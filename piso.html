@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Piso Soldeu — Gestión de Alquiler</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:opsz,wght@9..40,400;9..40,500&family=DM+Mono&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f4f1ec;--surface:#fff;--surface2:#eeebe4;--border:#ddd8cf;--text:#1c1a17;--muted:#706b63;--accent:#1e5f43;--accent-bg:#e6f2ec;--danger:#a83226;--danger-bg:#fdecea;--warn:#7a5200;--warn-bg:#fef6e4;--info:#1a4a8a;--info-bg:#e8f0fc;--serif:'DM Serif Display',serif;--sans:'DM Sans',sans-serif;--mono:'DM Mono',monospace;--r:10px;--rl:14px}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:15px;line-height:1.5;min-height:100vh}
+header{background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 1.5rem;height:56px;gap:1rem;position:sticky;top:0;z-index:100}
+.logo{font-family:var(--serif);font-size:19px;color:var(--text);white-space:nowrap;flex-shrink:0}.logo span{color:var(--accent)}
+nav{display:flex;margin-left:auto;overflow-x:auto}
+nav button{height:56px;padding:0 13px;border:none;background:none;font-family:var(--sans);font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:color .15s;white-space:nowrap}
+nav button:hover{color:var(--text)}
+nav button.active{color:var(--text);border-bottom-color:var(--accent);font-weight:500}
+main{max-width:1180px;margin:0 auto;padding:1.75rem 1.5rem}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+.four-col{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:820px){.two-col,.four-col{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:1.5rem}
+.metric{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1rem 1.25rem}
+.metric-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+.metric-value{font-size:23px;font-weight:500;line-height:1.1}
+.card-title{font-family:var(--serif);font-size:17px;font-weight:400;margin-bottom:1.25rem}
+.section-title{font-family:var(--serif);font-size:19px;font-weight:400;margin-bottom:1rem}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding:7px 0 9px;border-bottom:1px solid var(--border)}
+td{padding:9px 0;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.tr{text-align:right}.tc{text-align:center}
+.empty{text-align:center;padding:2rem 0;color:var(--muted);font-size:13px}
+.form-group{display:flex;flex-direction:column;gap:5px}
+.form-group label{font-size:12px;color:var(--muted)}
+input[type=text],input[type=number],input[type=date],input[type=month]{width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:14px;font-family:var(--sans);color:var(--text);background:var(--surface);outline:none;transition:border-color .15s}
+input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(30,95,67,.1)}
+input[readonly]{background:var(--accent-bg);color:var(--accent);font-weight:500;cursor:default}
+input[readonly]:focus{border-color:var(--border);box-shadow:none}
+.btn{border:none;border-radius:8px;padding:9px 18px;font-size:14px;font-family:var(--sans);cursor:pointer;font-weight:500;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--text);color:#fff}.btn-primary:hover{opacity:.85}
+.btn-secondary{background:var(--surface);color:var(--text);border:1px solid var(--border)}.btn-secondary:hover{background:var(--surface2)}
+.btn-full{width:100%;justify-content:center}
+.btn-ghost{background:none;border:none;color:var(--muted);padding:3px 7px;font-size:15px;cursor:pointer;border-radius:5px}
+.btn-ghost:hover{color:var(--danger);background:var(--danger-bg)}
+.receipt-box{background:var(--surface2);border-radius:10px;padding:1.25rem;font-family:var(--mono);font-size:12px;line-height:1.9;white-space:pre;overflow-x:auto;color:var(--text);border:1px solid var(--border)}
+.flash{padding:10px 14px;border-radius:8px;font-size:13px;margin-top:10px;display:none}
+.flash-success{background:var(--accent-bg);color:var(--accent)}
+.text-success{color:var(--accent)}.text-danger{color:var(--danger)}.text-muted{color:var(--muted)}.text-info{color:var(--info)}.fw500{font-weight:500}
+.total-row{display:flex;justify-content:space-between;align-items:center;padding-top:1rem;border-top:1px solid var(--border)}
+.info-box{background:var(--warn-bg);border:1px solid #e8c86a;border-radius:8px;padding:10px 14px;font-size:13px;color:var(--warn);margin-bottom:1rem}
+.supply-section{background:var(--surface2);border-radius:10px;padding:13px;margin-bottom:10px}
+.supply-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:500}
+.badge-g{background:var(--accent-bg);color:var(--accent)}.badge-b{background:var(--info-bg);color:var(--info)}
+.yr-row td{font-weight:500;background:var(--surface2)}
+.yr-row td:first-child{border-left:3px solid var(--accent);padding-left:8px}
+.inv-row{display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--border);font-size:14px}
+.inv-row:last-child{border-bottom:none}
+
+.sync-estado{font-size:11px;color:var(--muted);white-space:nowrap;padding:3px 9px;border-radius:999px;border:1px solid var(--border)}
+.sync-estado[data-tipo="pendiente"]{color:var(--warn);border-color:#e8c86a}
+.sync-estado[data-tipo="trabajando"]{color:var(--info);border-color:#b5d4f4}
+.sync-estado[data-tipo="ok"]{color:var(--accent);border-color:var(--accent)}
+.sync-estado[data-tipo="error"]{color:var(--danger);border-color:var(--danger)}
+#cargando{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;
+          flex-direction:column;gap:14px;z-index:9999;padding:24px;text-align:center}
+#cargando .msg{font-family:var(--serif);font-size:18px}
+#cargando .sub{font-size:13px;color:var(--muted);max-width:34ch;line-height:1.5}
+@media(max-width:640px){header .logo{font-size:16px}}
+</style>
+</head>
+<body>
+
+<div id="cargando">
+  <div class="msg">Cargando el piso…</div>
+  <div class="sub" id="cargando-sub">Descargando tus datos del repositorio privado.</div>
+</div>
+
+<header>
+  <div class="logo">🏠 Piso <span>Soldeu</span></div>
+  <nav>
+    <button class="active" onclick="show('dashboard')">Dashboard</button>
+    <button onclick="show('recibo')">Nuevo recibo</button>
+    <button onclick="show('recibos')">Mis recibos</button>
+    <button onclick="show('gastos')">Gastos</button>
+    <button onclick="show('inquilinos')">Inquilinos</button>
+    <button onclick="show('inversion')">Inversión</button>
+    <button onclick="show('config')">Configuración</button>
+  </nav>
+  <span id="sync-estado" class="sync-estado"></span>
+  <a href="index.html" style="font-size:13px;color:var(--muted);text-decoration:none;white-space:nowrap">← Inicio</a>
+</header>
+<main>
+
+<!-- DASHBOARD -->
+<div id="tab-dashboard">
+  <div class="four-col" id="metrics" style="margin-bottom:1.5rem"></div>
+  <div class="card" style="margin-bottom:1.5rem">
+    <div class="card-title">Resumen por año</div>
+    <div class="table-wrap" id="tabla-anual"></div>
+  </div>
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">Historial de meses</div>
+      <div class="table-wrap" id="tabla-meses"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Gastos operativos</div>
+      <div class="table-wrap" id="tabla-gastos-dash"></div>
+    </div>
+  </div>
+</div>
+
+<!-- NUEVO RECIBO -->
+<div id="tab-recibo" style="display:none">
+  <div class="two-col">
+    <div>
+      <div class="section-title">Registrar recibo mensual</div>
+      <div class="card">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div class="form-group"><label>Mes</label><input type="month" id="r-mes"></div>
+          <div class="form-group"><label>Alquiler (€)</label><input type="number" id="r-alq" step="0.01" oninput="calcular()"></div>
+        </div>
+        <div style="background:var(--accent-bg);border:1px solid var(--accent-light);border-radius:8px;padding:12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:12px;color:var(--accent);margin-bottom:2px">💶 Ingreso mensual para consumo (configurado)</div>
+            <div style="font-size:22px;font-weight:500;color:var(--accent)" id="cuota-display">100,00 €</div>
+          </div>
+          <div style="font-size:12px;color:var(--accent);text-align:right;max-width:160px;line-height:1.4">
+            Se registra automáticamente y aparece en el recibo del inquilino
+          </div>
+        </div>
+        <div class="info-box">⚠️ El incremento configurado se aplica sobre el coste real y <strong>no aparece en el recibo</strong> del inquilino.</div>
+
+        <!-- CALEFACCIÓN -->
+        <div class="supply-section">
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+            <span>🔥 Calefacción</span>
+            <span style="font-size:11px;color:var(--muted);font-weight:400">margen: +<span id="p-cal">0</span>%</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+            <div class="form-group"><label>Lectura anterior</label><input type="number" id="cal-ant" step="0.001" placeholder="0" oninput="calcular()"></div>
+            <div class="form-group"><label>Lectura actual</label><input type="number" id="cal-act" step="0.001" placeholder="0" oninput="calcular()" style="border-color:var(--accent)"></div>
+            <div class="form-group"><label>Precio unitario (€)</label><input type="number" id="cal-preu" step="0.0001" placeholder="0.0000" oninput="calcular()"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div class="form-group"><label>Consumo (unidades)</label><input type="text" id="cal-cons" readonly></div>
+            <div class="form-group"><label>Tu coste real (€)</label><input type="text" id="r-cal" readonly></div>
+            <div class="form-group"><label>Cobrado al inquilino (€)</label><input type="text" id="cal-cob" readonly></div>
+          </div>
+        </div>
+
+        <!-- AGUA CALIENTE -->
+        <div class="supply-section">
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+            <span>💧 Agua caliente</span>
+            <span style="font-size:11px;color:var(--muted);font-weight:400">margen: +<span id="p-agua">0</span>%</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+            <div class="form-group"><label>Lectura anterior</label><input type="number" id="agua-ant" step="0.001" placeholder="0" oninput="calcular()"></div>
+            <div class="form-group"><label>Lectura actual</label><input type="number" id="agua-act" step="0.001" placeholder="0" oninput="calcular()" style="border-color:var(--accent)"></div>
+            <div class="form-group"><label>Precio unitario (€)</label><input type="number" id="agua-preu" step="0.0001" placeholder="0.0000" oninput="calcular()"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div class="form-group"><label>Consumo (unidades)</label><input type="text" id="agua-cons" readonly></div>
+            <div class="form-group"><label>Tu coste real (€)</label><input type="text" id="r-agua" readonly></div>
+            <div class="form-group"><label>Cobrado al inquilino (€)</label><input type="text" id="agua-cob" readonly></div>
+          </div>
+        </div>
+
+        <!-- ELECTRICIDAD — precio directo -->
+        <div class="supply-section">
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+            <span>⚡ Electricidad</span>
+            <span style="font-size:11px;color:var(--muted);font-weight:400">margen: +<span id="p-elec">0</span>%</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="form-group">
+              <label>Lo que tú pagas (€)</label>
+              <input type="number" id="elec-directo" step="0.01" placeholder="0.00" oninput="calcular()">
+            </div>
+            <div class="form-group">
+              <label>Cobrado al inquilino (€)</label>
+              <input type="text" id="elec-cob" readonly>
+            </div>
+          </div>
+        </div>
+        <!-- SALDO ACUMULADO -->
+        <div id="saldo-box" style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div style="font-size:13px;font-weight:500">⚖️ Estado cuenta consumo</div>
+            <button onclick="toggleEditSaldo()" id="btn-edit-saldo" class="btn btn-secondary" style="padding:4px 10px;font-size:12px">✏️ Modificar saldo</button>
+          </div>
+
+          <!-- Saldo anterior editable -->
+          <div id="saldo-editable" style="display:none;background:var(--warn-bg);border:1px solid #e8c86a;border-radius:8px;padding:12px;margin-bottom:12px">
+            <div style="font-size:12px;color:var(--warn);margin-bottom:8px">⚠️ Introduce el saldo manualmente. <strong>+ a favor del inquilino · − a favor del propietario</strong></div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="number" id="saldo-manual" step="0.01" placeholder="ej: 72.00 o -15.40" style="flex:1;border:1px solid #e8c86a;border-radius:8px;padding:8px 12px;font-size:14px;font-family:var(--sans)" oninput="aplicarSaldoManual()">
+              <button onclick="resetSaldo()" class="btn btn-secondary" style="padding:8px 12px;font-size:12px">↺ Auto</button>
+            </div>
+          </div>
+
+          <table style="width:100%;font-size:13px;border-collapse:collapse">
+            <tr>
+              <td style="color:var(--muted);padding:5px 0">Saldo acumulado meses anteriores</td>
+              <td style="text-align:right;font-weight:500;padding:5px 0"><span id="saldo-prev-display">—</span></td>
+            </tr>
+            <tr>
+              <td style="color:var(--muted);padding:5px 0">+ Cuota ingresada este mes</td>
+              <td style="text-align:right;padding:5px 0"><span id="cuota-mes-display">—</span></td>
+            </tr>
+            <tr style="border-top:1px solid var(--border)">
+              <td style="color:var(--muted);padding:5px 0">− Gastos del mes actual</td>
+              <td style="text-align:right;padding:5px 0"><span id="consumo-display">—</span></td>
+            </tr>
+            <tr style="border-top:2px solid var(--border)">
+              <td style="font-weight:500;padding:8px 0 4px">Saldo total acumulado</td>
+              <td style="text-align:right;padding:8px 0 4px;font-size:17px;font-weight:500"><span id="saldo-total-display">—</span></td>
+            </tr>
+          </table>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px" id="saldo-origen"></div>
+          <input type="hidden" id="saldo-ant">
+        </div>
+        <div class="total-row" style="margin-bottom:14px">
+          <span class="fw500">Total a cobrar al inquilino</span>
+          <span id="total-r" style="font-size:21px;font-weight:500;color:var(--accent)">0,00 €</span>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="guardarRecibo()">Guardar recibo</button>
+        <div id="flash-recibo" class="flash flash-success">✓ Recibo guardado correctamente</div>
+      </div>
+    </div>
+    <div>
+      <div class="section-title">Factura para WhatsApp</div>
+      <div class="card" style="padding:1rem">
+        <canvas id="factura-canvas" style="width:100%;border-radius:8px;border:1px solid var(--border);display:block"></canvas>
+        <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+          <button class="btn btn-primary btn-full" style="font-size:15px;padding:13px" onclick="descargarFactura()">⬇️ Guardar imagen para WhatsApp</button>
+          <button class="btn btn-secondary btn-full" id="btn-compartir" onclick="compartirFactura()" style="display:none;font-size:14px">📤 Compartir directamente</button>
+        </div>
+        <div style="background:var(--accent-bg);border:1px solid var(--accent-light);border-radius:8px;padding:11px 14px;margin-top:10px;font-size:13px;color:var(--accent);line-height:1.5">
+          <strong>¿Cómo enviarlo?</strong> Descarga la imagen → abre WhatsApp → adjunta la imagen como foto. El inquilino verá exactamente esta factura.
+        </div>
+        <div id="preview" style="display:none"></div>
+      </div>
+      <div class="card" style="margin-top:1rem">
+        <div class="card-title" style="font-size:15px;margin-bottom:.75rem">Tu margen oculto este mes</div>
+        <div id="margen-preview" style="font-size:14px;color:var(--muted)">Introduce consumos para ver el desglose.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MIS RECIBOS -->
+<div id="tab-recibos" style="display:none">
+  <div style="display:flex;align-items:center;gap:14px;margin-bottom:1.25rem;flex-wrap:wrap">
+    <div class="section-title" style="margin-bottom:0">Mis recibos guardados</div>
+    <select id="rec-filtro-año" onchange="renderRecibos()" style="border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text);cursor:pointer"></select>
+  </div>
+  <div id="recibos-lista"></div>
+</div>
+
+<!-- GASTOS -->
+<div id="tab-gastos" style="display:none">
+  <div class="two-col">
+    <div>
+      <div class="section-title">Añadir gasto operativo</div>
+      <div class="card">
+        <div class="form-group" style="margin-bottom:12px"><label>Fecha</label><input type="date" id="g-fecha"></div>
+        <div class="form-group" style="margin-bottom:12px"><label>Descripción</label><input type="text" id="g-desc" placeholder="Comunidad, seguro, reparación..."></div>
+        <div class="form-group" style="margin-bottom:14px"><label>Importe (€)</label><input type="number" id="g-imp" step="0.01" placeholder="0.00"></div>
+        <button class="btn btn-primary btn-full" onclick="guardarGasto()">Añadir gasto</button>
+        <div id="flash-gasto" class="flash flash-success">✓ Gasto registrado</div>
+      </div>
+    </div>
+    <div>
+      <div class="section-title">Gastos registrados</div>
+      <div class="card"><div class="table-wrap" id="lista-gastos"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- INQUILINOS -->
+<div id="tab-inquilinos" style="display:none">
+  <div class="two-col">
+    <div>
+      <div class="section-title">Añadir inquilino</div>
+      <div class="card">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div class="form-group"><label>Nombre completo</label><input type="text" id="inq-nombre" placeholder="Nombre Apellidos"></div>
+          <div class="form-group"><label>Teléfono / contacto</label><input type="text" id="inq-tel" placeholder="+376 ..."></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div class="form-group"><label>Nº Censo / DNI / Pasaporte</label><input type="text" id="inq-censo" placeholder="365724F"></div>
+          <div class="form-group"><label>Notas</label><input type="text" id="inq-notas" placeholder="Observaciones..."></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div class="form-group"><label>Fecha de entrada</label><input type="date" id="inq-entrada"></div>
+          <div class="form-group"><label>Fecha de salida <em style="font-size:11px">(dejar vacío si sigue)</em></label><input type="date" id="inq-salida"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+          <div class="form-group"><label>Alquiler mensual (€)</label><input type="number" id="inq-alq" step="0.01" placeholder="900.00"></div>
+          <div class="form-group"><label>Depósito recibido (€)</label><input type="number" id="inq-dep" step="0.01" placeholder="0.00"></div>
+          <div class="form-group"><label>Depósito devuelto (€)</label><input type="number" id="inq-dep-dev" step="0.01" placeholder="0.00"></div>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="guardarInquilino()">Guardar inquilino</button>
+        <div id="flash-inq" class="flash flash-success">✓ Inquilino guardado</div>
+      </div>
+    </div>
+    <div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem">
+        <div class="section-title" style="margin-bottom:0">Historial</div>
+        <select id="inq-filtro-año" onchange="renderInquilinos()" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text);cursor:pointer"></select>
+      </div>
+      <div id="inq-lista"></div>
+      <div class="card" style="margin-top:1rem" id="inq-resumen-box"></div>
+    </div>
+  </div>
+</div>
+
+<!-- INVERSIÓN -->
+<div id="tab-inversion" style="display:none">
+  <div class="two-col">
+    <div>
+      <div class="section-title">Compra del piso</div>
+      <div class="card" style="margin-bottom:1.25rem" id="inv-compra-box"></div>
+      <div class="section-title" style="font-size:16px">Reformas e inversiones</div>
+      <div class="card" id="inv-reformas-box"></div>
+    </div>
+    <div>
+      <div class="section-title">Recuperación de la inversión</div>
+      <div class="card" style="margin-bottom:1.25rem">
+        <div class="four-col" id="inv-metrics" style="margin-bottom:1.25rem"></div>
+        <div class="inv-row"><span class="text-muted">Total invertido</span><span class="fw500" id="ii-total">—</span></div>
+        <div class="inv-row"><span class="text-muted">Ingresos brutos acumulados</span><span class="fw500 text-success" id="ii-ing">—</span></div>
+        <div class="inv-row"><span class="text-muted">Gastos operativos acumulados</span><span class="text-danger" id="ii-gas">—</span></div>
+        <div class="inv-row"><span class="text-muted">Beneficio neto operativo</span><span class="fw500 text-success" id="ii-ben">—</span></div>
+        <div style="background:var(--warn-bg);border:1px solid #e8c86a;border-radius:8px;padding:11px 13px;margin-top:12px;display:flex;justify-content:space-between;font-size:14px">
+          <span style="color:var(--warn)">Capital pendiente de recuperar</span>
+          <span style="color:var(--warn);font-weight:500" id="ii-pend">—</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="font-size:15px">Proyección de recuperación</div>
+        <div id="inv-proy"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIG -->
+<div id="tab-config" style="display:none">
+  <div class="section-title">Configuración</div>
+  <div class="card" style="max-width:540px">
+    <div class="card-title" style="font-size:15px;margin-bottom:1rem">Datos del alquiler</div>
+    <div style="background:var(--accent-bg);border:1px solid var(--accent-light);border-radius:8px;padding:11px;font-size:13px;color:var(--accent);margin-bottom:1rem">
+      El alquiler y los precios de suministros que guardes aquí se rellenarán solos cada mes. Solo tendrás que cambiarlos si suben.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.5rem">
+      <div class="form-group"><label>Nombre del inquilino</label><input type="text" id="c-inq" placeholder="Nombre Apellidos"></div>
+      <div class="form-group"><label>💰 Alquiler mensual (€) — se precarga en cada recibo</label><input type="number" id="c-alq" step="0.01" placeholder="900.00" style="border-color:var(--accent-light)"></div>
+    </div>
+    <div class="card-title" style="font-size:15px;margin-bottom:.5rem">Cuota fija gastos de consumo</div>
+    <div style="background:var(--accent-bg);border:1px solid var(--accent-light);border-radius:8px;padding:11px;font-size:13px;color:var(--accent);margin-bottom:1rem">
+      Esta cuota aparece en el recibo del inquilino. La fecha de inicio marca desde qué mes se empieza a acumular — útil cuando cambia el inquilino.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.5rem">
+      <div class="form-group"><label>📦 Cuota mensual gastos consumo (€)</label><input type="number" id="c-cuota" step="0.01" placeholder="100.00" style="border-color:var(--accent-light);font-size:16px;font-weight:500"></div>
+      <div class="form-group"><label>📅 Fecha inicio acumulación cuota</label><input type="month" id="c-cuota-desde" style="border-color:var(--accent-light)"><div style="font-size:11px;color:var(--muted);margin-top:4px">Solo se suman meses desde aquí</div></div>
+    </div>
+    <div class="card-title" style="font-size:15px;margin-bottom:.5rem">Precios de suministros (se precargan cada mes)</div>
+    <div style="background:var(--info-bg);border:1px solid #b5d4f4;border-radius:8px;padding:11px;font-size:13px;color:var(--info);margin-bottom:1rem">Guarda aquí los precios habituales. Se rellenarán solos al abrir un nuevo recibo y los puedes cambiar cuando suban.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:1.5rem">
+      <div class="form-group"><label>🔥 Calefacción (€/ud)</label><input type="number" id="c-cal-preu" step="0.0001" placeholder="0.0000"></div>
+      <div class="form-group"><label>💧 Agua caliente (€/ud)</label><input type="number" id="c-agua-preu" step="0.0001" placeholder="0.0000"></div>
+      <div class="form-group"><label>⚡ Electricidad (€ mes)</label><input type="number" id="c-elec-preu" step="0.01" placeholder="0.00"></div>
+    </div>
+    <div class="card-title" style="font-size:15px;margin-bottom:.5rem">Incrementos ocultos por suministro</div>
+    <div style="background:var(--warn-bg);border:1px solid #e8c86a;border-radius:8px;padding:11px;font-size:13px;color:var(--warn);margin-bottom:1rem">Solo los ves tú. No aparecen en el recibo del inquilino.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:1.5rem">
+      <div class="form-group"><label>🔥 Calefacción (%)</label><input type="number" id="c-cal" step="0.1" placeholder="0"></div>
+      <div class="form-group"><label>💧 Agua caliente (%)</label><input type="number" id="c-agua" step="0.1" placeholder="0"></div>
+      <div class="form-group"><label>⚡ Electricidad (%)</label><input type="number" id="c-elec" step="0.1" placeholder="0"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:1.5rem">
+      <label>Texto de cierre del recibo</label>
+      <input type="text" id="c-cierre" placeholder="Muchas gracias 🙏">
+    </div>
+
+    <div class="card-title" style="font-size:15px;margin-bottom:.5rem">La inversión</div>
+    <div style="background:var(--info-bg);border:1px solid #b5d4f4;border-radius:8px;padding:11px;font-size:13px;color:var(--info);margin-bottom:1rem">
+      Lo que te costó el piso. Con esto se calcula cuánto llevas recuperado en la pestaña Inversión.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1rem">
+      <div class="form-group"><label>Precio de compra (€)</label><input type="number" id="c-invCompra" step="0.01" placeholder="0.00"></div>
+      <div class="form-group"><label>Notario (€)</label><input type="number" id="c-invNotario" step="0.01" placeholder="0.00"></div>
+      <div class="form-group"><label>Impuesto de compra (€)</label><input type="number" id="c-invImpuesto" step="0.01" placeholder="0.00"></div>
+      <div class="form-group"><label>Catastro (€)</label><input type="number" id="c-invCatastro" step="0.01" placeholder="0.00"></div>
+      <div class="form-group"><label>Inversión inicial (€)</label><input type="number" id="c-invInicial" step="0.01" placeholder="0.00"></div>
+      <div class="form-group"><label>Reforma y amueblado (€)</label><input type="number" id="c-invReforma" step="0.01" placeholder="0.00"></div>
+      <div class="form-group"><label>Depósito recibido (€)</label><input type="number" id="c-depRecibido" step="0.01" placeholder="0.00"></div>
+    </div>
+    <button class="btn btn-primary" onclick="guardarCfg()">Guardar configuración</button>
+    <div id="flash-cfg" class="flash flash-success">✓ Configuración guardada</div>
+  </div>
+
+  <div class="section-title" style="margin-top:2rem">Copia de seguridad</div>
+  <div class="card" style="max-width:540px">
+    <div style="background:var(--info-bg);border:1px solid #b5d4f4;border-radius:8px;padding:12px;font-size:13px;color:var(--info);margin-bottom:1.25rem">
+      💾 Exporta todos tus datos (recibos, gastos, inquilinos y configuración) en un archivo que puedes guardar donde quieras. Para recuperarlos en otro ordenador o después de limpiar el navegador, importa ese archivo.
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="exportarDatos()" style="flex:1;min-width:180px">
+        ⬇️ Exportar datos
+      </button>
+      <label class="btn btn-secondary" style="flex:1;min-width:180px;justify-content:center;cursor:pointer">
+        ⬆️ Importar datos
+        <input type="file" id="import-file" accept=".json" style="display:none" onchange="importarDatos(event)">
+      </label>
+    </div>
+    <div id="flash-export" class="flash flash-success" style="margin-top:10px">✓ Datos exportados correctamente</div>
+    <div id="flash-import" class="flash flash-success" style="margin-top:10px">✓ Datos importados correctamente. Recarga la página.</div>
+    <div id="flash-import-err" class="flash" style="margin-top:10px;background:var(--danger-bg);color:var(--danger)">✗ Archivo no válido. Asegúrate de usar un archivo exportado desde esta app.</div>
+  </div>
+</div>
+
+</main>
+<!-- MODAL RECIBO -->
+<div id="modal-recibo" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;padding:1.5rem;overflow-y:auto" onclick="if(event.target===this)cerrarModal()">
+  <div style="background:var(--surface);border-radius:var(--rl);max-width:520px;margin:0 auto;padding:1.5rem;position:relative">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <div id="modal-titulo" style="font-family:var(--serif);font-size:18px"></div>
+      <button onclick="cerrarModal()" style="border:none;background:var(--surface2);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:20px;color:var(--muted)">×</button>
+    </div>
+    <div id="modal-texto" class="receipt-box" style="font-size:12.5px;line-height:1.85;max-height:70vh;overflow-y:auto"></div>
+    <div style="display:flex;gap:8px;margin-top:1rem">
+      <button class="btn btn-primary" style="flex:1" onclick="copiarRecibo('modal-texto')">📋 Copiar para WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+
+<script src="sync.js"></script>
+<script>
+(function(){
+  var capa = document.getElementById('cargando');
+  var sub  = document.getElementById('cargando-sub');
+
+  Sync.iniciar('piso').then(function(){
+    var s = document.createElement('script');
+    s.src = 'piso.js';
+    s.onload = function(){
+      Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
+      capa.remove();
+    };
+    s.onerror = function(){
+      sub.textContent = 'No se pudo cargar piso.js. Recarga la pagina.';
+    };
+    document.body.appendChild(s);
+  }).catch(function(err){
+    if (err.message === 'sin-credenciales') {
+      location.href = 'index.html?volver=piso.html';
+      return;
+    }
+    capa.querySelector('.msg').textContent = 'No he podido cargar tus datos';
+    sub.innerHTML = err.message + '<br><br><a href="index.html">Volver al inicio</a>';
+  });
+})();
+</script>
+</body>
+</html>

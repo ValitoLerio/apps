@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Horario Restaurante</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0f0e0b; --surface:#1a1814; --surface2:#232017;
+    --gold:#c9a84c; --gold2:#e8c96d;
+    --text:#f0ece0; --text2:#b0aa98; --border:#2e2b22;
+    --enc:#c9a84c; --coc:#e07b39; --cam:#5b9bd5;
+    --shift-l:#1a4a2e; --shift-r:#2a1a0a; --shift-c:#1a1814;
+    --wk-vac-bg:#0f3a5a; --wk-vac-txt:#74b3e0;
+    --wk-fes-bg:#3a0f0a; --wk-fes-txt:#e87c6f;
+    --wk-baj-bg:#3a0a0a; --wk-baj-txt:#f1948a;
+    --wk-aus-bg:#3a1a00; --wk-aus-txt:#f0a070;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+  /* HEADER */
+  .topbar{background:linear-gradient(135deg,#1a1814,#201c12);border-bottom:1px solid var(--border);padding:5px 14px;display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow-x:auto;min-height:38px;}
+  .topbar-title{font-family:'Playfair Display',serif;font-size:.9rem;color:var(--gold2);white-space:nowrap;margin-right:6px;}
+  select{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 7px;font-family:'DM Sans',sans-serif;font-size:.72rem;cursor:pointer;}
+  .sb{padding:3px 9px;border-radius:14px;border:1.5px solid;font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:500;cursor:pointer;background:transparent;transition:all .15s;white-space:nowrap;}
+  .sb.v{border-color:#e8a020;color:#e8a020;} .sb.v.on{background:#e8a020;color:#0f0e0b;}
+  .sb.i{border-color:#5b9bd5;color:#5b9bd5;} .sb.i.on{background:#5b9bd5;color:#0f0e0b;}
+  .tbtn{padding:3px 9px;border-radius:14px;border:1.5px solid;font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:500;cursor:pointer;background:transparent;transition:all .15s;white-space:nowrap;}
+
+  /* MONTH NAV */
+  .mnav{display:flex;background:var(--surface);border-bottom:1px solid var(--border);padding:0 12px;overflow-x:auto;}
+  .mb{background:transparent;border:none;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:500;padding:8px 9px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all .13s;text-transform:uppercase;letter-spacing:.05em;}
+  .mb:hover{color:var(--gold2);} .mb.on{color:var(--gold2);border-bottom-color:var(--gold2);}
+
+  /* SCHEDULE */
+  .schedule-area{overflow:auto;background:var(--bg);height:calc(100vh - 96px);}
+  .sched{border-collapse:collapse;min-width:100%;font-size:.79rem;}
+  .sched th{background:var(--surface);position:sticky;top:0;z-index:10;padding:8px 4px;font-weight:500;color:var(--text2);border:1px solid var(--border);text-align:center;white-space:nowrap;}
+  .sched th.dh{font-size:.7rem;min-width:116px;}
+  .sched th.dh.we{background:#1e1c14;color:var(--gold);}
+  .sched th.dh.tod{background:rgba(201,168,76,.15);color:var(--gold2);}
+  .nc{position:sticky;left:0;background:var(--surface);z-index:5;white-space:nowrap;font-weight:500;padding:6px 10px;border:1px solid var(--border);min-width:130px;text-align:center;}
+  .nch{position:sticky;left:0;z-index:15;background:var(--surface);text-align:center;}
+  .sched td{border:1px solid var(--border);padding:0;vertical-align:middle;text-align:center;}
+  .ci{display:flex;flex-direction:column;align-items:center;gap:2px;min-height:72px;justify-content:center;padding:4px 0;width:100%;}
+  .tb{display:inline-flex;align-items:center;gap:3px;padding:6px 10px;border-radius:5px;font-size:.88rem;font-weight:600;cursor:pointer;transition:opacity .12s;white-space:nowrap;}
+  .tb:hover{opacity:.75;}
+  .th{font-size:.85rem;color:var(--text2);font-weight:700;}
+  .et{background:rgba(39,174,96,.18);color:#5dca82;border:1px solid rgba(39,174,96,.3);}
+  .ef{background:rgba(192,57,43,.18);color:#e87c6f;border:1px solid rgba(192,57,43,.3);}
+  .ev{background:rgba(41,128,185,.18);color:#74b3e0;border:1px solid rgba(41,128,185,.3);}
+  .eb{background:rgba(231,76,60,.18);color:#f1948a;border:1px solid rgba(231,76,60,.35);}
+  .ea{background:rgba(230,126,34,.18);color:#f0a070;border:1px solid rgba(230,126,34,.35);}
+  .el{background:transparent;color:var(--border);border:1px dashed var(--border);}
+  .rt{font-size:.62rem;padding:1px 4px;border-radius:3px;margin-left:3px;font-weight:600;}
+  .re{background:rgba(201,168,76,.2);color:var(--enc);}
+  .rc{background:rgba(224,123,57,.2);color:var(--coc);}
+  .ra{background:rgba(91,155,213,.2);color:var(--cam);}
+  .gs td{background:var(--surface);height:3px;border:none;padding:0;}
+  .nc-row .hide-btn{background:none;border:none;color:transparent;cursor:pointer;font-size:.75rem;padding:2px 3px;border-radius:3px;transition:color .15s;line-height:1;}
+  .nc:hover .hide-btn{color:var(--text2);}
+  .nc:hover .hide-btn:hover{color:#c080e0;background:rgba(142,68,173,.15);}
+
+  /* STATS BAR */
+  .statsbar{display:flex;gap:12px;padding:7px 16px;background:var(--surface);border-top:1px solid var(--border);flex-wrap:wrap;align-items:center;}
+  .si{display:flex;align-items:center;gap:5px;font-size:.74rem;}
+  .sl{color:var(--text2);} .sv{color:var(--gold2);font-weight:600;}
+
+  /* WEEK BAR */
+  .week-bar{display:none;background:#0d2214;border-bottom:2px solid #27ae60;padding:6px 14px;align-items:center;gap:10px;flex-wrap:wrap;}
+  .week-bar.show{display:flex;}
+
+  /* CLIP BANNER */
+  #clip-banner{display:none;position:sticky;bottom:0;z-index:50;background:#1a3a1f;border-top:2px solid var(--gold);padding:8px 16px;align-items:center;gap:10px;flex-wrap:wrap;}
+  #clip-banner.show{display:flex;}
+
+  /* COVERAGE */
+  #cov{background:var(--bg);border-top:2px solid var(--border);}
+  .covh{display:flex;align-items:center;gap:12px;padding:11px 18px 9px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap;}
+  .covt{font-family:'Playfair Display',serif;font-size:1rem;color:var(--gold2);}
+  .covleg{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:.68rem;color:var(--text2);}
+  .sw{width:14px;height:14px;border-radius:3px;}
+
+  /* POPUP */
+  .popup{position:fixed;z-index:200;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:10px;box-shadow:0 8px 32px rgba(0,0,0,.65);min-width:196px;display:none;}
+  .popup h4{font-size:.78rem;color:var(--gold);margin-bottom:8px;font-family:'Playfair Display',serif;}
+  .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:4px;}
+  .pb{padding:6px 5px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:.72rem;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .12s;}
+  .pb:hover{border-color:var(--gold);color:var(--gold);}
+  .pb.on{background:var(--gold);color:var(--bg);border-color:var(--gold);}
+  .pi{width:100%;padding:5px 7px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:5px;font-size:.74rem;font-family:'DM Sans',sans-serif;}
+  .pi:focus{outline:none;border-color:var(--gold);}
+  .pact{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;}
+  .psave{flex:1;padding:6px;background:var(--gold);color:var(--bg);border:none;border-radius:5px;font-size:.76rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;}
+  .pcanc{padding:6px 8px;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:5px;font-size:.76rem;cursor:pointer;font-family:'DM Sans',sans-serif;}
+  .pcopy{padding:6px 8px;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:5px;font-size:.76rem;cursor:pointer;font-family:'DM Sans',sans-serif;}
+  #hl{font-size:.66rem;color:var(--text2);margin-bottom:4px;}
+
+  /* MODALS */
+  .ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:300;align-items:center;justify-content:center;}
+  .ov.show{display:flex;}
+  .modal{background:var(--surface);border:1px solid var(--gold);border-radius:12px;padding:20px;min-width:270px;box-shadow:0 20px 60px rgba(0,0,0,.7);max-height:90vh;overflow-y:auto;}
+  .modal h3{font-family:'Playfair Display',serif;color:var(--gold2);margin-bottom:13px;}
+  .modal input[type=text]{width:100%;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;font-family:'DM Sans',sans-serif;font-size:.86rem;margin-bottom:10px;}
+  .modal input[type=text]:focus{outline:none;border-color:var(--gold);}
+  .mact{display:flex;gap:7px;}
+  .bp{flex:1;padding:8px;background:var(--gold);color:var(--bg);border:none;border-radius:6px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+  .bs{padding:8px 12px;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;}
+
+  /* COLOR PANEL */
+  .crow{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);margin-bottom:4px;}
+  .crow label{font-size:.76rem;color:var(--text2);}
+  .cpair{display:flex;align-items:center;gap:7px;}
+  .cpair input[type=color]{width:36px;height:28px;border:2px solid var(--border);border-radius:5px;cursor:pointer;padding:0;}
+  .cpair input[type=color]:hover{border-color:var(--gold);}
+  .chex{font-size:.68rem;color:var(--text2);font-family:monospace;min-width:52px;}
+  .preset-btn{padding:5px 10px;border-radius:6px;border:1.5px solid;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.74rem;font-weight:600;margin:2px;}
+  .preset-btn:hover{opacity:.8;}
+
+  #toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:var(--gold);color:#0f0e0b;padding:8px 18px;border-radius:16px;font-weight:700;font-size:.83rem;box-shadow:0 4px 20px rgba(0,0,0,.5);z-index:9999;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;}
+
+  /* Indicador de guardado */
+  .sync-estado{font-size:.68rem;color:var(--text2);white-space:nowrap;padding:3px 8px;border-radius:12px;border:1px solid var(--border)}
+  .sync-estado[data-tipo="pendiente"]{color:#e8a020;border-color:#e8a020}
+  .sync-estado[data-tipo="trabajando"]{color:#5b9bd5;border-color:#5b9bd5}
+  .sync-estado[data-tipo="ok"]{color:#5dca82;border-color:#5dca82}
+  .sync-estado[data-tipo="error"]{color:#e87c6f;border-color:#e87c6f}
+  #cargando{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;
+            justify-content:center;flex-direction:column;gap:14px;z-index:9999;padding:24px;text-align:center}
+  #cargando .msg{font-family:'Playfair Display',serif;color:var(--gold2);font-size:1.05rem}
+  #cargando .sub{font-size:.8rem;color:var(--text2);max-width:34ch;line-height:1.5}
+  #cargando a{color:var(--gold);font-size:.82rem}
+</style>
+</head>
+<body>
+
+<div id="cargando">
+  <div class="msg">Cargando el horario…</div>
+  <div class="sub" id="cargando-sub">Descargando tus datos del repositorio privado.</div>
+</div>
+
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <span class="topbar-title">&#127374; <span id="myl"></span></span>
+  <select id="yr" onchange="renderAll()">
+    <option value="2025">2025</option>
+    <option value="2026" selected>2026</option>
+    <option value="2027">2027</option>
+  </select>
+  <button class="sb v" id="bv" onclick="setSeason('verano')">&#9728;&#65039; Verano</button>
+  <button class="sb i" id="bi" onclick="setSeason('invierno')">&#10052;&#65039; Invierno</button>
+  <button class="tbtn" style="border-color:#5b9bd5;color:#5b9bd5" onclick="openAddModal()">+ Personal</button>
+  <button class="tbtn" id="bwk" style="border-color:#27ae60;color:#27ae60" onclick="toggleWeekMode()">&#128197; Vista semana</button>
+  <button class="tbtn" style="border-color:var(--gold);color:var(--gold)" onclick="openTheme()">&#127912; Colores</button>
+  <button class="tbtn" style="border-color:#27ae60;color:#6dbb85" onclick="exportarHorario()" title="Descargar una copia">&#11015;&#65039; Copia</button>
+  <label class="tbtn" style="border-color:#27ae60;color:#6dbb85;display:inline-flex;align-items:center" title="Cargar una copia">&#11014;&#65039; Importar
+    <input type="file" accept=".json" style="display:none" onchange="importarHorario(event)">
+  </label>
+  <button class="tbtn" style="border-color:#c0392b;color:#e87c6f" onclick="resetAll()" title="Borrar datos">&#128465;&#65039;</button>
+  <a href="index.html" class="tbtn" style="border-color:var(--border);color:var(--text2);text-decoration:none;margin-left:auto">&#8592; Inicio</a>
+  <span id="sync-estado" class="sync-estado"></span>
+</div>
+
+<!-- MONTH NAV -->
+<div class="mnav" id="mnav"></div>
+
+<!-- WEEK BAR -->
+<div class="week-bar" id="week-bar">
+  <button onclick="prevWeek()" style="background:transparent;border:1px solid #27ae60;color:#6dbb85;border-radius:5px;padding:4px 14px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.82rem">&#9664; Anterior</button>
+  <span id="week-label" style="font-size:.84rem;color:#a0e0b0;font-weight:600;min-width:200px;text-align:center"></span>
+  <button onclick="nextWeek()" style="background:transparent;border:1px solid #27ae60;color:#6dbb85;border-radius:5px;padding:4px 14px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.82rem">Siguiente &#9654;</button>
+  <span style="font-size:.72rem;color:#4a8a60">&#183; <span id="wk-season"></span></span>
+  <button onclick="toggleWeekMode()" style="margin-left:auto;background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:5px;padding:4px 10px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.75rem">&#10005; Salir</button>
+</div>
+
+<!-- SCHEDULE -->
+<div class="schedule-area" id="sarea"></div>
+
+<!-- STATS BAR -->
+<div class="statsbar" id="statsbar">
+  <div class="si"><span class="sl">Mes:</span><span class="sv" id="stm">-</span></div>
+  <div class="si"><span class="sl">Temporada:</span><span class="sv" id="sts">-</span></div>
+  <div class="si"><span class="sl">H. diarias:</span><span class="sv" id="sth">-</span></div>
+  <div class="si" style="margin-left:auto;gap:4px">
+    <span style="background:rgba(39,174,96,.18);color:#5dca82;border:1px solid rgba(39,174,96,.3);padding:2px 7px;border-radius:3px;font-size:.7rem">&#9989; Trabaja</span>
+    <span style="background:rgba(192,57,43,.18);color:#e87c6f;border:1px solid rgba(192,57,43,.3);padding:2px 7px;border-radius:3px;font-size:.7rem">&#127881; Festivo</span>
+    <span style="background:rgba(41,128,185,.18);color:#74b3e0;border:1px solid rgba(41,128,185,.3);padding:2px 7px;border-radius:3px;font-size:.7rem">&#127958;&#65039; Vacaciones</span>
+    <span style="background:rgba(231,76,60,.18);color:#f1948a;border:1px solid rgba(231,76,60,.35);padding:2px 7px;border-radius:3px;font-size:.7rem">B Baja</span>
+    <span style="background:rgba(230,126,34,.18);color:#f0a070;border:1px solid rgba(230,126,34,.35);padding:2px 7px;border-radius:3px;font-size:.7rem">A Ausencia</span>
+  </div>
+</div>
+
+<!-- CLIP BANNER -->
+<div id="clip-banner">
+  <div>
+    <div id="clip-info" style="font-size:.82rem;color:var(--gold2);font-weight:600">Turno copiado</div>
+    <div id="clip-sub" style="font-size:.72rem;color:#a0d0a8">Haz clic en cualquier celda para pegar</div>
+  </div>
+  <button onclick="clearClip()" style="padding:5px 12px;background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.78rem">&#10005; Cancelar</button>
+</div>
+
+<!-- COVERAGE -->
+<div id="cov">
+  <div class="covh">
+    <div>
+      <div class="covt">&#128101; Personal trabajando dia a dia</div>
+      <div style="font-size:.71rem;color:var(--text2)">Personas activas por hora y dia del mes</div>
+    </div>
+    <div class="covleg">
+      <div style="display:flex;align-items:center;gap:3px"><div class="sw" style="background:#16140f;border:1px solid #2a2720"></div>0</div>
+      <div style="display:flex;align-items:center;gap:3px"><div class="sw" style="background:#0d2e14"></div>1-2</div>
+      <div style="display:flex;align-items:center;gap:3px"><div class="sw" style="background:#0f4a1e"></div>3-4</div>
+      <div style="display:flex;align-items:center;gap:3px"><div class="sw" style="background:#1a7a32"></div>5-6</div>
+      <div style="display:flex;align-items:center;gap:3px"><div class="sw" style="background:#22a845"></div>7+</div>
+    </div>
+  </div>
+  <div style="overflow-x:auto;padding:0"><table id="covtbl" style="border-collapse:separate;border-spacing:2px;font-size:.8rem"></table></div>
+</div>
+
+<!-- RESUMEN DE HORAS -->
+<div id="hours-section" style="background:var(--bg);border-top:2px solid var(--border);padding-bottom:40px">
+  <div style="display:flex;align-items:center;gap:14px;padding:13px 20px 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap">
+    <div>
+      <div style="font-family:'Playfair Display',serif;font-size:1rem;color:var(--gold2)">&#128338; Horas y dias trabajados</div>
+      <div style="font-size:.71rem;color:var(--text2)">Por persona - mes actual y acumulado anual</div>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+      <select id="hours-view-sel" onchange="renderHours()" style="font-size:.75rem;padding:4px 8px">
+        <option value="monthly">Mensual</option>
+        <option value="weekly">Semanal</option>
+        <option value="annual">Resumen anual</option>
+      </select>
+      <select id="hours-year-sel" onchange="renderHours()" style="font-size:.75rem;padding:4px 8px">
+        <option value="2025">2025</option>
+        <option value="2026" selected>2026</option>
+        <option value="2027">2027</option>
+      </select>
+    </div>
+  </div>
+  <div style="overflow-x:auto;padding:16px 20px 0">
+    <table id="hourstbl" style="border-collapse:collapse;font-size:.8rem;min-width:100%"></table>
+  </div>
+</div>
+<div class="popup" id="popup">
+  <h4 id="ptitle">Editar</h4>
+  <div class="pgrid">
+    <button class="pb et" onclick="selE('trabajo')">&#9989; Trabaja</button>
+    <button class="pb ef" onclick="selE('festivo')">&#127881; Festivo</button>
+    <button class="pb ev" onclick="selE('vacaciones')">&#127958;&#65039; Vacac.</button>
+    <button class="pb eb" onclick="selE('baja')">B Baja</button>
+    <button class="pb ea" onclick="selE('ausencia')">A Ausencia</button>
+    <button class="pb el" onclick="selE('libre')">- Libre</button>
+  </div>
+  <div id="ta" style="display:none">
+    <div style="margin-top:7px;background:var(--surface);border-radius:6px;padding:7px 9px;border:1px solid var(--border)">
+      <div id="hl">Introduce la hora de entrada</div>
+      <div style="display:flex;gap:7px;align-items:center">
+        <div style="flex:1"><div style="font-size:.63rem;color:var(--text2);margin-bottom:2px">Entrada</div><input class="pi" id="ini" type="time" oninput="calcFin()" style="width:100%"></div>
+        <div style="color:var(--text2);margin-top:12px">-></div>
+        <div style="flex:1"><div style="font-size:.63rem;color:var(--text2);margin-bottom:2px">Salida <span style="color:var(--gold);font-size:.58rem">(auto)</span></div><input class="pi" id="fin" type="time" style="width:100%"></div>
+      </div>
+    </div>
+    <input class="pi" id="nota" type="text" placeholder="Nota (opcional)" style="margin-top:5px">
+    <div id="align-row" style="display:none;margin-top:7px">
+      <div style="font-size:.63rem;color:var(--text2);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">Posicion en la celda</div>
+      <div style="display:flex;gap:4px">
+        <button id="ab-l" onclick="selAlign('flex-start')" style="flex:1;padding:5px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-size:.85rem;transition:all .12s">&#9664;</button>
+        <button id="ab-c" onclick="selAlign('center')"     style="flex:1;padding:5px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-size:.85rem;transition:all .12s">&#9679;</button>
+        <button id="ab-r" onclick="selAlign('flex-end')"   style="flex:1;padding:5px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-size:.85rem;transition:all .12s">&#9654;</button>
+      </div>
+    </div>
+  </div>
+  <div class="pact">
+    <button class="psave" onclick="saveCell()">Guardar</button>
+    <button class="pcopy" id="copybtn" onclick="copyCell()" style="display:none">Copiar</button>
+    <button class="pcanc" onclick="closePopup()">&#10005;</button>
+  </div>
+</div>
+
+<!-- MODAL ADD CAMARERO -->
+<div class="ov" id="addov">
+  <div class="modal" style="max-width:360px;width:95vw">
+    <h3>Personal del restaurante</h3>
+    <div id="camlist" style="margin-bottom:12px;max-height:220px;overflow-y:auto"></div>
+    <div style="font-size:.78rem;color:var(--text2);margin-bottom:7px">Anadir persona:</div>
+    <div style="display:flex;gap:7px;margin-bottom:10px">
+      <input type="text" id="nn" placeholder="Nombre" onkeydown="if(event.key==='Enter')doAdd()" style="flex:1;margin-bottom:0">
+      <select id="nrol" style="font-size:.8rem">
+        <option value="cam">Camarero/a</option>
+        <option value="coc">Cocinero/a</option>
+        <option value="enc">Encargado/a</option>
+      </select>
+    </div>
+    <div class="mact">
+      <button class="bp" onclick="doAdd()">+ Anadir</button>
+      <button class="bs" onclick="closeAdd()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL COLORES -->
+<div class="ov" id="themeov">
+  <div class="modal" style="max-width:500px;width:96vw">
+    <h3>Personalizar colores</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px">
+      <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding-bottom:4px;border-bottom:1px solid var(--border)">Fondos</div>
+      <div class="crow"><label>Fondo principal</label><div class="cpair"><input type="color" id="c-bg" oninput="applyTheme()"><span class="chex" id="h-bg"></span></div></div>
+      <div class="crow"><label>Superficies</label><div class="cpair"><input type="color" id="c-surface" oninput="applyTheme()"><span class="chex" id="h-surface"></span></div></div>
+      <div class="crow"><label>Celdas / inputs</label><div class="cpair"><input type="color" id="c-surface2" oninput="applyTheme()"><span class="chex" id="h-surface2"></span></div></div>
+      <div class="crow"><label>Bordes</label><div class="cpair"><input type="color" id="c-border" oninput="applyTheme()"><span class="chex" id="h-border"></span></div></div>
+      <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding:8px 0 4px;border-bottom:1px solid var(--border)">Textos</div>
+      <div class="crow"><label>Texto principal</label><div class="cpair"><input type="color" id="c-text" oninput="applyTheme()"><span class="chex" id="h-text"></span></div></div>
+      <div class="crow"><label>Texto secundario</label><div class="cpair"><input type="color" id="c-text2" oninput="applyTheme()"><span class="chex" id="h-text2"></span></div></div>
+      <div class="crow"><label>Color dorado</label><div class="cpair"><input type="color" id="c-gold" oninput="applyTheme()"><span class="chex" id="h-gold"></span></div></div>
+      <div class="crow"><label>Color dorado 2</label><div class="cpair"><input type="color" id="c-gold2" oninput="applyTheme()"><span class="chex" id="h-gold2"></span></div></div>
+      <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding:8px 0 4px;border-bottom:1px solid var(--border)">Roles</div>
+      <div class="crow"><label>Encargados</label><div class="cpair"><input type="color" id="c-enc" oninput="applyTheme()"><span class="chex" id="h-enc"></span></div></div>
+      <div class="crow"><label>Cocineros</label><div class="cpair"><input type="color" id="c-coc" oninput="applyTheme()"><span class="chex" id="h-coc"></span></div></div>
+      <div class="crow"><label>Camareros</label><div class="cpair"><input type="color" id="c-cam" oninput="applyTheme()"><span class="chex" id="h-cam"></span></div></div>
+      <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding:8px 0 4px;border-bottom:1px solid var(--border)">Turnos por posicion</div>
+      <div class="crow"><label>Manana (izq.)</label><div class="cpair"><input type="color" id="c-shift-l" oninput="applyTheme()"><span class="chex" id="h-shift-l"></span></div></div>
+      <div class="crow"><label>Mediodia (centro)</label><div class="cpair"><input type="color" id="c-shift-c" oninput="applyTheme()"><span class="chex" id="h-shift-c"></span></div></div>
+      <div class="crow"><label>Noche (der.)</label><div class="cpair"><input type="color" id="c-shift-r" oninput="applyTheme()"><span class="chex" id="h-shift-r"></span></div></div>
+      <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding:8px 0 4px;border-bottom:1px solid var(--border)">Vista semana - celdas especiales</div>
+      <div class="crow"><label>Vacaciones fondo</label><div class="cpair"><input type="color" id="c-wk-vac-bg" oninput="applyTheme()"><span class="chex" id="h-wk-vac-bg"></span></div></div>
+      <div class="crow"><label>Vacaciones letra</label><div class="cpair"><input type="color" id="c-wk-vac-txt" oninput="applyTheme()"><span class="chex" id="h-wk-vac-txt"></span></div></div>
+      <div class="crow"><label>Festivo fondo</label><div class="cpair"><input type="color" id="c-wk-fes-bg" oninput="applyTheme()"><span class="chex" id="h-wk-fes-bg"></span></div></div>
+      <div class="crow"><label>Festivo letra</label><div class="cpair"><input type="color" id="c-wk-fes-txt" oninput="applyTheme()"><span class="chex" id="h-wk-fes-txt"></span></div></div>
+      <div class="crow"><label>Baja fondo</label><div class="cpair"><input type="color" id="c-wk-baj-bg" oninput="applyTheme()"><span class="chex" id="h-wk-baj-bg"></span></div></div>
+      <div class="crow"><label>Baja letra</label><div class="cpair"><input type="color" id="c-wk-baj-txt" oninput="applyTheme()"><span class="chex" id="h-wk-baj-txt"></span></div></div>
+      <div class="crow"><label>Ausencia fondo</label><div class="cpair"><input type="color" id="c-wk-aus-bg" oninput="applyTheme()"><span class="chex" id="h-wk-aus-bg"></span></div></div>
+      <div class="crow"><label>Ausencia letra</label><div class="cpair"><input type="color" id="c-wk-aus-txt" oninput="applyTheme()"><span class="chex" id="h-wk-aus-txt"></span></div></div>
+    </div>
+    <div style="font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);margin-bottom:8px">Temas rapidos</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px">
+      <button onclick="loadPreset('dark')"   class="preset-btn" style="background:#0f0e0b;color:#c9a84c;border-color:#c9a84c">Oscuro</button>
+      <button onclick="loadPreset('light')"  class="preset-btn" style="background:#f5f0e8;color:#5a4a2a;border-color:#8a6a2a">Claro</button>
+      <button onclick="loadPreset('navy')"   class="preset-btn" style="background:#0a1628;color:#5b9bd5;border-color:#5b9bd5">Marino</button>
+      <button onclick="loadPreset('forest')" class="preset-btn" style="background:#0a1a0f;color:#4caf50;border-color:#4caf50">Bosque</button>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="bp" onclick="saveTheme()">Guardar</button>
+      <button class="bs" onclick="resetTheme()">Restablecer</button>
+      <button class="bs" onclick="closeTheme()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+
+
+<script src="sync.js"></script>
+<script>
+(function(){
+  var capa = document.getElementById('cargando');
+  var sub  = document.getElementById('cargando-sub');
+
+  Sync.iniciar('horario').then(function(){
+    var s = document.createElement('script');
+    s.src = 'horario.js';
+    s.onload = function(){
+      Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
+      capa.remove();
+    };
+    s.onerror = function(){
+      sub.textContent = 'No se pudo cargar horario.js. Recarga la pagina.';
+    };
+    document.body.appendChild(s);
+  }).catch(function(err){
+    if (err.message === 'sin-credenciales') {
+      location.href = 'index.html?volver=horario.html';
+      return;
+    }
+    capa.querySelector('.msg').textContent = 'No he podido cargar tus datos';
+    sub.innerHTML = err.message + '<br><br><a href="index.html">Volver al inicio</a>';
+  });
+})();
+</script>
+</body>
+</html>
