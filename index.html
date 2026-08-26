@@ -13,6 +13,7 @@
     --tinta:#eef2f0; --tinta2:#93a5a1;
     --piso:#5fd3ac; --piso-tenue:#14322a;
     --resto:#e0954a; --resto-tenue:#33261492;
+    --comanda:#e0919c; --comanda-tenue:#33202499;
     --alerta:#ef8a76; --alerta-tenue:#331a16;
     --display:'Fraunces',Georgia,serif;
     --texto:'Archivo','Helvetica Neue',sans-serif;
@@ -26,6 +27,7 @@
       --tinta:#0f1618; --tinta2:#5c6b68;
       --piso:#0c5a44; --piso-tenue:#d8ece4;
       --resto:#8a5310; --resto-tenue:#f4e7d5;
+      --comanda:#7b2d3b; --comanda-tenue:#f3e6e8;
       --alerta:#96331f; --alerta-tenue:#f7e2de;
       --sombra:0 16px 34px -26px rgba(15,22,24,.5);
     }
@@ -36,6 +38,7 @@
     --tinta:#0f1618; --tinta2:#5c6b68;
     --piso:#0c5a44; --piso-tenue:#d8ece4;
     --resto:#8a5310; --resto-tenue:#f4e7d5;
+    --comanda:#7b2d3b; --comanda-tenue:#f3e6e8;
     --alerta:#96331f; --alerta-tenue:#f7e2de;
     --sombra:0 16px 34px -26px rgba(15,22,24,.5);
   }
@@ -140,6 +143,7 @@
 
   .p-piso{--tono:var(--piso)}
   .p-resto{--tono:var(--resto)}
+  .p-comanda{--tono:var(--comanda)}
 
   /* ── Conexión ──────────────────────────────────────────────────── */
   .conexion{background:var(--sup);border:1px solid var(--linea);border-radius:16px;
@@ -289,6 +293,22 @@
           <div class="celda"><span class="k">Equipo</span><span class="v" id="d-personal">—</span></div>
           <div class="celda"><span class="k">Turnos</span><span class="v" id="d-turnos">—</span></div>
           <div class="celda"><span class="k">Temporada</span><span class="v" id="temporada">—</span></div>
+        </div>
+        <div class="entrar">Abrir <span class="flecha">→</span></div>
+      </a>
+
+      <a class="puerta p-comanda" href="comanda.html">
+        <span class="rotulo">Facturación</span>
+        <h2>Comanda</h2>
+        <p class="que">Comidas de empresa: albaranes del día y factura mensual con IGI.</p>
+        <div class="cifra">
+          <span class="n" id="d-pendiente">—</span>
+          <span class="u">por facturar</span>
+        </div>
+        <div class="tira">
+          <div class="celda"><span class="k">Empresas</span><span class="v" id="d-empresas">—</span></div>
+          <div class="celda"><span class="k">Servicios</span><span class="v" id="d-servicios">—</span></div>
+          <div class="celda"><span class="k">Facturas</span><span class="v" id="d-facturas">—</span></div>
         </div>
         <div class="entrar">Abrir <span class="flecha">→</span></div>
       </a>
@@ -446,11 +466,32 @@
     pon('d-horas', String(Math.round(minutos/60)));
   }
 
+  function resumenComanda(seccion){
+    var libro = leer(seccion['comanda.ledger.v1'], {});
+    var servicios = libro.services || [];
+    var igiGeneral = (libro.settings && libro.settings.igi) || 0;
+
+    // Mismo criterio que la app: si el precio ya lleva el IGI, el importe
+    // tecleado es el total; si no, se le suma encima.
+    var pendiente = servicios.reduce(function(suma, s){
+      if ((s.status || 'pendiente') !== 'pendiente') return suma;
+      var importe = (+s.diners || 0) * (+s.price || 0);
+      var tipo = (s.igi == null) ? igiGeneral : s.igi;
+      return suma + (s.gross ? importe : importe * (1 + tipo/100));
+    }, 0);
+
+    pon('d-pendiente', euros(pendiente));
+    pon('d-empresas',  String((libro.companies || []).length));
+    pon('d-servicios', String(servicios.length));
+    pon('d-facturas',  String((libro.invoices || []).length));
+  }
+
   function pintarResumen(){
     Sync.descargarTodo().then(function(datos){
       datos = datos || {};
       resumenPiso(datos.piso || {});
       resumenHorario(datos.horario || {});
+      resumenComanda(datos.comanda || {});
       pon('ultimo-guardado', haceCuanto(datos.actualizado));
     }).catch(function(err){
       pon('ultimo-guardado', 'no he podido leer los datos: ' + err.message);
@@ -495,7 +536,8 @@
     if (!confirm('Se borrarán el token y los datos guardados en este navegador. Los del repositorio no se tocan. ¿Sigo?')) return;
     Sync.olvidarCredenciales();
     ['piso_cfg','piso_meses','piso_gastos','piso_inq','piso_data_version',
-     'rsch','rcam','rhid','rtheme'].forEach(function(k){ localStorage.removeItem(k); });
+     'rsch','rcam','rhid','rtheme',
+     'comanda.ledger.v1'].forEach(function(k){ localStorage.removeItem(k); });
     mostrar();
   });
 

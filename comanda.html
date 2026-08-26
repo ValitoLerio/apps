@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Comanda</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+
+:root{
+  --ground:#F6F4F2; --surface:#FFFFFF; --surface-2:#FBF9F8; --line:#E4DCD9; --line-soft:#EFE9E7;
+  --ink:#221B1C; --ink-2:#4A3E40; --muted:#7A6D6E;
+  --accent:#7B2D3B; --accent-ink:#FFFFFF; --accent-soft:#F3E6E8; --accent-line:#E3C9CE;
+  --ok:#2E6A4F; --ok-soft:#E3EFE8; --warn:#8F6114; --warn-soft:#F6ECD9; --danger:#9A2B23;
+  --shadow:0 1px 2px rgba(34,27,28,.05), 0 8px 24px -12px rgba(34,27,28,.18);
+  --radius:8px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#161314; --surface:#1E1A1B; --surface-2:#241F20; --line:#37302F; --line-soft:#2C2626;
+    --ink:#F1EAE9; --ink-2:#D6CBCA; --muted:#9E9192;
+    --accent:#E0919C; --accent-ink:#2A1418; --accent-soft:#3A2429; --accent-line:#4E3239;
+    --ok:#7FC0A0; --ok-soft:#23332C; --warn:#D9AC63; --warn-soft:#332A1C; --danger:#E58A82;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#161314; --surface:#1E1A1B; --surface-2:#241F20; --line:#37302F; --line-soft:#2C2626;
+  --ink:#F1EAE9; --ink-2:#D6CBCA; --muted:#9E9192;
+  --accent:#E0919C; --accent-ink:#2A1418; --accent-soft:#3A2429; --accent-line:#4E3239;
+  --ok:#7FC0A0; --ok-soft:#23332C; --warn:#D9AC63; --warn-soft:#332A1C; --danger:#E58A82;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:"Archivo","Helvetica Neue",Arial,sans-serif; font-size:14px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{font-family:"Newsreader",Georgia,serif; font-weight:500; margin:0; text-wrap:balance}
+button,input,select,textarea{font:inherit; color:inherit}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px}
+@media (prefers-reduced-motion:reduce){*{animation:none !important; transition:none !important}}
+
+/* ---------- shell ---------- */
+.app{display:grid; grid-template-columns:232px minmax(0,1fr); min-height:100vh}
+.rail{
+  background:var(--surface); border-right:1px solid var(--line);
+  display:flex; flex-direction:column; gap:2px; padding:20px 12px; position:sticky; top:0; height:100vh;
+}
+.brand{padding:4px 10px 18px}
+.brand .mark{font-family:"Newsreader",Georgia,serif; font-size:23px; letter-spacing:-.01em; display:block; line-height:1.15}
+.brand .sub{font-size:11px; color:var(--muted); letter-spacing:.09em; text-transform:uppercase; margin-top:3px; display:block}
+.nav-btn{
+  display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%;
+  padding:8px 10px; border:0; background:transparent; border-radius:6px; cursor:pointer;
+  color:var(--ink-2); text-align:left; font-size:14px; font-weight:500;
+}
+.nav-btn:hover{background:var(--surface-2); color:var(--ink)}
+.nav-btn[aria-current="true"]{background:var(--accent-soft); color:var(--accent); font-weight:600}
+.nav-btn .count{font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums}
+.nav-btn[aria-current="true"] .count{color:var(--accent)}
+.rail-foot{margin-top:auto; padding:10px; border-top:1px solid var(--line-soft); display:flex; flex-direction:column; gap:8px}
+.save-chip{display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--muted)}
+.dot{width:7px; height:7px; border-radius:50%; background:var(--ok); flex:none}
+.dot.local{background:var(--warn)} .dot.busy{background:var(--muted)} .dot.err{background:var(--danger)}
+
+main{padding:26px 30px 80px; max-width:1180px; min-width:0}
+.page-head{display:flex; align-items:flex-end; justify-content:space-between; gap:20px; flex-wrap:wrap; margin-bottom:20px}
+.page-head h1{font-size:27px; letter-spacing:-.015em}
+.page-head p{margin:4px 0 0; color:var(--muted); font-size:13px; max-width:62ch}
+
+/* ---------- controls ---------- */
+.field{display:flex; flex-direction:column; gap:5px; min-width:0}
+label.lbl{font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); font-weight:600}
+input,select,textarea{
+  background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:7px 9px;
+  font-size:13.5px; width:100%; min-width:0;
+}
+input:focus,select:focus,textarea:focus{border-color:var(--accent); outline:none; box-shadow:0 0 0 3px var(--accent-soft)}
+input[type="number"]{font-variant-numeric:tabular-nums}
+input[type="checkbox"]{width:auto; min-width:0; accent-color:var(--accent); margin:0}
+.check{display:flex; align-items:flex-start; gap:9px; margin-top:14px; cursor:pointer}
+.check span{font-size:13px; color:var(--ink-2)}
+.check span b{display:block; color:var(--ink); font-weight:600; font-size:13.5px}
+textarea{resize:vertical; min-height:70px; line-height:1.45}
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:7px; cursor:pointer;
+  border:1px solid var(--line); background:var(--surface); color:var(--ink);
+  padding:8px 14px; border-radius:6px; font-size:13.5px; font-weight:500; white-space:nowrap;
+}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:600}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{border-color:transparent; background:transparent; color:var(--muted); padding:6px 8px}
+.btn.ghost:hover{background:var(--surface-2); color:var(--ink)}
+.btn.danger{color:var(--danger)}
+.btn.solid-danger{background:var(--danger); border-color:var(--danger); color:var(--surface); font-weight:600}
+.btn.solid-danger:hover{filter:brightness(1.08)}
+.choice{display:flex; gap:10px; align-items:flex-start; padding:11px 13px; border:1px solid var(--line); border-radius:6px; cursor:pointer; margin-bottom:9px}
+.choice:hover{border-color:var(--muted)}
+.choice input{width:auto; min-width:0; margin:2px 0 0; accent-color:var(--accent)}
+.choice span{font-size:13px; color:var(--muted)}
+.choice span b{display:block; color:var(--ink); font-size:13.5px; font-weight:600; margin-bottom:2px}
+.btn:disabled{opacity:.45; cursor:not-allowed}
+.btn.sm{padding:5px 9px; font-size:12.5px}
+
+/* ---------- cards & tables ---------- */
+.card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow)}
+.card-head{padding:14px 16px; border-bottom:1px solid var(--line-soft); display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap}
+.card-head h2{font-size:17px}
+.card-head .hint{font-size:12px; color:var(--muted)}
+.card-body{padding:16px}
+
+.stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1px; background:var(--line-soft); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; margin-bottom:18px}
+.stat{background:var(--surface); padding:13px 15px}
+.stat .k{font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600}
+.stat .v{font-size:21px; font-weight:600; font-variant-numeric:tabular-nums; margin-top:3px; letter-spacing:-.01em}
+.stat .v.accent{color:var(--accent)}
+.stat .n{font-size:11.5px; color:var(--muted); margin-top:1px}
+
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse; width:100%; font-size:13.5px}
+th{
+  text-align:left; font-size:10.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted);
+  font-weight:600; padding:9px 10px; border-bottom:1px solid var(--line); white-space:nowrap; background:var(--surface);
+  position:sticky; top:0; z-index:1;
+}
+td{padding:8px 10px; border-bottom:1px solid var(--line-soft); vertical-align:middle}
+tbody tr:hover td{background:var(--surface-2)}
+.num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace; font-size:12.5px}
+tfoot td{border-top:1px solid var(--line); border-bottom:0; font-weight:600; background:var(--surface-2)}
+.row-actions{display:flex; gap:2px; justify-content:flex-end}
+.empty{padding:34px 16px; text-align:center; color:var(--muted); font-size:13.5px}
+.empty strong{display:block; color:var(--ink); font-family:"Newsreader",Georgia,serif; font-size:17px; font-weight:500; margin-bottom:5px}
+
+.pill{display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:20px; font-size:11.5px; font-weight:600; white-space:nowrap}
+.pill.pend{background:var(--surface-2); color:var(--muted); border:1px solid var(--line)}
+.pill.fact{background:var(--warn-soft); color:var(--warn)}
+.pill.cobr{background:var(--ok-soft); color:var(--ok)}
+
+/* ---------- quick add ---------- */
+.quick{display:grid; grid-template-columns:120px minmax(150px,1.3fr) minmax(170px,2fr) 130px 78px 100px auto; gap:10px; align-items:end}
+.quick .total-preview{
+  font-variant-numeric:tabular-nums; font-weight:600; font-size:15px; padding-bottom:8px; white-space:nowrap; color:var(--accent);
+}
+.filters{display:flex; gap:12px; align-items:end; flex-wrap:wrap}
+.filters .field{width:170px}
+
+/* ---------- forms grid ---------- */
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:13px}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:13px}
+.section-note{font-size:12.5px; color:var(--muted); margin:0 0 14px; max-width:70ch}
+
+/* ---------- invoice preview (paper) ---------- */
+.paper{
+  background:#fff; color:#221B1C; border:1px solid var(--line); border-radius:var(--radius);
+  box-shadow:var(--shadow); padding:40px 44px; max-width:800px; font-size:13px;
+}
+.paper h2,.paper h3{color:#221B1C}
+.paper .p-top{display:flex; justify-content:space-between; gap:30px; align-items:flex-start; flex-wrap:wrap}
+.paper .issuer .nm{font-family:"Newsreader",Georgia,serif; font-size:22px; font-weight:600}
+.paper .issuer div{color:#5B4E50; font-size:12.5px}
+.paper .inv-box{text-align:right}
+.paper .inv-box .ttl{font-family:"Newsreader",Georgia,serif; font-size:26px; letter-spacing:.02em; color:#7B2D3B}
+.paper .inv-box .no{font-family:"IBM Plex Mono",monospace; font-size:15px; margin-top:2px}
+.paper .inv-box .dt{color:#5B4E50; font-size:12.5px; margin-top:5px}
+.paper .bill-to{margin:26px 0 6px; padding:14px 16px; background:#FAF7F7; border-left:3px solid #7B2D3B; border-radius:3px}
+.paper .bill-to .k{font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:#7B2D3B; font-weight:700}
+.paper .bill-to .nm{font-weight:600; font-size:15px; margin-top:3px}
+.paper .bill-to div{color:#5B4E50; font-size:12.5px}
+.paper table{font-size:12.5px; margin-top:18px}
+.paper th{background:#fff; color:#7A6D6E; border-bottom:1px solid #C9BEBE; position:static}
+.paper td{border-bottom:1px solid #EFE9E7; color:#221B1C}
+.paper tbody tr:hover td{background:transparent}
+.paper .totals{margin-top:18px; margin-left:auto; width:290px}
+.paper .totals .r{display:flex; justify-content:space-between; padding:6px 10px; font-variant-numeric:tabular-nums}
+.paper .totals .r.grand{background:#7B2D3B; color:#fff; font-weight:700; font-size:15.5px; border-radius:4px; padding:10px}
+.paper .p-foot{margin-top:26px; padding-top:14px; border-top:1px solid #EFE9E7; color:#5B4E50; font-size:11.5px; display:grid; grid-template-columns:1fr 1fr; gap:16px}
+.paper .p-foot .k{font-weight:700; color:#221B1C; font-size:10px; letter-spacing:.08em; text-transform:uppercase}
+
+/* ---------- misc ---------- */
+.toolbar{display:flex; gap:9px; flex-wrap:wrap; align-items:center; margin-bottom:16px}
+.spacer{flex:1}
+dialog{
+  border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); color:var(--ink);
+  padding:0; max-width:560px; width:calc(100% - 32px); box-shadow:0 24px 60px -20px rgba(0,0,0,.4);
+}
+dialog::backdrop{background:rgba(20,14,15,.5)}
+.dlg-head{padding:15px 18px; border-bottom:1px solid var(--line-soft); display:flex; justify-content:space-between; align-items:center}
+.dlg-head h3{font-size:18px}
+.dlg-body{padding:18px; max-height:65vh; overflow:auto}
+.dlg-foot{padding:13px 18px; border-top:1px solid var(--line-soft); display:flex; gap:9px; justify-content:flex-end}
+.toast{
+  position:fixed; left:50%; bottom:26px; transform:translateX(-50%);
+  background:var(--ink); color:var(--ground); padding:10px 18px; border-radius:22px; font-size:13.5px; font-weight:500;
+  box-shadow:0 10px 30px -8px rgba(0,0,0,.5); z-index:50; max-width:88vw; text-align:center;
+}
+.toast.bad{background:var(--danger); color:#fff}
+.send-box{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-top:16px}
+.send-box h4{font-family:"Newsreader",Georgia,serif; font-size:17px; font-weight:500; margin:0 0 4px}
+.send-box .lead{margin:0 0 13px; font-size:12.5px; color:var(--muted); max-width:64ch}
+.send-box .dest{margin:12px 0 0; font-size:12px; color:var(--muted); display:flex; gap:16px; flex-wrap:wrap}
+.send-box .dest b{color:var(--ink-2); font-weight:600}
+.step{display:inline-flex; align-items:center; justify-content:center; width:17px; height:17px; border-radius:50%;
+  background:var(--accent-soft); color:var(--accent); font-size:10.5px; font-weight:700; margin-right:2px}
+.warn-banner{
+  background:var(--warn-soft); border:1px solid var(--warn); color:var(--warn);
+  padding:10px 14px; border-radius:6px; font-size:13px; margin-bottom:16px;
+}
+.warn-banner a{color:inherit}
+.inline-link{background:none; border:0; padding:0; color:var(--accent); font-weight:600; cursor:pointer; text-decoration:underline; font-size:inherit}
+
+@media (max-width:900px){
+  .app{grid-template-columns:1fr}
+  .rail{position:static; height:auto; flex-direction:row; flex-wrap:wrap; align-items:center; padding:12px; gap:6px; border-right:0; border-bottom:1px solid var(--line)}
+  .brand{padding:0 10px 0 4px; flex:1 0 100%} .brand .sub{display:none}
+  .brand .mark{font-size:18px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .rail-foot{margin:0 0 0 auto; border:0; padding:0}
+  .save-chip{font-size:11px}
+  .nav-btn{width:auto}  .nav-btn .count{display:none}
+  main{padding:18px 14px 70px}
+  .quick{grid-template-columns:1fr 1fr}
+  .paper{padding:24px 20px}
+}
+
+/* ---------- escritorio ---------- */
+.save-chip [data-sync][data-tipo="pendiente"]{color:var(--warn)}
+.save-chip [data-sync][data-tipo="trabajando"]{color:var(--muted)}
+.save-chip [data-sync][data-tipo="ok"]{color:var(--ok)}
+.save-chip [data-sync][data-tipo="error"]{color:var(--danger)}
+.volver{font-size:12px; color:var(--muted); text-decoration:none; padding:2px 0}
+.volver:hover{color:var(--ink)}
+#cargando{position:fixed; inset:0; background:var(--ground); display:flex; align-items:center;
+          justify-content:center; flex-direction:column; gap:14px; z-index:99; padding:24px; text-align:center}
+#cargando .msg{font-family:"Newsreader",Georgia,serif; font-size:19px}
+#cargando .sub{font-size:13px; color:var(--muted); max-width:34ch; line-height:1.5}
+@media (max-width:900px){ .rail-foot{flex-direction:row; gap:12px; align-items:center} }
+</style>
+</head>
+<body>
+
+<div id="cargando">
+  <div class="msg">Cargando Comanda…</div>
+  <div class="sub" id="cargando-sub">Descargando tus datos del repositorio privado.</div>
+</div>
+
+<div id="root" class="app"></div>
+
+<script src="sync.js"></script>
+<script>
+(function(){
+  var capa = document.getElementById('cargando');
+  var sub  = document.getElementById('cargando-sub');
+
+  Sync.iniciar('comanda').then(function(){
+    var s = document.createElement('script');
+    s.src = 'comanda.js';
+    s.onload = function(){ capa.remove(); };
+    s.onerror = function(){ sub.textContent = 'No se pudo cargar comanda.js. Recarga la pagina.'; };
+    document.body.appendChild(s);
+  }).catch(function(err){
+    if (err.message === 'sin-credenciales') { location.href = 'index.html?volver=comanda.html'; return; }
+    capa.querySelector('.msg').textContent = 'No he podido cargar tus datos';
+    sub.innerHTML = err.message + '<br><br><a href="index.html">Volver al escritorio</a>';
+  });
+})();
+</script>
+</body>
+</html>

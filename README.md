@@ -1,8 +1,8 @@
-# Escritorio de Valeriano
+# Escritorio
 
-Panel privado con dos herramientas: la gestión del piso de Soldeu y el
-horario del restaurante. Publicado con GitHub Pages en
-**https://valitolerio.github.io/apps/**
+Panel privado con tres herramientas: la gestión del piso de Soldeu, el
+horario del restaurante y la facturación de comidas de empresa. Publicado
+con GitHub Pages en **https://valitolerio.github.io/apps/**
 
 ## Cómo está montado
 
@@ -11,10 +11,11 @@ personal. Los datos viven en un repositorio **privado** aparte
 (`ValitoLerio/datos`), en un único archivo `datos.json`.
 
 ```
-Este repo (público)              Repo de datos (privado)
-├── index.html   escritorio      └── datos.json
-├── piso.html    + piso.js            ├── piso:    recibos, gastos, inquilinos
-├── horario.html + horario.js         └── horario: turnos, personal, colores
+Este repo (público)                Repo de datos (privado)
+├── index.html   el escritorio     └── datos.json
+├── piso.html    + piso.js              ├── piso:    recibos, gastos, inquilinos
+├── horario.html + horario.js           ├── horario: turnos, personal, colores
+├── comanda.html + comanda.js           └── comanda: empresas, servicios, facturas
 └── sync.js      guardado
 ```
 
@@ -36,24 +37,24 @@ dispositivo", que borra el token y la copia local de los datos.
 
 ## Traer los datos que ya tenías
 
-Las versiones originales de estos HTML, con los datos reales dentro, están
-en el repositorio privado `ValitoLerio/panel` y en la carpeta
-`Escritorio / CLAUDE DOCS` del Mac.
-
-- **Piso**: en el archivo original, Configuración → Exportar datos. En la
-  web, Configuración → Importar datos. Las cifras de la compra se rellenan
-  a mano en Configuración → La inversión.
-- **Horario**: en el archivo original, botón *Copia*. En la web, botón
-  *Importar*.
+- **Piso**: en el archivo original del Mac, Configuración → Exportar datos.
+  En la web, Configuración → Importar datos. Las cifras de la compra se
+  rellenan a mano en Configuración → La inversión.
+- **Horario**: en el archivo original, botón *Copia*. En la web, *Importar*.
+- **Comanda**: en el artefacto de Claude, Ajustes → Descargar copia. En la
+  web, Ajustes → Restaurar copia.
 
 Al importar, los datos se suben solos al repositorio privado.
 
 ## Tocar el código
 
-Los HTML de este repositorio se generan a partir de los originales con dos
-scripts que sacan del código los datos reales. Esos scripts viven en el
-repositorio privado `ValitoLerio/panel`, en la carpeta `generadores/`,
-porque contienen justo lo que aquí no debe estar.
+Los HTML de este repositorio se generan a partir de los originales con tres
+scripts que sacan del código los datos reales y reconectan el guardado.
+Viven en el repositorio privado `ValitoLerio/panel`, en `generadores/`.
+
+Comanda venía de un artefacto de Claude y guardaba dentro del propio
+documento; aquí guarda en el repositorio de datos, y el PDF de las facturas
+lo descarga el navegador en vez de la API del visor.
 
 Si editas aquí a mano, ten presente que **todo lo que subas es público**:
 los datos van siempre al repositorio privado, nunca al código.

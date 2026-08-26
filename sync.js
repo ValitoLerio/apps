@@ -31,7 +31,8 @@ var REINTENTOS = 3;      // ante conflicto con otro dispositivo
 // Qué claves de localStorage pertenece a cada app
 var SECCIONES = {
   piso:    ['piso_cfg','piso_meses','piso_gastos','piso_inq','piso_data_version'],
-  horario: ['rsch','rcam','rhid','rtheme']
+  horario: ['rsch','rcam','rhid','rtheme'],
+  comanda: ['comanda.ledger.v1']
 };
 
 var seccionActiva = null;
