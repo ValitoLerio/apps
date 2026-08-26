@@ -24,6 +24,22 @@ solo en ese navegador. A partir de ahí, cualquier cambio en las apps se
 sube solo al repositorio de datos un par de segundos después, y al abrir
 la web en otro sitio se descarga lo último guardado.
 
+## Trabajar en dos dispositivos sin pisarse
+
+El guardado sustituye la sección entera de cada app, así que dos
+dispositivos editando lo mismo podrían machacarse. Para evitarlo:
+
+- **Al abrir** cualquier app, y el escritorio, se descarga primero lo que
+  hay en GitHub. Si no se puede comprobar, el escritorio lo dice y no
+  sigue: mejor eso que trabajar sobre datos viejos.
+- **Mientras trabajas**, cada minuto y al volver a la pestaña se mira si
+  alguien guardó desde otro sitio. Si aquí no hay nada sin guardar, se
+  trae la versión nueva sola. Si lo hay, pregunta con cuál te quedas.
+- **Antes de guardar**, se comprueba que la sección no haya cambiado
+  desde que se cargó. Si cambió, vuelve a preguntar en vez de pisar.
+- **Al salir** con algo sin subir, el navegador avisa. El indicador de
+  estado se puede pulsar para guardar en el acto.
+
 ## Conectar un dispositivo
 
 1. Abre la web y rellena el formulario de conexión

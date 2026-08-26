@@ -443,7 +443,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
 </div>
 
 
-<script src="sync.js?v=202608261227"></script>
+<script src="sync.js?v=202608261300"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -451,7 +451,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
 
   Sync.iniciar('piso').then(function(){
     var s = document.createElement('script');
-    s.src = 'piso.js?v=202608261227';
+    s.src = 'piso.js?v=202608261300';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
