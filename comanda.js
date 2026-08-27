@@ -42,9 +42,12 @@ function companyName(id){ var c=company(id); return c?c.name:"(sin empresa)"; }
 /* Cada servicio recuerda cómo se tecleó su precio: con el IGI dentro (gross)
    o sin él. Así cambiar el ajuste no altera lo ya anotado. */
 function isGross(s){ return s.gross===undefined ? false : !!s.gross; }
+function extraDe(s){ return +s.extra||0; }
 function svcAmounts(s){
   var rate=(s.igi==null? state.settings.igi : s.igi);
-  var importe=r2((+s.diners||0)*(+s.price||0));
+  /* Los extras se cobran como el menu: si el precio lleva el IGI dentro,
+     el extra tambien, para que el total impreso cuadre al centimo. */
+  var importe=r2((+s.diners||0)*(+s.price||0) + extraDe(s));
   if(isGross(s)){
     var base=r2(importe/(1+rate/100));
     return {base:base, rate:rate, igi:r2(importe-base), total:importe, gross:true};
@@ -77,10 +80,11 @@ function servicesOf(ym, companyId, status){
 /* El IGI se liquida sobre la base de cada tipo, no sumando los redondeos de cada línea:
    así la factura cuadra si alguien recalcula el porcentaje sobre la base impresa. */
 function totalsOf(list){
-  var t={diners:0,base:0,igi:0,total:0,count:list.length,taxes:[],gross:false}, byRate={};
+  var t={diners:0,base:0,igi:0,total:0,extras:0,count:list.length,taxes:[],gross:false}, byRate={};
   list.forEach(function(s){
     var a=svcAmounts(s);
     t.diners+=+s.diners||0;
+    t.extras=r2(t.extras+extraDe(s));
     var g=byRate[a.rate]||(byRate[a.rate]={grossTotal:0, netBase:0});
     if(a.gross){ g.grossTotal=r2(g.grossTotal+a.total); t.gross=true; }
     else g.netBase=r2(g.netBase+a.base);
@@ -228,6 +232,7 @@ function viewServicios(main){
       '<div class="field"><label class="lbl" for="q_date">Fecha</label><input type="date" id="q_date" value="'+esc(todayISO())+'" required></div>'+
       '<div class="field"><label class="lbl" for="q_comp">Empresa</label><select id="q_comp" required>'+companyOptions(ui.fCompany,"— elegir —")+'</select></div>'+
       '<div class="field"><label class="lbl" for="q_desc">Descripción</label><input id="q_desc" placeholder="'+esc(defaultDesc())+'" value="'+esc(defaultDesc())+'"></div>'+
+      '<div class="field"><label class="lbl" for="q_ext">Extras (€)</label><input type="number" id="q_ext" min="0" step="0.01" placeholder="0,00"></div>'+
       '<div class="field"><label class="lbl" for="q_alb">Nº albarán</label><input id="q_alb" class="mono" placeholder="ALB-0001"></div>'+
       '<div class="field"><label class="lbl" for="q_din">Comens.</label><input type="number" id="q_din" min="0" step="1" value="1" required></div>'+
       '<div class="field"><label class="lbl" for="q_pri">€/persona'+(state.settings.pricesIncludeIgi?" (IGI incl.)":"")+'</label><input type="number" id="q_pri" min="0" step="0.01" value="'+esc(precioPara(ui.fCompany))+'" required></div>'+
@@ -248,9 +253,10 @@ function viewServicios(main){
 
   var f=document.getElementById("quickForm");
   var qc=document.getElementById("q_comp"), qp=document.getElementById("q_pri"),
-      qd=document.getElementById("q_din"), qt=document.getElementById("q_total"), qa=document.getElementById("q_alb");
+      qd=document.getElementById("q_din"), qt=document.getElementById("q_total"), qa=document.getElementById("q_alb"),
+      qe=document.getElementById("q_ext");
   function refreshPreview(){
-    var importe=r2((+qd.value||0)*(+qp.value||0));
+    var importe=r2((+qd.value||0)*(+qp.value||0) + (+qe.value||0));
     if(!importe){ qt.textContent="—"; return; }
     var tot=state.settings.pricesIncludeIgi ? importe : r2(importe*(1+state.settings.igi/100));
     qt.textContent=eur(tot);
@@ -261,6 +267,7 @@ function viewServicios(main){
     refreshPreview();
   });
   qd.addEventListener("input", refreshPreview); qp.addEventListener("input", refreshPreview);
+  qe.addEventListener("input", refreshPreview);
   qa.value=nextAlbaran();
   refreshPreview();
 
@@ -271,6 +278,7 @@ function viewServicios(main){
       id:uid(), date:document.getElementById("q_date").value, companyId:qc.value,
       desc:document.getElementById("q_desc").value.trim()||defaultDesc(),
       albaran:qa.value.trim(), diners:+qd.value||0, price:+qp.value||0,
+      extra:+qe.value||0,
       igi:state.settings.igi, gross:!!state.settings.pricesIncludeIgi,
       status:"pendiente", invoiceId:null
     };
@@ -281,6 +289,7 @@ function viewServicios(main){
     var nq=document.getElementById("q_comp"); if(nq){ nq.value=s.companyId; nq.dispatchEvent(new Event("change")); }
     var nd=document.getElementById("q_date"); if(nd) nd.value=s.date;
     var na=document.getElementById("q_alb"); if(na) na.value=nextAlbaran();
+    var ne=document.getElementById("q_ext"); if(ne) ne.value="";
     document.getElementById("q_din").focus();
     toast("Servicio anotado: "+eur(svcAmounts(s).total));
   });
@@ -312,6 +321,7 @@ function paintServices(list,t){
       "<td>"+esc(dmy(s.date))+"</td>"+
       "<td>"+esc(companyName(s.companyId))+"</td>"+
       "<td>"+esc(s.desc)+"</td>"+
+      '<td class="num">'+(extraDe(s)?eur(extraDe(s)):"—")+"</td>"+
       '<td class="mono">'+esc(s.albaran||"—")+"</td>"+
       '<td class="num">'+num(s.diners)+"</td>"+
       '<td class="num">'+eur(s.price)+"</td>"+
@@ -325,11 +335,12 @@ function paintServices(list,t){
       "</div></td></tr>";
   }).join("");
   box.innerHTML='<table><thead><tr>'+
-    "<th>Fecha</th><th>Empresa</th><th>Descripción</th><th>Nº albarán</th>"+
+    "<th>Fecha</th><th>Empresa</th><th>Descripción</th>"+
+    '<th class="num">Extras</th><th>Nº albarán</th>'+
     '<th class="num">Com.</th><th class="num">€/pers.'+(state.settings.pricesIncludeIgi?" c/IGI":"")+"</th>"+
     '<th class="num">Subtotal</th><th class="num">IGI</th>'+
     '<th class="num">Total</th><th>Estado</th><th></th></tr></thead><tbody>'+rows+"</tbody>"+
-    '<tfoot><tr><td colspan="4">'+num(t.count)+' servicios</td>'+
+    '<tfoot><tr><td colspan="5">'+num(t.count)+' servicios</td>'+
     '<td class="num">'+num(t.diners)+'</td><td></td>'+
     '<td class="num">'+eur(t.base)+'</td><td class="num">'+eur(t.igi)+'</td>'+
     '<td class="num">'+eur(t.total)+'</td><td colspan="2"></td></tr></tfoot></table>';
@@ -359,6 +370,7 @@ function editService(id){
       '<div class="field"><label class="lbl" for="e_date">Fecha</label><input type="date" id="e_date" value="'+esc(s.date)+'"></div>'+
       '<div class="field"><label class="lbl" for="e_comp">Empresa</label><select id="e_comp">'+companyOptions(s.companyId,"— elegir —")+'</select></div>'+
       '<div class="field" style="grid-column:1/-1"><label class="lbl" for="e_desc">Descripción</label><input id="e_desc" value="'+esc(s.desc)+'"></div>'+
+      '<div class="field"><label class="lbl" for="e_ext">Extras (€)</label><input type="number" id="e_ext" min="0" step="0.01" value="'+esc(extraDe(s)||"")+'"></div>'+
       '<div class="field"><label class="lbl" for="e_alb">Nº albarán</label><input id="e_alb" class="mono" value="'+esc(s.albaran||"")+'"></div>'+
       '<div class="field"><label class="lbl" for="e_din">Comensales</label><input type="number" id="e_din" min="0" step="1" value="'+esc(s.diners)+'"></div>'+
       '<div class="field"><label class="lbl" for="e_pri">Precio por persona (€)</label><input type="number" id="e_pri" min="0" step="0.01" value="'+esc(s.price)+'"></div>'+
@@ -374,6 +386,7 @@ function editService(id){
       s.companyId=document.getElementById("e_comp").value||s.companyId;
       s.desc=document.getElementById("e_desc").value.trim()||s.desc;
       s.albaran=document.getElementById("e_alb").value.trim();
+      s.extra=+document.getElementById("e_ext").value||0;
       s.diners=+document.getElementById("e_din").value||0;
       s.price=+document.getElementById("e_pri").value||0;
       s.gross=document.getElementById("e_gross").checked;
@@ -536,13 +549,16 @@ function viewFacturar(main){
 }
 function miniTable(list,t){
   return "<table><thead><tr><th>Fecha</th><th>Nº albarán</th><th>Descripción</th>"+
-    '<th class="num">Com.</th><th class="num">€/pers.</th><th class="num">Importe</th></tr></thead><tbody>'+
+    '<th class="num">Com.</th><th class="num">€/pers.</th><th class="num">Extras</th>'+
+    '<th class="num">Importe</th></tr></thead><tbody>'+
     list.map(function(s){ var a=svcAmounts(s);
       return "<tr><td>"+esc(dmy(s.date))+'</td><td class="mono">'+esc(s.albaran||"—")+"</td><td>"+esc(s.desc)+
-      '</td><td class="num">'+num(s.diners)+'</td><td class="num">'+eur(s.price)+'</td><td class="num">'+
+      '</td><td class="num">'+num(s.diners)+'</td><td class="num">'+eur(s.price)+
+      '</td><td class="num">'+(extraDe(s)?eur(extraDe(s)):"—")+'</td><td class="num">'+
       eur(a.gross?a.total:a.base)+"</td></tr>";
     }).join("")+"</tbody><tfoot><tr><td colspan=\"3\">Subtotal "+eur(t.base)+" · IGI "+eur(t.igi)+
-    '</td><td class="num">'+num(t.diners)+'</td><td></td><td class="num">'+eur(t.total)+"</td></tr></tfoot></table>";
+    '</td><td class="num">'+num(t.diners)+'</td><td></td>'+
+    '<td class="num">'+eur(t.extras)+'</td><td class="num">'+eur(t.total)+"</td></tr></tfoot></table>";
 }
 function draftInvoice(cid, ym){
   var list=sortedServices(state.services.filter(function(s){
@@ -559,9 +575,11 @@ function draftInvoice(cid, ym){
     lines:list.map(function(s){ var a=svcAmounts(s);
       /* amount = lo que se imprime en la columna Importe: con IGI si el precio lo lleva */
       return {date:s.date, albaran:s.albaran, desc:s.desc, diners:s.diners, price:s.price,
+              extra:extraDe(s),
               base:a.base, amount:a.gross?a.total:a.base, gross:a.gross, serviceId:s.id};
     }),
-    base:t.base, igi:t.igi, total:t.total, diners:t.diners, taxes:t.taxes, gross:t.gross,
+    base:t.base, igi:t.igi, total:t.total, diners:t.diners, extras:t.extras,
+    taxes:t.taxes, gross:t.gross,
     status:"borrador",
     client:{name:c.name,nrt:c.nrt,address:c.address,city:c.city,email:c.email,contact:c.contact,phone:c.phone},
     issuer:{name:st.name,nrt:st.nrt,address:st.address,city:st.city,phone:st.phone,email:st.email},
@@ -896,7 +914,8 @@ function invoiceHTML(inv){
   var i=inv.issuer||{}, c=inv.client||{};
   var rows=inv.lines.map(function(l){
     return "<tr><td>"+esc(dmy(l.date))+'</td><td class="mono">'+esc(l.albaran||"—")+"</td><td>"+esc(l.desc)+
-      '</td><td class="num">'+num(l.diners)+'</td><td class="num">'+eur(l.price)+'</td><td class="num">'+
+      '</td><td class="num">'+num(l.diners)+'</td><td class="num">'+eur(l.price)+
+      '</td><td class="num">'+((+l.extra||0)?eur(l.extra):"—")+'</td><td class="num">'+
       eur(l.amount==null?l.base:l.amount)+"</td></tr>";
   }).join("");
   var gross=!!inv.gross;
@@ -917,7 +936,7 @@ function invoiceHTML(inv){
       "</strong>. "+num(inv.lines.length)+" albaranes, "+num(inv.diners)+" comensales."+
       (gross?" Importes con el IGI incluido.":"")+"</p>"+
     '<div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Nº albarán</th><th>Concepto</th>'+
-      '<th class="num">Comens.</th><th class="num">€/pers.</th>'+
+      '<th class="num">Comens.</th><th class="num">€/pers.</th><th class="num">Extras</th>'+
       '<th class="num">Importe</th></tr></thead><tbody>'+rows+"</tbody></table></div>"+
     '<div class="totals">'+
       '<div class="r"><span>Subtotal (base imponible)</span><span>'+eur(inv.base)+"</span></div>"+
@@ -1018,7 +1037,9 @@ function layoutInvoice(inv, opts){
   y+=16;
 
   /* table */
-  var COL={fecha:L, alb:L+62, desc:L+150, com:L+340, pri:L+400, imp:R};
+  /* Bordes de columna. Los cuatro numeros van alineados a la derecha, y
+     al concepto le queda el hueco entre el albaran y los comensales. */
+  var COL={fecha:L, alb:L+56, desc:L+138, com:L+292, pri:L+346, ext:L+400, imp:R};
   function tableHead(){
     RC(L, y-10, R-L, 15, C_SOFT);
     T("FECHA", COL.fecha+2, y, 7.4, true, C_MUT);
@@ -1026,6 +1047,7 @@ function layoutInvoice(inv, opts){
     T("CONCEPTO", COL.desc, y, 7.4, true, C_MUT);
     T("COMENS.", COL.com+38, y, 7.4, true, C_MUT, "right");
     T("€/PERS.", COL.pri+52, y, 7.4, true, C_MUT, "right");
+    T("EXTRAS", COL.ext+52, y, 7.4, true, C_MUT, "right");
     T("IMPORTE", COL.imp-2, y, 7.4, true, C_MUT, "right");
     y+=6; LN(L,y,R,y,0.7,C_LINE); y+=13;
   }
@@ -1039,9 +1061,10 @@ function layoutInvoice(inv, opts){
     }
     T(dmy(l.date), COL.fecha+2, y, 9);
     T(l.albaran||"—", COL.alb, y, 9);
-    T(clip(l.desc||"", 30), COL.desc, y, 9);
+    T(clip(l.desc||"", 26), COL.desc, y, 9);
     T(num(l.diners), COL.com+38, y, 9, false, C_INK, "right");
     T(eur(l.price), COL.pri+52, y, 9, false, C_INK, "right");
+    T((+l.extra||0)?eur(l.extra):"—", COL.ext+52, y, 9, false, C_INK, "right");
     T(eur(l.amount==null?l.base:l.amount), COL.imp-2, y, 9, false, C_INK, "right");
     y+=5; LN(L,y,R,y,0.35,[0.9,0.88,0.87]); y+=12;
   });
