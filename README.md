@@ -40,6 +40,25 @@ dispositivos editando lo mismo podrían machacarse. Para evitarlo:
 - **Al salir** con algo sin subir, el navegador avisa. El indicador de
   estado se puede pulsar para guardar en el acto.
 
+## Contraseña por app
+
+Cada app puede pedir su propia contraseña, desde el botón del candado en
+el escritorio. De la contraseña se deriva una huella con PBKDF2 (200.000
+iteraciones y sal propia) y solo eso viaja al repositorio de datos, en una
+sección `seguridad` que las apps no tocan. La contraseña no se guarda en
+ninguna parte, ni aquí ni allí.
+
+Mientras una app esté bloqueada, sus datos **no se descargan al aparato**:
+la pantalla de contraseña sale antes, y el escritorio tampoco enseña sus
+cifras. Al acertar, queda abierta hasta que cierres la pestaña; "Bloquear
+ahora" la cierra en el acto.
+
+Es un candado, no un cifrado: quien sepa manejar las herramientas del
+navegador en un dispositivo ya conectado podría saltárselo. Sirve para que
+nadie que coja tu móvil desbloqueado curiosee, no contra alguien técnico.
+Si olvidas la contraseña, se quita desde otro dispositivo y no se pierde
+nada.
+
 ## Conectar un dispositivo
 
 1. Abre la web y rellena el formulario de conexión

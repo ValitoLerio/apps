@@ -189,6 +189,38 @@
                font-weight:600;font-size:1rem;margin-bottom:.35rem}
   .nota p{font-size:.86rem;color:var(--tinta2);max-width:36ch}
 
+  /* ── Candados ──────────────────────────────────────────────────── */
+  .puerta.trancada .cifra .n,
+  .puerta.trancada .celda .v{color:var(--tinta2);opacity:.5}
+  .candado{font-size:.72rem;margin-left:.4rem;opacity:.85}
+  .panel{position:fixed;inset:0;z-index:60;background:rgba(8,12,12,.66);
+         display:flex;align-items:center;justify-content:center;padding:20px}
+  .panel .caja{background:var(--sup);border:1px solid var(--linea);border-radius:16px;
+               width:100%;max-width:430px;padding:1.5rem}
+  .panel h3{font-family:var(--display);font-variation-settings:'opsz' 90,'SOFT' 30;
+            font-weight:600;font-size:1.25rem;margin-bottom:.3rem}
+  .panel .lead{font-size:.86rem;color:var(--tinta2);margin-bottom:1.2rem}
+  .fila{display:flex;align-items:center;gap:.7rem;padding:.7rem 0;
+        border-top:1px solid var(--linea)}
+  .fila .nom{font-weight:500;font-size:.95rem}
+  .fila .est{font-family:var(--mono);font-size:.65rem;color:var(--tinta2);
+             text-transform:uppercase;letter-spacing:.1em}
+  .fila .acciones2{margin-left:auto;display:flex;gap:.4rem}
+  .mini{background:var(--sup2);border:1px solid var(--linea);color:var(--tinta);
+        font-family:var(--texto);font-size:.78rem;padding:.35rem .7rem;
+        border-radius:7px;cursor:pointer}
+  .mini:hover{border-color:var(--tinta2)}
+  .mini.quita{color:var(--alerta)}
+  .panel .cerrar{margin-top:1.2rem;width:100%;background:var(--piso);color:var(--fondo);
+                 border:none;font-family:var(--texto);font-weight:600;font-size:.9rem;
+                 padding:.6rem;border-radius:9px;cursor:pointer}
+  .panel .recado{font-size:.82rem;margin-top:.8rem;min-height:1.2em}
+  .panel .recado.malo{color:var(--alerta)}
+  .panel .recado.bueno{color:var(--piso)}
+  .panel input{width:100%;font-family:var(--mono);font-size:.9rem;padding:.6rem .75rem;
+               border-radius:8px;border:1px solid var(--linea);background:var(--sup2);
+               color:var(--tinta);margin-top:.5rem}
+
   /* ── Pantalla de carga ─────────────────────────────────────────── */
   #cargando{position:fixed;inset:0;z-index:50;background:var(--fondo);
             display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -231,6 +263,7 @@
       <h1>Escritorio de Valeriano</h1>
     </div>
     <div class="acciones">
+      <button class="icono" id="btn-candados" type="button" title="Contraseñas de las apps" aria-label="Contraseñas">🔒</button>
       <button class="icono" id="btn-tema" type="button" title="Cambiar entre claro y oscuro" aria-label="Cambiar tema">◐</button>
     </div>
   </header>
@@ -364,7 +397,7 @@
 
 </div>
 
-<script src="sync.js?v=202608261300"></script>
+<script src="sync.js?v=202608270941"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
@@ -532,12 +565,174 @@
     pon('d-facturas',  String((libro.invoices || []).length));
   }
 
+  // ── Candados ───────────────────────────────────────────
+  var TARJETAS = {piso:'.p-piso', horario:'.p-resto', comanda:'.p-comanda'};
+  var NOMBRES  = {piso:'Piso Soldeu', horario:'Horario Restaurante', comanda:'Comanda'};
+  var seguridad = {};
+
+  function pintarCandados(){
+    Object.keys(TARJETAS).forEach(function(sec){
+      var tarjeta = document.querySelector(TARJETAS[sec]);
+      if (!tarjeta) return;
+      var trancada = !!seguridad[sec];
+      tarjeta.classList.toggle('trancada', trancada);
+      var rotulo = tarjeta.querySelector('.rotulo');
+      var marca = rotulo.querySelector('.candado');
+      if (trancada && !marca) {
+        marca = document.createElement('span');
+        marca.className = 'candado';
+        marca.textContent = '🔒';
+        marca.title = 'Pide contraseña al abrirla';
+        rotulo.appendChild(marca);
+      } else if (!trancada && marca) {
+        marca.remove();
+      }
+    });
+  }
+
+  function ocultarCifras(sec){
+    // Con candado, el escritorio tampoco enseña los números
+    var ids = {
+      piso:    ['d-cobrado','d-recibos','d-ultimo-mes','d-inquilino'],
+      horario: ['d-horas','d-personal','d-turnos'],
+      comanda: ['d-pendiente','d-empresas','d-servicios','d-facturas']
+    }[sec] || [];
+    ids.forEach(function(id){ pon(id, '···'); });
+  }
+
+  function abrirPanel(){
+    var fondo = document.createElement('div');
+    fondo.className = 'panel';
+    var caja = document.createElement('div');
+    caja.className = 'caja';
+    caja.innerHTML =
+      '<h3>Contraseñas</h3>' +
+      '<p class="lead">Cada app puede pedir su propia contraseña al abrirla. ' +
+      'Se guarda una huella cifrada en tu repositorio privado, nunca la contraseña.</p>' +
+      '<div id="filas"></div>' +
+      '<div class="recado" id="recado"></div>' +
+      '<button class="mini" id="bloquear-ya" style="width:100%;margin-top:.9rem">' +
+      'Bloquear ahora las apps con contraseña</button>' +
+      '<button class="cerrar" id="cerrar-panel">Cerrar</button>';
+    fondo.appendChild(caja);
+    document.body.appendChild(fondo);
+
+    var recado = caja.querySelector('#recado');
+    function decirlo(texto, tipo){
+      recado.textContent = texto;
+      recado.className = 'recado ' + (tipo || '');
+    }
+
+    function pintarFilas(){
+      var cont = caja.querySelector('#filas');
+      cont.innerHTML = '';
+      Object.keys(NOMBRES).forEach(function(sec){
+        var fila = document.createElement('div');
+        fila.className = 'fila';
+        var puesta = !!seguridad[sec];
+        var izq = document.createElement('div');
+        izq.innerHTML = '<div class="nom"></div><div class="est"></div>';
+        izq.querySelector('.nom').textContent = NOMBRES[sec];
+        izq.querySelector('.est').textContent = puesta ? 'Con contraseña' : 'Sin contraseña';
+        var acc = document.createElement('div');
+        acc.className = 'acciones2';
+
+        var poner = document.createElement('button');
+        poner.className = 'mini';
+        poner.textContent = puesta ? 'Cambiar' : 'Poner';
+        poner.addEventListener('click', function(){ flujoPoner(sec); });
+        acc.appendChild(poner);
+
+        if (puesta) {
+          var quitar = document.createElement('button');
+          quitar.className = 'mini quita';
+          quitar.textContent = 'Quitar';
+          quitar.addEventListener('click', function(){ flujoQuitar(sec); });
+          acc.appendChild(quitar);
+        }
+        fila.appendChild(izq); fila.appendChild(acc);
+        cont.appendChild(fila);
+      });
+    }
+
+    function pedirTexto(titulo, callback){
+      var cont = caja.querySelector('#filas');
+      cont.innerHTML = '';
+      var t = document.createElement('div');
+      t.className = 'nom';
+      t.textContent = titulo;
+      var campo = document.createElement('input');
+      campo.type = 'password';
+      campo.placeholder = 'Contraseña';
+      var acciones = document.createElement('div');
+      acciones.style.cssText = 'display:flex;gap:.5rem;margin-top:.7rem';
+      var ok = document.createElement('button');
+      ok.className = 'mini'; ok.textContent = 'Aceptar';
+      var no = document.createElement('button');
+      no.className = 'mini'; no.textContent = 'Cancelar';
+      acciones.appendChild(ok); acciones.appendChild(no);
+      cont.appendChild(t); cont.appendChild(campo); cont.appendChild(acciones);
+      setTimeout(function(){ campo.focus(); }, 50);
+      ok.addEventListener('click', function(){ callback(campo.value); });
+      campo.addEventListener('keydown', function(e){ if (e.key === 'Enter') callback(campo.value); });
+      no.addEventListener('click', function(){ decirlo(''); pintarFilas(); });
+    }
+
+    function flujoPoner(sec){
+      decirlo('');
+      pedirTexto('Contraseña nueva para ' + NOMBRES[sec], function(clave){
+        if (!clave || clave.length < 4) { decirlo('Usa al menos 4 caracteres.', 'malo'); return; }
+        pedirTexto('Repite la contraseña', function(otra){
+          if (otra !== clave) { decirlo('No coinciden. Empieza otra vez.', 'malo'); pintarFilas(); return; }
+          decirlo('Guardando…');
+          Sync.ponerClave(sec, clave).then(function(){
+            seguridad[sec] = true;
+            decirlo('Listo: ' + NOMBRES[sec] + ' pedirá contraseña.', 'bueno');
+            pintarFilas(); pintarCandados(); ocultarCifras(sec);
+          }, function(err){
+            decirlo('No se pudo guardar: ' + err.message, 'malo');
+            pintarFilas();
+          });
+        });
+      });
+    }
+
+    function flujoQuitar(sec){
+      decirlo('');
+      pedirTexto('Contraseña actual de ' + NOMBRES[sec], function(clave){
+        decirlo('Comprobando…');
+        Sync.quitarClave(sec, clave).then(function(){
+          seguridad[sec] = false;
+          decirlo(NOMBRES[sec] + ' ya no pide contraseña.', 'bueno');
+          pintarFilas(); pintarCandados(); pintarResumen();
+        }, function(err){
+          decirlo(err.message, 'malo');
+          pintarFilas();
+        });
+      });
+    }
+
+    pintarFilas();
+    caja.querySelector('#bloquear-ya').addEventListener('click', function(){
+      Sync.cerrarCandados();
+      decirlo('Hecho: volverán a pedir contraseña al abrirlas.', 'bueno');
+    });
+    caja.querySelector('#cerrar-panel').addEventListener('click', function(){ fondo.remove(); });
+    fondo.addEventListener('click', function(e){ if (e.target === fondo) fondo.remove(); });
+  }
+
+  document.getElementById('btn-candados').addEventListener('click', abrirPanel);
+
   function pintarResumen(){
     return Sync.descargarTodo().then(function(datos){
       datos = datos || {};
+      var seg = datos.seguridad || {};
+      seguridad = {piso: !!seg.piso, horario: !!seg.horario, comanda: !!seg.comanda};
       resumenPiso(datos.piso || {});
       resumenHorario(datos.horario || {});
       resumenComanda(datos.comanda || {});
+      Object.keys(seguridad).forEach(function(sec){ if (seguridad[sec]) ocultarCifras(sec); });
+      pintarCandados();
       pon('ultimo-guardado', haceCuanto(datos.actualizado));
     }, function(err){
       pon('ultimo-guardado', 'no he podido leer los datos: ' + err.message);
