@@ -15,15 +15,70 @@ function blankState(){
     settings:{
       name:"", nrt:"", address:"", city:"", phone:"", email:"",
       igi:4.5, iban:"", dueDays:30, terms:"Transferencia bancaria",
-      prefix:"F", nextNumber:1, paperCopy:true, pricesIncludeIgi:true, countryCode:"376",
+      prefix:"F", nextNumber:1, perfilActivo:"",
+      paperCopy:true, pricesIncludeIgi:true, countryCode:"376",
       defaultPrice:13.5, defaultDesc:"Menú del día",
       mailIntro:"Buenos días:\n\nOs adjunto la factura de las comidas del periodo indicado, junto con el detalle de albaranes.\n\nUn saludo,"
     },
-    companies:[], services:[], invoices:[]
+    profiles:[], companies:[], services:[], invoices:[]
   };
 }
+
+/* ── Perfiles de emisor ──────────────────────────────────────────────
+   Cada factura se emite desde un perfil: sus datos fiscales, su correo
+   y su propia numeracion. Asi puedes facturar como una cosa u otra sin
+   mezclar series. */
+function perfiles(){ return state.profiles || (state.profiles = []); }
+function perfil(id){
+  var l = perfiles();
+  for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i];
+  return null;
+}
+function perfilActivo(){
+  return perfil(ui.perfil) || perfil(state.settings.perfilActivo) || perfiles()[0] || null;
+}
+function nombrePerfil(id){ var p = perfil(id); return p ? p.name : "(sin perfil)"; }
+
+/* Al abrir por primera vez, los datos sueltos de Ajustes pasan a ser el
+   primer perfil. Nada se pierde y a partir de ahi se gestionan en lista. */
+function asegurarPerfiles(){
+  if (perfiles().length) {
+    // Si el perfil en uso ya no existe, apuntamos al primero
+    if (!perfil(state.settings.perfilActivo)) {
+      state.settings.perfilActivo = perfiles()[0].id;
+      touch();
+    }
+    return;
+  }
+  var s = state.settings;
+  perfiles().push({
+    id: uid(), name: s.name || "", nrt: s.nrt || "", address: s.address || "",
+    city: s.city || "", phone: s.phone || "", email: s.email || "",
+    iban: s.iban || "", terms: s.terms || "Transferencia bancaria",
+    prefix: s.prefix || "F", nextNumber: +s.nextNumber || 1
+  });
+  state.settings.perfilActivo = perfiles()[0].id;
+  /* Hay que guardarlo: si no, en cada carga se crearia otro perfil con
+     otro id y las facturas ya emitidas apuntarian a uno inexistente. */
+  touch();
+}
+
+/* Los correos de una empresa: admite el campo antiguo y la lista nueva. */
+function correosDe(c){
+  if (!c) return [];
+  var lista = [];
+  if (Array.isArray(c.emails)) lista = c.emails.slice();
+  else if (c.email) lista = String(c.email).split(/[;,\s]+/);
+  return lista.map(function(x){ return String(x).trim(); }).filter(Boolean);
+}
+function correosDeFactura(inv){
+  var vivo = company(inv.companyId);
+  var guardados = (inv.client && inv.client.emails) || [];
+  return (guardados.length ? guardados : correosDe(vivo));
+}
 var state = blankState();
-var ui = { view:"servicios", month:todayISO().slice(0,7), fCompany:"", fStatus:"", invCompany:"", saving:"idle", remote:false };
+var ui = { view:"servicios", month:todayISO().slice(0,7), fCompany:"", fStatus:"",
+           invCompany:"", perfil:"", saving:"idle", remote:false };
 
 /* ============================ money & format ============================ */
 function r2(n){ return Math.round((n+Number.EPSILON)*100)/100; }
@@ -128,7 +183,10 @@ function boot(){
     var d=blankState().settings;
     for(var k in d) if(state.settings[k]===undefined) state.settings[k]=d[k];
     state.companies=state.companies||[]; state.services=state.services||[]; state.invoices=state.invoices||[];
+    state.profiles=state.profiles||[];
   }
+  asegurarPerfiles();
+  ui.perfil = state.settings.perfilActivo || (perfiles()[0] && perfiles()[0].id) || "";
   render();
   paintSave();
 }
@@ -174,7 +232,7 @@ function render(){
   var root=document.getElementById("root");
   root.innerHTML=
     '<nav class="rail">'+
-      '<div class="brand"><span class="mark">'+esc(state.settings.name||"Comanda")+'</span><span class="sub">Comidas de empresa</span></div>'+
+      '<div class="brand"><span class="mark">'+esc((perfilActivo()&&perfilActivo().name)||"Comanda")+'</span><span class="sub">Comidas de empresa</span></div>'+
       NAV.map(function(n){
         return '<button class="nav-btn" data-nav="'+n.id+'" aria-label="'+n.label+'" aria-current="'+(ui.view===n.id)+'">'+
                '<span>'+n.label+'</span><span class="count">'+(c[n.id]===""?"":c[n.id])+'</span></button>';
@@ -189,9 +247,10 @@ function render(){
   paintSave();
   var main=document.getElementById("main");
   ({servicios:viewServicios, empresas:viewEmpresas, facturar:viewFacturar, facturas:viewFacturas, ajustes:viewAjustes})[ui.view](main);
-  if(!state.settings.name && ui.view!=="ajustes"){
+  var pAct = perfilActivo();
+  if((!pAct || !pAct.name) && ui.view!=="ajustes"){
     var w=document.createElement("div"); w.className="warn-banner";
-    w.innerHTML='Aún no has puesto los datos de tu restaurante, y sin ellos la factura sale incompleta. <button class="inline-link" data-goto="ajustes">Rellenarlos ahora</button>';
+    w.innerHTML='Aún no has puesto los datos de quien emite la factura, y sin ellos sale incompleta. <button class="inline-link" data-goto="ajustes">Rellenarlos ahora</button>';
     main.insertBefore(w, main.firstChild);
     w.querySelector("[data-goto]").addEventListener("click", function(){ ui.view="ajustes"; render(); });
   }
@@ -413,7 +472,7 @@ function viewEmpresas(main){
     return "<tr>"+
       "<td><strong>"+esc(c.name)+"</strong></td>"+
       '<td class="mono">'+esc(c.nrt||"—")+"</td>"+
-      "<td>"+esc(c.email||"—")+"</td>"+
+      "<td>"+esc(correosDe(c).join(", ")||"—")+"</td>"+
       "<td>"+esc(c.contact||"—")+"</td>"+
       '<td class="num">'+(c.price?eur(c.price):"—")+"</td>"+
       '<td class="num">'+(pend.count?num(pend.count)+" · "+eur(pend.total):"—")+"</td>"+
@@ -480,7 +539,9 @@ function editCompany(id){
       '<div class="field" style="grid-column:1/-1"><label class="lbl" for="c_addr">Dirección</label><input id="c_addr" value="'+esc(c.address)+'"></div>'+
       '<div class="field"><label class="lbl" for="c_city">Población</label><input id="c_city" value="'+esc(c.city)+'"></div>'+
       '<div class="field"><label class="lbl" for="c_contact">Persona de contacto</label><input id="c_contact" value="'+esc(c.contact)+'"></div>'+
-      '<div class="field"><label class="lbl" for="c_email">Correo de facturación</label><input type="email" id="c_email" value="'+esc(c.email)+'"></div>'+
+      '<div class="field" style="grid-column:1/-1"><label class="lbl" for="c_email">Correos de facturación</label>'+
+        '<input id="c_email" value="'+esc(correosDe(c).join(", "))+'" placeholder="uno@empresa.ad, otro@empresa.ad">'+
+        '<span style="font-size:11.5px;color:var(--muted)">Separa varios con comas. La factura se envía a todos.</span></div>'+
       '<div class="field"><label class="lbl" for="c_phone">Teléfono (WhatsApp)</label><input id="c_phone" value="'+esc(c.phone)+'" placeholder="+376 800 111"></div>'+
       '<div class="field" style="grid-column:1/-1"><label class="lbl" for="c_terms">Condiciones de pago propias</label><input id="c_terms" value="'+esc(c.terms)+'" placeholder="Si lo dejas vacío se usan las de Ajustes"></div>'+
     '</div>',
@@ -493,7 +554,9 @@ function editCompany(id){
       c.address=document.getElementById("c_addr").value.trim();
       c.city=document.getElementById("c_city").value.trim();
       c.contact=document.getElementById("c_contact").value.trim();
-      c.email=document.getElementById("c_email").value.trim();
+      c.emails=document.getElementById("c_email").value.split(/[;,\s]+/)
+                 .map(function(x){ return x.trim(); }).filter(Boolean);
+      c.email=c.emails[0]||"";
       c.phone=document.getElementById("c_phone").value.trim();
       c.terms=document.getElementById("c_terms").value.trim();
       if(!id) state.companies.push(c);
@@ -518,10 +581,23 @@ function viewFacturar(main){
     '<div class="card" style="margin-bottom:18px"><div class="card-body"><div class="filters">'+
       '<div class="field"><label class="lbl" for="i_month">Periodo</label><input type="month" id="i_month" value="'+esc(ym)+'"></div>'+
       '<div class="field"><label class="lbl" for="i_comp">Empresa</label><select id="i_comp">'+companyOptions(cid)+'</select></div>'+
-    '</div></div></div>'+
+      '<div class="field"><label class="lbl" for="i_perfil">Emitir como</label><select id="i_perfil">'+
+        perfiles().map(function(p){
+          return '<option value="'+p.id+'"'+((perfilActivo()&&perfilActivo().id)===p.id?" selected":"")+">"+esc(p.name||"(sin nombre)")+"</option>";
+        }).join("")+'</select></div>'+
+    '</div>'+
+    (perfilActivo()?'<p class="section-note" style="margin:12px 0 0">Saldrá a nombre de <strong>'+
+      esc(perfilActivo().name||"—")+'</strong>, con la serie <span class="mono">'+
+      esc(perfilActivo().prefix+"-"+ym.slice(0,4)+"-"+String(perfilActivo().nextNumber).padStart(4,"0"))+
+      '</span>.</p>':"")+
+    '</div></div>'+
     '<div id="invZone"></div>';
   document.getElementById("i_month").addEventListener("change", function(){ ui.month=this.value; render(); });
   document.getElementById("i_comp").addEventListener("change", function(){ ui.invCompany=this.value; render(); });
+  var selPerfil=document.getElementById("i_perfil");
+  if(selPerfil) selPerfil.addEventListener("change", function(){
+    ui.perfil=this.value; state.settings.perfilActivo=this.value; touch(); render();
+  });
 
   var zone=document.getElementById("invZone");
   var aviso=huerfanos?'<div class="warn-banner">Hay '+huerfanos+" servicio"+(huerfanos>1?"s":"")+
@@ -566,10 +642,12 @@ function draftInvoice(cid, ym){
   }));
   var t=totalsOf(list);
   var st=state.settings;
+  var em=perfilActivo()||{prefix:"F", nextNumber:1};
   var c=company(cid)||{};
   var d=todayISO();
   return {
-    id:"draft", number:st.prefix+"-"+ym.slice(0,4)+"-"+String(st.nextNumber).padStart(4,"0"),
+    id:"draft", perfilId:em.id,
+    number:(em.prefix||"F")+"-"+ym.slice(0,4)+"-"+String(em.nextNumber||1).padStart(4,"0"),
     date:d, due:addDays(d, +st.dueDays||0),
     companyId:cid, period:ym, igiRate:st.igi,
     lines:list.map(function(s){ var a=svcAmounts(s);
@@ -581,26 +659,31 @@ function draftInvoice(cid, ym){
     base:t.base, igi:t.igi, total:t.total, diners:t.diners, extras:t.extras,
     taxes:t.taxes, gross:t.gross,
     status:"borrador",
-    client:{name:c.name,nrt:c.nrt,address:c.address,city:c.city,email:c.email,contact:c.contact,phone:c.phone},
-    issuer:{name:st.name,nrt:st.nrt,address:st.address,city:st.city,phone:st.phone,email:st.email},
-    terms:(c.terms||st.terms), iban:st.iban
+    client:{name:c.name,nrt:c.nrt,address:c.address,city:c.city,
+            email:correosDe(c)[0]||"", emails:correosDe(c), contact:c.contact, phone:c.phone},
+    issuer:{name:em.name,nrt:em.nrt,address:em.address,city:em.city,
+            phone:em.phone,email:em.email},
+    terms:(c.terms||em.terms||st.terms), iban:em.iban||st.iban
   };
 }
 function previewDraft(cid, ym){ showInvoice(draftInvoice(cid,ym), true); }
 function emitInvoice(cid, ym){
   var inv=draftInvoice(cid,ym);
   if(!inv.lines.length){ toast("No hay servicios pendientes que facturar.", true); return; }
-  if(!state.settings.name){ toast("Antes rellena los datos de tu restaurante en Ajustes.", true); ui.view="ajustes"; render(); return; }
+  var emisor=perfilActivo();
+  if(!emisor || !emisor.name){ toast("Antes rellena los datos del emisor en Ajustes.", true); ui.view="ajustes"; render(); return; }
   confirmar("Emitir factura "+inv.number,
     '<p style="margin:0">Vas a emitir la factura <strong class="mono">'+esc(inv.number)+"</strong> a <strong>"+
-      esc(companyName(cid))+"</strong> por <strong>"+eur(inv.total)+"</strong>.</p>"+
+      esc(companyName(cid))+"</strong> por <strong>"+eur(inv.total)+"</strong>, "+
+      "a nombre de <strong>"+esc(emisor.name)+"</strong>.</p>"+
     '<p class="section-note" style="margin:12px 0 0">El número queda usado en firme y '+
       (inv.lines.length>1? "sus "+inv.lines.length+" servicios pasan" : "su servicio pasa")+
       " a «facturado». Si te equivocas, puedes anularla desde Facturas.</p>",
     function(){
       inv.id=uid(); inv.status="emitida";
       state.invoices.push(inv);
-      state.settings.nextNumber=(+state.settings.nextNumber||1)+1;
+      var em=perfil(inv.perfilId)||emisor;
+      em.nextNumber=(+em.nextNumber||1)+1;
       var ids={}; inv.lines.forEach(function(l){ ids[l.serviceId]=1; });
       state.services.forEach(function(s){ if(ids[s.id]){ s.status="facturado"; s.invoiceId=inv.id; } });
       touch(); ui.view="facturas"; render();
@@ -670,15 +753,12 @@ function voidInv(id){
 function viewAjustes(main){
   var s=state.settings;
   main.innerHTML=head("Ajustes","Los datos de tu restaurante y las reglas de facturación. Todo esto sale impreso en la factura.")+
-    '<div class="card" style="margin-bottom:18px"><div class="card-head"><h2>Datos del restaurante</h2></div><div class="card-body">'+
-      '<div class="grid2">'+
-        '<div class="field" style="grid-column:1/-1"><label class="lbl" for="s_name">Nombre fiscal</label><input id="s_name" value="'+esc(s.name)+'" placeholder="Restaurant Cal Miquel, SL"></div>'+
-        '<div class="field"><label class="lbl" for="s_nrt">NRT / CIF</label><input id="s_nrt" class="mono" value="'+esc(s.nrt)+'"></div>'+
-        '<div class="field"><label class="lbl" for="s_phone">Teléfono</label><input id="s_phone" value="'+esc(s.phone)+'"></div>'+
-        '<div class="field" style="grid-column:1/-1"><label class="lbl" for="s_addr">Dirección</label><input id="s_addr" value="'+esc(s.address)+'"></div>'+
-        '<div class="field"><label class="lbl" for="s_city">Población</label><input id="s_city" value="'+esc(s.city)+'"></div>'+
-        '<div class="field"><label class="lbl" for="s_email">Correo</label><input type="email" id="s_email" value="'+esc(s.email)+'"></div>'+
-      "</div></div></div>"+
+    '<div class="card" style="margin-bottom:18px"><div class="card-head"><h2>Perfiles de emisor</h2>'+
+      '<button class="btn primary" id="addProf">Nuevo perfil</button></div><div class="card-body">'+
+      '<p class="section-note">Cada factura se emite desde uno de estos perfiles: sus datos salen impresos, '+
+      'su correo es el remitente y cada uno lleva su propia serie y numeración. En «Facturar» eliges con cuál.</p>'+
+      '<div id="profList"></div>'+
+    "</div></div>"+
 
     '<div class="card" style="margin-bottom:18px"><div class="card-head"><h2>El menú de cada día</h2></div><div class="card-body">'+
       '<p class="section-note">Con esto llega relleno el formulario de Servicios, para que anotar el día a día sea solo poner comensales. Puedes cambiarlo en cualquier línea sin tocar nada de aquí.</p>'+
@@ -694,20 +774,18 @@ function viewAjustes(main){
         "<span><b>Los precios que apunto ya llevan el IGI incluido</b>"+
         "Es lo normal cuando cierras un precio por menú con la empresa. La factura desglosa el impuesto hacia atrás: subtotal, IGI y total, "+
         "y el total coincide al céntimo con lo que cobras. Solo afecta a los servicios que anotes a partir de ahora.</span></label>"+
-      '<p class="section-note">El número de factura se forma con la serie, el año y un contador que sube solo cada vez que emites.</p>'+
+
       '<div class="grid3">'+
         '<div class="field"><label class="lbl" for="s_igi">IGI (%)</label><input type="number" id="s_igi" min="0" step="0.1" value="'+esc(s.igi)+'"></div>'+
-        '<div class="field"><label class="lbl" for="s_prefix">Serie</label><input id="s_prefix" class="mono" value="'+esc(s.prefix)+'"></div>'+
-        '<div class="field"><label class="lbl" for="s_next">Siguiente número</label><input type="number" id="s_next" min="1" step="1" value="'+esc(s.nextNumber)+'"></div>'+
         '<div class="field"><label class="lbl" for="s_due">Vencimiento (días)</label><input type="number" id="s_due" min="0" step="1" value="'+esc(s.dueDays)+'"></div>'+
         '<div class="field"><label class="lbl" for="s_cc">Prefijo país (WhatsApp)</label><input id="s_cc" class="mono" value="'+esc(s.countryCode)+'" placeholder="376"></div>'+
-        '<div class="field" style="grid-column:span 2"><label class="lbl" for="s_terms">Condiciones de pago</label><input id="s_terms" value="'+esc(s.terms)+'"></div>'+
       "</div>"+
-      '<div class="field" style="margin-top:13px"><label class="lbl" for="s_iban">IBAN para el cobro</label><input id="s_iban" class="mono" value="'+esc(s.iban)+'" placeholder="AD00 0000 0000 0000 0000 0000"></div>'+
+      '<p class="section-note" style="margin:13px 0 0">La serie, el número, las condiciones de pago y el IBAN '+
+      'son de cada perfil de emisor, no generales.</p>'+
       '<label class="check"><input type="checkbox" id="s_copy"'+(s.paperCopy!==false?" checked":"")+">"+
         "<span><b>Al imprimir, añadir la copia para tu archivo</b>"+
         "El PDF para imprimir sale con el ejemplar del cliente y, detrás, el tuyo. Ambos llevan recuadro de firma y sello.</span></label>"+
-      '<p class="section-note" style="margin:14px 0 0">Próximo número: <strong class="mono">'+esc(s.prefix+"-"+new Date().getFullYear()+"-"+String(s.nextNumber).padStart(4,"0"))+"</strong></p>"+
+
     "</div></div>"+
 
     '<div class="card" style="margin-bottom:18px"><div class="card-head"><h2>Texto del correo</h2></div><div class="card-body">'+
@@ -722,16 +800,18 @@ function viewAjustes(main){
       '<input type="file" id="impFile" accept="application/json,.json" hidden></div>'+
     "</div></div>";
 
-  var map={s_name:"name",s_nrt:"nrt",s_phone:"phone",s_addr:"address",s_city:"city",s_email:"email",
-           s_prefix:"prefix",s_terms:"terms",s_iban:"iban",s_mail:"mailIntro",s_cc:"countryCode",
-           s_ddesc:"defaultDesc"};
+  var map={s_mail:"mailIntro", s_cc:"countryCode", s_ddesc:"defaultDesc"};
   Object.keys(map).forEach(function(id){
-    document.getElementById(id).addEventListener("change", function(){ state.settings[map[id]]=this.value.trim?this.value.trim():this.value; touch(); if(map[id]==="name") render(); });
+    var el=document.getElementById(id); if(!el) return;
+    el.addEventListener("change", function(){ state.settings[map[id]]=this.value.trim?this.value.trim():this.value; touch(); });
   });
-  ["s_igi","s_next","s_due","s_dprice"].forEach(function(id){
-    var k={s_igi:"igi",s_next:"nextNumber",s_due:"dueDays",s_dprice:"defaultPrice"}[id];
-    document.getElementById(id).addEventListener("change", function(){ state.settings[k]=+this.value||0; touch(); render(); });
+  ["s_igi","s_due","s_dprice"].forEach(function(id){
+    var k={s_igi:"igi",s_due:"dueDays",s_dprice:"defaultPrice"}[id];
+    var el=document.getElementById(id); if(!el) return;
+    el.addEventListener("change", function(){ state.settings[k]=+this.value||0; touch(); render(); });
   });
+  document.getElementById("addProf").addEventListener("click", function(){ editarPerfil(null); });
+  pintarPerfiles();
   document.getElementById("s_copy").addEventListener("change", function(){ state.settings.paperCopy=this.checked; touch(); });
   document.getElementById("s_gross").addEventListener("change", function(){ state.settings.pricesIncludeIgi=this.checked; touch(); });
   document.getElementById("expBtn").addEventListener("click", exportBackup);
@@ -758,6 +838,89 @@ function importBackup(ev){
     }catch(e){ toast("Ese archivo no es una copia válida de Comanda.", true); }
   };
   rd.readAsText(f); ev.target.value="";
+}
+
+/* ============================ perfiles ============================ */
+function pintarPerfiles(){
+  var box=document.getElementById("profList"); if(!box) return;
+  if(!perfiles().length){
+    box.innerHTML='<div class="empty"><strong>Todavía no hay perfiles</strong>Crea el primero con los datos con los que facturas.</div>';
+    return;
+  }
+  var activo=(perfilActivo()||{}).id;
+  box.innerHTML='<div class="tbl-wrap"><table><thead><tr><th>Nombre fiscal</th><th>NRT</th>'+
+    '<th>Correo del remitente</th><th class="num">Próximo número</th><th></th></tr></thead><tbody>'+
+    perfiles().map(function(p){
+      return "<tr>"+
+        "<td><strong>"+esc(p.name||"(sin nombre)")+"</strong>"+
+          (p.id===activo?' <span class="pill cobr">En uso</span>':"")+"</td>"+
+        '<td class="mono">'+esc(p.nrt||"—")+"</td>"+
+        "<td>"+esc(p.email||"—")+"</td>"+
+        '<td class="num mono">'+esc((p.prefix||"F")+"-"+new Date().getFullYear()+"-"+String(p.nextNumber||1).padStart(4,"0"))+"</td>"+
+        '<td><div class="row-actions">'+
+          '<button class="btn ghost sm" data-pedit="'+p.id+'">Editar</button>'+
+          (p.id===activo?"":'<button class="btn ghost sm" data-puse="'+p.id+'">Usar</button>')+
+          (perfiles().length>1?'<button class="btn ghost sm danger" data-pdel="'+p.id+'">Borrar</button>':"")+
+        "</div></td></tr>";
+    }).join("")+"</tbody></table></div>";
+
+  box.querySelectorAll("[data-pedit]").forEach(function(b){ b.addEventListener("click",function(){ editarPerfil(b.getAttribute("data-pedit")); }); });
+  box.querySelectorAll("[data-puse]").forEach(function(b){ b.addEventListener("click",function(){
+    ui.perfil=b.getAttribute("data-puse"); state.settings.perfilActivo=ui.perfil; touch(); render();
+    toast("Ahora facturas como "+nombrePerfil(ui.perfil));
+  }); });
+  box.querySelectorAll("[data-pdel]").forEach(function(b){ b.addEventListener("click",function(){ borrarPerfil(b.getAttribute("data-pdel")); }); });
+}
+
+function borrarPerfil(id){
+  var p=perfil(id); if(!p) return;
+  var usadas=state.invoices.filter(function(i){ return i.perfilId===id; }).length;
+  confirmar("Borrar perfil",
+    '<p style="margin:0">Vas a borrar <strong>'+esc(p.name||"(sin nombre)")+"</strong>.</p>"+
+    (usadas?'<p class="section-note" style="margin:12px 0 0">Sus '+usadas+" factura"+(usadas>1?"s":"")+
+      " emitida"+(usadas>1?"s":"")+" se conserva"+(usadas>1?"n":"")+": cada factura guarda los datos con los que se emitió.</p>":""),
+    function(){
+      state.profiles=perfiles().filter(function(x){ return x.id!==id; });
+      if(state.settings.perfilActivo===id) state.settings.perfilActivo=(perfiles()[0]||{}).id||"";
+      if(ui.perfil===id) ui.perfil=state.settings.perfilActivo;
+      touch(); render(); toast("Perfil borrado");
+    }, {okLabel:"Borrar perfil", danger:true});
+}
+
+function editarPerfil(id){
+  var p=id?perfil(id):{id:uid(), name:"", nrt:"", address:"", city:"", phone:"", email:"",
+                       iban:"", terms:"Transferencia bancaria", prefix:"F", nextNumber:1};
+  openDialog(id?"Editar perfil":"Nuevo perfil de emisor",
+    '<div class="grid2">'+
+      '<div class="field" style="grid-column:1/-1"><label class="lbl" for="p_name">Nombre fiscal</label><input id="p_name" value="'+esc(p.name)+'" placeholder="Restaurant Cal Miquel, SL"></div>'+
+      '<div class="field"><label class="lbl" for="p_nrt">NRT / CIF</label><input id="p_nrt" class="mono" value="'+esc(p.nrt)+'"></div>'+
+      '<div class="field"><label class="lbl" for="p_phone">Teléfono</label><input id="p_phone" value="'+esc(p.phone)+'"></div>'+
+      '<div class="field" style="grid-column:1/-1"><label class="lbl" for="p_email">Correo del remitente</label>'+
+        '<input type="email" id="p_email" value="'+esc(p.email)+'" placeholder="facturacion@ejemplo.ad"></div>'+
+      '<div class="field" style="grid-column:1/-1"><label class="lbl" for="p_addr">Dirección</label><input id="p_addr" value="'+esc(p.address)+'"></div>'+
+      '<div class="field"><label class="lbl" for="p_city">Población</label><input id="p_city" value="'+esc(p.city)+'"></div>'+
+      '<div class="field"><label class="lbl" for="p_iban">IBAN para el cobro</label><input id="p_iban" class="mono" value="'+esc(p.iban)+'"></div>'+
+      '<div class="field" style="grid-column:1/-1"><label class="lbl" for="p_terms">Condiciones de pago</label><input id="p_terms" value="'+esc(p.terms)+'"></div>'+
+      '<div class="field"><label class="lbl" for="p_prefix">Serie</label><input id="p_prefix" class="mono" value="'+esc(p.prefix)+'"></div>'+
+      '<div class="field"><label class="lbl" for="p_next">Siguiente número</label><input type="number" id="p_next" min="1" step="1" value="'+esc(p.nextNumber)+'"></div>'+
+    '</div>'+
+    '<p class="section-note" style="margin-top:12px">El correo es el que aparece como remitente en la factura y el que usas para enviarla.</p>',
+    function(){
+      var nombre=document.getElementById("p_name").value.trim();
+      if(!nombre){ toast("El perfil necesita un nombre fiscal.", true); return true; }
+      p.name=nombre;
+      p.nrt=document.getElementById("p_nrt").value.trim();
+      p.phone=document.getElementById("p_phone").value.trim();
+      p.email=document.getElementById("p_email").value.trim();
+      p.address=document.getElementById("p_addr").value.trim();
+      p.city=document.getElementById("p_city").value.trim();
+      p.iban=document.getElementById("p_iban").value.trim();
+      p.terms=document.getElementById("p_terms").value.trim();
+      p.prefix=document.getElementById("p_prefix").value.trim()||"F";
+      p.nextNumber=+document.getElementById("p_next").value||1;
+      if(!id){ perfiles().push(p); if(!state.settings.perfilActivo){ state.settings.perfilActivo=p.id; ui.perfil=p.id; } }
+      touch(); render(); toast(id?"Perfil actualizado":"Perfil creado");
+    });
 }
 
 /* ============================ dialog ============================ */
@@ -823,20 +986,53 @@ function canShareFiles(){
 function sendBoxHTML(inv){
   var c=inv.client||{};
   var tel=waNumber(inv);
+  var lista=correosDeFactura(inv);
+  var em=inv.issuer||{};
+
+  var casillas = lista.length
+    ? lista.map(function(dir,i){
+        return '<label class="check" style="margin:0 0 6px"><input type="checkbox" class="dest-mail" value="'+
+               esc(dir)+'" checked><span>'+esc(dir)+'</span></label>';
+      }).join("")
+    : '<p class="section-note" style="margin:0 0 8px">Esta empresa no tiene correos guardados. '+
+      'Añádelos en Empresas, o escribe uno aquí abajo.</p>';
+
   return '<div class="send-box"><h4>Enviar a '+esc(c.name||"la empresa")+"</h4>"+
     '<p class="lead">El PDF se adjunta a mano: ni el correo ni WhatsApp permiten que una web adjunte archivos por su cuenta. '+
     'Descárgalo primero y adjúntalo en el mensaje que se abre'+(canShareFiles()?", o usa «Compartir PDF», que sí lo lleva dentro.":".")+"</p>"+
+    '<div style="margin:0 0 10px">'+
+      '<div class="lbl" style="margin-bottom:6px">Destinatarios</div>'+
+      casillas+
+      '<input id="otroCorreo" placeholder="Otro correo para este envío (opcional)" '+
+      'style="margin-top:6px" autocomplete="off">'+
+    "</div>"+
     '<div class="toolbar" style="margin:0">'+
       '<button class="btn primary" data-pdf><span class="step">1</span>Descargar PDF</button>'+
-      '<button class="btn" data-mailto'+(c.email?"":" disabled title=\"Esta empresa no tiene correo guardado\"")+'><span class="step">2</span>Abrir correo</button>'+
+      '<button class="btn" data-mailto><span class="step">2</span>Abrir correo</button>'+
       '<button class="btn" data-wa><span class="step">2</span>Abrir WhatsApp</button>'+
       (canShareFiles()?'<button class="btn" data-share>Compartir PDF…</button>':"")+
       '<button class="btn ghost" data-mail>Copiar texto</button>'+
     "</div>"+
     '<div class="dest">'+
-      "<span>Correo: <b>"+esc(c.email||"sin guardar")+"</b></span>"+
+      "<span>Remitente: <b>"+esc(em.email||em.name||"sin correo en el perfil")+"</b></span>"+
       "<span>WhatsApp: <b>"+esc(tel?waDisplay(inv):"elegirás el contacto")+"</b></span>"+
-    "</div></div>";
+    "</div>"+
+    (em.email?'<p class="section-note" style="margin:10px 0 0">Al abrir el correo, comprueba que sales como '+
+      '<strong>'+esc(em.email)+'</strong>: si tu programa tiene varias cuentas, elígela antes de enviar.</p>':"")+
+    "</div>";
+}
+
+/* Los correos marcados en el panel, mas el que se haya escrito a mano. */
+function destinatariosElegidos(inv){
+  var marcados = Array.prototype.slice.call(document.querySelectorAll(".dest-mail:checked"))
+                   .map(function(x){ return x.value; });
+  var otro = document.getElementById("otroCorreo");
+  if (otro && otro.value.trim()) {
+    otro.value.split(/[;,\s]+/).forEach(function(x){ x=x.trim(); if(x) marcados.push(x); });
+  }
+  if (!marcados.length) marcados = correosDeFactura(inv);
+  // sin repetidos
+  return marcados.filter(function(x,i){ return marcados.indexOf(x) === i; });
 }
 function waNumber(inv){
   var vivo=company(inv.companyId)||{};
@@ -885,10 +1081,19 @@ function openExternal(url, aviso){
   if(aviso) toast(aviso);
 }
 function openMail(inv){
-  var m=mailText(inv);
-  if(!m.to){ toast("Esta empresa no tiene correo guardado. Añádelo en Empresas.", true); return; }
-  openExternal("mailto:"+encodeURIComponent(m.to)+"?subject="+encodeURIComponent(m.subject)+"&body="+encodeURIComponent(m.body),
-    "Adjunta el PDF antes de enviar. Si no se abre tu correo, usa «Copiar texto».");
+  var destinos=destinatariosElegidos(inv);
+  if(!destinos.length){
+    toast("Marca al menos un correo, o escribe uno en «Otro correo».", true);
+    var otro=document.getElementById("otroCorreo"); if(otro) otro.focus();
+    return;
+  }
+  var m=mailText(inv, destinos);
+  /* mailto separa los destinatarios por comas, sin codificarlas */
+  var para=destinos.map(function(d){ return encodeURIComponent(d); }).join(",");
+  openExternal("mailto:"+para+"?subject="+encodeURIComponent(m.subject)+"&body="+encodeURIComponent(m.body),
+    destinos.length>1
+      ? "Se abre un correo para "+destinos.length+" destinatarios. Adjunta el PDF antes de enviar."
+      : "Adjunta el PDF antes de enviar. Si no se abre tu correo, usa «Copiar texto».");
 }
 function openWhatsApp(inv){
   var tel=waNumber(inv);
@@ -955,8 +1160,9 @@ function invoiceHTML(inv){
 }
 
 /* ============================ email text ============================ */
-function mailText(inv){
+function mailText(inv, destinos){
   var c=inv.client||{};
+  var para=(destinos && destinos.length) ? destinos : correosDeFactura(inv);
   var subject="Factura "+inv.number+" — "+(inv.issuer&&inv.issuer.name?inv.issuer.name:"")+" — "+monthLabel(inv.period);
   var body=(state.settings.mailIntro||"")+"\n\n"+
     "Factura: "+inv.number+"\n"+
@@ -968,11 +1174,11 @@ function mailText(inv){
     "Vencimiento: "+dmy(inv.due)+"\n"+
     (inv.iban?"IBAN: "+inv.iban+"\n":"")+
     "\n"+(inv.issuer&&inv.issuer.name?inv.issuer.name:"")+(inv.issuer&&inv.issuer.phone?" · "+inv.issuer.phone:"");
-  return {to:c.email||"", subject:subject, body:body};
+  return {to:para.join(","), subject:subject, body:body, lista:para};
 }
 async function copyMail(inv){
-  var m=mailText(inv);
-  var txt="Para: "+(m.to||"(sin correo guardado)")+"\nAsunto: "+m.subject+"\n\n"+m.body;
+  var m=mailText(inv, destinatariosElegidos(inv));
+  var txt="Para: "+(m.lista.join(", ")||"(sin correo guardado)")+"\nAsunto: "+m.subject+"\n\n"+m.body;
   var ok=false;
   try{ await navigator.clipboard.writeText(txt); ok=true; }catch(e){
     try{
