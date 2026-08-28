@@ -96,6 +96,8 @@
   .pact{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;}
   .psave{flex:1;padding:6px;background:var(--gold);color:var(--bg);border:none;border-radius:5px;font-size:.76rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;}
   .pcanc{padding:6px 8px;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:5px;font-size:.76rem;cursor:pointer;font-family:'DM Sans',sans-serif;}
+  .pdel{padding:6px 9px;background:transparent;border:1px solid rgba(192,57,43,.45);color:#e87c6f;border-radius:5px;font-size:.8rem;cursor:pointer;font-family:'DM Sans',sans-serif;}
+  .pdel:hover{background:rgba(192,57,43,.18);}
   .pcopy{padding:6px 8px;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:5px;font-size:.76rem;cursor:pointer;font-family:'DM Sans',sans-serif;}
   #hl{font-size:.66rem;color:var(--text2);margin-bottom:4px;}
 
@@ -299,6 +301,7 @@
   <div class="pact">
     <button class="psave" onclick="saveCell()">Guardar</button>
     <button class="pcopy" id="copybtn" onclick="copyCell()" style="display:none">Copiar</button>
+    <button class="pdel" id="delbtn" onclick="borrarCelda()" style="display:none" title="Vaciar este día">&#128465;&#65039;</button>
     <button class="pcanc" onclick="closePopup()">&#10005;</button>
   </div>
 </div>
@@ -376,7 +379,7 @@
 
 
 
-<script src="sync.js?v=202608281155"></script>
+<script src="sync.js?v=202608281204"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -384,7 +387,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202608281155';
+    s.src = 'horario.js?v=202608281204';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

@@ -840,8 +840,11 @@ function openCell(sid, day, event, mo, yr) {
     }
   }
 
+  var conAlgo = !!(cell && cell.estado && cell.estado !== 'libre');
   var cb = document.getElementById('copybtn');
-  if (cb) cb.style.display = (cell&&cell.estado&&cell.estado!=='libre')?'inline-flex':'none';
+  if (cb) cb.style.display = conAlgo ? 'inline-flex' : 'none';
+  var db = document.getElementById('delbtn');
+  if (db) db.style.display = conAlgo ? 'inline-flex' : 'none';
 
   if (pop) {
     pop.style.display = 'block';
@@ -872,6 +875,8 @@ function calcFin() {
 
 function selE(est) {
   var pop = document.getElementById('popup'); if (!pop) return;
+  /* Marcar "Libre" es querer vaciar el dia: se hace ya, sin Guardar. */
+  if (est === 'libre') { borrarCelda(); return; }
   pop._est = est;
   document.querySelectorAll('.pb').forEach(function(b){ b.classList.remove('on'); });
   event.target.classList.add('on');
@@ -917,6 +922,19 @@ function saveCell() {
   sc(active.sid, active.day, data);
   curM = savedM; curY = savedY;
   closePopup(); renderTable(); renderCov(); renderAusencias();
+}
+
+/* Vacia el dia y cierra: un solo toque, sin elegir "Libre" ni Guardar. */
+function borrarCelda() {
+  if (!active) return;
+  var savedM = curM, savedY = curY;
+  if (active.mo !== undefined) { curM = active.mo; curY = active.yr; }
+  var mes = (sched[curY] || {})[curM] || {};
+  if (mes[active.sid]) delete mes[active.sid][active.day];
+  save();
+  curM = savedM; curY = savedY;
+  closePopup(); renderTable(); renderCov(); renderAusencias();
+  toast('Día vaciado');
 }
 
 function copyCell() {
