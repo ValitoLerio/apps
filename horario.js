@@ -331,6 +331,14 @@ function renderHoursAnnual(tbl, y, all) {
 // ================================================================
 // AUSENCIAS: VACACIONES, FESTIVOS Y BAJAS
 // ================================================================
+var ausFiltro = null;   /* null = se ven los cuatro tipos */
+
+/* Al pulsar una ficha se ve solo ese tipo; al volver a pulsarla, todos. */
+function filtrarAusencias(tipo){
+  ausFiltro = (ausFiltro === tipo) ? null : tipo;
+  renderAusencias();
+}
+
 var AUS_TIPOS = {
   vacaciones: {lbl:'Vacaciones', cls:'ev', ico:'\uD83C\uDFD6\uFE0F'},
   festivo:    {lbl:'Festivos',   cls:'ef', ico:'\uD83C\uDF89'},
@@ -391,15 +399,45 @@ function renderAusencias(){
   if (caja) {
     caja.innerHTML = Object.keys(AUS_TIPOS).map(function(k){
       var n = datos.totales[k];
-      return '<div class="tb ' + AUS_TIPOS[k].cls + '" style="cursor:default;padding:7px 12px">' +
+      var elegida = (ausFiltro === k);
+      var apagada = (ausFiltro && !elegida);
+      return '<div class="tb ' + AUS_TIPOS[k].cls + ' aus-ficha" data-tipo="' + k + '"' +
+             ' title="' + (elegida ? 'Quitar el filtro' : 'Ver solo ' + AUS_TIPOS[k].lbl.toLowerCase()) + '"' +
+             ' style="cursor:pointer;padding:7px 12px;transition:opacity .15s,box-shadow .15s;' +
+             (elegida ? 'box-shadow:0 0 0 2px currentColor;' : '') +
+             (apagada ? 'opacity:.4;' : '') + '">' +
              '<span style="font-size:1.05rem;font-weight:700">' + n + '</span>' +
              '<span style="margin-left:5px;font-weight:500">' + AUS_TIPOS[k].lbl + '</span></div>';
-    }).join('');
+    }).join('') +
+    (ausFiltro
+      ? '<button onclick="filtrarAusencias(null)" style="background:none;border:1px solid var(--border);' +
+        'color:var(--text2);border-radius:14px;padding:5px 12px;cursor:pointer;font-family:inherit;' +
+        'font-size:.72rem;align-self:center">\u2715 Ver todo</button>'
+      : '');
+    caja.querySelectorAll('.aus-ficha').forEach(function(f){
+      f.addEventListener('click', function(){ filtrarAusencias(f.getAttribute('data-tipo')); });
+    });
   }
 
-  /* Sale la plantilla entera, tenga o no ausencias: asi se ve de un
-     vistazo quien falta y quien no. */
+  /* Con un tipo elegido solo sale esa columna y solo quien lo tenga.
+     Sin filtro, la plantilla entera con los cuatro tipos. */
+  var tipos = ausFiltro ? [ausFiltro] : Object.keys(AUS_TIPOS);
   var todos = visibleStaff();
+  if (ausFiltro) {
+    todos = todos.filter(function(s){
+      var porMes = datos.porPersona[s.id];
+      if (!porMes) return false;
+      return Object.keys(porMes).some(function(m){
+        return (porMes[m][ausFiltro] || []).length > 0;
+      });
+    });
+    if (!todos.length) {
+      tbl.innerHTML = '<tbody><tr><td style="padding:26px 4px;text-align:center;color:var(--text2)">' +
+        'Nadie tiene ' + AUS_TIPOS[ausFiltro].lbl.toLowerCase() + ' ' +
+        (datos.alcance === 'ano' ? 'en ' + curY : 'en ' + MESES[curM]) + '.</td></tr></tbody>';
+      return;
+    }
+  }
   if (!todos.length) {
     tbl.innerHTML = '<tbody><tr><td style="padding:26px 4px;text-align:center;color:var(--text2)">' +
       'Aun no hay personal dado de alta.</td></tr></tbody>';
@@ -412,14 +450,14 @@ function renderAusencias(){
     (datos.alcance === 'ano'
       ? '<th style="background:var(--surface);color:var(--text2);padding:9px 10px;border:1px solid var(--border);text-align:left;font-size:.74rem;min-width:80px">Mes</th>'
       : '') +
-    Object.keys(AUS_TIPOS).map(function(k){
+    tipos.map(function(k){
       return '<th style="background:var(--surface);color:var(--text2);padding:9px 10px;border:1px solid var(--border);' +
              'text-align:left;font-size:.74rem;min-width:120px">' + AUS_TIPOS[k].lbl + '</th>';
     }).join('') +
     '<th style="background:#1a2010;color:var(--gold2);padding:9px 10px;border:1px solid var(--border);' +
     'text-align:center;font-size:.74rem;min-width:70px">Días</th></tr></thead>';
 
-  var columnas = Object.keys(AUS_TIPOS).length + (datos.alcance === 'ano' ? 2 : 1) + 1;
+  var columnas = tipos.length + (datos.alcance === 'ano' ? 2 : 1) + 1;
   var tb = '<tbody>';
   var ultimoRol = null;
 
@@ -432,7 +470,7 @@ function renderAusencias(){
   }
   function celdasTipos(porTipo){
     var total = 0;
-    var html = Object.keys(AUS_TIPOS).map(function(k){
+    var html = tipos.map(function(k){
       var dias = (porTipo && porTipo[k]) || [];
       total += dias.length;
       return '<td style="padding:7px 10px;border:1px solid var(--border)">' +
@@ -456,6 +494,9 @@ function renderAusencias(){
     }
     var porMes = datos.porPersona[s.id];
     var mesesConAlgo = porMes ? Object.keys(porMes).map(Number).sort(function(a,b){ return a-b; }) : [];
+    if (ausFiltro) {
+      mesesConAlgo = mesesConAlgo.filter(function(m){ return (porMes[m][ausFiltro] || []).length > 0; });
+    }
 
     if (!mesesConAlgo.length) {
       // Sin nada: sale igualmente, para tener la plantilla completa
