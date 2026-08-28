@@ -1332,16 +1332,19 @@ function datosFacturaDeRecibo(m){
   };
 }
 
-/* Dibuja la factura de un recibo en un lienzo aparte y la devuelve como
-   imagen, sin tocar la que se ve en pantalla. */
+/* Dibuja la factura en un lienzo aparte y la devuelve como imagen.
+   Se hace TODO de forma sincrona (toDataURL, no toBlob) para no perder
+   el gesto del usuario: si entre su clic y el window.open hay un await,
+   el navegador bloquea la ventana y no se abre nada. */
 function imagenDeRecibo(m){
-  return new Promise((resolve,reject)=>{
-    try{
-      const cv=document.createElement('canvas');
-      dibujarFactura(datosFacturaDeRecibo(m), cv);
-      cv.toBlob(b=>b?resolve(b):reject(new Error('No se pudo generar la imagen')), 'image/png');
-    }catch(err){ reject(err); }
-  });
+  const cv=document.createElement('canvas');
+  dibujarFactura(datosFacturaDeRecibo(m), cv);
+  const datos=cv.toDataURL('image/png');
+  const base64=datos.split(',')[1];
+  const bin=atob(base64);
+  const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  return new Blob([bytes], {type:'image/png'});
 }
 
 /* El telefono del inquilino que este viviendo ahora, si lo hay. */
@@ -1371,10 +1374,11 @@ function textoWhatsApp(m){
   return l.join('\n');
 }
 
-/* Manda la factura por WhatsApp. En el movil va la imagen dentro del
-   propio envio; en el ordenador WhatsApp no deja adjuntar desde una web,
-   asi que se descarga la imagen y se abre el chat con el texto puesto. */
-async function whatsappRecibo(mes){
+/* Manda la factura por WhatsApp. En el movil, si el aparato deja
+   compartir archivos, va la imagen dentro del propio envio. Si no, se
+   descarga la imagen y se abre el chat con el texto puesto, para
+   adjuntarla a mano: ni WhatsApp Web ni wa.me admiten adjuntos. */
+function whatsappRecibo(mes){
   const m=meses.find(r=>r.mes===mes);
   if(!m){ alert('No encuentro ese recibo.'); return; }
   const nombre='recibo-'+mes+'.png';
@@ -1382,31 +1386,52 @@ async function whatsappRecibo(mes){
   const tel=telefonoInquilino();
 
   let blob=null;
-  try{ blob=await imagenDeRecibo(m); }
+  try{ blob=imagenDeRecibo(m); }
   catch(err){ alert('No he podido generar la factura: '+err.message); return; }
 
-  if(navigator.canShare && navigator.share){
-    try{
-      const file=new File([blob], nombre, {type:'image/png'});
-      if(navigator.canShare({files:[file]})){
-        await navigator.share({files:[file], text:texto, title:'Recibo '+fmtMes(mes)});
-        return;
-      }
-    }catch(err){
-      if(err && err.name==='AbortError') return;   /* lo ha cancelado */
+  // 1) Movil: compartir la imagen directamente, con el texto dentro
+  try{
+    const file=new File([blob], nombre, {type:'image/png'});
+    if(navigator.canShare && navigator.share && navigator.canShare({files:[file]})){
+      navigator.share({files:[file], text:texto, title:'Recibo '+fmtMes(mes)})
+        .catch(()=>{});   /* si lo cancela, no pasa nada */
+      return;
     }
-  }
+  }catch(err){ /* seguimos por el otro camino */ }
 
-  await guardarArchivo(nombre, blob, function(){
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url; a.download=nombre;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(()=>URL.revokeObjectURL(url), 1500);
-  });
+  // 2) Ordenador: bajamos la imagen y abrimos el chat, todo dentro del
+  //    mismo clic para que el navegador no bloquee la ventana
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=nombre;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
 
   const destino='https://wa.me/'+(tel||'')+'?text='+encodeURIComponent(texto);
-  window.open(destino, '_blank', 'noopener');
+  const ventana=window.open(destino, '_blank');
+  if(!ventana){
+    /* El navegador la ha bloqueado: dejamos un enlace a mano */
+    mostrarEnlaceWhatsApp(destino, tel);
+  }
+}
+
+/* Si el navegador bloquea la ventana, un enlace que sí puede pulsar. */
+function mostrarEnlaceWhatsApp(destino, tel){
+  const previo=document.getElementById('wa-aviso');
+  if(previo) previo.remove();
+  const caja=document.createElement('div');
+  caja.id='wa-aviso';
+  caja.style.cssText='position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:2000;'+
+    'background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 18px;'+
+    'box-shadow:0 18px 40px -18px rgba(0,0,0,.35);max-width:90vw;text-align:center;font-size:13.5px';
+  caja.innerHTML='<div style="margin-bottom:10px">La factura ya está descargada. '+
+    'Tu navegador ha bloqueado la ventana de WhatsApp:</div>'+
+    '<a href="'+destino+'" target="_blank" rel="noopener" class="btn btn-primary" '+
+    'style="background:#25D366;color:#0b3d24;text-decoration:none;display:inline-block">'+
+    'Abrir WhatsApp'+(tel?'':' y elegir contacto')+'</a> '+
+    '<button class="btn btn-secondary" onclick="this.closest(\'#wa-aviso\').remove()">Cerrar</button>';
+  document.body.appendChild(caja);
+  setTimeout(()=>{ const c=document.getElementById('wa-aviso'); if(c) c.remove(); }, 20000);
 }
 
 function getDatosFactura(){
