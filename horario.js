@@ -397,11 +397,12 @@ function renderAusencias(){
     }).join('');
   }
 
-  var conAlgo = staff().filter(function(s){ return datos.porPersona[s.id]; });
-  if (!conAlgo.length) {
+  /* Sale la plantilla entera, tenga o no ausencias: asi se ve de un
+     vistazo quien falta y quien no. */
+  var todos = visibleStaff();
+  if (!todos.length) {
     tbl.innerHTML = '<tbody><tr><td style="padding:26px 4px;text-align:center;color:var(--text2)">' +
-      'Nadie tiene vacaciones, festivos ni bajas ' +
-      (datos.alcance === 'ano' ? 'en ' + curY : 'en ' + MESES[curM]) + '.</td></tr></tbody>';
+      'Aun no hay personal dado de alta.</td></tr></tbody>';
     return;
   }
 
@@ -414,34 +415,65 @@ function renderAusencias(){
     Object.keys(AUS_TIPOS).map(function(k){
       return '<th style="background:var(--surface);color:var(--text2);padding:9px 10px;border:1px solid var(--border);' +
              'text-align:left;font-size:.74rem;min-width:120px">' + AUS_TIPOS[k].lbl + '</th>';
-    }).join('') + '</tr></thead>';
+    }).join('') +
+    '<th style="background:#1a2010;color:var(--gold2);padding:9px 10px;border:1px solid var(--border);' +
+    'text-align:center;font-size:.74rem;min-width:70px">Días</th></tr></thead>';
 
+  var columnas = Object.keys(AUS_TIPOS).length + (datos.alcance === 'ano' ? 2 : 1) + 1;
   var tb = '<tbody>';
-  conAlgo.forEach(function(s){
+  var ultimoRol = null;
+
+  function celdaNombre(s, filas){
+    return '<td' + (filas > 1 ? ' rowspan="' + filas + '"' : '') +
+           ' style="background:var(--surface);position:sticky;left:0;z-index:5;' +
+           'padding:7px 12px;border:1px solid var(--border);vertical-align:top">' +
+           '<span style="color:' + RCOL[s.role] + ';font-weight:600;font-size:.8rem">' + s.name + '</span>' +
+           '<span class="rt r' + s.role + '" style="margin-left:3px">' + RLBL[s.role] + '</span></td>';
+  }
+  function celdasTipos(porTipo){
+    var total = 0;
+    var html = Object.keys(AUS_TIPOS).map(function(k){
+      var dias = (porTipo && porTipo[k]) || [];
+      total += dias.length;
+      return '<td style="padding:7px 10px;border:1px solid var(--border)">' +
+             (dias.length
+               ? '<span class="tb ' + AUS_TIPOS[k].cls + '" style="cursor:default;font-size:.78rem;padding:3px 8px">' +
+                 textoTramos(dias) + '<span style="opacity:.7;margin-left:5px">(' + dias.length + 'd)</span></span>'
+               : '<span style="color:var(--border)">·</span>') +
+             '</td>';
+    }).join('');
+    html += '<td style="background:#1a2010;padding:7px 10px;border:1px solid var(--border);text-align:center">' +
+            (total
+              ? '<span style="font-size:.9rem;font-weight:700;color:var(--gold2)">' + total + '</span>'
+              : '<span style="color:var(--border)">·</span>') + '</td>';
+    return html;
+  }
+
+  todos.forEach(function(s){
+    if (s.role !== ultimoRol) {
+      if (ultimoRol !== null) tb += '<tr><td colspan="' + columnas + '" style="height:3px;background:var(--border);padding:0;border:none"></td></tr>';
+      ultimoRol = s.role;
+    }
     var porMes = datos.porPersona[s.id];
-    var mesesConAlgo = Object.keys(porMes).map(Number).sort(function(a,b){ return a-b; });
+    var mesesConAlgo = porMes ? Object.keys(porMes).map(Number).sort(function(a,b){ return a-b; }) : [];
+
+    if (!mesesConAlgo.length) {
+      // Sin nada: sale igualmente, para tener la plantilla completa
+      tb += '<tr>' + celdaNombre(s, 1) +
+            (datos.alcance === 'ano'
+              ? '<td style="padding:7px 10px;border:1px solid var(--border);color:var(--border)">—</td>'
+              : '') +
+            celdasTipos(null) + '</tr>';
+      return;
+    }
     mesesConAlgo.forEach(function(m, idx){
       tb += '<tr>';
-      if (idx === 0) {
-        tb += '<td rowspan="' + mesesConAlgo.length + '" style="background:var(--surface);position:sticky;left:0;z-index:5;' +
-              'padding:7px 12px;border:1px solid var(--border);vertical-align:top">' +
-              '<span style="color:' + RCOL[s.role] + ';font-weight:600;font-size:.8rem">' + s.name + '</span>' +
-              '<span class="rt r' + s.role + '" style="margin-left:3px">' + RLBL[s.role] + '</span></td>';
-      }
+      if (idx === 0) tb += celdaNombre(s, mesesConAlgo.length);
       if (datos.alcance === 'ano') {
         tb += '<td style="padding:7px 10px;border:1px solid var(--border);color:var(--text2);white-space:nowrap">' +
               MESES[m] + '</td>';
       }
-      Object.keys(AUS_TIPOS).forEach(function(k){
-        var dias = porMes[m][k] || [];
-        tb += '<td style="padding:7px 10px;border:1px solid var(--border)">' +
-              (dias.length
-                ? '<span class="tb ' + AUS_TIPOS[k].cls + '" style="cursor:default;font-size:.78rem;padding:3px 8px">' +
-                  textoTramos(dias) + '<span style="opacity:.7;margin-left:5px">(' + dias.length + 'd)</span></span>'
-                : '<span style="color:var(--border)">·</span>') +
-              '</td>';
-      });
-      tb += '</tr>';
+      tb += celdasTipos(porMes[m]) + '</tr>';
     });
   });
   tb += '</tbody>';
@@ -729,7 +761,7 @@ function openCell(sid, day, event, mo, yr) {
   if (clip) {
     sc(sid, day, Object.assign({}, clip));
     curM = savedM; curY = savedY;
-    renderTable(); renderCov();
+    renderTable(); renderCov(); renderAusencias();
     toast('Turno pegado en dia '+day);
     return;
   }
@@ -843,7 +875,7 @@ function saveCell() {
   if (active.mo !== undefined) { curM = active.mo; curY = active.yr; }
   sc(active.sid, active.day, data);
   curM = savedM; curY = savedY;
-  closePopup(); renderTable(); renderCov();
+  closePopup(); renderTable(); renderCov(); renderAusencias();
 }
 
 function copyCell() {
@@ -884,7 +916,7 @@ function toggleHide(sid) {
   var s = staff().find(function(x){ return x.id===sid; });
   if (hidden[sid]) { delete hidden[sid]; toast(s.name+' visible'); }
   else             { hidden[sid]=true;   toast(s.name+' oculto'); }
-  save(); renderTable(); renderCov();
+  save(); renderTable(); renderCov(); renderAusencias();
 }
 
 // ================================================================
