@@ -124,9 +124,10 @@ function renderDash(){
 
   const gs=[...gastos].sort((a,b)=>b.fecha.localeCompare(a.fecha));
   document.getElementById('tabla-gastos-dash').innerHTML=gs.length===0?'<div class="empty">Sin gastos.</div>':
-    `<table><thead><tr><th>Fecha</th><th>Descripción</th><th class="tr">Importe</th></tr></thead>
+    `<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th class="tr">Importe</th></tr></thead>
     <tbody>${gs.map(g=>`<tr>
       <td class="text-muted" style="white-space:nowrap">${g.fecha}</td>
+      <td style="white-space:nowrap">${etiquetaTipo(g)}</td>
       <td>${g.desc}</td>
       <td class="tr text-danger">${fmt(g.imp)} €</td>
     </tr>`).join('')}</tbody></table>
@@ -256,7 +257,10 @@ function calcularSaldoAcumulado(hastaExcluido){
     .sort((a,b)=>a.mes.localeCompare(b.mes));
   let saldo=0;
   for(const m of ordenados){
-    const c=m.cuota||(cfg.cuota||0);
+    /* Cada recibo guarda la cuota con la que se emitio. Solo los meses
+       antiguos, que no la llevan, usan la de Configuracion. Con != null
+       una cuota de 0 € guardada cuenta como 0 y no como la de hoy. */
+    const c=(m.cuota!=null)?m.cuota:(cfg.cuota||0);
     const consumo=(m.cal_cob||0)+(m.agua_cob||0)+(m.elec_cob||0);
     saldo+=c-consumo;
   }
@@ -292,7 +296,7 @@ function initRecibo(){
   const esManual=saldoEl.dataset.manual==='1';
   const saldo=esManual?parseFloat(saldoEl.dataset.valor||0):calcularSaldoAcumulado(mesSel);
   const desde=cfg.cuotaDesde||'0000-00';
-  const mesesAnt=[...meses].filter(m=>m.mes<mesSel&&m.mes>=desde).sort((a,b)=>a.mes.localeCompare(b.mis));
+  const mesesAnt=[...meses].filter(m=>m.mes<mesSel&&m.mes>=desde).sort((a,b)=>a.mes.localeCompare(b.mes));
 
   saldoEl.dataset.valor=saldo;
   actualizarDisplaySaldo(saldo);
@@ -463,8 +467,11 @@ function guardarRecibo(){
   const mes=document.getElementById('r-mes').value;
   if(!mes)return alert('Selecciona un mes.');
   const alq=n('r-alq');
-  // Recalcular saldo directamente para no depender del dataset
-  const saldoAnt=calcularSaldoAcumulado(mes);
+  /* Si has tocado "Modificar saldo", manda lo que hayas escrito; si no,
+     se calcula sumando los meses anteriores. */
+  const saldoEl=document.getElementById('saldo-ant');
+  const manual=saldoEl && saldoEl.dataset.manual==='1';
+  const saldoAnt=manual?(parseFloat(saldoEl.dataset.valor)||0):calcularSaldoAcumulado(mes);
   const cuota=cfg.cuota||0;
 
   function getLect(pref,pctKey){
@@ -482,7 +489,7 @@ function guardarRecibo(){
   const liquidacion=cuota-totalConsumo;
   const total=alq+cuota;
 
-  const rec={mes,alq,cuota,saldo_ant:saldoAnt,liquidacion,
+  const rec={mes,alq,cuota,saldo_ant:saldoAnt,saldo_manual:!!manual,liquidacion,
     cal_ant:cal.ant,cal_act:cal.act,cal_preu:cal.preu,cal_cons:cal.cons,cal_con:cal.con,cal_cob:cal.cob,
     agua_ant:agua.ant,agua_act:agua.act,agua_preu:agua.preu,agua_cons:agua.cons,agua_con:agua.con,agua_cob:agua.cob,
     elec_directo:elecDir,elec_con:elecDir,elec_cob:elecCob,
@@ -554,7 +561,7 @@ function textoReciboCompleto(m){
   const sep='───────────────────────────────────';
   const W=33;
   const inq=cfg.inq||'(Inquilino)';
-  const cuota=m.cuota||(cfg.cuota||0);
+  const cuota=(m.cuota!=null)?m.cuota:(cfg.cuota||0);
   function R(label,val){return label+' '.repeat(Math.max(1,W-label.length))+val;}
 
   let lines=[];
@@ -576,7 +583,9 @@ function textoReciboCompleto(m){
   lines.push('');
 
   // BLOQUE 2 — CUENTA CONSUMO
-  const saldoFavAnt = calcularSaldoAcumulado(m.mes);
+  /* Lo que se le envio al inquilino no puede cambiar despues: se usa el
+     saldo guardado en el recibo, no el que saldria hoy. */
+  const saldoFavAnt = (m.saldo_ant!=null) ? m.saldo_ant : calcularSaldoAcumulado(m.mes);
   const totalConsumo=(m.cal_cob||0)+(m.agua_cob||0)+(m.elec_cob||0);
   const totalFavor=saldoFavAnt+cuota;
   const saldoFinal=totalFavor-totalConsumo;
@@ -660,7 +669,7 @@ function editarRecibo(mes){
   const saldoAnt=m.saldo_ant!=null?m.saldo_ant:calcularSaldoAcumulado(mes);
   const saldoEl=document.getElementById('saldo-ant');
   saldoEl.dataset.valor=saldoAnt;
-  saldoEl.dataset.manual='1';
+  saldoEl.dataset.manual='1';   /* el del recibo guardado, no se recalcula */
   document.getElementById('saldo-manual').value=saldoAnt;
   document.getElementById('saldo-editable').style.display='block';
   document.getElementById('btn-edit-saldo').textContent='✕ Cerrar';
@@ -685,6 +694,9 @@ function editarRecibo(mes){
 function verRecibo(mes){
   const m=meses.find(r=>r.mes===mes);
   document.getElementById('modal-texto').textContent=textoReciboCompleto(m);
+  document.getElementById('modal-titulo').textContent='Recibo de '+fmtMes(mes);
+  const wa=document.getElementById('modal-wa');
+  if(wa) wa.onclick=function(){ whatsappRecibo(mes); };
   document.getElementById('modal-recibo').style.display='block';
   document.body.style.overflow='hidden';
 }
@@ -735,23 +747,32 @@ function renderRecibos(){
           </tr></thead>
           <tbody>`;
     ms.forEach(m=>{
-      const cuota=m.cuota||(cfg.cuota||0);
+      const cuota=(m.cuota!=null)?m.cuota:(cfg.cuota||0);
       const totalConsumo=(m.cal_cob||0)+(m.agua_cob||0)+(m.elec_cob||0);
-      const saldoFavAnt=calcularSaldoAcumulado(m.mes); // recalculado siempre en tiempo real
+      /* El saldo que se emitio manda. El de hoy solo sirve para avisar
+         de que algo cambio despues de enviar el recibo. */
+      const saldoEmitido=(m.saldo_ant!=null)?m.saldo_ant:calcularSaldoAcumulado(m.mes);
+      const saldoHoy=calcularSaldoAcumulado(m.mes);
+      const descuadre=(m.saldo_ant!=null)&&Math.abs(saldoHoy-saldoEmitido)>0.004;
+      const saldoFavAnt=saldoEmitido;
       const saldoFinal=saldoFavAnt+cuota-totalConsumo;
       const saldoHtml=saldoFinal>0.004
         ?`<span style="color:var(--accent);font-weight:500">✅ +${fmt(saldoFinal)} € → inquilino</span>`
         :saldoFinal<-0.004
         ?`<span style="color:var(--danger);font-weight:500">⚠️ +${fmt(Math.abs(saldoFinal))} € → propietario</span>`
         :`<span style="color:var(--muted)">Al día</span>`;
+      const avisoDescuadre=descuadre
+        ? `<div style="font-size:11px;color:var(--warn);margin-top:2px" title="El saldo de partida guardado era ${fmt(saldoEmitido)} € y hoy saldría ${fmt(saldoHoy)} €, porque se han tocado meses anteriores">⚠︎ recalculado hoy: ${fmt(saldoHoy + cuota - totalConsumo)} €</div>`
+        : '';
       html+=`<tr style="border-top:1px solid var(--border)">
         <td style="padding:11px 16px;font-weight:500">${fmtMes(m.mes)}</td>
         <td style="padding:11px 16px;text-align:right">${fmt(m.alq)} €</td>
         <td style="padding:11px 16px;text-align:right">${fmt(cuota)} €</td>
         <td style="padding:11px 16px;text-align:right;font-weight:500">${fmt(m.alq+cuota)} €</td>
-        <td style="padding:11px 16px;text-align:right">${saldoHtml}</td>
+        <td style="padding:11px 16px;text-align:right">${saldoHtml}${avisoDescuadre}</td>
         <td style="padding:11px 16px;text-align:right">
           <div style="display:flex;gap:6px;justify-content:flex-end">
+            <button class="btn btn-primary" style="padding:5px 12px;font-size:12px;background:#25D366;color:#0b3d24" onclick="whatsappRecibo('${m.mes}')" title="Enviar la factura por WhatsApp">📱 WhatsApp</button>
             <button class="btn btn-secondary" style="padding:5px 12px;font-size:12px" onclick="verRecibo('${m.mes}')">👁 Ver</button>
             <button class="btn btn-secondary" style="padding:5px 12px;font-size:12px;color:var(--info)" onclick="editarRecibo('${m.mes}')">✏️ Editar</button>
             <button class="btn btn-ghost" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);color:var(--danger)" onclick="this.dataset.c=this.dataset.c||0;this.dataset.c++;if(this.dataset.c==1){this.textContent='¿Seguro?';setTimeout(()=>{this.textContent='🗑';this.dataset.c=0;},3000);}else{borrarRecibo('${m.mes}');}">🗑</button>
@@ -874,28 +895,94 @@ function renderInquilinos(){
 function fmtFecha(s){if(!s)return'—';const[y,m,d]=s.split('-');return d+'/'+m+'/'+y}
 
 // ── GASTOS ────────────────────────────────────────────────────────────────────
+const TIPOS_GASTO = {
+  comunidad:   {nombre:'Comunidad',                  corto:'Comunidad',   icono:'🏢'},
+  suministros: {nombre:'Suministros del propietario',corto:'Suministros', icono:'💡'},
+  seguro:      {nombre:'Seguro',                     corto:'Seguro',      icono:'🛡️'},
+  impuestos:   {nombre:'Impuestos y tasas',          corto:'Impuestos',   icono:'🏛️'},
+  reparacion:  {nombre:'Reparación y mantenimiento', corto:'Reparación',  icono:'🔧'},
+  gestion:     {nombre:'Gestión y administración',   corto:'Gestión',     icono:'📋'},
+  otros:       {nombre:'Otros gastos',               corto:'Otros',       icono:'📦'}
+};
+function tipoDe(g){ return TIPOS_GASTO[g.tipo] ? g.tipo : 'otros'; }
+/* En las tablas el nombre largo se come el ancho: ahi va el corto, con
+   el completo en el tooltip. */
+function etiquetaTipo(g){
+  const t = TIPOS_GASTO[tipoDe(g)];
+  return '<span title="'+t.nombre+'">'+t.icono+' '+t.corto+'</span>';
+}
+
 function guardarGasto(){
   const fecha=document.getElementById('g-fecha').value;
   const desc=document.getElementById('g-desc').value.trim();
   const imp=parseFloat(document.getElementById('g-imp').value);
   if(!fecha||!desc||isNaN(imp)||imp<=0)return alert('Rellena todos los campos correctamente.');
-  gastos.push({id:Date.now(),fecha,desc,imp});
+  const tipo=(document.getElementById('g-tipo')||{}).value||'otros';
+  gastos.push({id:Date.now(),fecha,desc,imp,tipo});
   LS.set('piso_gastos',gastos);
   document.getElementById('g-desc').value='';document.getElementById('g-imp').value='';
   flash('flash-gasto');renderGastos();
 }
 function renderGastos(){
-  const sorted=[...gastos].sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  const todos=[...gastos].sort((a,b)=>b.fecha.localeCompare(a.fecha));
+
+  // Filtro por tipo, con lo que haya de verdad registrado
+  const sel=document.getElementById('g-filtro');
+  if(sel){
+    const previo=sel.value||'todos';
+    const presentes=[...new Set(todos.map(tipoDe))];
+    sel.innerHTML='<option value="todos">Todos los tipos</option>'+
+      Object.keys(TIPOS_GASTO).filter(k=>presentes.includes(k))
+        .map(k=>`<option value="${k}">${TIPOS_GASTO[k].icono} ${TIPOS_GASTO[k].nombre}</option>`).join('');
+    sel.value=[...presentes,'todos'].includes(previo)?previo:'todos';
+    if(!sel.dataset.listo){ sel.dataset.listo='1'; sel.addEventListener('change',renderGastos); }
+  }
+  const filtro=sel?sel.value:'todos';
+  const sorted=filtro==='todos'?todos:todos.filter(g=>tipoDe(g)===filtro);
   const total=sorted.reduce((s,g)=>s+g.imp,0);
-  document.getElementById('lista-gastos').innerHTML=sorted.length===0?'<div class="empty">Sin gastos.</div>':
-    `<table><thead><tr><th>Fecha</th><th>Descripción</th><th class="tr">Importe</th><th></th></tr></thead>
+
+  // Resumen por tipo: de una ojeada, en qué se va el dinero
+  const caja=document.getElementById('resumen-gastos');
+  if(caja){
+    const porTipo={};
+    todos.forEach(g=>{ const t=tipoDe(g); (porTipo[t]=porTipo[t]||{n:0,imp:0}); porTipo[t].n++; porTipo[t].imp+=g.imp; });
+    const totalTodos=todos.reduce((s,g)=>s+g.imp,0);
+    const claves=Object.keys(porTipo).sort((a,b)=>porTipo[b].imp-porTipo[a].imp);
+    caja.innerHTML=claves.length===0?'<div class="empty">Sin gastos todavía.</div>':
+      claves.map(k=>{
+        const pct=totalTodos>0?(porTipo[k].imp/totalTodos*100):0;
+        return `<div style="margin-bottom:10px;cursor:pointer" onclick="filtrarGastos('${k}')" title="Ver solo estos">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:13px;margin-bottom:3px">
+            <span>${TIPOS_GASTO[k].icono} ${TIPOS_GASTO[k].nombre}
+              <span class="text-muted" style="font-size:11.5px">· ${porTipo[k].n}</span></span>
+            <span class="fw500 text-danger">${fmt(porTipo[k].imp)} €</span>
+          </div>
+          <div style="background:var(--surface2);border-radius:4px;height:5px;overflow:hidden">
+            <div style="background:var(--danger);height:100%;width:${pct.toFixed(1)}%;border-radius:4px"></div>
+          </div>
+        </div>`;
+      }).join('')+
+      `<div class="total-row" style="margin-top:12px"><span class="text-muted" style="font-size:12px">Total acumulado</span>
+       <span class="text-danger fw500">${fmt(totalTodos)} €</span></div>`;
+  }
+
+  document.getElementById('lista-gastos').innerHTML=sorted.length===0?'<div class="empty">Sin gastos de este tipo.</div>':
+    `<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th class="tr">Importe</th><th></th></tr></thead>
     <tbody>${sorted.map(g=>`<tr>
       <td class="text-muted" style="white-space:nowrap">${g.fecha}</td>
+      <td style="white-space:nowrap">${etiquetaTipo(g)}</td>
       <td>${g.desc}</td>
-      <td class="tr text-danger">${fmt(g.imp)} €</td>
+      <td class="tr text-danger" style="white-space:nowrap">${fmt(g.imp)} €</td>
       <td style="text-align:right"><button class="btn-ghost" onclick="delGasto(${g.id})">×</button></td>
     </tr>`).join('')}</tbody></table>
-    <div class="total-row"><span class="text-muted" style="font-size:12px">Total gastos</span><span class="text-danger fw500">${fmt(total)} €</span></div>`;
+    <div class="total-row"><span class="text-muted" style="font-size:12px">${filtro==='todos'?'Total gastos':'Total de este tipo'}</span><span class="text-danger fw500">${fmt(total)} €</span></div>`;
+}
+
+function filtrarGastos(tipo){
+  const sel=document.getElementById('g-filtro');
+  if(!sel) return;
+  sel.value=(sel.value===tipo)?'todos':tipo;   // volver a pulsar quita el filtro
+  renderGastos();
 }
 function delGasto(id){
   if(!confirm('¿Eliminar este gasto?'))return;
@@ -1020,8 +1107,8 @@ function importarDatos(event){
 }
 
 // ── FACTURA VISUAL PROFESIONAL ────────────────────────────────────────────────
-function dibujarFactura(datos){
-  const cv=document.getElementById('factura-canvas');
+function dibujarFactura(datos, lienzo){
+  const cv=lienzo||document.getElementById('factura-canvas');
   if(!cv) return;
   const SC=2, W=580;
   const rowsCon=(datos.totalConsumo>0?3:0)+(datos.cal>0?1:0)+(datos.agua>0?1:0)+(datos.elec>0?1:0);
@@ -1108,7 +1195,8 @@ function dibujarFactura(datos){
   t('Cuota mensual: ',L,y,MD,12,400);
   t(fmt(datos.cuota)+' €/mes',L+c.measureText('Cuota mensual: ').width,y,DK,12,600);
   if(datos.numMeses>0){
-    t('Meses acumulados: ',R-130,y,MD,12,400,'left');
+    /* la etiqueta necesita sitio: con R-130 se comia el importe */
+    t('Meses acumulados:',R-205,y,MD,12,400,'left');
     t(datos.numMeses+'  (' + fmt(datos.numMeses*datos.cuota)+' €)',R,y,DK,12,600,'right');
   }
   y+=28;
@@ -1173,9 +1261,21 @@ function dibujarFactura(datos){
   t(datos.cierre,L,y,LT,12,400);
   t('Documento informativo · '+new Date().getFullYear(),R,y,VL,10,400,'right');
 
-  // Ajustar canvas
+  /* Ajustar el alto al contenido real. OJO: tocar cv.height borra el
+     lienzo, asi que antes copiamos lo pintado y lo devolvemos encima.
+     Sin esto la factura salia en blanco. */
   const realH=y+24;
-  cv.height=realH*SC; cv.style.height=realH+'px';
+  const altoFinal=Math.round(realH*SC);
+  if(altoFinal>0 && altoFinal!==cv.height){
+    const copia=document.createElement('canvas');
+    copia.width=cv.width; copia.height=Math.min(cv.height, altoFinal);
+    copia.getContext('2d').drawImage(cv,0,0);
+    cv.height=altoFinal;
+    const ctx2=cv.getContext('2d');
+    ctx2.fillStyle=BG; ctx2.fillRect(0,0,cv.width,cv.height);
+    ctx2.drawImage(copia,0,0);
+  }
+  cv.style.height=realH+'px';
 }
 
 function descargarFactura(){
@@ -1211,6 +1311,102 @@ function activarCompartir(){
     const btn=document.getElementById('btn-compartir');
     if(btn) btn.style.display='';
   }
+}
+
+/* Los mismos datos que getDatosFactura(), pero de un recibo del
+   historial en vez del formulario. */
+function datosFacturaDeRecibo(m){
+  const cuota=(m.cuota!=null)?m.cuota:(cfg.cuota||0);
+  const saldoAnt=(m.saldo_ant!=null)?m.saldo_ant:calcularSaldoAcumulado(m.mes);
+  const cal=m.cal_cob||0, agua=m.agua_cob||0, elec=m.elec_cob||0;
+  const totalConsumo=cal+agua+elec;
+  const desde=cfg.cuotaDesde||'0000-00';
+  const numMeses=[...meses].filter(r=>r.mes<m.mes&&r.mes>=desde).length;
+  const totalFavor=saldoAnt+cuota;
+  return {
+    mes:fmtMes(m.mes), inq:cfg.inq||'(Inquilino)',
+    alq:m.alq||0, cuota, saldoFavAnt:saldoAnt, numMeses,
+    cal, agua, elec, totalConsumo, totalFavor,
+    saldoFinal:totalFavor-totalConsumo,
+    cierre:cfg.cierre||'Muchas gracias 🙏'
+  };
+}
+
+/* Dibuja la factura de un recibo en un lienzo aparte y la devuelve como
+   imagen, sin tocar la que se ve en pantalla. */
+function imagenDeRecibo(m){
+  return new Promise((resolve,reject)=>{
+    try{
+      const cv=document.createElement('canvas');
+      dibujarFactura(datosFacturaDeRecibo(m), cv);
+      cv.toBlob(b=>b?resolve(b):reject(new Error('No se pudo generar la imagen')), 'image/png');
+    }catch(err){ reject(err); }
+  });
+}
+
+/* El telefono del inquilino que este viviendo ahora, si lo hay. */
+function telefonoInquilino(){
+  const vivos=(inquilinos||[]).filter(i=>!i.salida||new Date(i.salida)>=new Date());
+  const con=(vivos.length?vivos:(inquilinos||[])).filter(i=>i.tel&&i.tel.trim());
+  if(!con.length) return '';
+  const bruto=con[0].tel.replace(/[^\d+]/g,'');
+  if(!bruto) return '';
+  if(bruto.charAt(0)==='+') return bruto.slice(1).replace(/\D/g,'');
+  const d=bruto.replace(/\D/g,'');
+  /* un numero corto es de aqui: le ponemos el prefijo de Andorra */
+  return d.length<=9 ? '376'+d : d;
+}
+
+function textoWhatsApp(m){
+  const d=datosFacturaDeRecibo(m);
+  const l=['🏠 *Recibo de '+d.mes+'*',
+           'Alquiler: '+fmt(d.alq)+' €',
+           'Fondo gastos consumo: '+fmt(d.cuota)+' €',
+           '*Total: '+fmt(d.alq+d.cuota)+' €*'];
+  if(d.totalConsumo>0) l.push('Gastos del mes: '+fmt(d.totalConsumo)+' €');
+  l.push(d.saldoFinal>0.004 ? 'Saldo a tu favor: '+fmt(d.saldoFinal)+' €'
+       : d.saldoFinal<-0.004 ? 'Saldo a favor del propietario: '+fmt(Math.abs(d.saldoFinal))+' €'
+       : 'Cuenta de consumo al día');
+  l.push('', 'Te adjunto la factura.');
+  return l.join('\n');
+}
+
+/* Manda la factura por WhatsApp. En el movil va la imagen dentro del
+   propio envio; en el ordenador WhatsApp no deja adjuntar desde una web,
+   asi que se descarga la imagen y se abre el chat con el texto puesto. */
+async function whatsappRecibo(mes){
+  const m=meses.find(r=>r.mes===mes);
+  if(!m){ alert('No encuentro ese recibo.'); return; }
+  const nombre='recibo-'+mes+'.png';
+  const texto=textoWhatsApp(m);
+  const tel=telefonoInquilino();
+
+  let blob=null;
+  try{ blob=await imagenDeRecibo(m); }
+  catch(err){ alert('No he podido generar la factura: '+err.message); return; }
+
+  if(navigator.canShare && navigator.share){
+    try{
+      const file=new File([blob], nombre, {type:'image/png'});
+      if(navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], text:texto, title:'Recibo '+fmtMes(mes)});
+        return;
+      }
+    }catch(err){
+      if(err && err.name==='AbortError') return;   /* lo ha cancelado */
+    }
+  }
+
+  await guardarArchivo(nombre, blob, function(){
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=nombre;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 1500);
+  });
+
+  const destino='https://wa.me/'+(tel||'')+'?text='+encodeURIComponent(texto);
+  window.open(destino, '_blank', 'noopener');
 }
 
 function getDatosFactura(){

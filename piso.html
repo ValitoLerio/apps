@@ -270,14 +270,30 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
       <div class="section-title">Añadir gasto operativo</div>
       <div class="card">
         <div class="form-group" style="margin-bottom:12px"><label>Fecha</label><input type="date" id="g-fecha"></div>
-        <div class="form-group" style="margin-bottom:12px"><label>Descripción</label><input type="text" id="g-desc" placeholder="Comunidad, seguro, reparación..."></div>
+        <div class="form-group" style="margin-bottom:12px"><label>Tipo de gasto</label>
+          <select id="g-tipo" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:14px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+            <option value="comunidad">🏢 Comunidad</option>
+            <option value="suministros">💡 Suministros del propietario</option>
+            <option value="seguro">🛡️ Seguro</option>
+            <option value="impuestos">🏛️ Impuestos y tasas</option>
+            <option value="reparacion">🔧 Reparación y mantenimiento</option>
+            <option value="gestion">📋 Gestión y administración</option>
+            <option value="otros" selected>📦 Otros gastos</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:12px"><label>Descripción</label><input type="text" id="g-desc" placeholder="Derrama de fachada, recibo del seguro..."></div>
         <div class="form-group" style="margin-bottom:14px"><label>Importe (€)</label><input type="number" id="g-imp" step="0.01" placeholder="0.00"></div>
         <button class="btn btn-primary btn-full" onclick="guardarGasto()">Añadir gasto</button>
         <div id="flash-gasto" class="flash flash-success">✓ Gasto registrado</div>
       </div>
     </div>
     <div>
-      <div class="section-title">Gastos registrados</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;flex-wrap:wrap">
+        <div class="section-title" style="margin-bottom:0">Gastos registrados</div>
+        <select id="g-filtro" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text);cursor:pointer;margin-left:auto"></select>
+      </div>
+      <div class="card" style="margin-bottom:1rem"><div class="card-title" style="font-size:15px">Por tipo de gasto</div>
+        <div id="resumen-gastos"></div></div>
       <div class="card"><div class="table-wrap" id="lista-gastos"></div></div>
     </div>
   </div>
@@ -436,14 +452,15 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
       <button onclick="cerrarModal()" style="border:none;background:var(--surface2);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:20px;color:var(--muted)">×</button>
     </div>
     <div id="modal-texto" class="receipt-box" style="font-size:12.5px;line-height:1.85;max-height:70vh;overflow-y:auto"></div>
-    <div style="display:flex;gap:8px;margin-top:1rem">
-      <button class="btn btn-primary" style="flex:1" onclick="copiarRecibo('modal-texto')">📋 Copiar para WhatsApp</button>
+    <div style="display:flex;gap:8px;margin-top:1rem;flex-wrap:wrap">
+      <button class="btn btn-primary" style="flex:1;min-width:190px;background:#25D366;color:#0b3d24" id="modal-wa">📱 Enviar factura por WhatsApp</button>
+      <button class="btn btn-secondary" style="flex:1;min-width:150px" onclick="copiarRecibo('modal-texto')">📋 Copiar el texto</button>
     </div>
   </div>
 </div>
 
 
-<script src="sync.js?v=202608281044"></script>
+<script src="sync.js?v=202608281119"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -451,7 +468,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
 
   Sync.iniciar('piso').then(function(){
     var s = document.createElement('script');
-    s.src = 'piso.js?v=202608281044';
+    s.src = 'piso.js?v=202608281119';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

@@ -245,6 +245,26 @@
     <table id="hourstbl" style="border-collapse:collapse;font-size:.8rem;min-width:100%"></table>
   </div>
 </div>
+<!-- AUSENCIAS -->
+<div id="ausencias-section" style="background:var(--bg);border-top:2px solid var(--border);padding-bottom:40px">
+  <div style="display:flex;align-items:center;gap:14px;padding:13px 20px 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap">
+    <div>
+      <div style="font-family:'Playfair Display',serif;font-size:1rem;color:var(--gold2)">&#127958;&#65039; Vacaciones, festivos y bajas</div>
+      <div style="font-size:.71rem;color:var(--text2)">Quién falta y qué días, de un vistazo</div>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+      <select id="aus-alcance" onchange="renderAusencias()" style="font-size:.75rem;padding:4px 8px">
+        <option value="mes">Mes en curso</option>
+        <option value="ano">Todo el año</option>
+      </select>
+    </div>
+  </div>
+  <div id="aus-resumen" style="display:flex;gap:10px;padding:12px 20px 0;flex-wrap:wrap"></div>
+  <div style="overflow-x:auto;padding:12px 20px 0">
+    <table id="austbl" style="border-collapse:collapse;font-size:.8rem;min-width:100%"></table>
+  </div>
+</div>
+
 <div class="popup" id="popup">
   <h4 id="ptitle">Editar</h4>
   <div class="pgrid">
@@ -354,7 +374,7 @@
 
 
 
-<script src="sync.js?v=202608281044"></script>
+<script src="sync.js?v=202608281119"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -362,7 +382,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202608281044';
+    s.src = 'horario.js?v=202608281119';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

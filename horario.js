@@ -148,6 +148,8 @@ function toggleWeekMode() {
   var mn   = document.getElementById('mnav');
   if (wb)  wb.classList.toggle('show', weekMode);
   if (cov) cov.style.display  = weekMode ? 'none' : 'block';
+  var aus = document.getElementById('ausencias-section');
+  if (aus) aus.style.display = weekMode ? 'none' : 'block';
   if (sb)  sb.style.display   = weekMode ? 'none' : 'flex';
   if (cb && !weekMode) cb.style.display = '';
   if (mn)  mn.style.display   = weekMode ? 'none' : 'flex';
@@ -180,7 +182,7 @@ function renderAll() {
   // Sync hours year selector
   var hyr = document.getElementById('hours-year-sel');
   if (hyr) hyr.value = curY;
-  renderNav(); renderTable(); renderStats(); renderCov(); renderHours();
+  renderNav(); renderTable(); renderStats(); renderCov(); renderHours(); renderAusencias();
 }
 
 // ================================================================
@@ -326,6 +328,126 @@ function renderHoursAnnual(tbl, y, all) {
   });
   tb+='</tbody>'; tbl.innerHTML=th+tb;
 }
+// ================================================================
+// AUSENCIAS: VACACIONES, FESTIVOS Y BAJAS
+// ================================================================
+var AUS_TIPOS = {
+  vacaciones: {lbl:'Vacaciones', cls:'ev', ico:'\uD83C\uDFD6\uFE0F'},
+  festivo:    {lbl:'Festivos',   cls:'ef', ico:'\uD83C\uDF89'},
+  baja:       {lbl:'Bajas',      cls:'eb', ico:'B'},
+  ausencia:   {lbl:'Ausencias',  cls:'ea', ico:'A'}
+};
+
+/* Agrupa los dias sueltos en tramos: 3,4,5 y 9 -> "3-5" y "9". Asi se
+   lee "del 3 al 5" en vez de una lista larga de numeros. */
+function tramos(dias){
+  if (!dias.length) return [];
+  var orden = dias.slice().sort(function(a,b){ return a-b; });
+  var salida = [], ini = orden[0], prev = orden[0];
+  for (var i = 1; i < orden.length; i++) {
+    if (orden[i] === prev + 1) { prev = orden[i]; continue; }
+    salida.push([ini, prev]); ini = prev = orden[i];
+  }
+  salida.push([ini, prev]);
+  return salida;
+}
+function textoTramos(dias){
+  return tramos(dias).map(function(t){
+    return t[0] === t[1] ? String(t[0]) : t[0] + '-' + t[1];
+  }).join(', ');
+}
+
+/* Recoge las ausencias del mes en curso o de todo el año. */
+function recogerAusencias(){
+  var alcance = (document.getElementById('aus-alcance') || {}).value || 'mes';
+  var meses = alcance === 'ano' ? [] : [curM];
+  if (alcance === 'ano') for (var m = 0; m < 12; m++) meses.push(m);
+
+  var porPersona = {};   // sid -> mes -> tipo -> [dias]
+  var totales = {vacaciones:0, festivo:0, baja:0, ausencia:0};
+
+  staff().forEach(function(s){
+    meses.forEach(function(m){
+      var celdas = ((sched[curY] || {})[m] || {})[s.id] || {};
+      Object.keys(celdas).forEach(function(dia){
+        var c = celdas[dia];
+        if (!c || !AUS_TIPOS[c.estado]) return;
+        porPersona[s.id] = porPersona[s.id] || {};
+        porPersona[s.id][m] = porPersona[s.id][m] || {};
+        (porPersona[s.id][m][c.estado] = porPersona[s.id][m][c.estado] || []).push(+dia);
+        totales[c.estado]++;
+      });
+    });
+  });
+  return {porPersona: porPersona, totales: totales, meses: meses, alcance: alcance};
+}
+
+function renderAusencias(){
+  var tbl = document.getElementById('austbl'); if (!tbl) return;
+  var datos = recogerAusencias();
+
+  // Fichas de recuento
+  var caja = document.getElementById('aus-resumen');
+  if (caja) {
+    caja.innerHTML = Object.keys(AUS_TIPOS).map(function(k){
+      var n = datos.totales[k];
+      return '<div class="tb ' + AUS_TIPOS[k].cls + '" style="cursor:default;padding:7px 12px">' +
+             '<span style="font-size:1.05rem;font-weight:700">' + n + '</span>' +
+             '<span style="margin-left:5px;font-weight:500">' + AUS_TIPOS[k].lbl + '</span></div>';
+    }).join('');
+  }
+
+  var conAlgo = staff().filter(function(s){ return datos.porPersona[s.id]; });
+  if (!conAlgo.length) {
+    tbl.innerHTML = '<tbody><tr><td style="padding:26px 4px;text-align:center;color:var(--text2)">' +
+      'Nadie tiene vacaciones, festivos ni bajas ' +
+      (datos.alcance === 'ano' ? 'en ' + curY : 'en ' + MESES[curM]) + '.</td></tr></tbody>';
+    return;
+  }
+
+  var th = '<thead><tr>' +
+    '<th style="background:var(--surface);color:var(--gold);font-family:Playfair Display,serif;font-size:.82rem;' +
+    'padding:9px 12px;border:1px solid var(--border);text-align:left;position:sticky;left:0;z-index:10;min-width:130px">Personal</th>' +
+    (datos.alcance === 'ano'
+      ? '<th style="background:var(--surface);color:var(--text2);padding:9px 10px;border:1px solid var(--border);text-align:left;font-size:.74rem;min-width:80px">Mes</th>'
+      : '') +
+    Object.keys(AUS_TIPOS).map(function(k){
+      return '<th style="background:var(--surface);color:var(--text2);padding:9px 10px;border:1px solid var(--border);' +
+             'text-align:left;font-size:.74rem;min-width:120px">' + AUS_TIPOS[k].lbl + '</th>';
+    }).join('') + '</tr></thead>';
+
+  var tb = '<tbody>';
+  conAlgo.forEach(function(s){
+    var porMes = datos.porPersona[s.id];
+    var mesesConAlgo = Object.keys(porMes).map(Number).sort(function(a,b){ return a-b; });
+    mesesConAlgo.forEach(function(m, idx){
+      tb += '<tr>';
+      if (idx === 0) {
+        tb += '<td rowspan="' + mesesConAlgo.length + '" style="background:var(--surface);position:sticky;left:0;z-index:5;' +
+              'padding:7px 12px;border:1px solid var(--border);vertical-align:top">' +
+              '<span style="color:' + RCOL[s.role] + ';font-weight:600;font-size:.8rem">' + s.name + '</span>' +
+              '<span class="rt r' + s.role + '" style="margin-left:3px">' + RLBL[s.role] + '</span></td>';
+      }
+      if (datos.alcance === 'ano') {
+        tb += '<td style="padding:7px 10px;border:1px solid var(--border);color:var(--text2);white-space:nowrap">' +
+              MESES[m] + '</td>';
+      }
+      Object.keys(AUS_TIPOS).forEach(function(k){
+        var dias = porMes[m][k] || [];
+        tb += '<td style="padding:7px 10px;border:1px solid var(--border)">' +
+              (dias.length
+                ? '<span class="tb ' + AUS_TIPOS[k].cls + '" style="cursor:default;font-size:.78rem;padding:3px 8px">' +
+                  textoTramos(dias) + '<span style="opacity:.7;margin-left:5px">(' + dias.length + 'd)</span></span>'
+                : '<span style="color:var(--border)">·</span>') +
+              '</td>';
+      });
+      tb += '</tr>';
+    });
+  });
+  tb += '</tbody>';
+  tbl.innerHTML = th + tb;
+}
+
 function renderNav() {
   var nav = document.getElementById('mnav');
   if (!nav) return;
