@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-app="comanda">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -241,6 +241,8 @@ dialog::backdrop{background:rgba(20,14,15,.5)}
 #cargando .sub{font-size:13px; color:var(--muted); max-width:34ch; line-height:1.5}
 @media (max-width:900px){ .rail-foot{flex-direction:row; gap:12px; align-items:center} }
 </style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="comun.css?v=202608281120">
 </head>
 <body>
 
@@ -251,7 +253,7 @@ dialog::backdrop{background:rgba(20,14,15,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202608281119"></script>
+<script src="sync.js?v=202608281123"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -259,7 +261,7 @@ dialog::backdrop{background:rgba(20,14,15,.5)}
 
   Sync.iniciar('comanda').then(function(){
     var s = document.createElement('script');
-    s.src = 'comanda.js?v=202608281119';
+    s.src = 'comanda.js?v=202608281123';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar comanda.js. Recarga la pagina.'; };
     document.body.appendChild(s);

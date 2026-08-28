@@ -1,0 +1,111 @@
+/* ══════════════════════════════════════════════════════════════════
+   ESTILO COMÚN DEL ESCRITORIO
+   ══════════════════════════════════════════════════════════════════
+   Las tres apps venían cada una con su paleta y sus tipografías. Esta
+   hoja les da un aire común sin tocar su lógica: solo redefine los
+   colores y las fuentes que ya usaban, y cada una conserva su acento
+   —verde para el piso, cobre para el horario, granate para Comanda—
+   para reconocerlas de un vistazo.
+
+   Se carga DESPUÉS del <style> de cada app, así que gana.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Tipografía compartida ───────────────────────────────────────── */
+:root{
+  --letra-titulo:'Fraunces',Georgia,serif;
+  --letra-texto:'Archivo','Helvetica Neue',Arial,sans-serif;
+  --letra-mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+}
+
+/* ── PISO: claro, con verde abeto ────────────────────────────────── */
+[data-app="piso"]{
+  --bg:#eceeeb; --surface:#fbfcfb; --surface2:#f0f3f0;
+  --line:#d3dad6; --border:#d3dad6;
+  --text:#0f1618; --muted:#5c6b68;
+  --accent:#0c5a44; --accent-bg:#dcece5; --accent-line:#b9d5c9; --accent-light:#b9d5c9;
+  --danger:#96331f; --danger-bg:#f7e2de;
+  --warn:#7d5714; --warn-bg:#f4e7d5;
+  --info:#1a4a6b; --info-bg:#e2eef5;
+  --serif:var(--letra-titulo); --sans:var(--letra-texto); --mono:var(--letra-mono);
+  --r:10px; --rl:14px;
+}
+[data-app="piso"] .logo,
+[data-app="piso"] .card-title,
+[data-app="piso"] .section-title{font-family:var(--letra-titulo);font-weight:600;letter-spacing:-.015em}
+[data-app="piso"] .metric-value{font-family:var(--letra-texto);font-weight:600;letter-spacing:-.02em}
+[data-app="piso"] .metric-label,
+[data-app="piso"] th{font-family:var(--letra-mono);letter-spacing:.08em}
+
+/* ── HORARIO: oscuro, con cobre ──────────────────────────────────── */
+[data-app="horario"]{
+  --bg:#101617; --surface:#171f21; --surface2:#1e282a; --border:#263335;
+  --text:#eef2f0; --text2:#93a5a1;
+  --gold:#e0954a; --gold2:#efb373;
+  --enc:#efb373; --coc:#e0919c; --cam:#5fd3ac;
+  --shift-l:#14322a; --shift-c:#1a2426; --shift-r:#2c2414;
+}
+[data-app="horario"] body,
+[data-app="horario"] .mb,
+[data-app="horario"] .sb,
+[data-app="horario"] .tbtn,
+[data-app="horario"] select,
+[data-app="horario"] .pb,
+[data-app="horario"] .pi,
+[data-app="horario"] .psave,
+[data-app="horario"] .pcanc,
+[data-app="horario"] .pcopy,
+[data-app="horario"] .bp,
+[data-app="horario"] .bs,
+[data-app="horario"] .preset-btn,
+[data-app="horario"] .modal input[type=text]{font-family:var(--letra-texto)}
+[data-app="horario"] .topbar-title,
+[data-app="horario"] .covt,
+[data-app="horario"] .modal h3,
+[data-app="horario"] .popup h4{font-family:var(--letra-titulo);font-weight:600;letter-spacing:-.01em}
+[data-app="horario"] .mb,
+[data-app="horario"] .sl,
+[data-app="horario"] .k{font-family:var(--letra-mono)}
+
+/* ── COMANDA: claro, con granate ─────────────────────────────────── */
+[data-app="comanda"]{
+  --ground:#eceeeb; --surface:#fbfcfb; --surface-2:#f0f3f0;
+  --line:#d3dad6; --line-soft:#e2e7e4;
+  --ink:#0f1618; --ink-2:#3d4a48; --muted:#5c6b68;
+  --accent:#7b2d3b; --accent-ink:#ffffff; --accent-soft:#f3e6e8; --accent-line:#e0c6cb;
+  --ok:#0c5a44; --ok-soft:#dcece5;
+  --warn:#7d5714; --warn-soft:#f4e7d5;
+  --danger:#96331f;
+  --radius:10px;
+}
+[data-app="comanda"] body,
+[data-app="comanda"] button,
+[data-app="comanda"] input,
+[data-app="comanda"] select,
+[data-app="comanda"] textarea{font-family:var(--letra-texto)}
+[data-app="comanda"] h1,
+[data-app="comanda"] h2,
+[data-app="comanda"] h3,
+[data-app="comanda"] .brand .mark,
+[data-app="comanda"] .empty strong,
+[data-app="comanda"] .send-box h4{font-family:var(--letra-titulo);font-weight:600;letter-spacing:-.015em}
+[data-app="comanda"] .mono,
+[data-app="comanda"] th,
+[data-app="comanda"] label.lbl,
+[data-app="comanda"] .stat .k,
+[data-app="comanda"] .brand .sub{font-family:var(--letra-mono)}
+[data-app="comanda"] .stat .v{font-family:var(--letra-texto);font-weight:600;letter-spacing:-.02em}
+
+/* La factura impresa se queda en blanco y negro de papel: no hereda el
+   tono de la pantalla, porque es lo que ve el cliente. */
+[data-app="comanda"] .paper{background:#fff}
+
+/* ── Detalles compartidos ────────────────────────────────────────── */
+[data-app] ::selection{background:rgba(12,90,68,.22)}
+[data-app="horario"] ::selection{background:rgba(224,149,74,.3)}
+[data-app="comanda"] ::selection{background:rgba(123,45,59,.18)}
+
+[data-app] :focus-visible{outline:2px solid currentColor;outline-offset:2px;border-radius:4px}
+
+@media (prefers-reduced-motion:reduce){
+  [data-app] *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}

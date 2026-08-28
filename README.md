@@ -24,6 +24,15 @@ solo en ese navegador. A partir de ahí, cualquier cambio en las apps se
 sube solo al repositorio de datos un par de segundos después, y al abrir
 la web en otro sitio se descarga lo último guardado.
 
+## Un mismo aire en las tres
+
+`comun.css` se carga después del estilo propio de cada app y redefine sus
+colores y tipografías: Fraunces para los títulos, Archivo para el texto e
+IBM Plex Mono para etiquetas y datos, sobre los mismos grises del
+escritorio. Cada app conserva su acento —verde el piso, cobre el horario,
+granate Comanda— para reconocerla de un vistazo. Las apps se marcan con
+`data-app` en el `<html>`; no se ha tocado su lógica.
+
 ## Trabajar en dos dispositivos sin pisarse
 
 El guardado sustituye la sección entera de cada app, así que dos
