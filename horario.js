@@ -873,10 +873,28 @@ function calcFin() {
   if (hl) hl.innerHTML = '<span style="color:var(--gold2);font-weight:600">'+h+'h</span> - '+rl+' - '+(curS==='verano'?'Verano':'Invierno')+' - '+fmtH(v)+' to '+fmtH(fs);
 }
 
+/* Guarda un estado sin datos extra (festivo, vacaciones, baja, ausencia)
+   y cierra. Solo "Trabaja" necesita el paso de Guardar, porque hay que
+   escribir las horas. */
+function aplicarEstado(est) {
+  if (!active) return;
+  var dia = active.day;
+  var savedM = curM, savedY = curY;
+  if (active.mo !== undefined) { curM = active.mo; curY = active.yr; }
+  var previo = gc(active.sid, active.day) || {};
+  sc(active.sid, active.day, {estado: est, nota: previo.nota || ''});
+  curM = savedM; curY = savedY;
+  closePopup(); renderTable(); renderCov(); renderAusencias();
+  var comoSeLlama = {festivo:'Festivo', vacaciones:'Vacaciones', baja:'Baja', ausencia:'Ausencia'};
+  toast((comoSeLlama[est] || est) + ' · día ' + dia);
+}
+
 function selE(est) {
   var pop = document.getElementById('popup'); if (!pop) return;
   /* Marcar "Libre" es querer vaciar el dia: se hace ya, sin Guardar. */
   if (est === 'libre') { borrarCelda(); return; }
+  /* Los demas, salvo un turno con horas, tambien se aplican en el acto. */
+  if (est !== 'trabajo') { aplicarEstado(est); return; }
   pop._est = est;
   document.querySelectorAll('.pb').forEach(function(b){ b.classList.remove('on'); });
   event.target.classList.add('on');
