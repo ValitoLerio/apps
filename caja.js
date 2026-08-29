@@ -30,7 +30,7 @@ function libroVacio(){
   return {
     v:1, actualizado:new Date().toISOString(),
     ajustes:{ nombre:"", objetivoAmarilla:1500, fondoHabitual:0,
-              destinatario:"", prefijo:"376", telefono:"" },
+              destinatario:"", telefono:"" },
     dias:[],          /* {id, fecha, visa, efectivo, gastos, detalle:[…], aAmarilla, fondoCaja, nota} */
     aportaciones:[],  /* {id, fecha, importe, motivo} — dinero que entra sin ser de la caja */
     retiradas:[]      /* {id, fecha, importe, motivo} — dinero que sale de la amarilla */
@@ -452,24 +452,17 @@ function textoDia(fecha, opciones){
   return l.join("\n");
 }
 
-/* WhatsApp necesita el numero entero, con el codigo del pais y sin
-   signos: si va suelto, te abre el chat de cualquier otro. */
+/* El numero se guarda entero, con el codigo del pais, tal cual se
+   escribe. Antes la app le ponia el prefijo por su cuenta a todo numero
+   de hasta nueve cifras, y a un numero espanol de nueve le encajaba un
+   376 delante: salia un numero inexistente y WhatsApp respondia "no se
+   pudo abrir este enlace". Aqui ya no se adivina nada. */
 function telefonoCompleto(){
-  var pre=String(libro.ajustes.prefijo||"").replace(/\D/g,"");
-  var tel=String(libro.ajustes.telefono||"").replace(/[^\d+]/g,"");
-  if(!tel) return "";
-  if(tel.charAt(0)==="+") return tel.slice(1).replace(/\D/g,"");
-  tel=tel.replace(/\D/g,"");
-  /* si ya viene con el prefijo delante, no se lo ponemos dos veces */
-  if(pre && tel.indexOf(pre)===0 && tel.length>pre.length+5) return tel;
-  /* un numero corto es de aqui: le anteponemos el prefijo */
-  return (pre && tel.length<=9) ? pre+tel : tel;
+  return String(libro.ajustes.telefono||"").replace(/\D/g,"");
 }
 function telefonoBonito(){
-  var pre=String(libro.ajustes.prefijo||"").replace(/\D/g,"");
-  var tel=String(libro.ajustes.telefono||"").trim();
-  if(!tel) return "";
-  return (tel.charAt(0)==="+"?tel:(pre?"+"+pre+" ":"")+tel);
+  var tel=telefonoCompleto();
+  return tel ? "+"+tel : "";
 }
 function nombreDestino(){
   return libro.ajustes.destinatario || (telefonoBonito()||"quien elijas");
@@ -484,6 +477,7 @@ function enviarDiaPorWhatsApp(fecha){
   if(!texto){ avisar("Ese dia no tiene nada anotado. Guardalo primero.", true); return; }
   var tel=telefonoCompleto();
   var destino="https://wa.me/"+tel+"?text="+encodeURIComponent(plano);
+  var porNavegador="https://web.whatsapp.com/send?phone="+tel+"&text="+encodeURIComponent(plano);
 
   var vieja=document.getElementById("dlg"); if(vieja) vieja.remove();
   var d=document.createElement("dialog"); d.id="dlg";
@@ -501,14 +495,19 @@ function enviarDiaPorWhatsApp(fecha){
          con letra de maquina, y en WhatsApp se envian igualmente. */
       '<div class="parte" id="parteTexto">'+esc(texto.split("\n").filter(function(x){
          return x.trim()!=="```"; }).join("\n"))+'</div>'+
+      '<p class="nota" style="margin:10px 0 0">Si <strong>Abrir WhatsApp</strong> dice que no puede '+
+      'abrir el enlace, es cosa de la aplicación del ordenador: usa '+
+      '<strong>Abrir en el navegador</strong>, que no pasa por ella.</p>'+
     '</div>'+
     '<div class="dlg-pie">'+
       '<button class="btn" data-copiar>Copiar el parte</button>'+
-      /* Para mandarlo a otra persona sin tocar los ajustes. En el Mac,
-         WhatsApp rechaza los enlaces sin numero ("no se pudo abrir este
-         enlace"), asi que aqui no se usa ninguno: se copia el parte y se
-         abre la aplicacion, y el chat lo elige el a mano. */
-      '<button class="btn suave" data-elegir>Copiar y abrir WhatsApp</button>'+
+      /* Dos caminos distintos a proposito. wa.me se lo pasa a la
+         aplicacion del ordenador, y esa es la que a veces responde "no
+         se pudo abrir este enlace". El de web.whatsapp.com se queda en
+         el navegador y no toca la aplicacion, asi que sirve de recambio
+         cuando el primero falla. */
+      '<a class="btn suave" href="'+esc(porNavegador)+'" target="_blank" rel="noopener" '+
+      'style="text-decoration:none" data-web>Abrir en el navegador</a>'+
       '<a class="btn wa" href="'+esc(destino)+'" target="_blank" rel="noopener" '+
       'style="text-decoration:none" data-abrir>Abrir WhatsApp</a>'+
     '</div>';
@@ -527,8 +526,10 @@ function enviarDiaPorWhatsApp(fecha){
     if(escrito===null) return;
     var limpio=escrito.replace(/[^\d]/g,"");
     if(!limpio){ avisar("Ese número no vale.", true); return; }
-    var enlace=d.querySelector("[data-abrir]");
-    enlace.setAttribute("href", "https://wa.me/"+limpio+"?text="+encodeURIComponent(plano));
+    d.querySelector("[data-abrir]").setAttribute("href",
+      "https://wa.me/"+limpio+"?text="+encodeURIComponent(plano));
+    d.querySelector("[data-web]").setAttribute("href",
+      "https://web.whatsapp.com/send?phone="+limpio+"&text="+encodeURIComponent(plano));
     d.querySelector(".nota").innerHTML='Se abrira el chat de <span class="mono">+'+esc(limpio)+'</span>, '+
       'solo para este envio.';
     avisar("Este parte ira a +"+limpio);
@@ -538,11 +539,8 @@ function enviarDiaPorWhatsApp(fecha){
     /* damos tiempo a que abra la pestana antes de cerrar la ventana */
     setTimeout(function(){ if(document.getElementById("dlg")){ d.close(); d.remove(); } }, 600);
   });
-  d.querySelector("[data-elegir]").addEventListener("click", function(){
-    copiarTexto(texto, null);
-    avisar("Parte copiado. Abre el chat que quieras y pegalo.");
-    window.location.href="whatsapp://";
-    setTimeout(function(){ if(document.getElementById("dlg")){ d.close(); d.remove(); } }, 900);
+  d.querySelector("[data-web]").addEventListener("click", function(){
+    setTimeout(function(){ if(document.getElementById("dlg")){ d.close(); d.remove(); } }, 600);
   });
   d.showModal();
 }
@@ -928,15 +926,21 @@ function verAjustes(main){
       '<div class="rejilla">'+
         '<div class="campo"><label class="lbl" for="aj_dest">Nombre</label>'+
           '<input id="aj_dest" value="'+esc(libro.ajustes.destinatario||"")+'" placeholder="Valeriano"></div>'+
-        '<div class="campo"><label class="lbl" for="aj_pre">Prefijo del país</label>'+
-          '<input id="aj_pre" class="mono" value="'+esc(libro.ajustes.prefijo||"376")+'" placeholder="376"></div>'+
-        '<div class="campo"><label class="lbl" for="aj_tel">Teléfono</label>'+
-          '<input id="aj_tel" class="mono" value="'+esc(libro.ajustes.telefono||"")+'" placeholder="800100"></div>'+
+        '<div class="campo" style="grid-column:span 2">'+
+          '<label class="lbl" for="aj_tel">Teléfono con el código del país</label>'+
+          '<input id="aj_tel" class="mono" value="'+esc(libro.ajustes.telefono||"")+'" '+
+          'placeholder="+376 800100"></div>'+
       '</div>'+
       '<p class="nota" style="margin:10px 0 0" id="aj_previo"></p>'+
-      '<p class="nota" style="margin:14px 0 0">Con el número puesto, el parte diario va directo a ese chat. '+
-      'Si lo dejas vacío, WhatsApp te dejará elegir el contacto.</p>'+
-      '<button class="btn fuerte" id="aj_guardar" style="margin-top:14px">Guardar</button>'+
+      '<p class="nota" style="margin:14px 0 0">Escríbelo entero, empezando por el país: '+
+      '<span class="mono">+376</span> Andorra, <span class="mono">+34</span> España. '+
+      'Es el mismo número que ves en la ficha del contacto en WhatsApp. '+
+      'Si lo dejas vacío, tendrás que elegir el chat a mano.</p>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">'+
+        '<button class="btn fuerte" id="aj_guardar">Guardar</button>'+
+        '<a class="btn suave" id="aj_probar" href="#" target="_blank" rel="noopener" '+
+        'style="text-decoration:none">Probar el número</a>'+
+      '</div>'+
     '</div></div>'+
 
     '<div class="tarjeta" style="max-width:560px;margin-top:16px">'+
@@ -951,17 +955,25 @@ function verAjustes(main){
         'más lo que metas de fuera, menos lo que saques.</p>'+
       '</div></div>';
 
-  /* Mientras escribe, le enseñamos el número tal cual lo verá WhatsApp */
+  /* Mientras escribe, le enseñamos el número tal cual lo verá WhatsApp,
+     y el botón de probar abre ese chat sin mandar nada: así se sabe si
+     el problema es el número o el parte. */
   function previoDestino(){
     var caja=document.getElementById("aj_previo"); if(!caja) return;
-    var pre=valor("aj_pre").replace(/\D/g,""), tel=valor("aj_tel").replace(/\D/g,"");
-    if(!tel){ caja.textContent="Sin número, WhatsApp te dejará elegir el contacto cada vez."; return; }
-    var entero=(pre && tel.length<=9 && tel.indexOf(pre)!==0) ? pre+tel : tel;
-    caja.innerHTML='El parte se abrirá en <strong>wa.me/'+esc(entero)+'</strong>'+
+    var tel=valor("aj_tel").replace(/\D/g,"");
+    var probar=document.getElementById("aj_probar");
+    if(probar){
+      probar.setAttribute("href", tel ? "https://wa.me/"+tel : "#");
+      probar.style.opacity = tel ? "" : ".4";
+      probar.style.pointerEvents = tel ? "" : "none";
+    }
+    if(!tel){ caja.textContent="Sin número, tendrás que elegir el chat a mano cada vez."; return; }
+    caja.innerHTML='Se abrirá <strong>wa.me/'+esc(tel)+'</strong>'+
       (valor("aj_dest")?' — '+esc(valor("aj_dest")):"")+
-      '. Si te sale otro contacto, revisa el prefijo.';
+      '. Pulsa <strong>Probar el número</strong>: si abre el chat correcto, ya está.'+
+      (tel.length<8 ? ' <strong>Parece corto: ¿le falta el país?</strong>' : "");
   }
-  ["aj_pre","aj_tel","aj_dest"].forEach(function(id){
+  ["aj_tel","aj_dest"].forEach(function(id){
     var e=document.getElementById(id); if(e) e.addEventListener("input", previoDestino);
   });
   previoDestino();
@@ -970,7 +982,6 @@ function verAjustes(main){
     libro.ajustes.nombre=valor("aj_nom");
     libro.ajustes.objetivoAmarilla=numero("aj_obj");
     libro.ajustes.telefono=valor("aj_tel");
-    libro.ajustes.prefijo=valor("aj_pre");
     libro.ajustes.destinatario=valor("aj_dest");
     libro.ajustes.fondoHabitual=numero("aj_fondo");
     guardar(); pintar();
@@ -980,8 +991,23 @@ function verAjustes(main){
   });
 }
 
+/* El ajuste viejo guardaba prefijo y teléfono por separado. Se juntan
+   una sola vez, y sólo cuando el número es corto de verdad —seis cifras,
+   que es lo que mide uno de Andorra—; si ya era largo, se queda como
+   estaba, que para eso funcionaba. */
+function unificarTelefono(){
+  var a=libro.ajustes; if(!a || a.prefijo===undefined) return;
+  var pre=String(a.prefijo||"").replace(/\D/g,"");
+  var tel=String(a.telefono||"").replace(/\D/g,"");
+  if(tel && pre && tel.length<=6 && tel.indexOf(pre)!==0){ tel=pre+tel; a.telefono="+"+tel; }
+  else a.telefono=tel;   /* sin poner un + que no sabemos si le toca */
+  delete a.prefijo;
+  if(tel) guardar();
+}
+
 /* ══════════════════════════════════════════════════════════════ */
 cargar();
+unificarTelefono();
 pintar();
 
 })();
