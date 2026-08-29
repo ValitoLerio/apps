@@ -231,7 +231,7 @@ function verDia(main){
       ". Anota lo cobrado y lo pagado; el reparto se calcula solo.",
       '<div class="campo"><label class="lbl" for="d_fecha">Día</label>'+
       '<input type="date" id="d_fecha" value="'+esc(ui.dia)+'"></div>'+
-      (d?'<button class="btn wa" id="d_wa">📱 Enviar por WhatsApp</button>':""))+
+      '<button class="btn wa" id="d_wa">📱 Enviar por WhatsApp</button>')+
 
     '<div class="cifras">'+
       '<div class="cifra"><div class="k">Ventas del día</div><div class="v acento">'+eur(c.ventas)+'</div>'+
@@ -290,8 +290,14 @@ function verDia(main){
   document.getElementById("d_fecha").addEventListener("change", function(){
     ui.dia=this.value; ui.mes=this.value.slice(0,7); pintar();
   });
-  var wa=document.getElementById("d_wa");
-  if(wa) wa.addEventListener("click", function(){ enviarDiaPorWhatsApp(ui.dia); });
+  document.getElementById("d_wa").addEventListener("click", function(){
+    if(!diaDe(ui.dia)){
+      avisar("Guarda primero el día y luego lo mandas.", true);
+      var g=document.getElementById("f_guardar"); if(g) g.scrollIntoView({block:"center"});
+      return;
+    }
+    enviarDiaPorWhatsApp(ui.dia);
+  });
 
   pintarFormularioDia(d);
 }
@@ -437,25 +443,86 @@ function textoDia(fecha){
   return l.join("\n");
 }
 
-/* Abrir WhatsApp tiene que pasar dentro del propio clic: si media una
-   espera, el navegador bloquea la ventana sin decir nada. */
+/* Enviar el parte. En vez de abrir WhatsApp a ciegas —que muchos
+   navegadores bloquean sin avisar— se enseña el parte con un enlace de
+   verdad y un boton para copiarlo. Pulsar un enlace nunca se bloquea. */
 function enviarDiaPorWhatsApp(fecha){
   var texto=textoDia(fecha);
-  if(!texto){ avisar("Ese día no tiene nada anotado.", true); return; }
+  if(!texto){ avisar("Ese dia no tiene nada anotado. Guardalo primero.", true); return; }
   var tel=(libro.ajustes.telefono||"").replace(/[^\d]/g,"");
   var destino="https://wa.me/"+tel+"?text="+encodeURIComponent(texto);
-  var ventana=window.open(destino, "_blank");
-  if(!ventana){
-    abrirVentana("Parte del día",
-      '<p class="nota">El navegador ha bloqueado la ventana de WhatsApp. '+
-      'Puedes abrirlo con este botón o copiar el texto.</p>'+
+
+  var vieja=document.getElementById("dlg"); if(vieja) vieja.remove();
+  var d=document.createElement("dialog"); d.id="dlg";
+  d.innerHTML=
+    '<div class="dlg-cab"><h3>Parte del '+esc(dmy(fecha))+'</h3>'+
+      '<button class="btn suave" data-x>Cerrar</button></div>'+
+    '<div class="dlg-cuerpo">'+
+      '<p class="nota">Asi se va a enviar. Pulsa el boton verde y se abre WhatsApp'+
+      (tel?' con el chat de <strong>'+esc(libro.ajustes.telefono)+'</strong>':' para que elijas el contacto')+
+      '.</p>'+
+      /* En la vista previa se quitan las marcas de bloque: aqui ya se ve
+         con letra de maquina, y en WhatsApp se envian igualmente. */
+      '<div class="parte" id="parteTexto">'+esc(texto.split("\n").filter(function(x){
+         return x.trim()!=="```"; }).join("\n"))+'</div>'+
+    '</div>'+
+    '<div class="dlg-pie">'+
+      '<button class="btn" data-copiar>Copiar el parte</button>'+
       '<a class="btn wa" href="'+esc(destino)+'" target="_blank" rel="noopener" '+
-      'style="text-decoration:none;margin-bottom:12px">Abrir WhatsApp</a>'+
-      '<div class="parte">'+esc(texto)+'</div>',
-      function(){
-        try{ navigator.clipboard.writeText(texto); avisar("Parte copiado"); }catch(e){}
-      }, {aceptar:"Copiar el texto"});
+      'style="text-decoration:none" data-abrir>Abrir WhatsApp</a>'+
+    '</div>';
+  document.body.appendChild(d);
+
+  d.querySelectorAll("[data-x]").forEach(function(b){
+    b.addEventListener("click", function(){ d.close(); d.remove(); });
+  });
+  d.querySelector("[data-copiar]").addEventListener("click", function(){
+    copiarTexto(texto, this);
+  });
+  d.querySelector("[data-abrir]").addEventListener("click", function(){
+    /* damos tiempo a que abra la pestana antes de cerrar la ventana */
+    setTimeout(function(){ if(document.getElementById("dlg")){ d.close(); d.remove(); } }, 600);
+  });
+  d.showModal();
+}
+
+/* Copiar al portapapeles, con recambio para cuando el navegador no deja */
+function copiarTexto(texto, boton){
+  function hecho(){
+    if(boton){ var antes=boton.textContent; boton.textContent="Copiado"; 
+               setTimeout(function(){ boton.textContent=antes; }, 1800); }
+    avisar("Parte copiado");
   }
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(texto).then(hecho, function(){ copiarAMano(texto, hecho); });
+  } else {
+    copiarAMano(texto, hecho);
+  }
+}
+function copiarAMano(texto, hecho){
+  try{
+    var ta=document.createElement("textarea");
+    ta.value=texto;
+    ta.style.cssText="position:fixed;top:0;left:0;opacity:0";
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    var ok=document.execCommand("copy");
+    ta.remove();
+    if(ok){ hecho(); return; }
+  }catch(e){}
+  /* Ultimo recurso: dejar el parte ya seleccionado para copiarlo a mano */
+  try{
+    var caja=document.getElementById("parteTexto");
+    if(caja){
+      var rango=document.createRange();
+      rango.selectNodeContents(caja);
+      var sel=window.getSelection();
+      sel.removeAllRanges(); sel.addRange(rango);
+      avisar("Te lo dejo seleccionado: pulsa Cmd+C para copiarlo.", true);
+      return;
+    }
+  }catch(e){}
+  avisar("No he podido copiarlo. Selecciona el texto a mano.", true);
 }
 
 /* ══════════════════════════════════════════════════════════════
