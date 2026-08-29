@@ -1,0 +1,721 @@
+/* ══════════════════════════════════════════════════════════════════
+   CAJA — el cierre diario del restaurante
+   ══════════════════════════════════════════════════════════════════
+   Cada día se anota lo cobrado con visa, lo cobrado en efectivo y los
+   gastos pagados de la caja. El efectivo que queda se reparte entre la
+   caja amarilla —el fondo que se va guardando— y la caja del día.
+
+     Ventas        = visa + efectivo
+     Efectivo neto = efectivo − gastos
+     Caja          = efectivo neto − lo que va a la amarilla
+
+   La amarilla tiene un objetivo (1500 € de partida, editable): la app
+   dice cuánto lleva, cuánto falta y, si sacas dinero, cuánto reponer.
+
+   Los datos los guarda sync.js en el repositorio privado.
+   ══════════════════════════════════════════════════════════════════ */
+(function(){
+"use strict";
+
+var CLAVE = "caja.libro.v1";
+
+function p2(n){ return (n<10?"0":"")+n; }
+function hoyISO(){ var d=new Date(); return d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate()); }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+function libroVacio(){
+  return {
+    v:1, actualizado:new Date().toISOString(),
+    ajustes:{ nombre:"", objetivoAmarilla:1500, telefono:"" },
+    dias:[],       /* {id, fecha, visa, efectivo, gastos, detalle:[{concepto,importe}], aAmarilla, nota} */
+    retiradas:[]   /* {id, fecha, importe, motivo}  — dinero que sale de la amarilla */
+  };
+}
+
+var libro = libroVacio();
+var ui = { vista:"dia", dia:hoyISO(), mes:hoyISO().slice(0,7), anio:hoyISO().slice(0,4) };
+
+/* ── Dinero y fechas ──────────────────────────────────────────── */
+function r2(n){ return Math.round((n+Number.EPSILON)*100)/100; }
+function eur(n){ return (n||0).toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2})+" €"; }
+function num(n,d){ d=d||0; return (n||0).toLocaleString("es-ES",{minimumFractionDigits:d,maximumFractionDigits:d}); }
+var MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto",
+           "septiembre","octubre","noviembre","diciembre"];
+var DIAS=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+function mesLargo(ym){ if(!ym) return ""; var a=ym.split("-"); return MESES[+a[1]-1]+" "+a[0]; }
+function dmy(iso){ if(!iso) return ""; var a=iso.split("-"); return a[2]+"/"+a[1]+"/"+a[0]; }
+function diaSemana(iso){ return DIAS[new Date(iso+"T12:00:00").getDay()]; }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+
+/* ── Guardado ─────────────────────────────────────────────────── */
+function guardar(){
+  libro.actualizado=new Date().toISOString();
+  try{ localStorage.setItem(CLAVE, JSON.stringify(libro)); }catch(e){}
+}
+function cargar(){
+  try{
+    var crudo=localStorage.getItem(CLAVE);
+    if(!crudo) return;
+    var d=JSON.parse(crudo);
+    if(!d || typeof d!=="object") return;
+    var base=libroVacio();
+    Object.keys(base).forEach(function(k){ if(d[k]===undefined) d[k]=base[k]; });
+    if(!d.ajustes) d.ajustes=base.ajustes;
+    if(d.ajustes.objetivoAmarilla==null) d.ajustes.objetivoAmarilla=1500;
+    libro=d;
+  }catch(e){}
+}
+
+/* ── Aviso flotante ───────────────────────────────────────────── */
+var relojAviso=null;
+function avisar(mensaje, malo){
+  var viejo=document.querySelector(".aviso-flotante"); if(viejo) viejo.remove();
+  var a=document.createElement("div");
+  a.className="aviso-flotante"+(malo?" malo":"");
+  a.textContent=mensaje;
+  document.body.appendChild(a);
+  clearTimeout(relojAviso);
+  relojAviso=setTimeout(function(){ a.remove(); }, malo?5000:2600);
+}
+
+/* ── Ventana ──────────────────────────────────────────────────── */
+function abrirVentana(titulo, cuerpoHTML, alGuardar, opciones){
+  opciones=opciones||{};
+  var vieja=document.getElementById("dlg"); if(vieja) vieja.remove();
+  var d=document.createElement("dialog"); d.id="dlg";
+  d.innerHTML='<div class="dlg-cab"><h3>'+esc(titulo)+'</h3>'+
+              '<button class="btn suave" data-x>Cerrar</button></div>'+
+              '<div class="dlg-cuerpo">'+cuerpoHTML+'</div>'+
+              '<div class="dlg-pie"><button class="btn" data-x>Cancelar</button>'+
+              '<button class="btn '+(opciones.malo?"malo":"fuerte")+'" data-ok>'+
+              esc(opciones.aceptar||"Guardar")+'</button></div>';
+  document.body.appendChild(d);
+  d.querySelectorAll("[data-x]").forEach(function(b){
+    b.addEventListener("click", function(){ d.close(); d.remove(); });
+  });
+  d.querySelector("[data-ok]").addEventListener("click", function(){
+    if(alGuardar()===true) return;
+    d.close(); d.remove();
+  });
+  d.addEventListener("keydown", function(e){
+    if(e.key==="Enter" && e.target.tagName==="INPUT"){ e.preventDefault(); d.querySelector("[data-ok]").click(); }
+  });
+  d.showModal();
+  var primero=d.querySelector("input,select,textarea"); if(primero) primero.focus();
+}
+function confirmar(titulo, cuerpo, alAceptar, opciones){
+  opciones=opciones||{};
+  abrirVentana(titulo, cuerpo, function(){ alAceptar(); },
+               {aceptar:opciones.aceptar||"Aceptar", malo:opciones.malo});
+}
+function valor(id){ var e=document.getElementById(id); return e?e.value.trim():""; }
+function numero(id){ var e=document.getElementById(id); return e?(+e.value||0):0; }
+
+/* ══════════════════════════════════════════════════════════════
+   CUENTAS
+   ══════════════════════════════════════════════════════════════ */
+function diaDe(fecha){
+  return (libro.dias||[]).filter(function(d){ return d.fecha===fecha; })[0] || null;
+}
+function totalGastos(d){
+  if(!d) return 0;
+  if((d.detalle||[]).length) return r2(d.detalle.reduce(function(s,g){ return s+(+g.importe||0); },0));
+  return +d.gastos||0;
+}
+function cuentasDia(d){
+  if(!d) return {visa:0, efectivo:0, gastos:0, ventas:0, neto:0, amarilla:0, caja:0};
+  var visa=+d.visa||0, efectivo=+d.efectivo||0;
+  var gastos=totalGastos(d), amarilla=+d.aAmarilla||0;
+  var neto=r2(efectivo-gastos);
+  return {
+    visa:visa, efectivo:efectivo, gastos:gastos,
+    ventas:r2(visa+efectivo),
+    neto:neto, amarilla:amarilla,
+    caja:r2(neto-amarilla)
+  };
+}
+function diasDe(prefijo){
+  return (libro.dias||[]).filter(function(d){ return (d.fecha||"").indexOf(prefijo)===0; })
+                         .sort(function(a,b){ return a.fecha.localeCompare(b.fecha); });
+}
+function sumaCuentas(dias){
+  var t={visa:0, efectivo:0, gastos:0, ventas:0, neto:0, amarilla:0, caja:0, dias:dias.length};
+  dias.forEach(function(d){
+    var c=cuentasDia(d);
+    Object.keys(t).forEach(function(k){ if(k!=="dias") t[k]=r2(t[k]+c[k]); });
+  });
+  return t;
+}
+
+/* La amarilla: todo lo guardado menos todo lo sacado */
+function amarillaGuardado(){
+  var mete=(libro.dias||[]).reduce(function(s,d){ return s+(+d.aAmarilla||0); },0);
+  var saca=(libro.retiradas||[]).reduce(function(s,r){ return s+(+r.importe||0); },0);
+  return r2(mete-saca);
+}
+function objetivoAmarilla(){ return +libro.ajustes.objetivoAmarilla || 0; }
+function faltaAmarilla(){ return r2(Math.max(0, objetivoAmarilla()-amarillaGuardado())); }
+
+/* ══════════════════════════════════════════════════════════════
+   ARMAZÓN
+   ══════════════════════════════════════════════════════════════ */
+var APARTADOS=[
+  {id:"dia",      nombre:"Día"},
+  {id:"mes",      nombre:"Mes"},
+  {id:"anio",     nombre:"Año"},
+  {id:"amarilla", nombre:"Caja amarilla"},
+  {id:"ajustes",  nombre:"Ajustes"}
+];
+
+function pintar(){
+  var root=document.getElementById("root");
+  root.innerHTML=
+    '<nav class="rail">'+
+      '<div class="marca"><span class="nom">Caja</span>'+
+        '<span class="sub">'+esc(libro.ajustes.nombre||"Restaurante")+'</span></div>'+
+      APARTADOS.map(function(a){
+        return '<button class="nav" data-ir="'+a.id+'" aria-current="'+(ui.vista===a.id)+'">'+
+               '<span>'+a.nombre+'</span></button>';
+      }).join("")+
+      '<div class="pie-rail">'+
+        '<div id="sync-estado" style="font-size:11.5px;color:var(--muted)"></div>'+
+        '<a href="index.html">&larr; Escritorio</a>'+
+      '</div>'+
+    '</nav>'+
+    '<main id="main"></main>';
+
+  root.querySelectorAll("[data-ir]").forEach(function(b){
+    b.addEventListener("click", function(){ ui.vista=b.getAttribute("data-ir"); pintar(); });
+  });
+  if(window.Sync && Sync.mostrarEstadoEn) Sync.mostrarEstadoEn(document.getElementById("sync-estado"));
+
+  var main=document.getElementById("main");
+  ({dia:verDia, mes:verMes, anio:verAnio, amarilla:verAmarilla, ajustes:verAjustes})[ui.vista](main);
+}
+
+function cabecera(titulo, sub, derecha){
+  return '<div class="cabecera"><div><h1>'+esc(titulo)+'</h1>'+
+         (sub?'<p>'+sub+'</p>':"")+'</div>'+
+         '<div style="display:flex;gap:9px;flex-wrap:wrap;align-items:end">'+(derecha||"")+'</div></div>';
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DÍA
+   ══════════════════════════════════════════════════════════════ */
+function verDia(main){
+  var d=diaDe(ui.dia);
+  var c=cuentasDia(d);
+  var guardado=amarillaGuardado(), falta=faltaAmarilla();
+
+  main.innerHTML=
+    cabecera("Cierre del "+dmy(ui.dia),
+      esc(diaSemana(ui.dia).charAt(0).toUpperCase()+diaSemana(ui.dia).slice(1))+
+      ". Anota lo cobrado y lo pagado; el reparto se calcula solo.",
+      '<div class="campo"><label class="lbl" for="d_fecha">Día</label>'+
+      '<input type="date" id="d_fecha" value="'+esc(ui.dia)+'"></div>'+
+      (d?'<button class="btn wa" id="d_wa">📱 Enviar por WhatsApp</button>':""))+
+
+    '<div class="cifras">'+
+      '<div class="cifra"><div class="k">Ventas del día</div><div class="v acento">'+eur(c.ventas)+'</div>'+
+        '<div class="n">visa + efectivo</div></div>'+
+      '<div class="cifra"><div class="k">Visa</div><div class="v">'+eur(c.visa)+'</div>'+
+        '<div class="n">'+(c.ventas>0?num(c.visa/c.ventas*100,0)+"% del total":"—")+'</div></div>'+
+      '<div class="cifra"><div class="k">Efectivo</div><div class="v">'+eur(c.efectivo)+'</div>'+
+        '<div class="n">'+(c.ventas>0?num(c.efectivo/c.ventas*100,0)+"% del total":"—")+'</div></div>'+
+      '<div class="cifra"><div class="k">Gastos</div><div class="v malo">'+eur(c.gastos)+'</div>'+
+        '<div class="n">'+((d&&(d.detalle||[]).length)?d.detalle.length+" apuntes":"pagados de caja")+'</div></div>'+
+    '</div>'+
+
+    '<div class="tarjeta" style="margin-bottom:16px">'+
+      '<div class="tarjeta-cab"><h2>Fondo de caja</h2>'+
+        '<span class="pista">Lo que queda en efectivo, repartido</span></div>'+
+      '<div class="tarjeta-cuerpo">'+
+        '<table style="max-width:520px"><tbody>'+
+          '<tr><td>Efectivo cobrado</td><td class="num">'+eur(c.efectivo)+'</td></tr>'+
+          '<tr><td>− Gastos pagados de caja</td><td class="num" style="color:var(--malo)">'+eur(c.gastos)+'</td></tr>'+
+          '<tr style="border-top:1px solid var(--linea)"><td><strong>Queda en efectivo</strong></td>'+
+            '<td class="num"><strong>'+eur(c.neto)+'</strong></td></tr>'+
+          '<tr><td>→ A la caja amarilla</td>'+
+            '<td class="num" style="color:var(--amarilla)"><strong>'+eur(c.amarilla)+'</strong></td></tr>'+
+          '<tr><td>→ Queda en la caja</td><td class="num"><strong>'+eur(c.caja)+'</strong></td></tr>'+
+        '</tbody></table>'+
+        (c.caja<0?'<div class="aviso-caja" style="margin:14px 0 0;background:var(--malo-suave);'+
+          'border-color:var(--malo);color:var(--malo)">Estás metiendo en la amarilla más de lo que queda en efectivo.</div>':"")+
+      '</div></div>'+
+
+    '<div class="tarjeta" style="margin-bottom:16px">'+
+      '<div class="tarjeta-cab"><h2>La caja amarilla</h2>'+
+        '<span class="pista">Objetivo: '+eur(objetivoAmarilla())+'</span></div>'+
+      '<div class="tarjeta-cuerpo">'+
+        '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px">'+
+          '<div><div class="lbl">Guardado</div>'+
+            '<div style="font-size:26px;font-weight:600;color:var(--amarilla);font-variant-numeric:tabular-nums">'+
+            eur(guardado)+'</div></div>'+
+          '<div style="text-align:right">'+
+            (falta>0
+              ? '<div class="lbl">Falta</div><div style="font-size:18px;font-weight:600">'+eur(falta)+'</div>'
+              : '<span class="chapa ok">Fondo completo</span>')+
+          '</div>'+
+        '</div>'+
+        '<div class="barra-fondo"><i style="width:'+
+          (objetivoAmarilla()>0?Math.min(100, guardado/objetivoAmarilla()*100).toFixed(1):0)+'%"></i></div>'+
+      '</div></div>'+
+
+    '<div class="tarjeta"><div class="tarjeta-cab"><h2>'+(d?"Editar el día":"Anotar el día")+'</h2></div>'+
+      '<div class="tarjeta-cuerpo" id="formDia"></div></div>';
+
+  document.getElementById("d_fecha").addEventListener("change", function(){
+    ui.dia=this.value; ui.mes=this.value.slice(0,7); pintar();
+  });
+  var wa=document.getElementById("d_wa");
+  if(wa) wa.addEventListener("click", function(){ enviarDiaPorWhatsApp(ui.dia); });
+
+  pintarFormularioDia(d);
+}
+
+function pintarFormularioDia(d){
+  var caja=document.getElementById("formDia");
+  var actual=d||{visa:"", efectivo:"", gastos:"", aAmarilla:"", nota:"", detalle:[]};
+  caja.innerHTML=
+    '<div class="rejilla">'+
+      '<div class="campo"><label class="lbl" for="f_visa">Visa (€)</label>'+
+        '<input type="number" class="grande" id="f_visa" min="0" step="0.01" value="'+esc(actual.visa)+'"></div>'+
+      '<div class="campo"><label class="lbl" for="f_efec">Efectivo (€)</label>'+
+        '<input type="number" class="grande" id="f_efec" min="0" step="0.01" value="'+esc(actual.efectivo)+'"></div>'+
+      '<div class="campo"><label class="lbl" for="f_amar">A la caja amarilla (€)</label>'+
+        '<input type="number" class="grande" id="f_amar" min="0" step="0.01" value="'+esc(actual.aAmarilla)+'"></div>'+
+    '</div>'+
+    '<p class="nota" style="margin:16px 0 8px">Gastos pagados de la caja</p>'+
+    '<div id="gastos"></div>'+
+    '<button class="btn sm" id="masGasto" style="margin-top:8px">+ Añadir gasto</button>'+
+    '<div class="campo" style="margin-top:16px"><label class="lbl" for="f_nota">Nota del día</label>'+
+      '<input id="f_nota" value="'+esc(actual.nota||"")+'" placeholder="Fiesta mayor, cerrado por la tarde…"></div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;'+
+    'padding-top:14px;border-top:1px solid var(--linea);flex-wrap:wrap;gap:10px">'+
+      '<div id="f_resumen" style="font-size:13px;color:var(--muted)"></div>'+
+      '<div style="display:flex;gap:8px">'+
+        (d?'<button class="btn malo" id="f_borrar">Borrar el día</button>':"")+
+        '<button class="btn fuerte" id="f_guardar">'+(d?"Guardar cambios":"Guardar el día")+'</button>'+
+      '</div>'+
+    '</div>';
+
+  var cajaGastos=document.getElementById("gastos");
+  function totalG(){
+    var t=0;
+    cajaGastos.querySelectorAll(".gasto").forEach(function(f){ t+=+f.querySelector(".g_imp").value||0; });
+    return r2(t);
+  }
+  function refrescar(){
+    var visa=numero("f_visa"), efec=numero("f_efec"), g=totalG(), am=numero("f_amar");
+    var neto=r2(efec-g), queda=r2(neto-am);
+    document.getElementById("f_resumen").innerHTML=
+      "Ventas <strong>"+eur(r2(visa+efec))+"</strong> · "+
+      "queda en efectivo <strong>"+eur(neto)+"</strong> · "+
+      "a la caja <strong"+(queda<0?' style="color:var(--malo)"':"")+">"+eur(queda)+"</strong>";
+  }
+  function añadirGasto(g){
+    g=g||{concepto:"", importe:""};
+    var f=document.createElement("div");
+    f.className="gasto";
+    f.style.cssText="display:grid;grid-template-columns:minmax(120px,2fr) 110px auto;gap:8px;margin-top:8px;align-items:end";
+    f.innerHTML='<div class="campo"><input class="g_con" value="'+esc(g.concepto)+'" placeholder="Proveedor, hielo, taxi…"></div>'+
+                '<div class="campo"><input type="number" class="g_imp" min="0" step="0.01" value="'+esc(g.importe)+'" placeholder="0,00"></div>'+
+                '<button class="btn suave sm malo" title="Quitar">✕</button>';
+    cajaGastos.appendChild(f);
+    f.querySelector("button").addEventListener("click", function(){ f.remove(); refrescar(); });
+    f.querySelector(".g_imp").addEventListener("input", refrescar);
+  }
+  (actual.detalle||[]).forEach(añadirGasto);
+  if(!(actual.detalle||[]).length) añadirGasto();
+  document.getElementById("masGasto").addEventListener("click", function(){ añadirGasto(); refrescar(); });
+  ["f_visa","f_efec","f_amar"].forEach(function(id){
+    document.getElementById(id).addEventListener("input", refrescar);
+  });
+  refrescar();
+
+  document.getElementById("f_guardar").addEventListener("click", function(){
+    var detalle=[];
+    cajaGastos.querySelectorAll(".gasto").forEach(function(f){
+      var con=f.querySelector(".g_con").value.trim();
+      var imp=+f.querySelector(".g_imp").value||0;
+      if(imp>0) detalle.push({concepto:con||"Gasto", importe:imp});
+    });
+    var registro=d||{id:uid(), fecha:ui.dia};
+    registro.visa=numero("f_visa");
+    registro.efectivo=numero("f_efec");
+    registro.detalle=detalle;
+    registro.gastos=r2(detalle.reduce(function(s,g){ return s+g.importe; },0));
+    registro.aAmarilla=numero("f_amar");
+    registro.nota=valor("f_nota");
+    if(!d) libro.dias.push(registro);
+    guardar(); pintar();
+    avisar(d?"Día actualizado":"Día guardado: "+eur(cuentasDia(registro).ventas));
+  });
+
+  var borrar=document.getElementById("f_borrar");
+  if(borrar) borrar.addEventListener("click", function(){
+    confirmar("Borrar el día "+dmy(ui.dia),
+      '<p style="margin:0">Se borra el cierre de ese día, incluido lo que fue a la caja amarilla.</p>',
+      function(){
+        libro.dias=(libro.dias||[]).filter(function(x){ return x.fecha!==ui.dia; });
+        guardar(); pintar(); avisar("Día borrado");
+      }, {aceptar:"Borrar", malo:true});
+  });
+}
+
+/* ── El parte diario para WhatsApp ─────────────────────────────── */
+function textoDia(fecha){
+  var d=diaDe(fecha);
+  if(!d) return "";
+  var c=cuentasDia(d);
+  var l=[];
+  l.push("*CIERRE DE CAJA*");
+  l.push("📅 "+dmy(fecha)+" · "+diaSemana(fecha));
+  if(libro.ajustes.nombre) l.push(libro.ajustes.nombre);
+  l.push("");
+  l.push("💳 Visa:        "+eur(c.visa));
+  l.push("💵 Efectivo:    "+eur(c.efectivo));
+  l.push("*VENTAS:      "+eur(c.ventas)+"*");
+  l.push("");
+  if(c.gastos>0){
+    l.push("🧾 Gastos:      -"+eur(c.gastos));
+    (d.detalle||[]).forEach(function(g){ l.push("   · "+g.concepto+": "+eur(g.importe)); });
+    l.push("");
+  }
+  l.push("Queda en efectivo: "+eur(c.neto));
+  l.push("🟡 A caja amarilla: "+eur(c.amarilla));
+  l.push("💰 Queda en caja:   "+eur(c.caja));
+  l.push("");
+  var guardado=amarillaGuardado(), falta=faltaAmarilla();
+  l.push("🟡 *Caja amarilla: "+eur(guardado)+"*");
+  l.push(falta>0 ? "   faltan "+eur(falta)+" para "+eur(objetivoAmarilla())
+                 : "   fondo completo ("+eur(objetivoAmarilla())+")");
+  if(d.nota){ l.push(""); l.push("📝 "+d.nota); }
+  return l.join("\n");
+}
+
+/* Abrir WhatsApp tiene que pasar dentro del propio clic: si media una
+   espera, el navegador bloquea la ventana sin decir nada. */
+function enviarDiaPorWhatsApp(fecha){
+  var texto=textoDia(fecha);
+  if(!texto){ avisar("Ese día no tiene nada anotado.", true); return; }
+  var tel=(libro.ajustes.telefono||"").replace(/[^\d]/g,"");
+  var destino="https://wa.me/"+tel+"?text="+encodeURIComponent(texto);
+  var ventana=window.open(destino, "_blank");
+  if(!ventana){
+    abrirVentana("Parte del día",
+      '<p class="nota">El navegador ha bloqueado la ventana de WhatsApp. '+
+      'Puedes abrirlo con este botón o copiar el texto.</p>'+
+      '<a class="btn wa" href="'+esc(destino)+'" target="_blank" rel="noopener" '+
+      'style="text-decoration:none;margin-bottom:12px">Abrir WhatsApp</a>'+
+      '<div class="parte">'+esc(texto)+'</div>',
+      function(){
+        try{ navigator.clipboard.writeText(texto); avisar("Parte copiado"); }catch(e){}
+      }, {aceptar:"Copiar el texto"});
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MES: el cuadrante
+   ══════════════════════════════════════════════════════════════ */
+function verMes(main){
+  var dias=diasDe(ui.mes);
+  var t=sumaCuentas(dias);
+
+  main.innerHTML=
+    cabecera("Cuadrante de "+mesLargo(ui.mes),
+      "Un día por fila: lo cobrado, lo pagado y cómo quedó el fondo de caja.",
+      '<div class="campo"><label class="lbl" for="m_mes">Mes</label>'+
+      '<input type="month" id="m_mes" value="'+esc(ui.mes)+'"></div>')+
+    '<div class="cifras">'+
+      '<div class="cifra"><div class="k">Ventas del mes</div><div class="v acento">'+eur(t.ventas)+'</div>'+
+        '<div class="n">'+t.dias+' días anotados</div></div>'+
+      '<div class="cifra"><div class="k">Visa</div><div class="v">'+eur(t.visa)+'</div>'+
+        '<div class="n">'+(t.ventas>0?num(t.visa/t.ventas*100,0)+"%":"—")+'</div></div>'+
+      '<div class="cifra"><div class="k">Efectivo</div><div class="v">'+eur(t.efectivo)+'</div>'+
+        '<div class="n">'+(t.ventas>0?num(t.efectivo/t.ventas*100,0)+"%":"—")+'</div></div>'+
+      '<div class="cifra"><div class="k">Gastos</div><div class="v malo">'+eur(t.gastos)+'</div>'+
+        '<div class="n">pagados de caja</div></div>'+
+      '<div class="cifra"><div class="k">A la amarilla</div><div class="v amarilla">'+eur(t.amarilla)+'</div>'+
+        '<div class="n">guardado este mes</div></div>'+
+    '</div>'+
+    '<div class="tarjeta"><div class="tarjeta-cab"><h2>Días</h2>'+
+      '<span class="pista">Pulsa un día para abrirlo</span></div>'+
+      '<div class="tabla-caja" id="cuadrante"></div></div>';
+
+  document.getElementById("m_mes").addEventListener("change", function(){
+    ui.mes=this.value; ui.dia=this.value+"-01"; pintar();
+  });
+
+  var caja=document.getElementById("cuadrante");
+  if(!dias.length){
+    caja.innerHTML='<div class="vacio"><strong>Sin días anotados en '+esc(mesLargo(ui.mes))+'</strong>'+
+      'Ve a «Día» y anota el primer cierre.</div>';
+    return;
+  }
+  caja.innerHTML='<table><thead><tr><th>Día</th><th class="num">Visa</th><th class="num">Efectivo</th>'+
+    '<th class="num">Ventas</th><th class="num">Gastos</th><th class="num">Queda</th>'+
+    '<th class="num">Amarilla</th><th class="num">Caja</th><th>Nota</th></tr></thead><tbody>'+
+    dias.map(function(d){
+      var c=cuentasDia(d);
+      var esHoy=(d.fecha===hoyISO());
+      return '<tr'+(esHoy?' class="hoy"':'')+' style="cursor:pointer" data-dia="'+d.fecha+'">'+
+        "<td><strong>"+d.fecha.slice(8)+"</strong> "+
+          '<span style="color:var(--muted);font-size:12px">'+diaSemana(d.fecha).slice(0,3)+"</span></td>"+
+        '<td class="num">'+eur(c.visa)+"</td>"+
+        '<td class="num">'+eur(c.efectivo)+"</td>"+
+        '<td class="num"><strong>'+eur(c.ventas)+"</strong></td>"+
+        '<td class="num"'+(c.gastos>0?' style="color:var(--malo)"':"")+">"+(c.gastos>0?eur(c.gastos):"—")+"</td>"+
+        '<td class="num">'+eur(c.neto)+"</td>"+
+        '<td class="num"'+(c.amarilla>0?' style="color:var(--amarilla);font-weight:600"':"")+">"+
+          (c.amarilla>0?eur(c.amarilla):"—")+"</td>"+
+        '<td class="num">'+eur(c.caja)+"</td>"+
+        '<td style="font-size:12.5px;color:var(--muted)">'+esc(d.nota||"")+"</td></tr>";
+    }).join("")+
+    '</tbody><tfoot><tr><td>'+t.dias+' días</td>'+
+      '<td class="num">'+eur(t.visa)+'</td><td class="num">'+eur(t.efectivo)+'</td>'+
+      '<td class="num">'+eur(t.ventas)+'</td><td class="num">'+eur(t.gastos)+'</td>'+
+      '<td class="num">'+eur(t.neto)+'</td><td class="num">'+eur(t.amarilla)+'</td>'+
+      '<td class="num">'+eur(t.caja)+'</td><td></td></tr></tfoot></table>';
+
+  caja.querySelectorAll("[data-dia]").forEach(function(tr){
+    tr.addEventListener("click", function(){
+      ui.dia=tr.getAttribute("data-dia"); ui.vista="dia"; pintar();
+    });
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   AÑO
+   ══════════════════════════════════════════════════════════════ */
+function verAnio(main){
+  var anios=[...new Set((libro.dias||[]).map(function(d){ return (d.fecha||"").slice(0,4); }))]
+              .filter(Boolean).sort();
+  if(!anios.length) anios=[ui.anio];
+  if(anios.indexOf(ui.anio)<0) ui.anio=anios[anios.length-1];
+
+  var porMes=[];
+  for(var m=1;m<=12;m++){
+    var ym=ui.anio+"-"+p2(m);
+    porMes.push({ym:ym, t:sumaCuentas(diasDe(ym))});
+  }
+  var total=sumaCuentas(diasDe(ui.anio));
+  var mejorMes=porMes.slice().sort(function(a,b){ return b.t.ventas-a.t.ventas; })[0];
+
+  main.innerHTML=
+    cabecera("Año "+ui.anio,
+      "Cómo ha ido cada mes y lo que se ha guardado en la amarilla.",
+      '<div class="campo"><label class="lbl" for="a_anio">Año</label><select id="a_anio">'+
+        anios.map(function(a){ return '<option'+(a===ui.anio?" selected":"")+">"+a+"</option>"; }).join("")+
+      '</select></div>')+
+    '<div class="cifras">'+
+      '<div class="cifra"><div class="k">Ventas del año</div><div class="v acento">'+eur(total.ventas)+'</div>'+
+        '<div class="n">'+total.dias+' días</div></div>'+
+      '<div class="cifra"><div class="k">Visa</div><div class="v">'+eur(total.visa)+'</div></div>'+
+      '<div class="cifra"><div class="k">Efectivo</div><div class="v">'+eur(total.efectivo)+'</div></div>'+
+      '<div class="cifra"><div class="k">Gastos</div><div class="v malo">'+eur(total.gastos)+'</div></div>'+
+      '<div class="cifra"><div class="k">A la amarilla</div><div class="v amarilla">'+eur(total.amarilla)+'</div></div>'+
+      '<div class="cifra"><div class="k">Media por día</div>'+
+        '<div class="v">'+eur(total.dias>0?r2(total.ventas/total.dias):0)+'</div>'+
+        '<div class="n">'+(mejorMes&&mejorMes.t.ventas>0?"mejor: "+MESES[+mejorMes.ym.split("-")[1]-1]:"")+'</div></div>'+
+    '</div>'+
+    '<div class="tarjeta"><div class="tarjeta-cab"><h2>Mes a mes</h2>'+
+      '<span class="pista">Pulsa un mes para ver su cuadrante</span></div>'+
+      '<div class="tabla-caja" id="tablaAnio"></div></div>';
+
+  document.getElementById("a_anio").addEventListener("change", function(){ ui.anio=this.value; pintar(); });
+
+  var maximo=Math.max.apply(null, porMes.map(function(p){ return p.t.ventas; }).concat([1]));
+  document.getElementById("tablaAnio").innerHTML=
+    '<table><thead><tr><th>Mes</th><th class="num">Días</th><th class="num">Visa</th>'+
+    '<th class="num">Efectivo</th><th class="num">Ventas</th><th class="num">Gastos</th>'+
+    '<th class="num">Amarilla</th><th style="width:130px"></th></tr></thead><tbody>'+
+    porMes.map(function(p){
+      var vacio=p.t.dias===0;
+      return '<tr'+(vacio?' style="opacity:.45"':' style="cursor:pointer"')+' data-mes="'+p.ym+'">'+
+        "<td><strong>"+MESES[+p.ym.split("-")[1]-1]+"</strong></td>"+
+        '<td class="num">'+(p.t.dias||"—")+"</td>"+
+        '<td class="num">'+(vacio?"—":eur(p.t.visa))+"</td>"+
+        '<td class="num">'+(vacio?"—":eur(p.t.efectivo))+"</td>"+
+        '<td class="num"><strong>'+(vacio?"—":eur(p.t.ventas))+"</strong></td>"+
+        '<td class="num">'+(vacio?"—":eur(p.t.gastos))+"</td>"+
+        '<td class="num" style="color:var(--amarilla)">'+(vacio?"—":eur(p.t.amarilla))+"</td>"+
+        '<td><div style="background:var(--sup2);border-radius:4px;height:7px;overflow:hidden">'+
+          '<div style="background:var(--acento);height:100%;width:'+(p.t.ventas/maximo*100).toFixed(1)+'%"></div>'+
+        "</div></td></tr>";
+    }).join("")+
+    '</tbody><tfoot><tr><td>Total</td><td class="num">'+total.dias+'</td>'+
+    '<td class="num">'+eur(total.visa)+'</td><td class="num">'+eur(total.efectivo)+'</td>'+
+    '<td class="num">'+eur(total.ventas)+'</td><td class="num">'+eur(total.gastos)+'</td>'+
+    '<td class="num">'+eur(total.amarilla)+'</td><td></td></tr></tfoot></table>';
+
+  document.querySelectorAll("#tablaAnio [data-mes]").forEach(function(tr){
+    tr.addEventListener("click", function(){
+      ui.mes=tr.getAttribute("data-mes"); ui.vista="mes"; pintar();
+    });
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CAJA AMARILLA
+   ══════════════════════════════════════════════════════════════ */
+function verAmarilla(main){
+  var guardado=amarillaGuardado(), objetivo=objetivoAmarilla(), falta=faltaAmarilla();
+  var aportaciones=(libro.dias||[]).filter(function(d){ return (+d.aAmarilla||0)>0; })
+    .map(function(d){ return {fecha:d.fecha, tipo:"entrada", importe:+d.aAmarilla, motivo:"Cierre del día"}; });
+  var salidas=(libro.retiradas||[]).map(function(r){
+    return {id:r.id, fecha:r.fecha, tipo:"salida", importe:+r.importe||0, motivo:r.motivo||""};
+  });
+  var movimientos=aportaciones.concat(salidas)
+    .sort(function(a,b){ return (b.fecha||"").localeCompare(a.fecha||""); });
+
+  var esteMes=r2(aportaciones.filter(function(a){ return a.fecha.slice(0,7)===ui.mes; })
+                             .reduce(function(s,a){ return s+a.importe; },0));
+
+  main.innerHTML=
+    cabecera("Caja amarilla",
+      "El fondo que se va guardando cada día. Aquí ves cuánto llevas, de dónde salió y lo que se ha sacado.",
+      '<button class="btn" id="am_sacar">Sacar dinero</button>'+
+      '<button class="btn fuerte" id="am_objetivo">Cambiar objetivo</button>')+
+
+    '<div class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cuerpo">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:14px">'+
+        '<div><div class="lbl">Hay guardado</div>'+
+          '<div style="font-size:38px;font-weight:600;color:var(--amarilla);'+
+          'font-variant-numeric:tabular-nums;line-height:1.1">'+eur(guardado)+'</div></div>'+
+        '<div style="text-align:right">'+
+          (falta>0
+            ? '<div class="lbl">Falta para llegar a '+eur(objetivo)+'</div>'+
+              '<div style="font-size:24px;font-weight:600">'+eur(falta)+'</div>'
+            : '<span class="chapa ok" style="font-size:13px;padding:5px 12px">Fondo completo</span>'+
+              (guardado>objetivo?'<div class="n" style="margin-top:6px;color:var(--muted)">'+
+                eur(r2(guardado-objetivo))+' por encima del objetivo</div>':""))+
+        '</div>'+
+      '</div>'+
+      '<div class="barra-fondo" style="height:14px">'+
+        '<i style="width:'+(objetivo>0?Math.min(100,guardado/objetivo*100).toFixed(1):0)+'%"></i></div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px">'+
+        '<span>0 €</span><span>Objetivo '+eur(objetivo)+'</span></div>'+
+    '</div></div>'+
+
+    '<div class="cifras">'+
+      '<div class="cifra"><div class="k">Guardado este mes</div><div class="v amarilla">'+eur(esteMes)+'</div>'+
+        '<div class="n">'+esc(mesLargo(ui.mes))+'</div></div>'+
+      '<div class="cifra"><div class="k">Días que se guardó</div><div class="v">'+aportaciones.length+'</div>'+
+        '<div class="n">en total</div></div>'+
+      '<div class="cifra"><div class="k">Retiradas</div><div class="v malo">'+
+        eur(r2(salidas.reduce(function(s,x){ return s+x.importe; },0)))+'</div>'+
+        '<div class="n">'+salidas.length+' salidas</div></div>'+
+    '</div>'+
+
+    '<div class="tarjeta"><div class="tarjeta-cab"><h2>Movimientos</h2></div>'+
+      '<div class="tabla-caja" id="tablaAmarilla"></div></div>';
+
+  document.getElementById("am_objetivo").addEventListener("click", cambiarObjetivo);
+  document.getElementById("am_sacar").addEventListener("click", sacarDeAmarilla);
+
+  var caja=document.getElementById("tablaAmarilla");
+  caja.innerHTML = !movimientos.length
+    ? '<div class="vacio"><strong>Todavía no hay movimientos</strong>'+
+      'Cada día que guardes algo en el cierre, aparecerá aquí.</div>'
+    : '<table><thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Entra</th>'+
+      '<th class="num">Sale</th><th></th></tr></thead><tbody>'+
+      movimientos.slice(0,60).map(function(m){
+        return "<tr><td>"+esc(dmy(m.fecha))+"</td><td>"+esc(m.motivo)+"</td>"+
+          '<td class="num" style="color:var(--amarilla)">'+(m.tipo==="entrada"?eur(m.importe):"—")+"</td>"+
+          '<td class="num" style="color:var(--malo)">'+(m.tipo==="salida"?eur(m.importe):"—")+"</td>"+
+          "<td>"+(m.tipo==="salida"
+            ? '<div class="acciones-fila"><button class="btn suave sm malo" data-rdel="'+m.id+'">Borrar</button></div>'
+            : '<span style="color:var(--muted);font-size:12px">del cierre</span>')+"</td></tr>";
+      }).join("")+"</tbody></table>";
+
+  caja.querySelectorAll("[data-rdel]").forEach(function(b){
+    b.addEventListener("click", function(){
+      libro.retiradas=(libro.retiradas||[]).filter(function(r){ return r.id!==b.getAttribute("data-rdel"); });
+      guardar(); pintar(); avisar("Retirada borrada");
+    });
+  });
+}
+
+function cambiarObjetivo(){
+  abrirVentana("Objetivo de la caja amarilla",
+    '<p class="nota">Cuánto tiene que haber guardado en la amarilla.</p>'+
+    '<div class="campo" style="max-width:200px"><label class="lbl" for="ob_val">Objetivo (€)</label>'+
+    '<input type="number" id="ob_val" class="grande" min="0" step="10" value="'+esc(objetivoAmarilla())+'"></div>',
+    function(){
+      libro.ajustes.objetivoAmarilla=numero("ob_val");
+      guardar(); pintar(); avisar("Objetivo: "+eur(objetivoAmarilla()));
+    });
+}
+
+function sacarDeAmarilla(){
+  var guardado=amarillaGuardado();
+  abrirVentana("Sacar de la caja amarilla",
+    '<p class="nota">Ahora mismo hay <strong>'+eur(guardado)+'</strong>. '+
+    'Lo que saques se descuenta y el fondo quedará por debajo del objetivo.</p>'+
+    '<div class="rejilla">'+
+      '<div class="campo"><label class="lbl" for="sa_fecha">Fecha</label>'+
+        '<input type="date" id="sa_fecha" value="'+esc(hoyISO())+'"></div>'+
+      '<div class="campo"><label class="lbl" for="sa_imp">Importe (€)</label>'+
+        '<input type="number" id="sa_imp" min="0" step="0.01"></div>'+
+      '<div class="campo" style="grid-column:1/-1"><label class="lbl" for="sa_mot">Motivo</label>'+
+        '<input id="sa_mot" placeholder="Ingreso en el banco, pago a proveedor…"></div>'+
+    '</div>',
+    function(){
+      var imp=numero("sa_imp");
+      if(!imp){ avisar("Pon el importe.", true); return true; }
+      libro.retiradas.push({id:uid(), fecha:valor("sa_fecha")||hoyISO(),
+                            importe:imp, motivo:valor("sa_mot")||"Retirada"});
+      guardar(); pintar();
+      var falta=faltaAmarilla();
+      avisar(falta>0 ? "Sacados "+eur(imp)+". Faltan "+eur(falta)+" para el objetivo."
+                     : "Sacados "+eur(imp));
+    }, {aceptar:"Sacar"});
+}
+
+/* ══════════════════════════════════════════════════════════════
+   AJUSTES
+   ══════════════════════════════════════════════════════════════ */
+function verAjustes(main){
+  main.innerHTML=
+    cabecera("Ajustes", "El nombre que sale en el parte y a quién se lo mandas.")+
+    '<div class="tarjeta" style="max-width:560px"><div class="tarjeta-cuerpo">'+
+      '<div class="rejilla">'+
+        '<div class="campo" style="grid-column:1/-1"><label class="lbl" for="aj_nom">Nombre del restaurante</label>'+
+          '<input id="aj_nom" value="'+esc(libro.ajustes.nombre||"")+'"></div>'+
+        '<div class="campo"><label class="lbl" for="aj_obj">Objetivo de la caja amarilla (€)</label>'+
+          '<input type="number" id="aj_obj" min="0" step="10" value="'+esc(objetivoAmarilla())+'"></div>'+
+        '<div class="campo"><label class="lbl" for="aj_tel">WhatsApp del parte</label>'+
+          '<input id="aj_tel" class="mono" value="'+esc(libro.ajustes.telefono||"")+'" placeholder="376800100"></div>'+
+      '</div>'+
+      '<p class="nota" style="margin:14px 0 0">Con el número puesto, el parte diario va directo a ese chat. '+
+      'Si lo dejas vacío, WhatsApp te dejará elegir el contacto.</p>'+
+      '<button class="btn fuerte" id="aj_guardar" style="margin-top:14px">Guardar</button>'+
+    '</div></div>'+
+
+    '<div class="tarjeta" style="max-width:560px;margin-top:16px">'+
+      '<div class="tarjeta-cab"><h2>Cómo se calcula</h2></div>'+
+      '<div class="tarjeta-cuerpo" style="font-size:13px;color:var(--muted);line-height:1.7">'+
+        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Ventas</strong> = visa + efectivo.</p>'+
+        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Queda en efectivo</strong> = efectivo − gastos '+
+        'pagados de la caja.</p>'+
+        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Caja</strong> = lo que queda en efectivo '+
+        'menos lo que apartas a la amarilla.</p>'+
+        '<p style="margin:0"><strong style="color:var(--tinta)">Caja amarilla</strong> = todo lo apartado, '+
+        'menos lo que hayas sacado.</p>'+
+      '</div></div>';
+
+  document.getElementById("aj_guardar").addEventListener("click", function(){
+    libro.ajustes.nombre=valor("aj_nom");
+    libro.ajustes.objetivoAmarilla=numero("aj_obj");
+    libro.ajustes.telefono=valor("aj_tel");
+    guardar(); pintar(); avisar("Ajustes guardados");
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════ */
+cargar();
+pintar();
+
+})();

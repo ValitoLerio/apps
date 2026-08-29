@@ -15,6 +15,7 @@
     --resto:#e0954a; --resto-tenue:#33261492;
     --comanda:#e0919c; --comanda-tenue:#33202499;
     --casa:#7fc4e8; --casa-tenue:#152c3899;
+    --caja:#a99ae0; --caja-tenue:#221f3a99;
     --alerta:#ef8a76; --alerta-tenue:#331a16;
     --display:'Fraunces',Georgia,serif;
     --texto:'Archivo','Helvetica Neue',sans-serif;
@@ -30,6 +31,7 @@
       --resto:#8a5310; --resto-tenue:#f4e7d5;
       --comanda:#7b2d3b; --comanda-tenue:#f3e6e8;
       --casa:#1f5673; --casa-tenue:#e0ebf1;
+      --caja:#5b4a9e; --caja-tenue:#e7e4f3;
       --alerta:#96331f; --alerta-tenue:#f7e2de;
       --sombra:0 16px 34px -26px rgba(15,22,24,.5);
     }
@@ -42,6 +44,7 @@
     --resto:#8a5310; --resto-tenue:#f4e7d5;
     --comanda:#7b2d3b; --comanda-tenue:#f3e6e8;
     --casa:#1f5673; --casa-tenue:#e0ebf1;
+    --caja:#5b4a9e; --caja-tenue:#e7e4f3;
     --alerta:#96331f; --alerta-tenue:#f7e2de;
     --sombra:0 16px 34px -26px rgba(15,22,24,.5);
   }
@@ -148,6 +151,7 @@
   .p-resto{--tono:var(--resto)}
   .p-comanda{--tono:var(--comanda)}
   .p-casa{--tono:var(--casa)}
+  .p-caja{--tono:var(--caja)}
 
   /* ── Conexión ──────────────────────────────────────────────────── */
   .conexion{background:var(--sup);border:1px solid var(--linea);border-radius:16px;
@@ -393,6 +397,22 @@
         <div class="entrar">Abrir <span class="flecha">→</span></div>
       </a>
 
+      <a class="puerta p-caja" href="caja.html">
+        <span class="rotulo">Restaurante</span>
+        <h2>Caja</h2>
+        <p class="que">El cierre de cada día: visa, efectivo, gastos y la caja amarilla.</p>
+        <div class="cifra">
+          <span class="n" id="d-caja-mes">—</span>
+          <span class="u">ventas del mes</span>
+        </div>
+        <div class="tira">
+          <div class="celda"><span class="k">Amarilla</span><span class="v" id="d-caja-amarilla">—</span></div>
+          <div class="celda"><span class="k">Días</span><span class="v" id="d-caja-dias">—</span></div>
+          <div class="celda"><span class="k">Hoy</span><span class="v" id="d-caja-hoy">—</span></div>
+        </div>
+        <div class="entrar">Abrir <span class="flecha">→</span></div>
+      </a>
+
     </div>
 
     <section class="notas">
@@ -417,7 +437,7 @@
 
 </div>
 
-<script src="sync.js?v=202608290947"></script>
+<script src="sync.js?v=202608291018"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
@@ -586,9 +606,10 @@
   }
 
   // ── Candados ───────────────────────────────────────────
-  var TARJETAS = {piso:'.p-piso', horario:'.p-resto', comanda:'.p-comanda', casa:'.p-casa'};
+  var TARJETAS = {piso:'.p-piso', horario:'.p-resto', comanda:'.p-comanda',
+                  casa:'.p-casa', caja:'.p-caja'};
   var NOMBRES  = {piso:'Piso Soldeu', horario:'Horario Restaurante',
-                  comanda:'Comanda', casa:'Casa'};
+                  comanda:'Comanda', casa:'Casa', caja:'Caja'};
   var seguridad = {};
 
   function pintarCandados(){
@@ -617,7 +638,8 @@
       piso:    ['d-cobrado','d-recibos','d-ultimo-mes','d-inquilino'],
       horario: ['d-horas','d-personal','d-turnos'],
       comanda: ['d-pendiente','d-empresas','d-servicios','d-facturas'],
-      casa:    ['d-casa-mes','d-casa-fijos','d-casa-compra','d-casa-avisos']
+      casa:    ['d-casa-mes','d-casa-fijos','d-casa-compra','d-casa-avisos'],
+      caja:    ['d-caja-mes','d-caja-amarilla','d-caja-dias','d-caja-hoy']
     }[sec] || [];
     ids.forEach(function(id){ pon(id, '···'); });
   }
@@ -785,16 +807,37 @@
     pon('d-casa-avisos', pendientes ? String(pendientes) : '—');
   }
 
+  function resumenCaja(seccion){
+    var libro = leer(seccion['caja.libro.v1'], {});
+    var ym = new Date().toISOString().slice(0,7);
+    var hoy = new Date().toISOString().slice(0,10);
+    var dias = (libro.dias||[]);
+
+    var delMes = dias.filter(function(d){ return (d.fecha||'').slice(0,7) === ym; });
+    var ventasMes = delMes.reduce(function(s,d){ return s + (+d.visa||0) + (+d.efectivo||0); }, 0);
+
+    var mete = dias.reduce(function(s,d){ return s + (+d.aAmarilla||0); }, 0);
+    var saca = (libro.retiradas||[]).reduce(function(s,r){ return s + (+r.importe||0); }, 0);
+
+    var deHoy = dias.filter(function(d){ return d.fecha === hoy; })[0];
+
+    pon('d-caja-mes',      euros(ventasMes));
+    pon('d-caja-amarilla', euros(mete - saca));
+    pon('d-caja-dias',     String(delMes.length));
+    pon('d-caja-hoy',      deHoy ? euros((+deHoy.visa||0)+(+deHoy.efectivo||0)) : 'sin cerrar');
+  }
+
   function pintarResumen(){
     return Sync.descargarTodo().then(function(datos){
       datos = datos || {};
       var seg = datos.seguridad || {};
       seguridad = {piso: !!seg.piso, horario: !!seg.horario,
-                   comanda: !!seg.comanda, casa: !!seg.casa};
+                   comanda: !!seg.comanda, casa: !!seg.casa, caja: !!seg.caja};
       resumenPiso(datos.piso || {});
       resumenHorario(datos.horario || {});
       resumenComanda(datos.comanda || {});
       resumenCasa(datos.casa || {});
+      resumenCaja(datos.caja || {});
       Object.keys(seguridad).forEach(function(sec){ if (seguridad[sec]) ocultarCifras(sec); });
       pintarCandados();
       pon('ultimo-guardado', haceCuanto(datos.actualizado));
@@ -848,7 +891,7 @@
     Sync.olvidarCredenciales();
     ['piso_cfg','piso_meses','piso_gastos','piso_inq','piso_data_version',
      'rsch','rcam','rhid','rtheme',
-     'comanda.ledger.v1','casa.libro.v1'].forEach(function(k){ localStorage.removeItem(k); });
+     'comanda.ledger.v1','casa.libro.v1','caja.libro.v1'].forEach(function(k){ localStorage.removeItem(k); });
     mostrar();
   });
 

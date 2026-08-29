@@ -1,8 +1,8 @@
 # Escritorio
 
-Panel privado con cuatro herramientas: la gestión del piso de Soldeu, el
-horario del restaurante, la facturación de comidas de empresa y las
-cuentas de casa. Publicado
+Panel privado con cinco herramientas: la gestión del piso de Soldeu, el
+horario del restaurante, la facturación de comidas de empresa, las
+cuentas de casa y la caja del restaurante. Publicado
 con GitHub Pages en **https://valitolerio.github.io/apps/**
 
 ## Cómo está montado
@@ -17,7 +17,8 @@ Este repo (público)                Repo de datos (privado)
 ├── piso.html    + piso.js              ├── piso:    recibos, gastos, inquilinos
 ├── horario.html + horario.js           ├── horario: turnos, personal, colores
 ├── comanda.html + comanda.js           ├── comanda: empresas, servicios, facturas
-├── casa.html    + casa.js              └── casa:    compra, médico, coche, fijos…
+├── casa.html    + casa.js              ├── casa:    compra, médico, coche, fijos…
+├── caja.html    + caja.js              └── caja:    cierre diario del restaurante
 └── sync.js      guardado
 ```
 
