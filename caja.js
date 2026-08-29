@@ -504,12 +504,11 @@ function enviarDiaPorWhatsApp(fecha){
     '</div>'+
     '<div class="dlg-pie">'+
       '<button class="btn" data-copiar>Copiar el parte</button>'+
-      /* Salida de emergencia: si WhatsApp dice que no puede abrir el
-         enlace, casi siempre es que ese numero no esta dado de alta en
-         WhatsApp. Asi se abre igual y el contacto se elige a mano, con
-         el parte ya escrito. */
-      '<a class="btn suave" href="whatsapp://send?text='+esc(encodeURIComponent(plano))+'" '+
-      'style="text-decoration:none" data-elegir>Elegir contacto</a>'+
+      /* Para mandarlo a otra persona sin tocar los ajustes. En el Mac,
+         WhatsApp rechaza los enlaces sin numero ("no se pudo abrir este
+         enlace"), asi que aqui no se usa ninguno: se copia el parte y se
+         abre la aplicacion, y el chat lo elige el a mano. */
+      '<button class="btn suave" data-elegir>Copiar y abrir WhatsApp</button>'+
       '<a class="btn wa" href="'+esc(destino)+'" target="_blank" rel="noopener" '+
       'style="text-decoration:none" data-abrir>Abrir WhatsApp</a>'+
     '</div>';
@@ -540,7 +539,10 @@ function enviarDiaPorWhatsApp(fecha){
     setTimeout(function(){ if(document.getElementById("dlg")){ d.close(); d.remove(); } }, 600);
   });
   d.querySelector("[data-elegir]").addEventListener("click", function(){
-    setTimeout(function(){ if(document.getElementById("dlg")){ d.close(); d.remove(); } }, 600);
+    copiarTexto(texto, null);
+    avisar("Parte copiado. Abre el chat que quieras y pegalo.");
+    window.location.href="whatsapp://";
+    setTimeout(function(){ if(document.getElementById("dlg")){ d.close(); d.remove(); } }, 900);
   });
   d.showModal();
 }
