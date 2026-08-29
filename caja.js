@@ -27,8 +27,9 @@ function libroVacio(){
   return {
     v:1, actualizado:new Date().toISOString(),
     ajustes:{ nombre:"", objetivoAmarilla:1500, telefono:"" },
-    dias:[],       /* {id, fecha, visa, efectivo, gastos, detalle:[{concepto,importe}], aAmarilla, nota} */
-    retiradas:[]   /* {id, fecha, importe, motivo}  — dinero que sale de la amarilla */
+    dias:[],          /* {id, fecha, visa, efectivo, gastos, detalle:[{concepto,importe}], aAmarilla, nota} */
+    aportaciones:[],  /* {id, fecha, importe, motivo} — dinero que entra sin ser de la caja */
+    retiradas:[]      /* {id, fecha, importe, motivo} — dinero que sale de la amarilla */
   };
 }
 
@@ -148,11 +149,19 @@ function sumaCuentas(dias){
   return t;
 }
 
-/* La amarilla: todo lo guardado menos todo lo sacado */
+/* La amarilla: lo apartado en los cierres, más lo que se mete de fuera,
+   menos lo que se saca. */
+function amarillaDeCaja(){
+  return r2((libro.dias||[]).reduce(function(s,d){ return s+(+d.aAmarilla||0); },0));
+}
+function amarillaDeFuera(){
+  return r2((libro.aportaciones||[]).reduce(function(s,a){ return s+(+a.importe||0); },0));
+}
+function amarillaSacado(){
+  return r2((libro.retiradas||[]).reduce(function(s,r){ return s+(+r.importe||0); },0));
+}
 function amarillaGuardado(){
-  var mete=(libro.dias||[]).reduce(function(s,d){ return s+(+d.aAmarilla||0); },0);
-  var saca=(libro.retiradas||[]).reduce(function(s,r){ return s+(+r.importe||0); },0);
-  return r2(mete-saca);
+  return r2(amarillaDeCaja()+amarillaDeFuera()-amarillaSacado());
 }
 function objetivoAmarilla(){ return +libro.ajustes.objetivoAmarilla || 0; }
 function faltaAmarilla(){ return r2(Math.max(0, objetivoAmarilla()-amarillaGuardado())); }
@@ -562,22 +571,30 @@ function verAnio(main){
    ══════════════════════════════════════════════════════════════ */
 function verAmarilla(main){
   var guardado=amarillaGuardado(), objetivo=objetivoAmarilla(), falta=faltaAmarilla();
-  var aportaciones=(libro.dias||[]).filter(function(d){ return (+d.aAmarilla||0)>0; })
-    .map(function(d){ return {fecha:d.fecha, tipo:"entrada", importe:+d.aAmarilla, motivo:"Cierre del día"}; });
-  var salidas=(libro.retiradas||[]).map(function(r){
-    return {id:r.id, fecha:r.fecha, tipo:"salida", importe:+r.importe||0, motivo:r.motivo||""};
+  var deCierres=(libro.dias||[]).filter(function(d){ return (+d.aAmarilla||0)>0; })
+    .map(function(d){ return {fecha:d.fecha, tipo:"entrada", origen:"cierre",
+                              importe:+d.aAmarilla, motivo:"Cierre del día"}; });
+  var deFuera=(libro.aportaciones||[]).map(function(a){
+    return {id:a.id, fecha:a.fecha, tipo:"entrada", origen:"fuera",
+            importe:+a.importe||0, motivo:a.motivo||"Aportación"};
   });
-  var movimientos=aportaciones.concat(salidas)
+  var salidas=(libro.retiradas||[]).map(function(r){
+    return {id:r.id, fecha:r.fecha, tipo:"salida", origen:"salida",
+            importe:+r.importe||0, motivo:r.motivo||""};
+  });
+  var entradas=deCierres.concat(deFuera);
+  var movimientos=entradas.concat(salidas)
     .sort(function(a,b){ return (b.fecha||"").localeCompare(a.fecha||""); });
 
-  var esteMes=r2(aportaciones.filter(function(a){ return a.fecha.slice(0,7)===ui.mes; })
-                             .reduce(function(s,a){ return s+a.importe; },0));
+  var esteMes=r2(entradas.filter(function(a){ return a.fecha.slice(0,7)===ui.mes; })
+                         .reduce(function(s,a){ return s+a.importe; },0));
 
   main.innerHTML=
     cabecera("Caja amarilla",
       "El fondo que se va guardando cada día. Aquí ves cuánto llevas, de dónde salió y lo que se ha sacado.",
+      '<button class="btn" id="am_objetivo">Cambiar objetivo</button>'+
       '<button class="btn" id="am_sacar">Sacar dinero</button>'+
-      '<button class="btn fuerte" id="am_objetivo">Cambiar objetivo</button>')+
+      '<button class="btn fuerte" id="am_meter">Meter dinero</button>')+
 
     '<div class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cuerpo">'+
       '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:14px">'+
@@ -602,10 +619,11 @@ function verAmarilla(main){
     '<div class="cifras">'+
       '<div class="cifra"><div class="k">Guardado este mes</div><div class="v amarilla">'+eur(esteMes)+'</div>'+
         '<div class="n">'+esc(mesLargo(ui.mes))+'</div></div>'+
-      '<div class="cifra"><div class="k">Días que se guardó</div><div class="v">'+aportaciones.length+'</div>'+
-        '<div class="n">en total</div></div>'+
-      '<div class="cifra"><div class="k">Retiradas</div><div class="v malo">'+
-        eur(r2(salidas.reduce(function(s,x){ return s+x.importe; },0)))+'</div>'+
+      '<div class="cifra"><div class="k">De los cierres</div><div class="v">'+eur(amarillaDeCaja())+'</div>'+
+        '<div class="n">'+deCierres.length+' días</div></div>'+
+      '<div class="cifra"><div class="k">Metido de fuera</div><div class="v">'+eur(amarillaDeFuera())+'</div>'+
+        '<div class="n">'+deFuera.length+' aportaciones</div></div>'+
+      '<div class="cifra"><div class="k">Retiradas</div><div class="v malo">'+eur(amarillaSacado())+'</div>'+
         '<div class="n">'+salidas.length+' salidas</div></div>'+
     '</div>'+
 
@@ -614,26 +632,38 @@ function verAmarilla(main){
 
   document.getElementById("am_objetivo").addEventListener("click", cambiarObjetivo);
   document.getElementById("am_sacar").addEventListener("click", sacarDeAmarilla);
+  document.getElementById("am_meter").addEventListener("click", meterEnAmarilla);
 
   var caja=document.getElementById("tablaAmarilla");
   caja.innerHTML = !movimientos.length
     ? '<div class="vacio"><strong>Todavía no hay movimientos</strong>'+
       'Cada día que guardes algo en el cierre, aparecerá aquí.</div>'
-    : '<table><thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Entra</th>'+
+    : '<table><thead><tr><th>Fecha</th><th>Concepto</th><th>Origen</th><th class="num">Entra</th>'+
       '<th class="num">Sale</th><th></th></tr></thead><tbody>'+
       movimientos.slice(0,60).map(function(m){
-        return "<tr><td>"+esc(dmy(m.fecha))+"</td><td>"+esc(m.motivo)+"</td>"+
+        var origen = m.origen==="cierre" ? '<span class="chapa neutra">De la caja</span>'
+                   : m.origen==="fuera"  ? '<span class="chapa amarilla">De fuera</span>'
+                   :                       '<span class="chapa malo">Salida</span>';
+        return "<tr><td>"+esc(dmy(m.fecha))+"</td><td>"+esc(m.motivo)+"</td><td>"+origen+"</td>"+
           '<td class="num" style="color:var(--amarilla)">'+(m.tipo==="entrada"?eur(m.importe):"—")+"</td>"+
           '<td class="num" style="color:var(--malo)">'+(m.tipo==="salida"?eur(m.importe):"—")+"</td>"+
-          "<td>"+(m.tipo==="salida"
-            ? '<div class="acciones-fila"><button class="btn suave sm malo" data-rdel="'+m.id+'">Borrar</button></div>'
-            : '<span style="color:var(--muted);font-size:12px">del cierre</span>')+"</td></tr>";
+          "<td>"+(m.origen==="cierre"
+            ? '<span style="color:var(--muted);font-size:12px">del día '+esc(dmy(m.fecha))+'</span>'
+            : '<div class="acciones-fila"><button class="btn suave sm malo" data-mdel="'+m.origen+'|'+m.id+'">Borrar</button></div>')+
+          "</td></tr>";
       }).join("")+"</tbody></table>";
 
-  caja.querySelectorAll("[data-rdel]").forEach(function(b){
+  caja.querySelectorAll("[data-mdel]").forEach(function(b){
     b.addEventListener("click", function(){
-      libro.retiradas=(libro.retiradas||[]).filter(function(r){ return r.id!==b.getAttribute("data-rdel"); });
-      guardar(); pintar(); avisar("Retirada borrada");
+      var partes=b.getAttribute("data-mdel").split("|");
+      if(partes[0]==="fuera"){
+        libro.aportaciones=(libro.aportaciones||[]).filter(function(a){ return a.id!==partes[1]; });
+        avisar("Aportación borrada");
+      } else {
+        libro.retiradas=(libro.retiradas||[]).filter(function(r){ return r.id!==partes[1]; });
+        avisar("Retirada borrada");
+      }
+      guardar(); pintar();
     });
   });
 }
@@ -647,6 +677,43 @@ function cambiarObjetivo(){
       libro.ajustes.objetivoAmarilla=numero("ob_val");
       guardar(); pintar(); avisar("Objetivo: "+eur(objetivoAmarilla()));
     });
+}
+
+/* Reponer la amarilla con dinero que no sale de la caja del día:
+   del banco, del bolsillo, de donde sea. No toca el cierre diario. */
+function meterEnAmarilla(){
+  var guardado=amarillaGuardado(), falta=faltaAmarilla();
+  abrirVentana("Meter dinero en la caja amarilla",
+    '<p class="nota">Para reponer con dinero que <strong>no sale de la caja del día</strong>. '+
+    'No cambia ningún cierre: solo suma al fondo.</p>'+
+    (falta>0
+      ? '<div class="aviso-caja" style="background:var(--amarilla-suave);border-color:var(--amarilla-linea);'+
+        'color:var(--amarilla)">Ahora hay '+eur(guardado)+'. Faltan <strong>'+eur(falta)+
+        '</strong> para llegar a '+eur(objetivoAmarilla())+'.</div>'
+      : '<div class="aviso-caja" style="background:var(--ok-suave);border-color:var(--ok);color:var(--ok)">'+
+        'El fondo ya está completo ('+eur(guardado)+').</div>')+
+    '<div class="rejilla">'+
+      '<div class="campo"><label class="lbl" for="me_fecha">Fecha</label>'+
+        '<input type="date" id="me_fecha" value="'+esc(hoyISO())+'"></div>'+
+      '<div class="campo"><label class="lbl" for="me_imp">Importe (€)</label>'+
+        '<input type="number" id="me_imp" class="grande" min="0" step="0.01" value="'+
+        (falta>0?esc(falta):"")+'"></div>'+
+      '<div class="campo" style="grid-column:1/-1"><label class="lbl" for="me_mot">De dónde sale</label>'+
+        '<input id="me_mot" placeholder="Del banco, aportación propia, devolución…"></div>'+
+    '</div>'+
+    (falta>0?'<p class="nota" style="margin-top:12px">Viene puesto lo que falta para completar el fondo; '+
+      'cámbialo si metes otra cantidad.</p>':""),
+    function(){
+      var imp=numero("me_imp");
+      if(!imp){ avisar("Pon el importe.", true); return true; }
+      libro.aportaciones=libro.aportaciones||[];
+      libro.aportaciones.push({id:uid(), fecha:valor("me_fecha")||hoyISO(),
+                               importe:imp, motivo:valor("me_mot")||"Aportación"});
+      guardar(); pintar();
+      var restante=faltaAmarilla();
+      avisar(restante>0 ? "Metidos "+eur(imp)+". Faltan "+eur(restante)+"."
+                        : "Metidos "+eur(imp)+". Fondo completo.");
+    }, {aceptar:"Meter"});
 }
 
 function sacarDeAmarilla(){

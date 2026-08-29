@@ -437,7 +437,7 @@
 
 </div>
 
-<script src="sync.js?v=202608291018"></script>
+<script src="sync.js?v=202608291030"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
@@ -816,7 +816,8 @@
     var delMes = dias.filter(function(d){ return (d.fecha||'').slice(0,7) === ym; });
     var ventasMes = delMes.reduce(function(s,d){ return s + (+d.visa||0) + (+d.efectivo||0); }, 0);
 
-    var mete = dias.reduce(function(s,d){ return s + (+d.aAmarilla||0); }, 0);
+    var mete = dias.reduce(function(s,d){ return s + (+d.aAmarilla||0); }, 0) +
+               (libro.aportaciones||[]).reduce(function(s,a){ return s + (+a.importe||0); }, 0);
     var saca = (libro.retiradas||[]).reduce(function(s,r){ return s + (+r.importe||0); }, 0);
 
     var deHoy = dias.filter(function(d){ return d.fecha === hoy; })[0];
