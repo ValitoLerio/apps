@@ -14,6 +14,7 @@
     --piso:#5fd3ac; --piso-tenue:#14322a;
     --resto:#e0954a; --resto-tenue:#33261492;
     --comanda:#e0919c; --comanda-tenue:#33202499;
+    --casa:#7fc4e8; --casa-tenue:#152c3899;
     --alerta:#ef8a76; --alerta-tenue:#331a16;
     --display:'Fraunces',Georgia,serif;
     --texto:'Archivo','Helvetica Neue',sans-serif;
@@ -28,6 +29,7 @@
       --piso:#0c5a44; --piso-tenue:#d8ece4;
       --resto:#8a5310; --resto-tenue:#f4e7d5;
       --comanda:#7b2d3b; --comanda-tenue:#f3e6e8;
+      --casa:#1f5673; --casa-tenue:#e0ebf1;
       --alerta:#96331f; --alerta-tenue:#f7e2de;
       --sombra:0 16px 34px -26px rgba(15,22,24,.5);
     }
@@ -39,6 +41,7 @@
     --piso:#0c5a44; --piso-tenue:#d8ece4;
     --resto:#8a5310; --resto-tenue:#f4e7d5;
     --comanda:#7b2d3b; --comanda-tenue:#f3e6e8;
+    --casa:#1f5673; --casa-tenue:#e0ebf1;
     --alerta:#96331f; --alerta-tenue:#f7e2de;
     --sombra:0 16px 34px -26px rgba(15,22,24,.5);
   }
@@ -144,6 +147,7 @@
   .p-piso{--tono:var(--piso)}
   .p-resto{--tono:var(--resto)}
   .p-comanda{--tono:var(--comanda)}
+  .p-casa{--tono:var(--casa)}
 
   /* ── Conexión ──────────────────────────────────────────────────── */
   .conexion{background:var(--sup);border:1px solid var(--linea);border-radius:16px;
@@ -373,6 +377,22 @@
         <div class="entrar">Abrir <span class="flecha">→</span></div>
       </a>
 
+      <a class="puerta p-casa" href="casa.html">
+        <span class="rotulo">Familia</span>
+        <h2>Casa</h2>
+        <p class="que">Las cuentas de casa: compra, médico, coche, recibos y viajes.</p>
+        <div class="cifra">
+          <span class="n" id="d-casa-mes">—</span>
+          <span class="u">este mes</span>
+        </div>
+        <div class="tira">
+          <div class="celda"><span class="k">Fijos</span><span class="v" id="d-casa-fijos">—</span></div>
+          <div class="celda"><span class="k">Compra</span><span class="v" id="d-casa-compra">—</span></div>
+          <div class="celda"><span class="k">Avisos</span><span class="v" id="d-casa-avisos">—</span></div>
+        </div>
+        <div class="entrar">Abrir <span class="flecha">→</span></div>
+      </a>
+
     </div>
 
     <section class="notas">
@@ -397,7 +417,7 @@
 
 </div>
 
-<script src="sync.js?v=202608290937"></script>
+<script src="sync.js?v=202608290947"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
@@ -566,8 +586,9 @@
   }
 
   // ── Candados ───────────────────────────────────────────
-  var TARJETAS = {piso:'.p-piso', horario:'.p-resto', comanda:'.p-comanda'};
-  var NOMBRES  = {piso:'Piso Soldeu', horario:'Horario Restaurante', comanda:'Comanda'};
+  var TARJETAS = {piso:'.p-piso', horario:'.p-resto', comanda:'.p-comanda', casa:'.p-casa'};
+  var NOMBRES  = {piso:'Piso Soldeu', horario:'Horario Restaurante',
+                  comanda:'Comanda', casa:'Casa'};
   var seguridad = {};
 
   function pintarCandados(){
@@ -595,7 +616,8 @@
     var ids = {
       piso:    ['d-cobrado','d-recibos','d-ultimo-mes','d-inquilino'],
       horario: ['d-horas','d-personal','d-turnos'],
-      comanda: ['d-pendiente','d-empresas','d-servicios','d-facturas']
+      comanda: ['d-pendiente','d-empresas','d-servicios','d-facturas'],
+      casa:    ['d-casa-mes','d-casa-fijos','d-casa-compra','d-casa-avisos']
     }[sec] || [];
     ids.forEach(function(id){ pon(id, '···'); });
   }
@@ -723,14 +745,56 @@
 
   document.getElementById('btn-candados').addEventListener('click', abrirPanel);
 
+  function resumenCasa(seccion){
+    var libro = leer(seccion['casa.libro.v1'], {});
+    var ym = new Date().toISOString().slice(0,7);
+    function delMes(lista){
+      return (lista||[]).filter(function(x){ return (x.fecha||'').slice(0,7) === ym; });
+    }
+    function suma(lista, campo){
+      return (lista||[]).reduce(function(s,x){ return s + (+x[campo]||0); }, 0);
+    }
+    function totalCompra(c){
+      if (c.total != null) return +c.total||0;
+      return (c.lineas||[]).reduce(function(s,l){ return s + (+l.cantidad||0)*(+l.precio||0); }, 0);
+    }
+
+    var compra = delMes(libro.compras).reduce(function(s,c){ return s + totalCompra(c); }, 0);
+    var fijos  = suma(delMes(libro.fijos), 'importe');
+    var coche  = suma(delMes(libro.repostajes), 'importe') +
+                 (delMes(libro.revisiones)||[]).reduce(function(s,r){
+                   return s + (+r.manoObra||0) + (r.piezas||[]).reduce(function(t,p){ return t+(+p.precio||0); },0);
+                 }, 0);
+    var medico = (delMes(libro.medico)||[]).reduce(function(s,v){
+                   return s + (+v.consulta||0)+(+v.medicinas||0)-(+v.cass||0)-(+v.seguro||0); }, 0);
+    var otros  = suma(delMes(libro.otros), 'importe');
+    var viajes = (libro.viajes||[]).reduce(function(s,v){ return s + suma(delMes(v.gastos), 'importe'); }, 0);
+
+    pon('d-casa-mes',    euros(compra+fijos+coche+medico+otros+viajes));
+    pon('d-casa-fijos',  euros(fijos));
+    pon('d-casa-compra', euros(compra));
+
+    // Caducidades del coche: lo que conviene no olvidar
+    var coche2 = libro.coche || {};
+    var pendientes = 0;
+    [(coche2.itv||{}).caduca, (coche2.seguro||{}).caduca].forEach(function(f){
+      if (!f) return;
+      var dias = Math.round((new Date(f+'T12:00:00') - new Date()) / 86400000);
+      if (dias <= 45) pendientes++;
+    });
+    pon('d-casa-avisos', pendientes ? String(pendientes) : '—');
+  }
+
   function pintarResumen(){
     return Sync.descargarTodo().then(function(datos){
       datos = datos || {};
       var seg = datos.seguridad || {};
-      seguridad = {piso: !!seg.piso, horario: !!seg.horario, comanda: !!seg.comanda};
+      seguridad = {piso: !!seg.piso, horario: !!seg.horario,
+                   comanda: !!seg.comanda, casa: !!seg.casa};
       resumenPiso(datos.piso || {});
       resumenHorario(datos.horario || {});
       resumenComanda(datos.comanda || {});
+      resumenCasa(datos.casa || {});
       Object.keys(seguridad).forEach(function(sec){ if (seguridad[sec]) ocultarCifras(sec); });
       pintarCandados();
       pon('ultimo-guardado', haceCuanto(datos.actualizado));
@@ -784,7 +848,7 @@
     Sync.olvidarCredenciales();
     ['piso_cfg','piso_meses','piso_gastos','piso_inq','piso_data_version',
      'rsch','rcam','rhid','rtheme',
-     'comanda.ledger.v1'].forEach(function(k){ localStorage.removeItem(k); });
+     'comanda.ledger.v1','casa.libro.v1'].forEach(function(k){ localStorage.removeItem(k); });
     mostrar();
   });
 
