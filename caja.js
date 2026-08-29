@@ -402,7 +402,7 @@ function pintarFormularioDia(d){
 /* El parte de cada día, con los mismos conceptos y en el mismo orden
    que la hoja de siempre. Los importes se alinean a la derecha para que
    en WhatsApp queden en columna. */
-function textoDia(fecha){
+function textoDia(fecha, opciones){
   var d=diaDe(fecha);
   if(!d) return "";
   var c=cuentasDia(d);
@@ -417,30 +417,38 @@ function textoDia(fecha){
   var anchoTexto=Math.max.apply(null, lineas.map(function(x){ return x[0].length; }));
   var anchoImporte=Math.max.apply(null, lineas.map(function(x){ return eur(x[1]).length; }));
 
+  /* Dos versiones del mismo parte:
+       - alineada, con letra de maquina, para copiar y pegar
+       - sencilla, para el enlace de WhatsApp: su app rechaza el enlace
+         cuando lleva acentos graves o adornos, y sale "no se pudo abrir
+         este enlace" */
+  var alineado = (opciones && opciones.alineado);
   var l=[];
-  if(libro.ajustes.nombre) l.push("*"+libro.ajustes.nombre+"*");
-  l.push(dmy(fecha)+" · "+diaSemana(fecha));
+  if(libro.ajustes.nombre) l.push(libro.ajustes.nombre);
+  l.push(dmy(fecha)+" - "+diaSemana(fecha));
   l.push("");
-  /* Entre ``` WhatsApp lo escribe con letra de máquina y las cifras
-     quedan en columna, como en la hoja de papel. */
-  l.push("```");
+  if(alineado) l.push("```");
   lineas.forEach(function(x){
-    var etiqueta=x[0]+" ".repeat(anchoTexto-x[0].length);
-    var importe=eur(x[1]);
-    importe=" ".repeat(anchoImporte-importe.length)+importe;
-    l.push(etiqueta+"  "+importe);
+    if(alineado){
+      var etiqueta=x[0]+" ".repeat(anchoTexto-x[0].length);
+      var importe=eur(x[1]);
+      importe=" ".repeat(anchoImporte-importe.length)+importe;
+      l.push(etiqueta+"  "+importe);
+    } else {
+      l.push(x[0]+": "+eur(x[1]));
+    }
   });
-  l.push("```");
+  if(alineado) l.push("```");
   if(c.gastos>0 && (d.detalle||[]).length){
     l.push("");
-    l.push("_Pagos:_");
-    d.detalle.forEach(function(g){ l.push("· "+g.concepto+": "+eur(g.importe)); });
+    l.push("Pagos:");
+    d.detalle.forEach(function(g){ l.push("- "+g.concepto+": "+eur(g.importe)); });
   }
   l.push("");
   var guardado=amarillaGuardado(), falta=faltaAmarilla();
-  l.push("🟡 Caja amarilla: *"+eur(guardado)+"*");
-  if(falta>0) l.push("   faltan "+eur(falta)+" para "+eur(objetivoAmarilla()));
-  if(d.nota){ l.push(""); l.push("📝 "+d.nota); }
+  l.push("Caja amarilla: "+eur(guardado));
+  if(falta>0) l.push("faltan "+eur(falta)+" para "+eur(objetivoAmarilla()));
+  if(d.nota){ l.push(""); l.push("Nota: "+d.nota); }
   return l.join("\n");
 }
 
@@ -471,10 +479,11 @@ function nombreDestino(){
    navegadores bloquean sin avisar— se enseña el parte con un enlace de
    verdad y un boton para copiarlo. Pulsar un enlace nunca se bloquea. */
 function enviarDiaPorWhatsApp(fecha){
-  var texto=textoDia(fecha);
+  var texto=textoDia(fecha, {alineado:true});   /* para leer y copiar */
+  var plano=textoDia(fecha);                    /* para el enlace */
   if(!texto){ avisar("Ese dia no tiene nada anotado. Guardalo primero.", true); return; }
   var tel=telefonoCompleto();
-  var destino="https://wa.me/"+tel+"?text="+encodeURIComponent(texto);
+  var destino="https://wa.me/"+tel+"?text="+encodeURIComponent(plano);
 
   var vieja=document.getElementById("dlg"); if(vieja) vieja.remove();
   var d=document.createElement("dialog"); d.id="dlg";
@@ -495,6 +504,12 @@ function enviarDiaPorWhatsApp(fecha){
     '</div>'+
     '<div class="dlg-pie">'+
       '<button class="btn" data-copiar>Copiar el parte</button>'+
+      /* Salida de emergencia: si WhatsApp dice que no puede abrir el
+         enlace, casi siempre es que ese numero no esta dado de alta en
+         WhatsApp. Asi se abre igual y el contacto se elige a mano, con
+         el parte ya escrito. */
+      '<a class="btn suave" href="whatsapp://send?text='+esc(encodeURIComponent(plano))+'" '+
+      'style="text-decoration:none" data-elegir>Elegir contacto</a>'+
       '<a class="btn wa" href="'+esc(destino)+'" target="_blank" rel="noopener" '+
       'style="text-decoration:none" data-abrir>Abrir WhatsApp</a>'+
     '</div>';
@@ -504,7 +519,7 @@ function enviarDiaPorWhatsApp(fecha){
     b.addEventListener("click", function(){ d.close(); d.remove(); });
   });
   d.querySelector("[data-copiar]").addEventListener("click", function(){
-    copiarTexto(texto, this);
+    copiarTexto(texto, this);   /* al copiar va la version alineada */
   });
   var otro=d.querySelector("[data-otro]");
   if(otro) otro.addEventListener("click", function(){
@@ -514,7 +529,7 @@ function enviarDiaPorWhatsApp(fecha){
     var limpio=escrito.replace(/[^\d]/g,"");
     if(!limpio){ avisar("Ese número no vale.", true); return; }
     var enlace=d.querySelector("[data-abrir]");
-    enlace.setAttribute("href", "https://wa.me/"+limpio+"?text="+encodeURIComponent(texto));
+    enlace.setAttribute("href", "https://wa.me/"+limpio+"?text="+encodeURIComponent(plano));
     d.querySelector(".nota").innerHTML='Se abrira el chat de <span class="mono">+'+esc(limpio)+'</span>, '+
       'solo para este envio.';
     avisar("Este parte ira a +"+limpio);
@@ -522,6 +537,9 @@ function enviarDiaPorWhatsApp(fecha){
 
   d.querySelector("[data-abrir]").addEventListener("click", function(){
     /* damos tiempo a que abra la pestana antes de cerrar la ventana */
+    setTimeout(function(){ if(document.getElementById("dlg")){ d.close(); d.remove(); } }, 600);
+  });
+  d.querySelector("[data-elegir]").addEventListener("click", function(){
     setTimeout(function(){ if(document.getElementById("dlg")){ d.close(); d.remove(); } }, 600);
   });
   d.showModal();
