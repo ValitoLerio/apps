@@ -189,6 +189,13 @@ function boot(){
   ui.perfil = state.settings.perfilActivo || (perfiles()[0] && perfiles()[0].id) || "";
   render();
   paintSave();
+
+  /* Si algo se coló antes (o desde otro dispositivo), que se vea al entrar. */
+  var repes=numerosRepetidos();
+  if(repes.length){
+    toast("Cuidado: "+(repes.length>1?"hay números de factura repetidos":"hay un número de factura repetido")+
+          " ("+repes.join(", ")+"). Míralo en Facturas.", true);
+  }
 }
 
 /* Descarga un archivo generado por la pagina. */
@@ -666,12 +673,87 @@ function draftInvoice(cid, ym){
     terms:(c.terms||em.terms||st.terms), iban:em.iban||st.iban
   };
 }
+/* ── Control de facturas repetidas ───────────────────────────────────
+   Un numero de factura no puede salir dos veces: es el identificador
+   del documento que ya esta en manos del cliente y de Hacienda. */
+function facturaConNumero(num, exceptoId){
+  for(var i=0;i<state.invoices.length;i++){
+    var f=state.invoices[i];
+    if(f.number===num && f.id!==exceptoId) return f;
+  }
+  return null;
+}
+
+/* Sube el contador hasta dar con un numero que no este usado. */
+function siguienteLibre(em, anio){
+  var n=+em.nextNumber||1, tope=n+5000;
+  while(n<tope && facturaConNumero((em.prefix||"F")+"-"+anio+"-"+String(n).padStart(4,"0"))) n++;
+  return n;
+}
+
+/* Facturas ya emitidas a la misma empresa por el mismo periodo. */
+function facturasDe(cid, ym){
+  return state.invoices.filter(function(f){ return f.companyId===cid && f.period===ym; });
+}
+
+/* Todos los numeros que aparecen mas de una vez. */
+function numerosRepetidos(){
+  var vistos={}, repes={};
+  state.invoices.forEach(function(f){
+    if(vistos[f.number]) repes[f.number]=(repes[f.number]||1)+1;
+    vistos[f.number]=true;
+  });
+  return Object.keys(repes);
+}
+
 function previewDraft(cid, ym){ showInvoice(draftInvoice(cid,ym), true); }
 function emitInvoice(cid, ym){
   var inv=draftInvoice(cid,ym);
   if(!inv.lines.length){ toast("No hay servicios pendientes que facturar.", true); return; }
   var emisor=perfilActivo();
   if(!emisor || !emisor.name){ toast("Antes rellena los datos del emisor en Ajustes.", true); ui.view="ajustes"; render(); return; }
+
+  // ¿Ese número ya se usó? No se emite: se ofrece el siguiente libre.
+  var choque=facturaConNumero(inv.number);
+  if(choque){
+    var libre=siguienteLibre(emisor, ym.slice(0,4));
+    var numeroLibre=(emisor.prefix||"F")+"-"+ym.slice(0,4)+"-"+String(libre).padStart(4,"0");
+    openDialog("Ese número ya está usado",
+      '<p style="margin:0">La factura <strong class="mono">'+esc(inv.number)+'</strong> ya existe: '+
+      'se emitió el <strong>'+esc(dmy(choque.date))+'</strong> a <strong>'+
+      esc((choque.client&&choque.client.name)||companyName(choque.companyId))+'</strong> por <strong>'+
+      eur(choque.total)+'</strong>.</p>'+
+      '<p class="section-note" style="margin:12px 0 0">Dos facturas no pueden llevar el mismo número. '+
+      'El siguiente libre de esta serie es <strong class="mono">'+esc(numeroLibre)+'</strong>.</p>',
+      function(){
+        emisor.nextNumber=libre;
+        touch(); render();
+        toast("Numeración ajustada a "+numeroLibre+". Vuelve a emitir.");
+      },
+      {okLabel:"Usar "+numeroLibre});
+    return;
+  }
+
+  // ¿Ya hay una factura a esta empresa por este mismo periodo?
+  var mismas=facturasDe(cid, ym);
+  if(mismas.length && !emitInvoice._insistiendo){
+    openDialog("Ya facturaste este periodo",
+      '<p style="margin:0">A <strong>'+esc(companyName(cid))+'</strong> ya le emitiste '+
+      (mismas.length>1?'<strong>'+mismas.length+' facturas</strong>':'la factura <strong class="mono">'+esc(mismas[0].number)+'</strong>')+
+      ' de <strong>'+esc(monthLabel(ym))+'</strong>'+
+      (mismas.length>1?'':' por <strong>'+eur(mismas[0].total)+'</strong>')+'.</p>'+
+      '<p class="section-note" style="margin:12px 0 0">Esta llevaría '+inv.lines.length+
+      (inv.lines.length>1?' albaranes nuevos':' albarán nuevo')+
+      ' que aún no estaban facturados. Si es una factura complementaria, adelante; '+
+      'si te has confundido, mejor revisa antes en «Facturas».</p>',
+      function(){
+        emitInvoice._insistiendo=true;
+        emitInvoice(cid, ym);
+        emitInvoice._insistiendo=false;
+      },
+      {okLabel:"Emitirla igualmente", danger:true});
+    return;
+  }
   confirmar("Emitir factura "+inv.number,
     '<p style="margin:0">Vas a emitir la factura <strong class="mono">'+esc(inv.number)+"</strong> a <strong>"+
       esc(companyName(cid))+"</strong> por <strong>"+eur(inv.total)+"</strong>, "+
@@ -695,8 +777,14 @@ function emitInvoice(cid, ym){
 
 /* ============================ view: facturas ============================ */
 function viewFacturas(main){
+  var repes=numerosRepetidos();
   main.innerHTML=head("Facturas emitidas",
     "Desde aquí descargas el PDF que adjuntas al correo y llevas el control de cobros.")+
+    (repes.length
+      ? '<div class="warn-banner">⚠️ Hay '+(repes.length>1?'números repetidos':'un número repetido')+
+        ' entre tus facturas: <strong class="mono">'+repes.map(esc).join('</strong>, <strong class="mono">')+
+        '</strong>. Dos facturas no deberían compartir número: anula la que sobre y vuelve a emitirla.</div>'
+      : '')+
     '<div class="card"><div class="tbl-wrap" id="invTable"></div></div>';
   var box=document.getElementById("invTable");
   if(!state.invoices.length){
@@ -705,8 +793,10 @@ function viewFacturas(main){
   }
   var list=state.invoices.slice().sort(function(a,b){ return a.number<b.number?1:-1; });
   var rows=list.map(function(i){
-    return "<tr>"+
-      '<td class="mono"><strong>'+esc(i.number)+"</strong></td>"+
+    var repetida=repes.indexOf(i.number)>=0;
+    return '<tr'+(repetida?' style="background:var(--warn-soft)"':'')+'>'+
+      '<td class="mono"><strong>'+esc(i.number)+"</strong>"+
+      (repetida?' <span class="pill fact" title="Este número aparece en más de una factura">repetido</span>':'')+"</td>"+
       "<td>"+esc(dmy(i.date))+"</td>"+
       "<td>"+esc(i.client&&i.client.name?i.client.name:companyName(i.companyId))+"</td>"+
       "<td>"+esc(monthLabel(i.period))+"</td>"+
