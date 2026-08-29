@@ -29,7 +29,8 @@ function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(
 function libroVacio(){
   return {
     v:1, actualizado:new Date().toISOString(),
-    ajustes:{ nombre:"", objetivoAmarilla:1500, telefono:"", fondoHabitual:0 },
+    ajustes:{ nombre:"", objetivoAmarilla:1500, fondoHabitual:0,
+              destinatario:"", prefijo:"376", telefono:"" },
     dias:[],          /* {id, fecha, visa, efectivo, gastos, detalle:[…], aAmarilla, fondoCaja, nota} */
     aportaciones:[],  /* {id, fecha, importe, motivo} — dinero que entra sin ser de la caja */
     retiradas:[]      /* {id, fecha, importe, motivo} — dinero que sale de la amarilla */
@@ -443,13 +444,36 @@ function textoDia(fecha){
   return l.join("\n");
 }
 
+/* WhatsApp necesita el numero entero, con el codigo del pais y sin
+   signos: si va suelto, te abre el chat de cualquier otro. */
+function telefonoCompleto(){
+  var pre=String(libro.ajustes.prefijo||"").replace(/\D/g,"");
+  var tel=String(libro.ajustes.telefono||"").replace(/[^\d+]/g,"");
+  if(!tel) return "";
+  if(tel.charAt(0)==="+") return tel.slice(1).replace(/\D/g,"");
+  tel=tel.replace(/\D/g,"");
+  /* si ya viene con el prefijo delante, no se lo ponemos dos veces */
+  if(pre && tel.indexOf(pre)===0 && tel.length>pre.length+5) return tel;
+  /* un numero corto es de aqui: le anteponemos el prefijo */
+  return (pre && tel.length<=9) ? pre+tel : tel;
+}
+function telefonoBonito(){
+  var pre=String(libro.ajustes.prefijo||"").replace(/\D/g,"");
+  var tel=String(libro.ajustes.telefono||"").trim();
+  if(!tel) return "";
+  return (tel.charAt(0)==="+"?tel:(pre?"+"+pre+" ":"")+tel);
+}
+function nombreDestino(){
+  return libro.ajustes.destinatario || (telefonoBonito()||"quien elijas");
+}
+
 /* Enviar el parte. En vez de abrir WhatsApp a ciegas —que muchos
    navegadores bloquean sin avisar— se enseña el parte con un enlace de
    verdad y un boton para copiarlo. Pulsar un enlace nunca se bloquea. */
 function enviarDiaPorWhatsApp(fecha){
   var texto=textoDia(fecha);
   if(!texto){ avisar("Ese dia no tiene nada anotado. Guardalo primero.", true); return; }
-  var tel=(libro.ajustes.telefono||"").replace(/[^\d]/g,"");
+  var tel=telefonoCompleto();
   var destino="https://wa.me/"+tel+"?text="+encodeURIComponent(texto);
 
   var vieja=document.getElementById("dlg"); if(vieja) vieja.remove();
@@ -458,9 +482,12 @@ function enviarDiaPorWhatsApp(fecha){
     '<div class="dlg-cab"><h3>Parte del '+esc(dmy(fecha))+'</h3>'+
       '<button class="btn suave" data-x>Cerrar</button></div>'+
     '<div class="dlg-cuerpo">'+
-      '<p class="nota">Asi se va a enviar. Pulsa el boton verde y se abre WhatsApp'+
-      (tel?' con el chat de <strong>'+esc(libro.ajustes.telefono)+'</strong>':' para que elijas el contacto')+
-      '.</p>'+
+      (tel
+        ? '<p class="nota">Se abrira el chat de <strong>'+esc(nombreDestino())+'</strong> '+
+          '<span class="mono">'+esc(telefonoBonito())+'</span>. '+
+          '<button class="btn suave sm" data-otro style="padding:2px 6px">Enviar a otro</button></p>'
+        : '<p class="nota">No hay ningun numero guardado, asi que WhatsApp te dejara elegir el contacto. '+
+          'Ponlo en Ajustes y el parte ira siempre al mismo sitio.</p>')+
       /* En la vista previa se quitan las marcas de bloque: aqui ya se ve
          con letra de maquina, y en WhatsApp se envian igualmente. */
       '<div class="parte" id="parteTexto">'+esc(texto.split("\n").filter(function(x){
@@ -479,6 +506,20 @@ function enviarDiaPorWhatsApp(fecha){
   d.querySelector("[data-copiar]").addEventListener("click", function(){
     copiarTexto(texto, this);
   });
+  var otro=d.querySelector("[data-otro]");
+  if(otro) otro.addEventListener("click", function(){
+    var escrito=prompt("¿A qué número lo mando? (con el prefijo del país)",
+                       telefonoBonito());
+    if(escrito===null) return;
+    var limpio=escrito.replace(/[^\d]/g,"");
+    if(!limpio){ avisar("Ese número no vale.", true); return; }
+    var enlace=d.querySelector("[data-abrir]");
+    enlace.setAttribute("href", "https://wa.me/"+limpio+"?text="+encodeURIComponent(texto));
+    d.querySelector(".nota").innerHTML='Se abrira el chat de <span class="mono">+'+esc(limpio)+'</span>, '+
+      'solo para este envio.';
+    avisar("Este parte ira a +"+limpio);
+  });
+
   d.querySelector("[data-abrir]").addEventListener("click", function(){
     /* damos tiempo a que abra la pestana antes de cerrar la ventana */
     setTimeout(function(){ if(document.getElementById("dlg")){ d.close(); d.remove(); } }, 600);
@@ -859,11 +900,20 @@ function verAjustes(main){
         '<div class="campo"><label class="lbl" for="aj_fondo">Fondo de caja habitual (€)</label>'+
           '<input type="number" id="aj_fondo" min="0" step="0.01" value="'+esc(libro.ajustes.fondoHabitual||"")+'"'+
           ' placeholder="349"></div>'+
-        '<div class="campo"><label class="lbl" for="aj_tel">WhatsApp del parte</label>'+
-          '<input id="aj_tel" class="mono" value="'+esc(libro.ajustes.telefono||"")+'" placeholder="376800100"></div>'+
       '</div>'+
       '<p class="nota" style="margin:12px 0 0">El fondo habitual es el cambio que sueles dejar en la caja. '+
       'Viene puesto en cada día nuevo y lo cambias si un día dejas otra cantidad.</p>'+
+
+      '<p class="nota" style="margin:18px 0 8px"><strong style="color:var(--tinta)">A quién se manda el parte</strong></p>'+
+      '<div class="rejilla">'+
+        '<div class="campo"><label class="lbl" for="aj_dest">Nombre</label>'+
+          '<input id="aj_dest" value="'+esc(libro.ajustes.destinatario||"")+'" placeholder="Valeriano"></div>'+
+        '<div class="campo"><label class="lbl" for="aj_pre">Prefijo del país</label>'+
+          '<input id="aj_pre" class="mono" value="'+esc(libro.ajustes.prefijo||"376")+'" placeholder="376"></div>'+
+        '<div class="campo"><label class="lbl" for="aj_tel">Teléfono</label>'+
+          '<input id="aj_tel" class="mono" value="'+esc(libro.ajustes.telefono||"")+'" placeholder="800100"></div>'+
+      '</div>'+
+      '<p class="nota" style="margin:10px 0 0" id="aj_previo"></p>'+
       '<p class="nota" style="margin:14px 0 0">Con el número puesto, el parte diario va directo a ese chat. '+
       'Si lo dejas vacío, WhatsApp te dejará elegir el contacto.</p>'+
       '<button class="btn fuerte" id="aj_guardar" style="margin-top:14px">Guardar</button>'+
@@ -881,12 +931,32 @@ function verAjustes(main){
         'más lo que metas de fuera, menos lo que saques.</p>'+
       '</div></div>';
 
+  /* Mientras escribe, le enseñamos el número tal cual lo verá WhatsApp */
+  function previoDestino(){
+    var caja=document.getElementById("aj_previo"); if(!caja) return;
+    var pre=valor("aj_pre").replace(/\D/g,""), tel=valor("aj_tel").replace(/\D/g,"");
+    if(!tel){ caja.textContent="Sin número, WhatsApp te dejará elegir el contacto cada vez."; return; }
+    var entero=(pre && tel.length<=9 && tel.indexOf(pre)!==0) ? pre+tel : tel;
+    caja.innerHTML='El parte se abrirá en <strong>wa.me/'+esc(entero)+'</strong>'+
+      (valor("aj_dest")?' — '+esc(valor("aj_dest")):"")+
+      '. Si te sale otro contacto, revisa el prefijo.';
+  }
+  ["aj_pre","aj_tel","aj_dest"].forEach(function(id){
+    var e=document.getElementById(id); if(e) e.addEventListener("input", previoDestino);
+  });
+  previoDestino();
+
   document.getElementById("aj_guardar").addEventListener("click", function(){
     libro.ajustes.nombre=valor("aj_nom");
     libro.ajustes.objetivoAmarilla=numero("aj_obj");
     libro.ajustes.telefono=valor("aj_tel");
+    libro.ajustes.prefijo=valor("aj_pre");
+    libro.ajustes.destinatario=valor("aj_dest");
     libro.ajustes.fondoHabitual=numero("aj_fondo");
-    guardar(); pintar(); avisar("Ajustes guardados");
+    guardar(); pintar();
+    avisar(telefonoCompleto()
+      ? "El parte irá a "+nombreDestino()+" "+telefonoBonito()
+      : "Ajustes guardados");
   });
 }
 
