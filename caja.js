@@ -1,13 +1,16 @@
 /* ══════════════════════════════════════════════════════════════════
    CAJA — el cierre diario del restaurante
    ══════════════════════════════════════════════════════════════════
-   Cada día se anota lo cobrado con visa, lo cobrado en efectivo y los
-   gastos pagados de la caja. El efectivo que queda se reparte entre la
-   caja amarilla —el fondo que se va guardando— y la caja del día.
+   El parte de cada día, con los mismos conceptos de siempre:
 
-     Ventas        = visa + efectivo
-     Efectivo neto = efectivo − gastos
-     Caja          = efectivo neto − lo que va a la amarilla
+     Visas         cobrado con tarjeta
+     Efectivo      cobrado en metálico
+     Pagos         lo que se paga de la caja
+     C. amarilla   lo que se aparta al fondo
+     Fondo caja    lo que se deja de cambio para mañana
+     Sobrante      lo que queda tras repartir
+
+     Sobrante = efectivo − pagos − c. amarilla − fondo caja
 
    La amarilla tiene un objetivo (1500 € de partida, editable): la app
    dice cuánto lleva, cuánto falta y, si sacas dinero, cuánto reponer.
@@ -26,8 +29,8 @@ function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(
 function libroVacio(){
   return {
     v:1, actualizado:new Date().toISOString(),
-    ajustes:{ nombre:"", objetivoAmarilla:1500, telefono:"" },
-    dias:[],          /* {id, fecha, visa, efectivo, gastos, detalle:[{concepto,importe}], aAmarilla, nota} */
+    ajustes:{ nombre:"", objetivoAmarilla:1500, telefono:"", fondoHabitual:0 },
+    dias:[],          /* {id, fecha, visa, efectivo, gastos, detalle:[…], aAmarilla, fondoCaja, nota} */
     aportaciones:[],  /* {id, fecha, importe, motivo} — dinero que entra sin ser de la caja */
     retiradas:[]      /* {id, fecha, importe, motivo} — dinero que sale de la amarilla */
   };
@@ -125,15 +128,19 @@ function totalGastos(d){
   return +d.gastos||0;
 }
 function cuentasDia(d){
-  if(!d) return {visa:0, efectivo:0, gastos:0, ventas:0, neto:0, amarilla:0, caja:0};
+  if(!d) return {visa:0, efectivo:0, gastos:0, ventas:0, neto:0,
+                 amarilla:0, fondo:0, sobrante:0};
   var visa=+d.visa||0, efectivo=+d.efectivo||0;
   var gastos=totalGastos(d), amarilla=+d.aAmarilla||0;
+  var fondo=+d.fondoCaja||0;
   var neto=r2(efectivo-gastos);
   return {
     visa:visa, efectivo:efectivo, gastos:gastos,
     ventas:r2(visa+efectivo),
-    neto:neto, amarilla:amarilla,
-    caja:r2(neto-amarilla)
+    neto:neto,                    /* lo que queda tras los pagos */
+    amarilla:amarilla,
+    fondo:fondo,                  /* lo que se deja de cambio */
+    sobrante:r2(neto-amarilla-fondo)
   };
 }
 function diasDe(prefijo){
@@ -141,7 +148,8 @@ function diasDe(prefijo){
                          .sort(function(a,b){ return a.fecha.localeCompare(b.fecha); });
 }
 function sumaCuentas(dias){
-  var t={visa:0, efectivo:0, gastos:0, ventas:0, neto:0, amarilla:0, caja:0, dias:dias.length};
+  var t={visa:0, efectivo:0, gastos:0, ventas:0, neto:0,
+         amarilla:0, fondo:0, sobrante:0, dias:dias.length};
   dias.forEach(function(d){
     var c=cuentasDia(d);
     Object.keys(t).forEach(function(k){ if(k!=="dias") t[k]=r2(t[k]+c[k]); });
@@ -232,7 +240,7 @@ function verDia(main){
         '<div class="n">'+(c.ventas>0?num(c.visa/c.ventas*100,0)+"% del total":"—")+'</div></div>'+
       '<div class="cifra"><div class="k">Efectivo</div><div class="v">'+eur(c.efectivo)+'</div>'+
         '<div class="n">'+(c.ventas>0?num(c.efectivo/c.ventas*100,0)+"% del total":"—")+'</div></div>'+
-      '<div class="cifra"><div class="k">Gastos</div><div class="v malo">'+eur(c.gastos)+'</div>'+
+      '<div class="cifra"><div class="k">Pagos</div><div class="v malo">'+eur(c.gastos)+'</div>'+
         '<div class="n">'+((d&&(d.detalle||[]).length)?d.detalle.length+" apuntes":"pagados de caja")+'</div></div>'+
     '</div>'+
 
@@ -241,16 +249,21 @@ function verDia(main){
         '<span class="pista">Lo que queda en efectivo, repartido</span></div>'+
       '<div class="tarjeta-cuerpo">'+
         '<table style="max-width:520px"><tbody>'+
-          '<tr><td>Efectivo cobrado</td><td class="num">'+eur(c.efectivo)+'</td></tr>'+
-          '<tr><td>− Gastos pagados de caja</td><td class="num" style="color:var(--malo)">'+eur(c.gastos)+'</td></tr>'+
-          '<tr style="border-top:1px solid var(--linea)"><td><strong>Queda en efectivo</strong></td>'+
+          '<tr><td>Efectivo</td><td class="num">'+eur(c.efectivo)+'</td></tr>'+
+          '<tr><td>− Pagos</td><td class="num" style="color:var(--malo)">'+eur(c.gastos)+'</td></tr>'+
+          '<tr style="border-top:1px solid var(--linea)"><td><strong>Queda tras los pagos</strong></td>'+
             '<td class="num"><strong>'+eur(c.neto)+'</strong></td></tr>'+
-          '<tr><td>→ A la caja amarilla</td>'+
+          '<tr><td>− C. amarilla</td>'+
             '<td class="num" style="color:var(--amarilla)"><strong>'+eur(c.amarilla)+'</strong></td></tr>'+
-          '<tr><td>→ Queda en la caja</td><td class="num"><strong>'+eur(c.caja)+'</strong></td></tr>'+
+          '<tr><td>− Fondo de caja <span style="color:var(--muted);font-size:12px">(el cambio que dejas)</span></td>'+
+            '<td class="num"><strong>'+eur(c.fondo)+'</strong></td></tr>'+
+          '<tr style="border-top:2px solid var(--linea)"><td><strong>Sobrante</strong></td>'+
+            '<td class="num"><strong style="font-size:16px'+(c.sobrante<0?";color:var(--malo)":"")+'">'+
+            eur(c.sobrante)+'</strong></td></tr>'+
         '</tbody></table>'+
-        (c.caja<0?'<div class="aviso-caja" style="margin:14px 0 0;background:var(--malo-suave);'+
-          'border-color:var(--malo);color:var(--malo)">Estás metiendo en la amarilla más de lo que queda en efectivo.</div>':"")+
+        (c.sobrante<0?'<div class="aviso-caja" style="margin:14px 0 0;background:var(--malo-suave);'+
+          'border-color:var(--malo);color:var(--malo)">Falta dinero: entre la amarilla y el fondo de caja '+
+          'estás apartando más de lo que queda tras los pagos.</div>':"")+
       '</div></div>'+
 
     '<div class="tarjeta" style="margin-bottom:16px">'+
@@ -292,10 +305,13 @@ function pintarFormularioDia(d){
         '<input type="number" class="grande" id="f_visa" min="0" step="0.01" value="'+esc(actual.visa)+'"></div>'+
       '<div class="campo"><label class="lbl" for="f_efec">Efectivo (€)</label>'+
         '<input type="number" class="grande" id="f_efec" min="0" step="0.01" value="'+esc(actual.efectivo)+'"></div>'+
-      '<div class="campo"><label class="lbl" for="f_amar">A la caja amarilla (€)</label>'+
+      '<div class="campo"><label class="lbl" for="f_amar">C. amarilla (€)</label>'+
         '<input type="number" class="grande" id="f_amar" min="0" step="0.01" value="'+esc(actual.aAmarilla)+'"></div>'+
+      '<div class="campo"><label class="lbl" for="f_fondo">Fondo de caja (€)</label>'+
+        '<input type="number" class="grande" id="f_fondo" min="0" step="0.01" value="'+
+        esc(actual.fondoCaja!=null&&actual.fondoCaja!==""?actual.fondoCaja:(libro.ajustes.fondoHabitual||""))+'"></div>'+
     '</div>'+
-    '<p class="nota" style="margin:16px 0 8px">Gastos pagados de la caja</p>'+
+    '<p class="nota" style="margin:16px 0 8px">Pagos hechos con dinero de la caja</p>'+
     '<div id="gastos"></div>'+
     '<button class="btn sm" id="masGasto" style="margin-top:8px">+ Añadir gasto</button>'+
     '<div class="campo" style="margin-top:16px"><label class="lbl" for="f_nota">Nota del día</label>'+
@@ -316,12 +332,13 @@ function pintarFormularioDia(d){
     return r2(t);
   }
   function refrescar(){
-    var visa=numero("f_visa"), efec=numero("f_efec"), g=totalG(), am=numero("f_amar");
-    var neto=r2(efec-g), queda=r2(neto-am);
+    var visa=numero("f_visa"), efec=numero("f_efec"), g=totalG();
+    var am=numero("f_amar"), fondo=numero("f_fondo");
+    var neto=r2(efec-g), sobra=r2(neto-am-fondo);
     document.getElementById("f_resumen").innerHTML=
-      "Ventas <strong>"+eur(r2(visa+efec))+"</strong> · "+
-      "queda en efectivo <strong>"+eur(neto)+"</strong> · "+
-      "a la caja <strong"+(queda<0?' style="color:var(--malo)"':"")+">"+eur(queda)+"</strong>";
+      "Visas <strong>"+eur(visa)+"</strong> · "+
+      "tras pagos <strong>"+eur(neto)+"</strong> · "+
+      "sobrante <strong"+(sobra<0?' style="color:var(--malo)"':"")+">"+eur(sobra)+"</strong>";
   }
   function añadirGasto(g){
     g=g||{concepto:"", importe:""};
@@ -338,7 +355,7 @@ function pintarFormularioDia(d){
   (actual.detalle||[]).forEach(añadirGasto);
   if(!(actual.detalle||[]).length) añadirGasto();
   document.getElementById("masGasto").addEventListener("click", function(){ añadirGasto(); refrescar(); });
-  ["f_visa","f_efec","f_amar"].forEach(function(id){
+  ["f_visa","f_efec","f_amar","f_fondo"].forEach(function(id){
     document.getElementById(id).addEventListener("input", refrescar);
   });
   refrescar();
@@ -356,6 +373,7 @@ function pintarFormularioDia(d){
     registro.detalle=detalle;
     registro.gastos=r2(detalle.reduce(function(s,g){ return s+g.importe; },0));
     registro.aAmarilla=numero("f_amar");
+    registro.fondoCaja=numero("f_fondo");
     registro.nota=valor("f_nota");
     if(!d) libro.dias.push(registro);
     guardar(); pintar();
@@ -374,32 +392,47 @@ function pintarFormularioDia(d){
 }
 
 /* ── El parte diario para WhatsApp ─────────────────────────────── */
+/* El parte de cada día, con los mismos conceptos y en el mismo orden
+   que la hoja de siempre. Los importes se alinean a la derecha para que
+   en WhatsApp queden en columna. */
 function textoDia(fecha){
   var d=diaDe(fecha);
   if(!d) return "";
   var c=cuentasDia(d);
+  var lineas=[
+    ["Visas",       c.visa],
+    ["Efectivo",    c.efectivo],
+    ["Pagos",       c.gastos],
+    ["C. amarilla", c.amarilla],
+    ["Fondo caja",  c.fondo],
+    ["Sobrante",    c.sobrante]
+  ];
+  var anchoTexto=Math.max.apply(null, lineas.map(function(x){ return x[0].length; }));
+  var anchoImporte=Math.max.apply(null, lineas.map(function(x){ return eur(x[1]).length; }));
+
   var l=[];
-  l.push("*CIERRE DE CAJA*");
-  l.push("📅 "+dmy(fecha)+" · "+diaSemana(fecha));
-  if(libro.ajustes.nombre) l.push(libro.ajustes.nombre);
+  if(libro.ajustes.nombre) l.push("*"+libro.ajustes.nombre+"*");
+  l.push(dmy(fecha)+" · "+diaSemana(fecha));
   l.push("");
-  l.push("💳 Visa:        "+eur(c.visa));
-  l.push("💵 Efectivo:    "+eur(c.efectivo));
-  l.push("*VENTAS:      "+eur(c.ventas)+"*");
-  l.push("");
-  if(c.gastos>0){
-    l.push("🧾 Gastos:      -"+eur(c.gastos));
-    (d.detalle||[]).forEach(function(g){ l.push("   · "+g.concepto+": "+eur(g.importe)); });
+  /* Entre ``` WhatsApp lo escribe con letra de máquina y las cifras
+     quedan en columna, como en la hoja de papel. */
+  l.push("```");
+  lineas.forEach(function(x){
+    var etiqueta=x[0]+" ".repeat(anchoTexto-x[0].length);
+    var importe=eur(x[1]);
+    importe=" ".repeat(anchoImporte-importe.length)+importe;
+    l.push(etiqueta+"  "+importe);
+  });
+  l.push("```");
+  if(c.gastos>0 && (d.detalle||[]).length){
     l.push("");
+    l.push("_Pagos:_");
+    d.detalle.forEach(function(g){ l.push("· "+g.concepto+": "+eur(g.importe)); });
   }
-  l.push("Queda en efectivo: "+eur(c.neto));
-  l.push("🟡 A caja amarilla: "+eur(c.amarilla));
-  l.push("💰 Queda en caja:   "+eur(c.caja));
   l.push("");
   var guardado=amarillaGuardado(), falta=faltaAmarilla();
-  l.push("🟡 *Caja amarilla: "+eur(guardado)+"*");
-  l.push(falta>0 ? "   faltan "+eur(falta)+" para "+eur(objetivoAmarilla())
-                 : "   fondo completo ("+eur(objetivoAmarilla())+")");
+  l.push("🟡 Caja amarilla: *"+eur(guardado)+"*");
+  if(falta>0) l.push("   faltan "+eur(falta)+" para "+eur(objetivoAmarilla()));
   if(d.nota){ l.push(""); l.push("📝 "+d.nota); }
   return l.join("\n");
 }
@@ -444,10 +477,12 @@ function verMes(main){
         '<div class="n">'+(t.ventas>0?num(t.visa/t.ventas*100,0)+"%":"—")+'</div></div>'+
       '<div class="cifra"><div class="k">Efectivo</div><div class="v">'+eur(t.efectivo)+'</div>'+
         '<div class="n">'+(t.ventas>0?num(t.efectivo/t.ventas*100,0)+"%":"—")+'</div></div>'+
-      '<div class="cifra"><div class="k">Gastos</div><div class="v malo">'+eur(t.gastos)+'</div>'+
+      '<div class="cifra"><div class="k">Pagos</div><div class="v malo">'+eur(t.gastos)+'</div>'+
         '<div class="n">pagados de caja</div></div>'+
-      '<div class="cifra"><div class="k">A la amarilla</div><div class="v amarilla">'+eur(t.amarilla)+'</div>'+
+      '<div class="cifra"><div class="k">C. amarilla</div><div class="v amarilla">'+eur(t.amarilla)+'</div>'+
         '<div class="n">guardado este mes</div></div>'+
+      '<div class="cifra"><div class="k">Sobrante</div><div class="v">'+eur(t.sobrante)+'</div>'+
+        '<div class="n">tras repartir</div></div>'+
     '</div>'+
     '<div class="tarjeta"><div class="tarjeta-cab"><h2>Días</h2>'+
       '<span class="pista">Pulsa un día para abrirlo</span></div>'+
@@ -463,9 +498,9 @@ function verMes(main){
       'Ve a «Día» y anota el primer cierre.</div>';
     return;
   }
-  caja.innerHTML='<table><thead><tr><th>Día</th><th class="num">Visa</th><th class="num">Efectivo</th>'+
-    '<th class="num">Ventas</th><th class="num">Gastos</th><th class="num">Queda</th>'+
-    '<th class="num">Amarilla</th><th class="num">Caja</th><th>Nota</th></tr></thead><tbody>'+
+  caja.innerHTML='<table><thead><tr><th>Día</th><th class="num">Visas</th><th class="num">Efectivo</th>'+
+    '<th class="num">Pagos</th><th class="num">C. amarilla</th><th class="num">Fondo caja</th>'+
+    '<th class="num">Sobrante</th><th class="num">Ventas</th><th>Nota</th></tr></thead><tbody>'+
     dias.map(function(d){
       var c=cuentasDia(d);
       var esHoy=(d.fecha===hoyISO());
@@ -474,19 +509,19 @@ function verMes(main){
           '<span style="color:var(--muted);font-size:12px">'+diaSemana(d.fecha).slice(0,3)+"</span></td>"+
         '<td class="num">'+eur(c.visa)+"</td>"+
         '<td class="num">'+eur(c.efectivo)+"</td>"+
-        '<td class="num"><strong>'+eur(c.ventas)+"</strong></td>"+
         '<td class="num"'+(c.gastos>0?' style="color:var(--malo)"':"")+">"+(c.gastos>0?eur(c.gastos):"—")+"</td>"+
-        '<td class="num">'+eur(c.neto)+"</td>"+
         '<td class="num"'+(c.amarilla>0?' style="color:var(--amarilla);font-weight:600"':"")+">"+
           (c.amarilla>0?eur(c.amarilla):"—")+"</td>"+
-        '<td class="num">'+eur(c.caja)+"</td>"+
+        '<td class="num">'+(c.fondo>0?eur(c.fondo):"—")+"</td>"+
+        '<td class="num"'+(c.sobrante<0?' style="color:var(--malo)"':"")+"><strong>"+eur(c.sobrante)+"</strong></td>"+
+        '<td class="num">'+eur(c.ventas)+"</td>"+
         '<td style="font-size:12.5px;color:var(--muted)">'+esc(d.nota||"")+"</td></tr>";
     }).join("")+
     '</tbody><tfoot><tr><td>'+t.dias+' días</td>'+
       '<td class="num">'+eur(t.visa)+'</td><td class="num">'+eur(t.efectivo)+'</td>'+
-      '<td class="num">'+eur(t.ventas)+'</td><td class="num">'+eur(t.gastos)+'</td>'+
-      '<td class="num">'+eur(t.neto)+'</td><td class="num">'+eur(t.amarilla)+'</td>'+
-      '<td class="num">'+eur(t.caja)+'</td><td></td></tr></tfoot></table>';
+      '<td class="num">'+eur(t.gastos)+'</td><td class="num">'+eur(t.amarilla)+'</td>'+
+      '<td class="num">'+eur(t.fondo)+'</td><td class="num">'+eur(t.sobrante)+'</td>'+
+      '<td class="num">'+eur(t.ventas)+'</td><td></td></tr></tfoot></table>';
 
   caja.querySelectorAll("[data-dia]").forEach(function(tr){
     tr.addEventListener("click", function(){
@@ -523,8 +558,9 @@ function verAnio(main){
         '<div class="n">'+total.dias+' días</div></div>'+
       '<div class="cifra"><div class="k">Visa</div><div class="v">'+eur(total.visa)+'</div></div>'+
       '<div class="cifra"><div class="k">Efectivo</div><div class="v">'+eur(total.efectivo)+'</div></div>'+
-      '<div class="cifra"><div class="k">Gastos</div><div class="v malo">'+eur(total.gastos)+'</div></div>'+
-      '<div class="cifra"><div class="k">A la amarilla</div><div class="v amarilla">'+eur(total.amarilla)+'</div></div>'+
+      '<div class="cifra"><div class="k">Pagos</div><div class="v malo">'+eur(total.gastos)+'</div></div>'+
+      '<div class="cifra"><div class="k">C. amarilla</div><div class="v amarilla">'+eur(total.amarilla)+'</div></div>'+
+      '<div class="cifra"><div class="k">Sobrante</div><div class="v">'+eur(total.sobrante)+'</div></div>'+
       '<div class="cifra"><div class="k">Media por día</div>'+
         '<div class="v">'+eur(total.dias>0?r2(total.ventas/total.dias):0)+'</div>'+
         '<div class="n">'+(mejorMes&&mejorMes.t.ventas>0?"mejor: "+MESES[+mejorMes.ym.split("-")[1]-1]:"")+'</div></div>'+
@@ -753,9 +789,14 @@ function verAjustes(main){
           '<input id="aj_nom" value="'+esc(libro.ajustes.nombre||"")+'"></div>'+
         '<div class="campo"><label class="lbl" for="aj_obj">Objetivo de la caja amarilla (€)</label>'+
           '<input type="number" id="aj_obj" min="0" step="10" value="'+esc(objetivoAmarilla())+'"></div>'+
+        '<div class="campo"><label class="lbl" for="aj_fondo">Fondo de caja habitual (€)</label>'+
+          '<input type="number" id="aj_fondo" min="0" step="0.01" value="'+esc(libro.ajustes.fondoHabitual||"")+'"'+
+          ' placeholder="349"></div>'+
         '<div class="campo"><label class="lbl" for="aj_tel">WhatsApp del parte</label>'+
           '<input id="aj_tel" class="mono" value="'+esc(libro.ajustes.telefono||"")+'" placeholder="376800100"></div>'+
       '</div>'+
+      '<p class="nota" style="margin:12px 0 0">El fondo habitual es el cambio que sueles dejar en la caja. '+
+      'Viene puesto en cada día nuevo y lo cambias si un día dejas otra cantidad.</p>'+
       '<p class="nota" style="margin:14px 0 0">Con el número puesto, el parte diario va directo a ese chat. '+
       'Si lo dejas vacío, WhatsApp te dejará elegir el contacto.</p>'+
       '<button class="btn fuerte" id="aj_guardar" style="margin-top:14px">Guardar</button>'+
@@ -764,19 +805,20 @@ function verAjustes(main){
     '<div class="tarjeta" style="max-width:560px;margin-top:16px">'+
       '<div class="tarjeta-cab"><h2>Cómo se calcula</h2></div>'+
       '<div class="tarjeta-cuerpo" style="font-size:13px;color:var(--muted);line-height:1.7">'+
-        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Ventas</strong> = visa + efectivo.</p>'+
-        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Queda en efectivo</strong> = efectivo − gastos '+
-        'pagados de la caja.</p>'+
-        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Caja</strong> = lo que queda en efectivo '+
-        'menos lo que apartas a la amarilla.</p>'+
-        '<p style="margin:0"><strong style="color:var(--tinta)">Caja amarilla</strong> = todo lo apartado, '+
-        'menos lo que hayas sacado.</p>'+
+        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Sobrante</strong> = efectivo − pagos '+
+        '− c. amarilla − fondo de caja.</p>'+
+        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Fondo de caja</strong> es el cambio que '+
+        'dejas para el día siguiente; no es un resultado, lo pones tú.</p>'+
+        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Ventas</strong> = visas + efectivo.</p>'+
+        '<p style="margin:0"><strong style="color:var(--tinta)">Caja amarilla</strong> = lo apartado cada día, '+
+        'más lo que metas de fuera, menos lo que saques.</p>'+
       '</div></div>';
 
   document.getElementById("aj_guardar").addEventListener("click", function(){
     libro.ajustes.nombre=valor("aj_nom");
     libro.ajustes.objetivoAmarilla=numero("aj_obj");
     libro.ajustes.telefono=valor("aj_tel");
+    libro.ajustes.fondoHabitual=numero("aj_fondo");
     guardar(); pintar(); avisar("Ajustes guardados");
   });
 }
