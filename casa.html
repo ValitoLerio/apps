@@ -193,7 +193,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202608301017"></script>
+<script src="sync.js?v=202608301029"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -201,7 +201,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('casa').then(function(){
     var s = document.createElement('script');
-    s.src = 'casa.js?v=202608301017';
+    s.src = 'casa.js?v=202608301029';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar casa.js. Recarga la pagina.'; };
     document.body.appendChild(s);

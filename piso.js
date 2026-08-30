@@ -1356,8 +1356,11 @@ function telefonoInquilino(){
   if(!bruto) return '';
   if(bruto.charAt(0)==='+') return bruto.slice(1).replace(/\D/g,'');
   const d=bruto.replace(/\D/g,'');
-  /* un numero corto es de aqui: le ponemos el prefijo de Andorra */
-  return d.length<=9 ? '376'+d : d;
+  /* Solo se le pone el prefijo a un numero de seis cifras, que es lo que
+     mide uno de Andorra. Antes se lo ponia a cualquiera de hasta nueve, y
+     a un numero espanol le encajaba un 376 delante: salia un numero que
+     no existe. */
+  return d.length===6 ? '376'+d : d;
 }
 
 function textoWhatsApp(m){
@@ -1399,39 +1402,78 @@ function whatsappRecibo(mes){
     }
   }catch(err){ /* seguimos por el otro camino */ }
 
-  // 2) Ordenador: bajamos la imagen y abrimos el chat, todo dentro del
-  //    mismo clic para que el navegador no bloquee la ventana
+  // 2) Ordenador: bajamos la imagen y abrimos una ventana con el texto y
+  //    los enlaces. Antes se abria el chat de golpe, y cuando no habia
+  //    telefono guardado el enlace salia sin numero —wa.me/?text=…—, que
+  //    es justo el que WhatsApp rechaza con "no se pudo abrir este
+  //    enlace". Ahora los enlaces solo se ponen si hay numero.
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   a.href=url; a.download=nombre;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url), 4000);
 
-  const destino='https://wa.me/'+(tel||'')+'?text='+encodeURIComponent(texto);
-  const ventana=window.open(destino, '_blank');
-  if(!ventana){
-    /* El navegador la ha bloqueado: dejamos un enlace a mano */
-    mostrarEnlaceWhatsApp(destino, tel);
-  }
+  ventanaWhatsApp(texto, tel, nombre);
 }
 
-/* Si el navegador bloquea la ventana, un enlace que sí puede pulsar. */
-function mostrarEnlaceWhatsApp(destino, tel){
+/* La ventana de envio: el texto a la vista, los enlaces cuando hay
+   numero, y un hueco para escribirlo cuando no lo hay. */
+function ventanaWhatsApp(texto, tel, nombre){
   const previo=document.getElementById('wa-aviso');
   if(previo) previo.remove();
+
+  const enlaces=(num)=>
+    '<a href="https://wa.me/'+num+'?text='+encodeURIComponent(texto)+'" target="_blank" '+
+      'rel="noopener" class="btn btn-primary" data-wa '+
+      'style="background:#25D366;color:#0b3d24;text-decoration:none;display:inline-block">'+
+      'Abrir WhatsApp</a> '+
+    '<a href="https://web.whatsapp.com/send?phone='+num+'&text='+encodeURIComponent(texto)+'" '+
+      'target="_blank" rel="noopener" class="btn btn-secondary" data-web '+
+      'style="text-decoration:none;display:inline-block">Abrir en el navegador</a>';
+
   const caja=document.createElement('div');
   caja.id='wa-aviso';
-  caja.style.cssText='position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:2000;'+
-    'background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 18px;'+
-    'box-shadow:0 18px 40px -18px rgba(0,0,0,.35);max-width:90vw;text-align:center;font-size:13.5px';
-  caja.innerHTML='<div style="margin-bottom:10px">La factura ya está descargada. '+
-    'Tu navegador ha bloqueado la ventana de WhatsApp:</div>'+
-    '<a href="'+destino+'" target="_blank" rel="noopener" class="btn btn-primary" '+
-    'style="background:#25D366;color:#0b3d24;text-decoration:none;display:inline-block">'+
-    'Abrir WhatsApp'+(tel?'':' y elegir contacto')+'</a> '+
-    '<button class="btn btn-secondary" onclick="this.closest(\'#wa-aviso\').remove()">Cerrar</button>';
+  caja.style.cssText='position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2000;'+
+    'background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;'+
+    'box-shadow:0 24px 60px -20px rgba(0,0,0,.45);max-width:min(460px,92vw);font-size:13.5px';
+  caja.innerHTML=
+    '<div style="font-weight:600;margin-bottom:6px">La factura ya está descargada</div>'+
+    '<div style="color:var(--muted);margin-bottom:12px">Se llama <strong>'+nombre+'</strong>. '+
+    'WhatsApp no deja adjuntar archivos desde un enlace, así que el texto va puesto y '+
+    'la imagen la arrastras al chat.</div>'+
+    '<div style="white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);'+
+      'border-radius:10px;padding:10px;max-height:34vh;overflow:auto;margin-bottom:12px;'+
+      'font-size:12.5px" id="wa-texto"></div>'+
+    (tel
+      ? '<div style="color:var(--muted);margin-bottom:8px">Se abrirá el chat de '+
+        '<strong>+'+tel+'</strong>.</div><div>'+enlaces(tel)+'</div>'
+      : '<div style="color:var(--muted);margin-bottom:8px">No hay ningún teléfono guardado, '+
+        'y sin número WhatsApp rechaza el enlace. Escríbelo aquí con el código del país, '+
+        'o guárdalo en <strong>Inquilinos</strong> para no repetirlo cada mes.</div>'+
+        '<div style="display:flex;gap:8px;margin-bottom:10px">'+
+        '<input id="wa-num" placeholder="+376 800100" style="flex:1;padding:7px 10px;'+
+        'border:1px solid var(--border);border-radius:8px;background:var(--bg);color:inherit">'+
+        '<button class="btn btn-primary" id="wa-usar">Usar</button></div>'+
+        '<div id="wa-enlaces"></div>')+
+    '<div style="margin-top:12px;display:flex;gap:8px">'+
+      '<button class="btn btn-secondary" id="wa-copiar">Copiar el texto</button>'+
+      '<button class="btn btn-secondary" id="wa-cerrar">Cerrar</button></div>';
   document.body.appendChild(caja);
-  setTimeout(()=>{ const c=document.getElementById('wa-aviso'); if(c) c.remove(); }, 20000);
+  document.getElementById('wa-texto').textContent=texto;
+
+  document.getElementById('wa-cerrar').onclick=()=>caja.remove();
+  document.getElementById('wa-copiar').onclick=function(){
+    const boton=this;
+    const fin=()=>{ boton.textContent='Copiado'; setTimeout(()=>boton.textContent='Copiar el texto',1800); };
+    try{ navigator.clipboard.writeText(texto).then(fin, fin); }
+    catch(e){ fin(); }
+  };
+  const usar=document.getElementById('wa-usar');
+  if(usar) usar.onclick=function(){
+    const num=(document.getElementById('wa-num').value||'').replace(/\D/g,'');
+    if(!num){ document.getElementById('wa-num').focus(); return; }
+    document.getElementById('wa-enlaces').innerHTML=enlaces(num);
+  };
 }
 
 function getDatosFactura(){
