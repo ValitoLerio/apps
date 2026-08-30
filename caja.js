@@ -476,6 +476,16 @@ function textoDia(fecha, opciones){
    de hasta nueve cifras, y a un numero espanol de nueve le encajaba un
    376 delante: salia un numero inexistente y WhatsApp respondia "no se
    pudo abrir este enlace". Aqui ya no se adivina nada. */
+/* Ordenador: puntero fino y sin pantalla tactil. En el Mac, la
+   aplicacion de WhatsApp rechaza los enlaces wa.me con texto, asi que
+   ahi conviene ofrecer antes el navegador. */
+function enOrdenador(){
+  try{
+    return !((navigator.maxTouchPoints||0) > 1 &&
+             window.matchMedia("(pointer: coarse)").matches);
+  }catch(e){ return true; }
+}
+
 function telefonoCompleto(){
   return String(libro.ajustes.telefono||"").replace(/\D/g,"");
 }
@@ -514,21 +524,29 @@ function enviarDiaPorWhatsApp(fecha){
          con letra de maquina, y en WhatsApp se envian igualmente. */
       '<div class="parte" id="parteTexto">'+esc(texto.split("\n").filter(function(x){
          return x.trim()!=="```"; }).join("\n"))+'</div>'+
-      '<p class="nota" style="margin:10px 0 0">Si <strong>Abrir WhatsApp</strong> dice que no puede '+
-      'abrir el enlace, es cosa de la aplicación del ordenador: usa '+
-      '<strong>Abrir en el navegador</strong>, que no pasa por ella.</p>'+
+      '<p class="nota" style="margin:10px 0 0">'+(enOrdenador()
+        ? 'En el ordenador, la aplicación de WhatsApp rechaza estos enlaces '+
+          '(«no se pudo abrir este enlace»). Usa <strong>Abrir en el navegador</strong>, '+
+          'que no pasa por ella, o <strong>copia el parte</strong> y pégalo en el chat.'
+        : 'Si la aplicación dice que no puede abrir el enlace, usa '+
+          '<strong>Abrir en el navegador</strong> o copia el parte y pégalo.')+'</p>'+
     '</div>'+
+    /* En el ordenador va delante lo que funciona: copiar y el navegador.
+       wa.me se lo pasa a la aplicacion de escritorio, y esa es la que
+       responde "no se pudo abrir este enlace"; en el movil, en cambio,
+       es el camino bueno y va la primera. */
     '<div class="dlg-pie">'+
-      '<button class="btn" data-copiar>Copiar el parte</button>'+
-      /* Dos caminos distintos a proposito. wa.me se lo pasa a la
-         aplicacion del ordenador, y esa es la que a veces responde "no
-         se pudo abrir este enlace". El de web.whatsapp.com se queda en
-         el navegador y no toca la aplicacion, asi que sirve de recambio
-         cuando el primero falla. */
-      '<a class="btn suave" href="'+esc(porNavegador)+'" target="_blank" rel="noopener" '+
-      'style="text-decoration:none" data-web>Abrir en el navegador</a>'+
-      '<a class="btn wa" href="'+esc(destino)+'" target="_blank" rel="noopener" '+
-      'style="text-decoration:none" data-abrir>Abrir WhatsApp</a>'+
+      (enOrdenador()
+        ? '<a class="btn suave" href="'+esc(destino)+'" target="_blank" rel="noopener" '+
+          'style="text-decoration:none" data-abrir>Abrir la aplicación</a>'+
+          '<button class="btn" data-copiar>Copiar el parte</button>'+
+          '<a class="btn wa" href="'+esc(porNavegador)+'" target="_blank" rel="noopener" '+
+          'style="text-decoration:none" data-web>Abrir en el navegador</a>'
+        : '<button class="btn" data-copiar>Copiar el parte</button>'+
+          '<a class="btn suave" href="'+esc(porNavegador)+'" target="_blank" rel="noopener" '+
+          'style="text-decoration:none" data-web>Abrir en el navegador</a>'+
+          '<a class="btn wa" href="'+esc(destino)+'" target="_blank" rel="noopener" '+
+          'style="text-decoration:none" data-abrir>Abrir WhatsApp</a>')+
     '</div>';
   document.body.appendChild(d);
 
