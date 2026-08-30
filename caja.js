@@ -136,6 +136,9 @@ function cuentasDia(d){
   var fondo=+d.fondoCaja||0;
   var neto=r2(efectivo-gastos);
   return {
+    /* El fondo de caja son los dos sitios juntos: lo que se aparta a la
+       amarilla y lo que se deja en la registradora para el cambio. */
+    fondoTotal:r2(amarilla+fondo),
     visa:visa, efectivo:efectivo, gastos:gastos,
     ventas:r2(visa+efectivo),
     neto:neto,                    /* lo que queda tras los pagos */
@@ -246,18 +249,20 @@ function verDia(main){
     '</div>'+
 
     '<div class="tarjeta" style="margin-bottom:16px">'+
-      '<div class="tarjeta-cab"><h2>Fondo de caja</h2>'+
-        '<span class="pista">Lo que queda en efectivo, repartido</span></div>'+
+      '<div class="tarjeta-cab"><h2>Reparto del efectivo</h2>'+
+        '<span class="pista">Fondo de caja = amarilla + registradora</span></div>'+
       '<div class="tarjeta-cuerpo">'+
         '<table style="max-width:520px"><tbody>'+
           '<tr><td>Efectivo</td><td class="num">'+eur(c.efectivo)+'</td></tr>'+
           '<tr><td>− Pagos</td><td class="num" style="color:var(--malo)">'+eur(c.gastos)+'</td></tr>'+
           '<tr style="border-top:1px solid var(--linea)"><td><strong>Queda tras los pagos</strong></td>'+
             '<td class="num"><strong>'+eur(c.neto)+'</strong></td></tr>'+
-          '<tr><td>− C. amarilla</td>'+
+          '<tr><td>− Caja amarilla</td>'+
             '<td class="num" style="color:var(--amarilla)"><strong>'+eur(c.amarilla)+'</strong></td></tr>'+
-          '<tr><td>− Fondo de caja <span style="color:var(--muted);font-size:12px">(el cambio que dejas)</span></td>'+
+          '<tr><td>− Caja registradora <span style="color:var(--muted);font-size:12px">(el cambio que dejas)</span></td>'+
             '<td class="num"><strong>'+eur(c.fondo)+'</strong></td></tr>'+
+          '<tr><td style="color:var(--muted)">Fondo de caja, las dos juntas</td>'+
+            '<td class="num" style="color:var(--muted)">'+eur(c.fondoTotal)+'</td></tr>'+
           '<tr style="border-top:2px solid var(--linea)"><td><strong>Sobrante</strong></td>'+
             '<td class="num"><strong style="font-size:16px'+(c.sobrante<0?";color:var(--malo)":"")+'">'+
             eur(c.sobrante)+'</strong></td></tr>'+
@@ -312,12 +317,13 @@ function pintarFormularioDia(d){
         '<input type="number" class="grande" id="f_visa" min="0" step="0.01" value="'+esc(actual.visa)+'"></div>'+
       '<div class="campo"><label class="lbl" for="f_efec">Efectivo (€)</label>'+
         '<input type="number" class="grande" id="f_efec" min="0" step="0.01" value="'+esc(actual.efectivo)+'"></div>'+
-      '<div class="campo"><label class="lbl" for="f_amar">C. amarilla (€)</label>'+
+      '<div class="campo"><label class="lbl" for="f_amar">Caja amarilla (€)</label>'+
         '<input type="number" class="grande" id="f_amar" min="0" step="0.01" value="'+esc(actual.aAmarilla)+'"></div>'+
-      '<div class="campo"><label class="lbl" for="f_fondo">Fondo de caja (€)</label>'+
+      '<div class="campo"><label class="lbl" for="f_fondo">Caja registradora (€)</label>'+
         '<input type="number" class="grande" id="f_fondo" min="0" step="0.01" value="'+
         esc(actual.fondoCaja!=null&&actual.fondoCaja!==""?actual.fondoCaja:(libro.ajustes.fondoHabitual||""))+'"></div>'+
     '</div>'+
+    '<p class="nota" style="margin:6px 0 0" id="f_fondoTotal"></p>'+
     '<p class="nota" style="margin:16px 0 8px">Pagos hechos con dinero de la caja</p>'+
     '<div id="gastos"></div>'+
     '<button class="btn sm" id="masGasto" style="margin-top:8px">+ Añadir gasto</button>'+
@@ -342,6 +348,11 @@ function pintarFormularioDia(d){
     var visa=numero("f_visa"), efec=numero("f_efec"), g=totalG();
     var am=numero("f_amar"), fondo=numero("f_fondo");
     var neto=r2(efec-g), sobra=r2(neto-am-fondo);
+    var linea=document.getElementById("f_fondoTotal");
+    if(linea) linea.innerHTML = (am||fondo)
+      ? "Fondo de caja de hoy: <strong>"+eur(r2(am+fondo))+"</strong> — "+
+        eur(am)+" en la amarilla y "+eur(fondo)+" en la registradora."
+      : "El fondo de caja son las dos juntas: lo que apartas a la amarilla y lo que dejas de cambio.";
     document.getElementById("f_resumen").innerHTML=
       "Visas <strong>"+eur(visa)+"</strong> · "+
       "tras pagos <strong>"+eur(neto)+"</strong> · "+
@@ -947,9 +958,12 @@ function verAjustes(main){
       '<div class="tarjeta-cab"><h2>Cómo se calcula</h2></div>'+
       '<div class="tarjeta-cuerpo" style="font-size:13px;color:var(--muted);line-height:1.7">'+
         '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Sobrante</strong> = efectivo − pagos '+
-        '− c. amarilla − fondo de caja.</p>'+
-        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Fondo de caja</strong> es el cambio que '+
-        'dejas para el día siguiente; no es un resultado, lo pones tú.</p>'+
+        '− caja amarilla − caja registradora.</p>'+
+        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Fondo de caja</strong> es el dinero que '+
+        'no se retira, y está en dos sitios: la <strong style="color:var(--tinta)">caja amarilla</strong>, '+
+        'que se va guardando hasta el objetivo, y la '+
+        '<strong style="color:var(--tinta)">caja registradora</strong>, el cambio para el día siguiente. '+
+        'Los dos los pones tú; no son un resultado.</p>'+
         '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Ventas</strong> = visas + efectivo.</p>'+
         '<p style="margin:0"><strong style="color:var(--tinta)">Caja amarilla</strong> = lo apartado cada día, '+
         'más lo que metas de fuera, menos lo que saques.</p>'+
