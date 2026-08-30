@@ -1016,8 +1016,11 @@ function verAjustes(main){
           '<input id="aj_dest" value="'+esc(libro.ajustes.destinatario||"")+'" placeholder="Valeriano"></div>'+
         '<div class="campo" style="grid-column:span 2">'+
           '<label class="lbl" for="aj_tel">Teléfono con el código del país</label>'+
-          '<input id="aj_tel" class="mono" value="'+esc(libro.ajustes.telefono||"")+'" '+
-          'placeholder="+376 800100"></div>'+
+          /* type=tel e inputmode: en el movil sale el teclado de numeros y
+             el autorrelleno ofrece telefonos. Sin esto ofrecia el correo, y
+             si lo aceptas te queda una arroba donde va el numero. */
+          '<input id="aj_tel" class="mono" type="tel" inputmode="tel" autocomplete="tel" '+
+          'value="'+esc(libro.ajustes.telefono||"")+'" placeholder="+376 800100"></div>'+
       '</div>'+
       '<p class="nota" style="margin:10px 0 0" id="aj_previo"></p>'+
       '<p class="nota" style="margin:14px 0 0">Escríbelo entero, empezando por el país: '+
@@ -1083,6 +1086,17 @@ function verAjustes(main){
       probar.style.opacity = tel ? "" : ".4";
       probar.style.pointerEvents = tel ? "" : "none";
     }
+    /* Si el movil ha colado un correo o un nombre, decirlo claro: al
+       quitarle las letras quedaria un numero inventado. */
+    var escrito=valor("aj_tel");
+    if(/[a-zA-Z@]/.test(escrito)){
+      caja.innerHTML='<strong style="color:var(--malo)">Eso no es un teléfono.</strong> '+
+        'Parece que el móvil ha rellenado el campo por su cuenta. '+
+        'Borra lo que hay y escribe sólo el número, empezando por el país.';
+      if(probar){ probar.setAttribute("href","#"); probar.style.opacity=".4";
+                  probar.style.pointerEvents="none"; }
+      return;
+    }
     if(!tel){ caja.textContent="Sin número, tendrás que elegir el chat a mano cada vez."; return; }
     caja.innerHTML='Se abrirá <strong>wa.me/'+esc(tel)+'</strong>'+
       (valor("aj_dest")?' — '+esc(valor("aj_dest")):"")+
@@ -1145,6 +1159,10 @@ function verAjustes(main){
   document.getElementById("aj_guardar").addEventListener("click", function(){
     libro.ajustes.nombre=valor("aj_nom");
     libro.ajustes.objetivoAmarilla=numero("aj_obj");
+    if(/[a-zA-Z@]/.test(valor("aj_tel"))){
+      avisar("El teléfono lleva letras o una arroba. Déjalo sólo en números.", true);
+      return;
+    }
     libro.ajustes.telefono=valor("aj_tel");
     libro.ajustes.destinatario=valor("aj_dest");
     libro.ajustes.fondoHabitual=numero("aj_fondo");

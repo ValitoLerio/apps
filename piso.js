@@ -1466,7 +1466,8 @@ function ventanaWhatsApp(texto, tel, nombre){
         'y sin número WhatsApp rechaza el enlace. Escríbelo aquí con el código del país, '+
         'o guárdalo en <strong>Inquilinos</strong> para no repetirlo cada mes.</div>'+
         '<div style="display:flex;gap:8px;margin-bottom:10px">'+
-        '<input id="wa-num" placeholder="+376 800100" style="flex:1;padding:7px 10px;'+
+        '<input id="wa-num" type="tel" inputmode="tel" autocomplete="tel" '+
+        'placeholder="+376 800100" style="flex:1;padding:7px 10px;'+
         'border:1px solid var(--border);border-radius:8px;background:var(--bg);color:inherit">'+
         '<button class="btn btn-primary" id="wa-usar">Usar</button></div>'+
         '<div id="wa-enlaces"></div>')+
@@ -1485,8 +1486,17 @@ function ventanaWhatsApp(texto, tel, nombre){
   };
   const usar=document.getElementById('wa-usar');
   if(usar) usar.onclick=function(){
-    const num=(document.getElementById('wa-num').value||'').replace(/\D/g,'');
-    if(!num){ document.getElementById('wa-num').focus(); return; }
+    const campo=document.getElementById('wa-num');
+    const escrito=campo.value||'';
+    /* el movil a veces rellena el correo aqui; con letras no hay numero */
+    if(/[a-zA-Z@]/.test(escrito)){
+      document.getElementById('wa-enlaces').innerHTML=
+        '<div style="color:var(--danger)">Eso no es un teléfono. Borra lo que hay '+
+        'y escribe sólo el número, empezando por el país.</div>';
+      campo.focus(); return;
+    }
+    const num=escrito.replace(/\D/g,'');
+    if(!num){ campo.focus(); return; }
     document.getElementById('wa-enlaces').innerHTML=enlaces(num);
   };
 }
