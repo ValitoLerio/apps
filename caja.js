@@ -114,6 +114,14 @@ function confirmar(titulo, cuerpo, alAceptar, opciones){
   abrirVentana(titulo, cuerpo, function(){ alAceptar(); },
                {aceptar:opciones.aceptar||"Aceptar", malo:opciones.malo});
 }
+function contarDias(){ return (libro.dias||[]).length; }
+function plural(n, uno, varios){ return n+" "+(n===1?uno:varios); }
+/* elige la frase entera según sean uno o varios, para que concuerden
+   el verbo y el artículo */
+function conArticulo(n, uno, varios){ return n===1 ? uno : varios; }
+function contarMovimientos(){
+  return (libro.aportaciones||[]).length + (libro.retiradas||[]).length;
+}
 function valor(id){ var e=document.getElementById(id); return e?e.value.trim():""; }
 function numero(id){ var e=document.getElementById(id); return e?(+e.value||0):0; }
 
@@ -967,6 +975,31 @@ function verAjustes(main){
         '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Ventas</strong> = visas + efectivo.</p>'+
         '<p style="margin:0"><strong style="color:var(--tinta)">Caja amarilla</strong> = lo apartado cada día, '+
         'más lo que metas de fuera, menos lo que saques.</p>'+
+      '</div></div>'+
+
+    /* Zona de borrado. Va la ultima y aparte, para no tropezarse con
+       ella, y cada boton dice antes cuanto se lleva por delante. */
+    '<div class="tarjeta" style="max-width:560px;margin-top:16px;border-color:var(--malo)">'+
+      '<div class="tarjeta-cab"><h2 style="color:var(--malo)">Borrar</h2>'+
+        '<span class="pista">No tiene vuelta atrás</span></div>'+
+      '<div class="tarjeta-cuerpo">'+
+        '<p class="nota" style="margin:0 0 14px">Lo borrado se va también de GitHub, '+
+        'y no hay forma de recuperarlo desde aquí.</p>'+
+        '<div style="display:flex;flex-direction:column;gap:10px">'+
+          '<div><button class="btn malo" id="b_dias">Borrar los días</button>'+
+            '<div class="nota" style="margin-top:4px">'+
+            (contarDias()? plural(contarDias(),"cierre anotado","cierres anotados")
+                          : "no hay ningún día")+'</div></div>'+
+          '<div><button class="btn malo" id="b_amar">Borrar los movimientos de la amarilla</button>'+
+            '<div class="nota" style="margin-top:4px">'+
+            (contarMovimientos()? plural(contarMovimientos(),"entrada o salida","entradas y salidas")
+                                : "no hay movimientos")+
+            '. Lo que se apartó cada día va con los cierres.</div></div>'+
+          '<div style="border-top:1px solid var(--linea);padding-top:12px">'+
+            '<button class="btn malo fuerte" id="b_todo">Poner todo a cero</button>'+
+            '<div class="nota" style="margin-top:4px">Días y movimientos. '+
+            'Los ajustes —objetivo, teléfono, fondo habitual— se quedan.</div></div>'+
+        '</div>'+
       '</div></div>';
 
   /* Mientras escribe, le enseñamos el número tal cual lo verá WhatsApp,
@@ -991,6 +1024,54 @@ function verAjustes(main){
     var e=document.getElementById(id); if(e) e.addEventListener("input", previoDestino);
   });
   previoDestino();
+
+  document.getElementById("b_dias").addEventListener("click", function(){
+    if(!contarDias()){ avisar("No hay ningún día que borrar.", true); return; }
+    confirmar("Borrar los días",
+      '<p style="margin:0 0 10px">'+
+      conArticulo(contarDias(),"Se borra <strong>el cierre del día</strong>",
+                  "Se borran <strong>los "+contarDias()+" cierres</strong>")+
+      ', con sus visas, su efectivo y sus pagos.</p>'+
+      '<p class="nota" style="margin:0">Las entradas y salidas de la amarilla se quedan.</p>',
+      function(){
+        libro.dias=[]; guardar(); pintar(); avisar("Días borrados");
+      }, {aceptar:"Borrar los días", malo:true});
+  });
+
+  document.getElementById("b_amar").addEventListener("click", function(){
+    if(!contarMovimientos()){ avisar("No hay movimientos que borrar.", true); return; }
+    confirmar("Borrar los movimientos de la amarilla",
+      '<p style="margin:0 0 10px">'+
+      conArticulo(contarMovimientos(),"Se borra <strong>el único movimiento</strong>",
+                  "Se borran <strong>las "+contarMovimientos()+" entradas y salidas</strong>")+
+      ' que anotaste a mano.</p>'+
+      '<p class="nota" style="margin:0">Lo que se apartó cada día no está aquí: '+
+      'eso va con los cierres.</p>',
+      function(){
+        libro.aportaciones=[]; libro.retiradas=[];
+        guardar(); pintar(); avisar("Movimientos borrados");
+      }, {aceptar:"Borrar", malo:true});
+  });
+
+  /* Para el borrado entero pedimos que lo escriba: un clic de mas no
+     puede llevarse el año entero. */
+  document.getElementById("b_todo").addEventListener("click", function(){
+    abrirVentana("Poner todo a cero",
+      '<p style="margin:0 0 10px">Se van <strong>'+plural(contarDias(),"cierre","cierres")+'</strong> y '+
+      '<strong>'+plural(contarMovimientos(),"movimiento","movimientos")+'</strong> de la amarilla. '+
+      'La caja se queda como el primer día.</p>'+
+      '<p class="nota" style="margin:0 0 12px">Los ajustes se quedan como están.</p>'+
+      '<div class="campo"><label class="lbl" for="b_palabra">Escribe BORRAR para confirmarlo</label>'+
+        '<input id="b_palabra" class="mono" placeholder="BORRAR" autocomplete="off"></div>',
+      function(){
+        if(valor("b_palabra").toUpperCase()!=="BORRAR"){
+          avisar("Escribe BORRAR para confirmarlo.", true);
+          return true;   /* deja la ventana abierta */
+        }
+        libro.dias=[]; libro.aportaciones=[]; libro.retiradas=[];
+        guardar(); pintar(); avisar("Caja a cero");
+      }, {aceptar:"Poner todo a cero", malo:true});
+  });
 
   document.getElementById("aj_guardar").addEventListener("click", function(){
     libro.ajustes.nombre=valor("aj_nom");
