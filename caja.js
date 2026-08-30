@@ -136,13 +136,21 @@ function totalGastos(d){
   if((d.detalle||[]).length) return r2(d.detalle.reduce(function(s,g){ return s+(+g.importe||0); },0));
   return +d.gastos||0;
 }
+/* El sobrante lo cuenta el, no la app: es lo que hay en la mano al
+   cerrar. La cuenta se sigue haciendo, pero solo para dos cosas: sugerir
+   una cifra al anotar, y avisar si lo contado no cuadra con ella. */
+function sobranteAnotado(d){
+  return (d && d.sobrante!=null && d.sobrante!=="") ? r2(+d.sobrante) : null;
+}
 function cuentasDia(d){
-  if(!d) return {visa:0, efectivo:0, gastos:0, ventas:0, neto:0,
-                 amarilla:0, fondo:0, sobrante:0};
+  if(!d) return {visa:0, efectivo:0, gastos:0, ventas:0, neto:0, fondoTotal:0,
+                 amarilla:0, fondo:0, sobrante:0, sobranteCuenta:0, descuadre:0};
   var visa=+d.visa||0, efectivo=+d.efectivo||0;
   var gastos=totalGastos(d), amarilla=+d.aAmarilla||0;
   var fondo=+d.fondoCaja||0;
   var neto=r2(efectivo-gastos);
+  var cuenta=r2(neto-amarilla-fondo);
+  var anotado=sobranteAnotado(d);
   return {
     /* El fondo de caja son los dos sitios juntos: lo que se aparta a la
        amarilla y lo que se deja en la registradora para el cambio. */
@@ -152,7 +160,9 @@ function cuentasDia(d){
     neto:neto,                    /* lo que queda tras los pagos */
     amarilla:amarilla,
     fondo:fondo,                  /* lo que se deja de cambio */
-    sobrante:r2(neto-amarilla-fondo)
+    sobrante:(anotado!=null?anotado:cuenta),
+    sobranteCuenta:cuenta,        /* lo que saldria por la cuenta */
+    descuadre:(anotado!=null?r2(anotado-cuenta):0)
   };
 }
 function diasDe(prefijo){
@@ -161,7 +171,8 @@ function diasDe(prefijo){
 }
 function sumaCuentas(dias){
   var t={visa:0, efectivo:0, gastos:0, ventas:0, neto:0,
-         amarilla:0, fondo:0, sobrante:0, dias:dias.length};
+         amarilla:0, fondo:0, sobrante:0, sobranteCuenta:0, descuadre:0,
+         dias:dias.length};
   dias.forEach(function(d){
     var c=cuentasDia(d);
     Object.keys(t).forEach(function(k){ if(k!=="dias") t[k]=r2(t[k]+c[k]); });
@@ -271,7 +282,15 @@ function verDia(main){
             '<td class="num"><strong>'+eur(c.fondo)+'</strong></td></tr>'+
           '<tr><td style="color:var(--muted)">Fondo de caja, las dos juntas</td>'+
             '<td class="num" style="color:var(--muted)">'+eur(c.fondoTotal)+'</td></tr>'+
-          '<tr style="border-top:2px solid var(--linea)"><td><strong>Sobrante</strong></td>'+
+          (Math.abs(c.descuadre)>=0.005
+            ? '<tr><td style="color:var(--muted)">Por la cuenta saldrían</td>'+
+              '<td class="num" style="color:var(--muted)">'+eur(c.sobranteCuenta)+'</td></tr>'+
+              '<tr><td style="color:var(--malo)">'+(c.descuadre>0?"Sobran":"Faltan")+' respecto a la cuenta</td>'+
+              '<td class="num" style="color:var(--malo)">'+eur(Math.abs(c.descuadre))+'</td></tr>'
+            : "")+
+          '<tr style="border-top:2px solid var(--linea)"><td><strong>Sobrante'+
+            (sobranteAnotado(d)!=null?' <span style="color:var(--muted);font-size:12px">(contado)</span>':"")+
+            '</strong></td>'+
             '<td class="num"><strong style="font-size:16px'+(c.sobrante<0?";color:var(--malo)":"")+'">'+
             eur(c.sobrante)+'</strong></td></tr>'+
         '</tbody></table>'+
@@ -330,7 +349,12 @@ function pintarFormularioDia(d){
       '<div class="campo"><label class="lbl" for="f_fondo">Caja registradora (€)</label>'+
         '<input type="number" class="grande" id="f_fondo" min="0" step="0.01" value="'+
         esc(actual.fondoCaja!=null&&actual.fondoCaja!==""?actual.fondoCaja:(libro.ajustes.fondoHabitual||""))+'"></div>'+
+      '<div class="campo"><label class="lbl" for="f_sobra">Sobrante (€)</label>'+
+        '<input type="number" class="grande" id="f_sobra" step="0.01" value="'+
+        esc(actual.sobrante!=null&&actual.sobrante!==""?actual.sobrante:"")+'" '+
+        'placeholder="lo que cuentes"></div>'+
     '</div>'+
+    '<p class="nota" style="margin:6px 0 0" id="f_cuadre"></p>'+
     '<p class="nota" style="margin:6px 0 0" id="f_fondoTotal"></p>'+
     '<p class="nota" style="margin:16px 0 8px">Pagos hechos con dinero de la caja</p>'+
     '<div id="gastos"></div>'+
@@ -355,7 +379,29 @@ function pintarFormularioDia(d){
   function refrescar(){
     var visa=numero("f_visa"), efec=numero("f_efec"), g=totalG();
     var am=numero("f_amar"), fondo=numero("f_fondo");
-    var neto=r2(efec-g), sobra=r2(neto-am-fondo);
+    var neto=r2(efec-g), cuenta=r2(neto-am-fondo);
+    var campoSobra=document.getElementById("f_sobra");
+    var puesto=(campoSobra && campoSobra.value!=="") ? r2(+campoSobra.value||0) : null;
+    var sobra=(puesto!=null?puesto:cuenta);
+    var cuadre=document.getElementById("f_cuadre");
+    if(cuadre){
+      if(puesto==null){
+        cuadre.innerHTML='Cuenta el dinero y ponlo tú. Por la cuenta saldrían '+
+          '<strong>'+eur(cuenta)+'</strong>. '+
+          '<button type="button" class="btn sm suave" id="f_usarCuenta" '+
+          'style="padding:2px 8px">Usar esa cifra</button>';
+        var usar=document.getElementById("f_usarCuenta");
+        if(usar) usar.addEventListener("click", function(){
+          campoSobra.value=cuenta; refrescar();
+        });
+      } else {
+        var dif=r2(puesto-cuenta);
+        cuadre.innerHTML = Math.abs(dif)<0.005
+          ? 'Cuadra con la cuenta.'
+          : '<strong style="color:var(--malo)">'+(dif>0?"Sobran ":"Faltan ")+eur(Math.abs(dif))+
+            '</strong> respecto a la cuenta, que daría '+eur(cuenta)+'.';
+      }
+    }
     var linea=document.getElementById("f_fondoTotal");
     if(linea) linea.innerHTML = (am||fondo)
       ? "Fondo de caja de hoy: <strong>"+eur(r2(am+fondo))+"</strong> — "+
@@ -381,7 +427,7 @@ function pintarFormularioDia(d){
   (actual.detalle||[]).forEach(añadirGasto);
   if(!(actual.detalle||[]).length) añadirGasto();
   document.getElementById("masGasto").addEventListener("click", function(){ añadirGasto(); refrescar(); });
-  ["f_visa","f_efec","f_amar","f_fondo"].forEach(function(id){
+  ["f_visa","f_efec","f_amar","f_fondo","f_sobra"].forEach(function(id){
     document.getElementById(id).addEventListener("input", refrescar);
   });
   refrescar();
@@ -399,6 +445,8 @@ function pintarFormularioDia(d){
     registro.detalle=detalle;
     registro.gastos=r2(detalle.reduce(function(s,g){ return s+g.importe; },0));
     registro.aAmarilla=numero("f_amar");
+    var sob=document.getElementById("f_sobra");
+    registro.sobrante = (sob && sob.value!=="") ? r2(+sob.value||0) : null;
     registro.fondoCaja=numero("f_fondo");
     registro.nota=valor("f_nota");
     if(!d) libro.dias.push(registro);
@@ -458,6 +506,11 @@ function textoDia(fecha, opciones){
     }
   });
   if(alineado) l.push("```");
+  if(Math.abs(c.descuadre)>=0.005){
+    l.push("");
+    l.push((c.descuadre>0?"Sobran ":"Faltan ")+eur(Math.abs(c.descuadre))+
+           " respecto a la cuenta ("+eur(c.sobranteCuenta)+")");
+  }
   if(c.gastos>0 && (d.detalle||[]).length){
     l.push("");
     l.push("Pagos:");
@@ -1049,8 +1102,10 @@ function verAjustes(main){
     '<div class="tarjeta" style="max-width:560px;margin-top:16px">'+
       '<div class="tarjeta-cab"><h2>Cómo se calcula</h2></div>'+
       '<div class="tarjeta-cuerpo" style="font-size:13px;color:var(--muted);line-height:1.7">'+
-        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Sobrante</strong> = efectivo − pagos '+
-        '− caja amarilla − caja registradora.</p>'+
+        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Sobrante</strong> lo pones tú: '+
+        'es el dinero que cuentas al cerrar. La app calcula aparte lo que debería salir '+
+        '—efectivo − pagos − caja amarilla − caja registradora— y sólo lo usa para '+
+        'sugerírtelo y para avisarte si lo contado no cuadra.</p>'+
         '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Fondo de caja</strong> es el dinero que '+
         'no se retira, y está en dos sitios: la <strong style="color:var(--tinta)">caja amarilla</strong>, '+
         'que se va guardando hasta el objetivo, y la '+
