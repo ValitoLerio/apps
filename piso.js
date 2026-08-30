@@ -1392,15 +1392,21 @@ function whatsappRecibo(mes){
   try{ blob=imagenDeRecibo(m); }
   catch(err){ alert('No he podido generar la factura: '+err.message); return; }
 
-  // 1) Movil: compartir la imagen directamente, con el texto dentro
-  try{
-    const file=new File([blob], nombre, {type:'image/png'});
-    if(navigator.canShare && navigator.share && navigator.canShare({files:[file]})){
-      navigator.share({files:[file], text:texto, title:'Recibo '+fmtMes(mes)})
-        .catch(()=>{});   /* si lo cancela, no pasa nada */
-      return;
-    }
-  }catch(err){ /* seguimos por el otro camino */ }
+  // 1) Movil: compartir la imagen directamente, con el texto dentro.
+  //    Solo en aparatos de dedo. El Mac tambien dice que sabe compartir
+  //    archivos, pero lo que abre es el menu de compartir del sistema,
+  //    donde no esta WhatsApp: se acaba en el panel de Extensiones sin
+  //    haber enviado nada.
+  if(esAparatoDeDedo()){
+    try{
+      const file=new File([blob], nombre, {type:'image/png'});
+      if(navigator.canShare && navigator.share && navigator.canShare({files:[file]})){
+        navigator.share({files:[file], text:texto, title:'Recibo '+fmtMes(mes)})
+          .catch(()=>{ ventanaWhatsApp(texto, tel, nombre); });
+        return;
+      }
+    }catch(err){ /* seguimos por el otro camino */ }
+  }
 
   // 2) Ordenador: bajamos la imagen y abrimos una ventana con el texto y
   //    los enlaces. Antes se abria el chat de golpe, y cuando no habia
@@ -1414,6 +1420,15 @@ function whatsappRecibo(mes){
   setTimeout(()=>URL.revokeObjectURL(url), 4000);
 
   ventanaWhatsApp(texto, tel, nombre);
+}
+
+/* Movil o tableta: pantalla de dedo. En el Mac el puntero es fino
+   aunque el navegador presuma de saber compartir archivos. */
+function esAparatoDeDedo(){
+  try{
+    return (navigator.maxTouchPoints||0) > 1 &&
+           window.matchMedia('(pointer: coarse)').matches;
+  }catch(e){ return false; }
 }
 
 /* La ventana de envio: el texto a la vista, los enlaces cuando hay
