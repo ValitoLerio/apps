@@ -700,7 +700,7 @@ function verAnio(main){
       '</select></div>')+
     '<div class="cifras">'+
       '<div class="cifra"><div class="k">Ventas del año</div><div class="v acento">'+eur(total.ventas)+'</div>'+
-        '<div class="n">'+total.dias+' días</div></div>'+
+        '<div class="n">'+plural(total.dias,"día","días")+'</div></div>'+
       '<div class="cifra"><div class="k">Visa</div><div class="v">'+eur(total.visa)+'</div></div>'+
       '<div class="cifra"><div class="k">Efectivo</div><div class="v">'+eur(total.efectivo)+'</div></div>'+
       '<div class="cifra"><div class="k">Pagos</div><div class="v malo">'+eur(total.gastos)+'</div></div>'+
@@ -774,6 +774,7 @@ function verAmarilla(main){
     cabecera("Caja amarilla",
       "El fondo que se va guardando cada día. Aquí ves cuánto llevas, de dónde salió y lo que se ha sacado.",
       '<button class="btn" id="am_objetivo">Cambiar objetivo</button>'+
+      '<button class="btn malo" id="am_cero">Poner a cero</button>'+
       '<button class="btn" id="am_sacar">Sacar dinero</button>'+
       '<button class="btn fuerte" id="am_meter">Meter dinero</button>')+
 
@@ -801,17 +802,18 @@ function verAmarilla(main){
       '<div class="cifra"><div class="k">Guardado este mes</div><div class="v amarilla">'+eur(esteMes)+'</div>'+
         '<div class="n">'+esc(mesLargo(ui.mes))+'</div></div>'+
       '<div class="cifra"><div class="k">De los cierres</div><div class="v">'+eur(amarillaDeCaja())+'</div>'+
-        '<div class="n">'+deCierres.length+' días</div></div>'+
+        '<div class="n">'+plural(deCierres.length,"día","días")+'</div></div>'+
       '<div class="cifra"><div class="k">Metido de fuera</div><div class="v">'+eur(amarillaDeFuera())+'</div>'+
-        '<div class="n">'+deFuera.length+' aportaciones</div></div>'+
+        '<div class="n">'+plural(deFuera.length,"aportación","aportaciones")+'</div></div>'+
       '<div class="cifra"><div class="k">Retiradas</div><div class="v malo">'+eur(amarillaSacado())+'</div>'+
-        '<div class="n">'+salidas.length+' salidas</div></div>'+
+        '<div class="n">'+plural(salidas.length,"salida","salidas")+'</div></div>'+
     '</div>'+
 
     '<div class="tarjeta"><div class="tarjeta-cab"><h2>Movimientos</h2></div>'+
       '<div class="tabla-caja" id="tablaAmarilla"></div></div>';
 
   document.getElementById("am_objetivo").addEventListener("click", cambiarObjetivo);
+  document.getElementById("am_cero").addEventListener("click", ponerAmarillaACero);
   document.getElementById("am_sacar").addEventListener("click", sacarDeAmarilla);
   document.getElementById("am_meter").addEventListener("click", meterEnAmarilla);
 
@@ -895,6 +897,55 @@ function meterEnAmarilla(){
       avisar(restante>0 ? "Metidos "+eur(imp)+". Faltan "+eur(restante)+"."
                         : "Metidos "+eur(imp)+". Fondo completo.");
     }, {aceptar:"Meter"});
+}
+
+/* Dejar la amarilla a cero se puede entender de dos maneras, y no dan
+   el mismo resultado, asi que se elige:
+
+     - sacando el dinero: queda una retirada por el saldo, y los cierres
+       de los dias anteriores se quedan como estaban;
+     - empezando de cero: se borra tambien lo que cada dia aparto, y eso
+       cambia el sobrante de aquellos dias, porque ese dinero pasa a
+       contarse como sobrante. */
+function ponerAmarillaACero(){
+  var guardado=amarillaGuardado();
+  if(guardado===0 && !contarMovimientos()){
+    avisar("La amarilla ya está a cero.", true); return;
+  }
+  abrirVentana("Poner la caja amarilla a cero",
+    '<p style="margin:0 0 12px">Ahora hay <strong>'+eur(guardado)+'</strong>: '+
+    eur(amarillaDeCaja())+' apartados en los cierres y '+eur(amarillaDeFuera())+
+    ' metidos de fuera, menos '+eur(amarillaSacado())+' ya retirados.</p>'+
+    '<label style="display:flex;gap:10px;align-items:flex-start;padding:10px;'+
+      'border:1px solid var(--linea);border-radius:10px;cursor:pointer">'+
+      '<input type="radio" name="modo_cero" value="sacar" checked style="margin-top:3px">'+
+      '<span><strong>He sacado el dinero</strong><br>'+
+      '<span class="nota">Queda anotada una retirada de '+eur(guardado)+'. '+
+      'Los cierres de cada día no se tocan y el historial sigue entero.</span></span></label>'+
+    '<label style="display:flex;gap:10px;align-items:flex-start;padding:10px;margin-top:8px;'+
+      'border:1px solid var(--malo);border-radius:10px;cursor:pointer">'+
+      '<input type="radio" name="modo_cero" value="limpiar" style="margin-top:3px">'+
+      '<span><strong>Empezar de cero, sin historial</strong><br>'+
+      '<span class="nota">Se borran las entradas y salidas, y se pone a cero lo que '+
+      'apartaste cada día. <strong>Ojo:</strong> eso sube el sobrante de esos días, '+
+      'porque ese dinero pasa a contar como sobrante.</span></span></label>',
+    function(){
+      var elegido=document.querySelector('input[name="modo_cero"]:checked');
+      var modo=elegido?elegido.value:"sacar";
+      if(modo==="sacar"){
+        if(guardado<=0){ avisar("No hay nada que sacar.", true); return true; }
+        libro.retiradas=libro.retiradas||[];
+        libro.retiradas.push({id:uid(), fecha:hoyISO(), importe:guardado,
+                              motivo:"Vaciado de la caja amarilla"});
+        guardar(); pintar();
+        avisar("Amarilla a cero. Anotada la retirada de "+eur(guardado));
+      } else {
+        libro.aportaciones=[]; libro.retiradas=[];
+        (libro.dias||[]).forEach(function(d){ d.aAmarilla=0; });
+        guardar(); pintar();
+        avisar("Amarilla a cero, sin historial");
+      }
+    }, {aceptar:"Poner a cero", malo:true});
 }
 
 function sacarDeAmarilla(){
