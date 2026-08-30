@@ -1352,15 +1352,22 @@ function telefonoInquilino(){
   const vivos=(inquilinos||[]).filter(i=>!i.salida||new Date(i.salida)>=new Date());
   const con=(vivos.length?vivos:(inquilinos||[])).filter(i=>i.tel&&i.tel.trim());
   if(!con.length) return '';
-  const bruto=con[0].tel.replace(/[^\d+]/g,'');
-  if(!bruto) return '';
-  if(bruto.charAt(0)==='+') return bruto.slice(1).replace(/\D/g,'');
-  const d=bruto.replace(/\D/g,'');
-  /* Solo se le pone el prefijo a un numero de seis cifras, que es lo que
-     mide uno de Andorra. Antes se lo ponia a cualquiera de hasta nueve, y
-     a un numero espanol le encajaba un 376 delante: salia un numero que
-     no existe. */
-  return d.length===6 ? '376'+d : d;
+  return soloNumero(con[0].tel);
+}
+
+/* Deja el numero como lo quiere WhatsApp: solo cifras y empezando por el
+   pais. El 00 de toda la vida y el + son lo mismo, pero WhatsApp solo
+   entiende la version pelada; con 00376341459 no hay ningun numero. Y al
+   prefijo solo se recurre con seis cifras, que es lo que mide uno de
+   Andorra: antes se lo ponia a cualquiera de hasta nueve, y a un numero
+   espanol le encajaba un 376 delante. */
+function soloNumero(bruto){
+  let t=String(bruto||'').replace(/[^\d+]/g,'');
+  if(!t) return '';
+  if(t.charAt(0)==='+') return t.slice(1).replace(/\D/g,'');
+  t=t.replace(/\D/g,'');
+  if(t.indexOf('00')===0 && t.length>4) return t.slice(2);
+  return t.length===6 ? '376'+t : t;
 }
 
 function textoWhatsApp(m){
@@ -1495,7 +1502,7 @@ function ventanaWhatsApp(texto, tel, nombre){
         'y escribe sólo el número, empezando por el país.</div>';
       campo.focus(); return;
     }
-    const num=escrito.replace(/\D/g,'');
+    const num=soloNumero(escrito);
     if(!num){ campo.focus(); return; }
     document.getElementById('wa-enlaces').innerHTML=enlaces(num);
   };

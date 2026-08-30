@@ -486,8 +486,20 @@ function enOrdenador(){
   }catch(e){ return true; }
 }
 
+/* Deja el numero como lo quiere WhatsApp: solo cifras, empezando por el
+   codigo del pais. El 00 de toda la vida y el + son la misma cosa, pero
+   WhatsApp solo entiende la version sin nada: con 00376341459 delante no
+   hay ningun numero, y sale el aviso de que no se puede abrir. */
+function soloNumero(bruto){
+  var t=String(bruto||"").replace(/[^\d+]/g,"");
+  if(!t) return "";
+  if(t.charAt(0)==="+") return t.slice(1).replace(/\D/g,"");
+  t=t.replace(/\D/g,"");
+  if(t.indexOf("00")===0 && t.length>4) return t.slice(2);
+  return t;
+}
 function telefonoCompleto(){
-  return String(libro.ajustes.telefono||"").replace(/\D/g,"");
+  return soloNumero(libro.ajustes.telefono);
 }
 function telefonoBonito(){
   var tel=telefonoCompleto();
@@ -1079,7 +1091,7 @@ function verAjustes(main){
      el problema es el número o el parte. */
   function previoDestino(){
     var caja=document.getElementById("aj_previo"); if(!caja) return;
-    var tel=valor("aj_tel").replace(/\D/g,"");
+    var tel=soloNumero(valor("aj_tel"));
     var probar=document.getElementById("aj_probar");
     if(probar){
       probar.setAttribute("href", tel ? "https://wa.me/"+tel : "#");
@@ -1098,9 +1110,12 @@ function verAjustes(main){
       return;
     }
     if(!tel){ caja.textContent="Sin número, tendrás que elegir el chat a mano cada vez."; return; }
+    var crudo=valor("aj_tel").replace(/\D/g,"");
     caja.innerHTML='Se abrirá <strong>wa.me/'+esc(tel)+'</strong>'+
       (valor("aj_dest")?' — '+esc(valor("aj_dest")):"")+
       '. Pulsa <strong>Probar el número</strong>: si abre el chat correcto, ya está.'+
+      (crudo!==tel ? ' <strong>Le he quitado el 00 del principio</strong>, que es lo mismo '+
+                     'que el + y WhatsApp no lo admite.' : "")+
       (tel.length<8 ? ' <strong>Parece corto: ¿le falta el país?</strong>' : "");
   }
   ["aj_tel","aj_dest"].forEach(function(id){
@@ -1187,9 +1202,21 @@ function unificarTelefono(){
   if(tel) guardar();
 }
 
+/* Un numero apuntado con el 00 delante no le vale a WhatsApp. Se limpia
+   una vez, para no tener que acordarse de arreglarlo a mano. */
+function quitarCeros(){
+  var a=libro.ajustes; if(!a) return;
+  var bueno=soloNumero(a.telefono);
+  if(bueno && String(a.telefono||"").replace(/\D/g,"")!==bueno){
+    a.telefono="+"+bueno;
+    guardar();
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════ */
 cargar();
 unificarTelefono();
+quitarCeros();
 pintar();
 
 })();
