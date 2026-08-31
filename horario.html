@@ -379,7 +379,7 @@
 
 
 
-<script src="sync.js?v=202608311056"></script>
+<script src="sync.js?v=202608311106"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -387,7 +387,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202608311056';
+    s.src = 'horario.js?v=202608311106';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

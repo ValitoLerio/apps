@@ -119,6 +119,7 @@ function confirmar(titulo, cuerpo, alAceptar, opciones){
 function valor(id){ var e=document.getElementById(id); return e?e.value.trim():""; }
 function numero(id){ var e=document.getElementById(id); return e?(+e.value||0):0; }
 function marcado(id){ var e=document.getElementById(id); return e?!!e.checked:false; }
+function plural(n, uno, varios){ return n+" "+(n===1?uno:varios); }
 
 /* ══════════════════════════════════════════════════════════════
    CÁLCULOS COMPARTIDOS
@@ -441,6 +442,41 @@ function costeLista(superId){
   return {total:r2(total), sinPrecio:sinPrecio};
 }
 
+/* Dónde está más barato cada producto. Devuelve null cuando no tiene
+   precio en ningún sitio: eso no es que sea gratis, es que falta el
+   dato, y hay que decirlo aparte. */
+function dondeMasBarato(productoId){
+  var mejor=null;
+  (libro.supermercados||[]).forEach(function(s){
+    var pr=precioDe(productoId, s.id);
+    if(!pr) return;
+    var precio=+pr.precio||0;
+    if(!mejor || precio<mejor.precio) mejor={superId:s.id, nombre:s.nombre, precio:precio};
+  });
+  return mejor;
+}
+
+/* La lista repartida: cada cosa en la tienda donde sale más barata. */
+function repartoDeLaLista(){
+  var grupos={}, sinPrecio=[], total=0;
+  laLista().forEach(function(it){
+    if(it.hecho) return;
+    if(!it.productoId){ sinPrecio.push({item:it, motivo:"escrito a mano"}); return; }
+    var mejor=dondeMasBarato(it.productoId);
+    if(!mejor){ sinPrecio.push({item:it, motivo:"sin precio en ningún sitio"}); return; }
+    var cant=+it.cantidad||1;
+    var importe=r2(cant*mejor.precio);
+    total=r2(total+importe);
+    var g=grupos[mejor.superId] || (grupos[mejor.superId]=
+      {superId:mejor.superId, nombre:mejor.nombre, lineas:[], total:0});
+    g.lineas.push({item:it, precio:mejor.precio, cantidad:cant, importe:importe});
+    g.total=r2(g.total+importe);
+  });
+  var lista=Object.keys(grupos).map(function(k){ return grupos[k]; })
+                  .sort(function(a,b){ return b.total-a.total; });
+  return {tiendas:lista, sinPrecio:sinPrecio, total:total};
+}
+
 function pintarLista(){
   var caja=document.getElementById("listaCompra"); if(!caja) return;
   var items=laLista();
@@ -496,7 +532,10 @@ function pintarLista(){
             ? '<p class="nota" style="margin:8px 0 0">'+avisos.join(" ")+'</p>' : "";
         })()+
         '</div>'
-      : "");
+      : "")+
+    '<div id="repartoCompra"></div>';
+
+  pintarReparto();
 
   document.getElementById("l_nuevo").addEventListener("click", function(){ editarItem(null); });
   var limpiar=document.getElementById("l_limpiar");
@@ -528,6 +567,86 @@ function pintarLista(){
       guardar(); pintarLista(); avisar("Quitado de la lista");
     });
   });
+}
+
+/* La lista repartida por tiendas, con lo que se ahorra frente a hacerla
+   entera en el sitio más barato. Ir a tres sitios cuesta tiempo y
+   gasolina, así que la cifra del ahorro se enseña para que decida él. */
+function pintarReparto(){
+  var caja=document.getElementById("repartoCompra"); if(!caja) return;
+  var rep=repartoDeLaLista();
+  if(!rep.tiendas.length && !rep.sinPrecio.length){ caja.innerHTML=""; return; }
+
+  /* Lo mismo comprado todo en una sola tienda, la más barata posible */
+  var enteroMasBarato=null;
+  (libro.supermercados||[]).forEach(function(s){
+    var c=costeLista(s.id);
+    if(c.sinPrecio) return;   /* sin todos los precios no es comparable */
+    if(!enteroMasBarato || c.total<enteroMasBarato.total)
+      enteroMasBarato={nombre:s.nombre, total:c.total};
+  });
+  var ahorro = enteroMasBarato ? r2(enteroMasBarato.total-rep.total) : null;
+
+  caja.innerHTML=
+    '<div style="border-top:1px solid var(--linea);margin-top:14px;padding-top:14px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;'+
+      'flex-wrap:wrap;margin-bottom:12px">'+
+      '<h3 style="font-size:15px;margin:0">Comprando cada cosa donde está más barata</h3>'+
+      '<strong style="font-size:17px">'+eur(rep.total)+'</strong>'+
+    '</div>'+
+
+    (rep.tiendas.length>1
+      ? (ahorro==null
+          /* Sin todos los precios en un mismo sitio, la comparación seria
+             mentira: se dice en vez de callarla. */
+          ? '<p class="nota" style="margin:0 0 12px">No puedo decirte cuánto te ahorras '+
+            'repartiéndola: a ningún supermercado le tienes anotados todos los precios de '+
+            'la lista, así que no hay con qué compararla.</p>'
+          : (ahorro>0.004
+              ? '<p class="nota" style="margin:0 0 12px">Repartiéndola en '+
+                plural(rep.tiendas.length,"tienda","tiendas")+' te ahorras <strong>'+eur(ahorro)+
+                '</strong> frente a hacerla entera en '+esc(enteroMasBarato.nombre)+' ('+
+                eur(enteroMasBarato.total)+'). Tú verás si compensa el viaje.</p>'
+              : '<p class="nota" style="margin:0 0 12px">No te ahorras nada repartiéndola: '+
+                'sale igual haciéndola entera en '+esc(enteroMasBarato.nombre)+'.</p>'))
+      : "")+
+
+    rep.tiendas.map(function(g){
+      return '<div class="tarjeta" style="margin-bottom:10px;box-shadow:none">'+
+        '<div class="tarjeta-cab" style="padding:9px 13px">'+
+          '<h2 style="font-size:14px">'+esc(g.nombre)+'</h2>'+
+          '<strong>'+eur(g.total)+'</strong></div>'+
+        '<div style="padding:4px 13px 10px">'+
+          g.lineas.map(function(l){
+            return '<div style="display:flex;justify-content:space-between;gap:10px;'+
+              'padding:5px 0;border-bottom:1px solid var(--linea-suave);font-size:13px">'+
+              '<span>'+esc(nombreProducto(l.item.productoId))+
+                (l.cantidad>1?' <span style="color:var(--muted)">× '+l.cantidad+'</span>':"")+'</span>'+
+              '<span class="num" style="white-space:nowrap">'+eur(l.importe)+
+                (l.cantidad>1?' <span style="color:var(--muted);font-size:12px">('+
+                  eur(l.precio)+' c/u)</span>':"")+'</span></div>';
+          }).join("")+
+        '</div></div>';
+    }).join("")+
+
+    (rep.sinPrecio.length
+      ? '<div class="tarjeta" style="margin-bottom:10px;box-shadow:none;border-style:dashed">'+
+        '<div class="tarjeta-cab" style="padding:9px 13px">'+
+          '<h2 style="font-size:14px;color:var(--muted)">Sin sitio asignado</h2>'+
+          '<span class="pista">'+plural(rep.sinPrecio.length,"producto","productos")+'</span></div>'+
+        '<div style="padding:4px 13px 10px">'+
+          rep.sinPrecio.map(function(x){
+            var nombre = x.item.productoId ? nombreProducto(x.item.productoId) : (x.item.texto||"");
+            return '<div style="display:flex;justify-content:space-between;gap:10px;'+
+              'padding:5px 0;border-bottom:1px solid var(--linea-suave);font-size:13px">'+
+              '<span>'+esc(nombre)+'</span>'+
+              '<span style="color:var(--muted);font-size:12px">'+esc(x.motivo)+'</span></div>';
+          }).join("")+
+          '<p class="nota" style="margin:10px 0 0">Estos no entran en el total. '+
+          'Pon su precio en el comparador y se colocarán solos en la tienda que toque.</p>'+
+        '</div></div>'
+      : "")+
+    '</div>';
 }
 
 function filaLista(it){
