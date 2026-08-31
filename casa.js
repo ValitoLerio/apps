@@ -352,7 +352,11 @@ function nombreSuper(id){
 }
 function nombreProducto(id){
   var p=(libro.productos||[]).filter(function(x){ return x.id===id; })[0];
-  return p?p.nombre:"(sin producto)";
+  if(!p) return "(sin producto)";
+  /* Con la marca y el formato al lado, dos leches distintas dejan de
+     parecer la misma en los desplegables. */
+  var cola=[p.marca, p.formato].filter(function(x){ return !!x; }).join(", ");
+  return cola ? p.nombre+" · "+cola : p.nombre;
 }
 function precioDe(productoId, superId){
   var lista=(libro.precios||[]).filter(function(x){ return x.productoId===productoId && x.superId===superId; });
@@ -416,7 +420,22 @@ function pintarComparador(){
     return;
   }
   var html='<table><thead><tr><th>Producto</th>'+
-    supers.map(function(s){ return '<th class="num">'+esc(s.nombre)+'</th>'; }).join("")+
+    supers.map(function(s){
+      /* El nombre del supermercado abre su ficha; la ✕ lo borra. Antes
+         no había forma de tocarlos una vez creados, y un duplicado se
+         quedaba ahí para siempre. */
+      return '<th class="num"><div style="display:flex;gap:4px;align-items:center;'+
+        'justify-content:flex-end">'+
+        '<button class="btn suave sm" data-sedit="'+esc(s.id)+'" '+
+        'style="padding:1px 5px;font-size:inherit;letter-spacing:inherit;text-transform:inherit" '+
+        'title="Editar '+esc(s.nombre)+'">'+esc(s.nombre)+'</button>'+
+        '<button class="btn suave sm malo" data-sdel="'+esc(s.id)+'" '+
+        'style="padding:1px 5px" title="Borrar '+esc(s.nombre)+'">✕</button>'+
+        '</div>'+
+        (s.sitio?'<div style="font-weight:400;text-transform:none;letter-spacing:0;'+
+          'color:var(--muted);font-size:10.5px;margin-top:2px">'+esc(s.sitio)+'</div>':"")+
+        '</th>';
+    }).join("")+
     '<th class="num">Más barato</th><th></th></tr></thead><tbody>';
 
   productos.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre,"es"); }).forEach(function(p){
@@ -424,7 +443,9 @@ function pintarComparador(){
     var conPrecio=valores.filter(function(v){ return v!=null; });
     var minimo=conPrecio.length?Math.min.apply(null,conPrecio):null;
     html+="<tr><td><strong>"+esc(p.nombre)+"</strong>"+
-          (p.formato?' <span style="color:var(--muted);font-size:12px">'+esc(p.formato)+'</span>':"")+"</td>";
+          (p.marca?' <span style="color:var(--muted);font-size:12px">'+esc(p.marca)+'</span>':"")+
+          (p.formato?'<br><span style="color:var(--muted);font-size:12px">'+esc(p.formato)+'</span>':"")+
+          "</td>";
     supers.forEach(function(s,i){
       var v=valores[i];
       var esMin=(v!=null && minimo!=null && Math.abs(v-minimo)<0.001 && conPrecio.length>1);
@@ -451,6 +472,12 @@ function pintarComparador(){
   });
   caja.querySelectorAll("[data-pdel]").forEach(function(b){
     b.addEventListener("click", function(e){ e.stopPropagation(); borrarProducto(b.getAttribute("data-pdel")); });
+  });
+  caja.querySelectorAll("[data-sedit]").forEach(function(b){
+    b.addEventListener("click", function(e){ e.stopPropagation(); editarSuper(b.getAttribute("data-sedit")); });
+  });
+  caja.querySelectorAll("[data-sdel]").forEach(function(b){
+    b.addEventListener("click", function(e){ e.stopPropagation(); borrarSuper(b.getAttribute("data-sdel")); });
   });
 }
 
@@ -488,21 +515,59 @@ function editarSuper(id){
     });
 }
 
+/* Borrar un supermercado se lleva por delante los precios que tenga
+   anotados, y deja huérfanas las compras hechas allí. Se dice cuántas
+   son antes de aceptar, porque el importe de esas compras no cambia
+   pero se queda sin sitio al que apuntar. */
+function borrarSuper(id){
+  var s=(libro.supermercados||[]).filter(function(x){ return x.id===id; })[0];
+  if(!s) return;
+  var precios=(libro.precios||[]).filter(function(x){ return x.superId===id; }).length;
+  var compras=(libro.compras||[]).filter(function(x){ return x.superId===id; }).length;
+
+  confirmar("Borrar "+s.nombre,
+    '<p style="margin:0 0 10px">Se va la columna de <strong>'+esc(s.nombre)+'</strong> del '+
+    'comparador'+(precios?', con '+precios+' '+(precios===1?"precio anotado":"precios anotados"):
+                          ', que no tiene ningún precio anotado')+'.</p>'+
+    (compras
+      ? '<p class="nota" style="margin:0">Hay '+compras+' '+
+        (compras===1?"compra hecha":"compras hechas")+' allí. No se borran ni cambian de importe, '+
+        'pero se quedarán sin supermercado.</p>'
+      : '<p class="nota" style="margin:0">No hay ninguna compra anotada en ese supermercado.</p>'),
+    function(){
+      libro.supermercados=(libro.supermercados||[]).filter(function(x){ return x.id!==id; });
+      libro.precios=(libro.precios||[]).filter(function(x){ return x.superId!==id; });
+      guardar(); pintar(); avisar(s.nombre+" borrado");
+    }, {aceptar:"Borrar", malo:true});
+}
+
 function editarProducto(id){
   var p=id?(libro.productos||[]).filter(function(x){return x.id===id;})[0]
-          :{id:uid(), nombre:"", formato:""};
+          :{id:uid(), nombre:"", marca:"", formato:""};
+  /* Las marcas que ya haya escrito, para no volver a teclearlas */
+  var marcas={};
+  (libro.productos||[]).forEach(function(x){ if(x.marca) marcas[x.marca]=1; });
+
   abrirVentana(id?"Editar producto":"Nuevo producto",
     '<div class="rejilla">'+
       '<div class="campo"><label class="lbl" for="p_nom">Producto</label>'+
         '<input id="p_nom" value="'+esc(p.nombre)+'" placeholder="Leche entera"></div>'+
+      '<div class="campo"><label class="lbl" for="p_marca">Marca</label>'+
+        '<input id="p_marca" list="listaMarcas" value="'+esc(p.marca||"")+'" '+
+        'placeholder="Central Lechera, blanca…">'+
+        '<datalist id="listaMarcas">'+
+          Object.keys(marcas).sort().map(function(m){ return '<option value="'+esc(m)+'">'; }).join("")+
+        '</datalist></div>'+
       '<div class="campo"><label class="lbl" for="p_form">Formato</label>'+
         '<input id="p_form" value="'+esc(p.formato||"")+'" placeholder="1 L, pack de 6…"></div>'+
     '</div>'+
-    '<p class="nota" style="margin-top:12px">El formato importa para comparar: 1 litro contra 1 litro.</p>',
+    '<p class="nota" style="margin-top:12px">La marca y el formato son lo que hace justa la '+
+    'comparación: un litro de la misma marca contra un litro de la misma marca. '+
+    'Si comparas marcas distintas del mismo producto, dales de alta por separado.</p>',
     function(){
       var n=valor("p_nom");
       if(!n){ avisar("Ponle nombre al producto.", true); return true; }
-      p.nombre=n; p.formato=valor("p_form");
+      p.nombre=n; p.marca=valor("p_marca"); p.formato=valor("p_form");
       if(!id) libro.productos.push(p);
       guardar(); pintar(); avisar(id?"Producto actualizado":"Producto añadido");
     });
@@ -667,7 +732,9 @@ function verMedico(main){
     return;
   }
   caja.innerHTML='<table><thead><tr><th>Fecha</th><th>Quién</th><th>Médico</th><th>Motivo</th>'+
-    '<th class="num">Consulta</th><th class="num">Medicinas</th><th class="num">CASS</th>'+
+    '<th class="num">Consulta</th><th class="num">Medicinas<br>'+
+    '<span style="font-weight:400;text-transform:none;letter-spacing:0">y su recibo</span></th>'+
+    '<th class="num">CASS</th>'+
     '<th class="num">Seguro</th><th class="num">Te queda</th><th>Estado</th><th></th></tr></thead><tbody>'+
     visitas.map(function(v){
       var queda=pendienteMedico(v);
@@ -677,7 +744,11 @@ function verMedico(main){
         "<td>"+esc(v.medico||"—")+"</td>"+
         "<td>"+esc(v.motivo||"—")+"</td>"+
         '<td class="num">'+eur(v.consulta)+"</td>"+
-        '<td class="num">'+eur(v.medicinas)+"</td>"+
+        '<td class="num">'+eur(v.medicinas)+
+          (v.recibo?'<div class="mono" style="color:var(--muted);font-size:11px;'+
+            'font-weight:400">'+esc(v.recibo)+'</div>':"")+
+          (v.farmacia?'<div style="color:var(--muted);font-size:11px;font-weight:400">'+
+            esc(v.farmacia)+'</div>':"")+"</td>"+
         '<td class="num">'+eur(v.cass)+"</td>"+
         '<td class="num">'+eur(v.seguro)+"</td>"+
         '<td class="num"><strong>'+eur(queda)+"</strong></td>"+
@@ -727,6 +798,16 @@ function editarVisita(id){
       '<div class="campo"><label class="lbl" for="v_medi">Medicinas (€)</label>'+
         '<input type="number" id="v_medi" min="0" step="0.01" value="'+esc(v.medicinas||"")+'"></div>'+
     '</div>'+
+    /* El número del recibo de la farmacia es lo que piden luego para
+       devolverte el dinero, así que se guarda con la visita. */
+    '<div class="rejilla" style="margin-top:10px">'+
+      '<div class="campo"><label class="lbl" for="v_farmacia">Farmacia</label>'+
+        '<input id="v_farmacia" value="'+esc(v.farmacia||"")+'" placeholder="Farmàcia Pyrénées…"></div>'+
+      '<div class="campo"><label class="lbl" for="v_recibo">Nº de recibo</label>'+
+        '<input id="v_recibo" class="mono" value="'+esc(v.recibo||"")+'" placeholder="A-2026/0134"></div>'+
+    '</div>'+
+    '<p class="nota" style="margin:8px 0 0">El número del recibo es lo que te van a pedir '+
+    'para devolverte lo de las medicinas.</p>'+
     '<p class="nota" style="margin:16px 0 8px">Lo que te devuelven</p>'+
     '<div class="rejilla3">'+
       '<div class="campo"><label class="lbl" for="v_cass">CASS (€)</label>'+
@@ -745,6 +826,8 @@ function editarVisita(id){
       v.motivo=valor("v_motivo");
       v.consulta=numero("v_cons");
       v.medicinas=numero("v_medi");
+      v.farmacia=valor("v_farmacia");
+      v.recibo=valor("v_recibo");
       v.cass=numero("v_cass");
       v.seguro=numero("v_seg");
       v.cobrado=document.getElementById("v_cobrado").checked;
