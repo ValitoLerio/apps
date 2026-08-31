@@ -149,7 +149,10 @@ function cuentasDia(d){
   var gastos=totalGastos(d), amarilla=+d.aAmarilla||0;
   var fondo=+d.fondoCaja||0;
   var neto=r2(efectivo-gastos);
-  var cuenta=r2(neto-amarilla-fondo);
+  /* El sobrante es lo que entra en la amarilla por encima del objetivo:
+     cuando ya están los 1500, lo demás sobra. Se sigue pudiendo escribir
+     a mano, y entonces manda lo escrito. */
+  var cuenta=r2(Math.max(0, amarilla-objetivoAmarilla()));
   var anotado=sobranteAnotado(d);
   return {
     /* El fondo de caja son los dos sitios juntos: lo que se aparta a la
@@ -180,22 +183,42 @@ function sumaCuentas(dias){
   return t;
 }
 
-/* La amarilla: lo apartado en los cierres, más lo que se mete de fuera,
-   menos lo que se saca. */
-function amarillaDeCaja(){
-  return r2((libro.dias||[]).reduce(function(s,d){ return s+(+d.aAmarilla||0); },0));
+/* La caja amarilla es un recuento, no una suma: cada día se anota lo que
+   hay dentro, igual que en la hoja de papel. Antes la app iba sumando lo
+   de todos los días y salía una cifra que no existía en ninguna parte.
+
+   Por eso lo que hay guardado es, sencillamente, lo último que se anotó. */
+function ultimoDiaConAmarilla(){
+  var candidatos=(libro.dias||[]).filter(function(d){
+    return d.aAmarilla!=null && d.aAmarilla!=="";
+  }).sort(function(a,b){ return a.fecha.localeCompare(b.fecha); });
+  return candidatos.length ? candidatos[candidatos.length-1] : null;
 }
+function amarillaGuardado(){
+  var d=ultimoDiaConAmarilla();
+  return d ? r2(+d.aAmarilla||0) : 0;
+}
+function fechaAmarilla(){
+  var d=ultimoDiaConAmarilla();
+  return d ? d.fecha : null;
+}
+/* Las entradas y salidas de fuera se siguen apuntando como historial, pero
+   ya no mueven el saldo: el saldo es el recuento del día. */
 function amarillaDeFuera(){
   return r2((libro.aportaciones||[]).reduce(function(s,a){ return s+(+a.importe||0); },0));
 }
 function amarillaSacado(){
   return r2((libro.retiradas||[]).reduce(function(s,r){ return s+(+r.importe||0); },0));
 }
-function amarillaGuardado(){
-  return r2(amarillaDeCaja()+amarillaDeFuera()-amarillaSacado());
-}
 function objetivoAmarilla(){ return +libro.ajustes.objetivoAmarilla || 0; }
 function faltaAmarilla(){ return r2(Math.max(0, objetivoAmarilla()-amarillaGuardado())); }
+
+/* Lo que sobra de la amarilla: lo que entra una vez que ya están los
+   1500. Es la última columna de la hoja. */
+function sobraAmarilla(d){
+  var am=(d && d.aAmarilla!=null && d.aAmarilla!=="") ? r2(+d.aAmarilla||0) : 0;
+  return r2(Math.max(0, am-objetivoAmarilla()));
+}
 
 /* ══════════════════════════════════════════════════════════════
    ARMAZÓN
@@ -268,35 +291,35 @@ function verDia(main){
     '</div>'+
 
     '<div class="tarjeta" style="margin-bottom:16px">'+
-      '<div class="tarjeta-cab"><h2>Reparto del efectivo</h2>'+
-        '<span class="pista">Fondo de caja = amarilla + registradora</span></div>'+
+      '<div class="tarjeta-cab"><h2>El cierre del día</h2>'+
+        '<span class="pista">Los recuentos los pones tú; la app no los inventa</span></div>'+
       '<div class="tarjeta-cuerpo">'+
         '<table style="max-width:520px"><tbody>'+
           '<tr><td>Efectivo</td><td class="num">'+eur(c.efectivo)+'</td></tr>'+
           '<tr><td>− Pagos</td><td class="num" style="color:var(--malo)">'+eur(c.gastos)+'</td></tr>'+
           '<tr style="border-top:1px solid var(--linea)"><td><strong>Queda tras los pagos</strong></td>'+
             '<td class="num"><strong>'+eur(c.neto)+'</strong></td></tr>'+
-          '<tr><td>− Caja amarilla</td>'+
+          '<tr><td>Caja amarilla <span style="color:var(--muted);font-size:12px">(lo que hay dentro)</span></td>'+
             '<td class="num" style="color:var(--amarilla)"><strong>'+eur(c.amarilla)+'</strong></td></tr>'+
-          '<tr><td>− Caja registradora <span style="color:var(--muted);font-size:12px">(el cambio que dejas)</span></td>'+
+          '<tr><td>Caja registradora <span style="color:var(--muted);font-size:12px">(el cambio que dejas)</span></td>'+
             '<td class="num"><strong>'+eur(c.fondo)+'</strong></td></tr>'+
           '<tr><td style="color:var(--muted)">Fondo de caja, las dos juntas</td>'+
             '<td class="num" style="color:var(--muted)">'+eur(c.fondoTotal)+'</td></tr>'+
           (Math.abs(c.descuadre)>=0.005
-            ? '<tr><td style="color:var(--muted)">Por la cuenta saldrían</td>'+
-              '<td class="num" style="color:var(--muted)">'+eur(c.sobranteCuenta)+'</td></tr>'+
-              '<tr><td style="color:var(--malo)">'+(c.descuadre>0?"Sobran":"Faltan")+' respecto a la cuenta</td>'+
-              '<td class="num" style="color:var(--malo)">'+eur(Math.abs(c.descuadre))+'</td></tr>'
+            ? '<tr><td style="color:var(--muted)">Por encima de '+eur(objetivoAmarilla())+' saldrían</td>'+
+              '<td class="num" style="color:var(--muted)">'+eur(c.sobranteCuenta)+'</td></tr>'
             : "")+
-          '<tr style="border-top:2px solid var(--linea)"><td><strong>Sobrante'+
-            (sobranteAnotado(d)!=null?' <span style="color:var(--muted);font-size:12px">(contado)</span>':"")+
+          '<tr style="border-top:2px solid var(--linea)"><td><strong>Sobra c. amarilla'+
+            (sobranteAnotado(d)!=null?' <span style="color:var(--muted);font-size:12px">(anotado)</span>':"")+
             '</strong></td>'+
             '<td class="num"><strong style="font-size:16px'+(c.sobrante<0?";color:var(--malo)":"")+'">'+
             eur(c.sobrante)+'</strong></td></tr>'+
         '</tbody></table>'+
-        (c.sobrante<0?'<div class="aviso-caja" style="margin:14px 0 0;background:var(--malo-suave);'+
-          'border-color:var(--malo);color:var(--malo)">Falta dinero: entre la amarilla y el fondo de caja '+
-          'estás apartando más de lo que queda tras los pagos.</div>':"")+
+        (c.amarilla>0 && objetivoAmarilla()>0 && c.amarilla<objetivoAmarilla()
+          ? '<div class="nota" style="margin:14px 0 0">A la amarilla le faltan '+
+            eur(r2(objetivoAmarilla()-c.amarilla))+' para llegar a '+eur(objetivoAmarilla())+
+            ', así que ese día no sobra nada.</div>'
+          : "")+
       '</div></div>'+
 
     '<div class="tarjeta" style="margin-bottom:16px">'+
@@ -349,10 +372,10 @@ function pintarFormularioDia(d){
       '<div class="campo"><label class="lbl" for="f_fondo">Caja registradora (€)</label>'+
         '<input type="number" class="grande" id="f_fondo" min="0" step="0.01" value="'+
         esc(actual.fondoCaja!=null&&actual.fondoCaja!==""?actual.fondoCaja:(libro.ajustes.fondoHabitual||""))+'"></div>'+
-      '<div class="campo"><label class="lbl" for="f_sobra">Sobrante (€)</label>'+
+      '<div class="campo"><label class="lbl" for="f_sobra">Sobra c. amarilla (€)</label>'+
         '<input type="number" class="grande" id="f_sobra" step="0.01" value="'+
         esc(actual.sobrante!=null&&actual.sobrante!==""?actual.sobrante:"")+'" '+
-        'placeholder="lo que cuentes"></div>'+
+        'placeholder="0,00"></div>'+
     '</div>'+
     '<p class="nota" style="margin:6px 0 0" id="f_cuadre"></p>'+
     '<p class="nota" style="margin:6px 0 0" id="f_fondoTotal"></p>'+
@@ -379,17 +402,22 @@ function pintarFormularioDia(d){
   function refrescar(){
     var visa=numero("f_visa"), efec=numero("f_efec"), g=totalG();
     var am=numero("f_amar"), fondo=numero("f_fondo");
-    var neto=r2(efec-g), cuenta=r2(neto-am-fondo);
+    var neto=r2(efec-g), cuenta=r2(Math.max(0, am-objetivoAmarilla()));
     var campoSobra=document.getElementById("f_sobra");
     var puesto=(campoSobra && campoSobra.value!=="") ? r2(+campoSobra.value||0) : null;
     var sobra=(puesto!=null?puesto:cuenta);
     var cuadre=document.getElementById("f_cuadre");
     if(cuadre){
+      var objetivo=objetivoAmarilla();
       if(puesto==null){
-        cuadre.innerHTML='Cuenta el dinero y ponlo tú. Por la cuenta saldrían '+
-          '<strong>'+eur(cuenta)+'</strong>. '+
-          '<button type="button" class="btn sm suave" id="f_usarCuenta" '+
-          'style="padding:2px 8px">Usar esa cifra</button>';
+        cuadre.innerHTML = cuenta>0
+          ? 'La amarilla pasa de '+eur(objetivo)+', así que sobran <strong>'+eur(cuenta)+'</strong>. '+
+            '<button type="button" class="btn sm suave" id="f_usarCuenta" '+
+            'style="padding:2px 8px">Usar esa cifra</button>'
+          : (objetivo>0
+              ? 'Todavía no llega a '+eur(objetivo)+', así que no sobra nada. '+
+                'Si sobró, escríbelo tú.'
+              : 'Ponle un objetivo a la amarilla en su pestaña y aquí te diré cuánto sobra.');
         var usar=document.getElementById("f_usarCuenta");
         if(usar) usar.addEventListener("click", function(){
           campoSobra.value=cuenta; refrescar();
@@ -397,9 +425,10 @@ function pintarFormularioDia(d){
       } else {
         var dif=r2(puesto-cuenta);
         cuadre.innerHTML = Math.abs(dif)<0.005
-          ? 'Cuadra con la cuenta.'
-          : '<strong style="color:var(--malo)">'+(dif>0?"Sobran ":"Faltan ")+eur(Math.abs(dif))+
-            '</strong> respecto a la cuenta, que daría '+eur(cuenta)+'.';
+          ? (cuenta>0 ? 'Cuadra: es lo que pasa de '+eur(objetivo)+'.'
+                      : 'Anotado a mano; por el objetivo no sobraría nada.')
+          : '<strong style="color:var(--aviso)">'+eur(puesto)+'</strong>, cuando por encima de '+
+            eur(objetivo)+' saldrían '+eur(cuenta)+'.';
       }
     }
     var linea=document.getElementById("f_fondoTotal");
@@ -410,7 +439,7 @@ function pintarFormularioDia(d){
     document.getElementById("f_resumen").innerHTML=
       "Visas <strong>"+eur(visa)+"</strong> · "+
       "tras pagos <strong>"+eur(neto)+"</strong> · "+
-      "sobrante <strong"+(sobra<0?' style="color:var(--malo)"':"")+">"+eur(sobra)+"</strong>";
+      "sobra amarilla <strong>"+eur(sobra)+"</strong>";
   }
   function añadirGasto(g){
     g=g||{concepto:"", importe:""};
@@ -479,7 +508,7 @@ function textoDia(fecha, opciones){
     ["Pagos",       c.gastos],
     ["C. amarilla", c.amarilla],
     ["Fondo caja",  c.fondo],
-    ["Sobrante",    c.sobrante]
+    ["Sobra c. am.", c.sobrante]
   ];
   var anchoTexto=Math.max.apply(null, lineas.map(function(x){ return x[0].length; }));
   var anchoImporte=Math.max.apply(null, lineas.map(function(x){ return eur(x[1]).length; }));
@@ -506,11 +535,6 @@ function textoDia(fecha, opciones){
     }
   });
   if(alineado) l.push("```");
-  if(Math.abs(c.descuadre)>=0.005){
-    l.push("");
-    l.push((c.descuadre>0?"Sobran ":"Faltan ")+eur(Math.abs(c.descuadre))+
-           " respecto a la cuenta ("+eur(c.sobranteCuenta)+")");
-  }
   if(c.gastos>0 && (d.detalle||[]).length){
     l.push("");
     l.push("Pagos:");
@@ -707,10 +731,12 @@ function verMes(main){
         '<div class="n">'+(t.ventas>0?num(t.efectivo/t.ventas*100,0)+"%":"—")+'</div></div>'+
       '<div class="cifra"><div class="k">Pagos</div><div class="v malo">'+eur(t.gastos)+'</div>'+
         '<div class="n">pagados de caja</div></div>'+
-      '<div class="cifra"><div class="k">C. amarilla</div><div class="v amarilla">'+eur(t.amarilla)+'</div>'+
-        '<div class="n">guardado este mes</div></div>'+
-      '<div class="cifra"><div class="k">Sobrante</div><div class="v">'+eur(t.sobrante)+'</div>'+
-        '<div class="n">tras repartir</div></div>'+
+      '<div class="cifra"><div class="k">C. amarilla</div><div class="v amarilla">'+
+        eur(amarillaGuardado())+'</div>'+
+        '<div class="n">'+(fechaAmarilla()?"último recuento, "+esc(dmy(fechaAmarilla())):"sin recuentos")+
+        '</div></div>'+
+      '<div class="cifra"><div class="k">Sobra amarilla</div><div class="v">'+eur(t.sobrante)+'</div>'+
+        '<div class="n">lo que pasó de '+eur(objetivoAmarilla())+'</div></div>'+
     '</div>'+
     '<div class="tarjeta"><div class="tarjeta-cab"><h2>Días</h2>'+
       '<span class="pista">Pulsa un día para abrirlo</span></div>'+
@@ -728,7 +754,7 @@ function verMes(main){
   }
   caja.innerHTML='<table><thead><tr><th>Día</th><th class="num">Visas</th><th class="num">Efectivo</th>'+
     '<th class="num">Pagos</th><th class="num">C. amarilla</th><th class="num">Fondo caja</th>'+
-    '<th class="num">Sobrante</th><th class="num">Ventas</th><th>Nota</th></tr></thead><tbody>'+
+    '<th class="num">Sobra am.</th><th class="num">Ventas</th><th>Nota</th></tr></thead><tbody>'+
     dias.map(function(d){
       var c=cuentasDia(d);
       var esHoy=(d.fecha===hoyISO());
@@ -741,14 +767,18 @@ function verMes(main){
         '<td class="num"'+(c.amarilla>0?' style="color:var(--amarilla);font-weight:600"':"")+">"+
           (c.amarilla>0?eur(c.amarilla):"—")+"</td>"+
         '<td class="num">'+(c.fondo>0?eur(c.fondo):"—")+"</td>"+
-        '<td class="num"'+(c.sobrante<0?' style="color:var(--malo)"':"")+"><strong>"+eur(c.sobrante)+"</strong></td>"+
+        '<td class="num"><strong>'+eur(c.sobrante)+"</strong></td>"+
         '<td class="num">'+eur(c.ventas)+"</td>"+
         '<td style="font-size:12.5px;color:var(--muted)">'+esc(d.nota||"")+"</td></tr>";
     }).join("")+
     '</tbody><tfoot><tr><td>'+t.dias+' días</td>'+
       '<td class="num">'+eur(t.visa)+'</td><td class="num">'+eur(t.efectivo)+'</td>'+
-      '<td class="num">'+eur(t.gastos)+'</td><td class="num">'+eur(t.amarilla)+'</td>'+
-      '<td class="num">'+eur(t.fondo)+'</td><td class="num">'+eur(t.sobrante)+'</td>'+
+      /* La amarilla y el fondo son recuentos: sumar los de todos los días
+         daría una cifra que no existe en ninguna parte. */
+      '<td class="num">'+eur(t.gastos)+'</td>'+
+      '<td class="num" style="color:var(--muted)">—</td>'+
+      '<td class="num" style="color:var(--muted)">—</td>'+
+      '<td class="num">'+eur(t.sobrante)+'</td>'+
       '<td class="num">'+eur(t.ventas)+'</td><td></td></tr></tfoot></table>';
 
   caja.querySelectorAll("[data-dia]").forEach(function(tr){
@@ -787,8 +817,10 @@ function verAnio(main){
       '<div class="cifra"><div class="k">Visa</div><div class="v">'+eur(total.visa)+'</div></div>'+
       '<div class="cifra"><div class="k">Efectivo</div><div class="v">'+eur(total.efectivo)+'</div></div>'+
       '<div class="cifra"><div class="k">Pagos</div><div class="v malo">'+eur(total.gastos)+'</div></div>'+
-      '<div class="cifra"><div class="k">C. amarilla</div><div class="v amarilla">'+eur(total.amarilla)+'</div></div>'+
-      '<div class="cifra"><div class="k">Sobrante</div><div class="v">'+eur(total.sobrante)+'</div></div>'+
+      '<div class="cifra"><div class="k">C. amarilla</div><div class="v amarilla">'+
+        eur(amarillaGuardado())+'</div>'+
+        '<div class="n">último recuento</div></div>'+
+      '<div class="cifra"><div class="k">Sobra amarilla</div><div class="v">'+eur(total.sobrante)+'</div></div>'+
       '<div class="cifra"><div class="k">Media por día</div>'+
         '<div class="v">'+eur(total.dias>0?r2(total.ventas/total.dias):0)+'</div>'+
         '<div class="n">'+(mejorMes&&mejorMes.t.ventas>0?"mejor: "+MESES[+mejorMes.ym.split("-")[1]-1]:"")+'</div></div>'+
@@ -821,7 +853,7 @@ function verAnio(main){
     '</tbody><tfoot><tr><td>Total</td><td class="num">'+total.dias+'</td>'+
     '<td class="num">'+eur(total.visa)+'</td><td class="num">'+eur(total.efectivo)+'</td>'+
     '<td class="num">'+eur(total.ventas)+'</td><td class="num">'+eur(total.gastos)+'</td>'+
-    '<td class="num">'+eur(total.amarilla)+'</td><td></td></tr></tfoot></table>';
+    '<td class="num" style="color:var(--muted)">—</td><td></td></tr></tfoot></table>';
 
   document.querySelectorAll("#tablaAnio [data-mes]").forEach(function(tr){
     tr.addEventListener("click", function(){
@@ -835,9 +867,13 @@ function verAnio(main){
    ══════════════════════════════════════════════════════════════ */
 function verAmarilla(main){
   var guardado=amarillaGuardado(), objetivo=objetivoAmarilla(), falta=faltaAmarilla();
-  var deCierres=(libro.dias||[]).filter(function(d){ return (+d.aAmarilla||0)>0; })
-    .map(function(d){ return {fecha:d.fecha, tipo:"entrada", origen:"cierre",
-                              importe:+d.aAmarilla, motivo:"Cierre del día"}; });
+  /* Cada cierre es un recuento de lo que había ese día, no una entrada:
+     por eso se enseña como nivel y no se suma con los demás. */
+  var deCierres=(libro.dias||[])
+    .filter(function(d){ return d.aAmarilla!=null && d.aAmarilla!==""; })
+    .map(function(d){ return {fecha:d.fecha, tipo:"nivel", origen:"cierre",
+                              importe:+d.aAmarilla||0, motivo:"Recuento del día",
+                              sobra:sobraAmarilla(d)}; });
   var deFuera=(libro.aportaciones||[]).map(function(a){
     return {id:a.id, fecha:a.fecha, tipo:"entrada", origen:"fuera",
             importe:+a.importe||0, motivo:a.motivo||"Aportación"};
@@ -846,16 +882,20 @@ function verAmarilla(main){
     return {id:r.id, fecha:r.fecha, tipo:"salida", origen:"salida",
             importe:+r.importe||0, motivo:r.motivo||""};
   });
-  var entradas=deCierres.concat(deFuera);
-  var movimientos=entradas.concat(salidas)
+  var movimientos=deCierres.concat(deFuera).concat(salidas)
     .sort(function(a,b){ return (b.fecha||"").localeCompare(a.fecha||""); });
 
-  var esteMes=r2(entradas.filter(function(a){ return a.fecha.slice(0,7)===ui.mes; })
-                         .reduce(function(s,a){ return s+a.importe; },0));
+  /* Lo que ha sobrado este mes: la suma de lo que entró por encima del
+     objetivo, que es lo único de la amarilla que sí se acumula. */
+  var sobraMes=r2((libro.dias||[])
+    .filter(function(d){ return (d.fecha||"").slice(0,7)===ui.mes; })
+    .reduce(function(s,d){ return s+sobraAmarilla(d); },0));
+  var cuando=fechaAmarilla();
 
   main.innerHTML=
     cabecera("Caja amarilla",
-      "El fondo que se va guardando cada día. Aquí ves cuánto llevas, de dónde salió y lo que se ha sacado.",
+      "Lo que hay dentro lo cuentas tú y lo anotas en el cierre de cada día. "+
+      "Aquí ves el último recuento y todo lo que ha ido pasando.",
       '<button class="btn" id="am_objetivo">Cambiar objetivo</button>'+
       '<button class="btn malo" id="am_cero">Poner a cero</button>'+
       '<button class="btn" id="am_sacar">Sacar dinero</button>'+
@@ -863,7 +903,7 @@ function verAmarilla(main){
 
     '<div class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cuerpo">'+
       '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:14px">'+
-        '<div><div class="lbl">Hay guardado</div>'+
+        '<div><div class="lbl">'+(cuando?"Último recuento · "+esc(dmy(cuando)):"Hay guardado")+'</div>'+
           '<div style="font-size:38px;font-weight:600;color:var(--amarilla);'+
           'font-variant-numeric:tabular-nums;line-height:1.1">'+eur(guardado)+'</div></div>'+
         '<div style="text-align:right">'+
@@ -882,14 +922,14 @@ function verAmarilla(main){
     '</div></div>'+
 
     '<div class="cifras">'+
-      '<div class="cifra"><div class="k">Guardado este mes</div><div class="v amarilla">'+eur(esteMes)+'</div>'+
-        '<div class="n">'+esc(mesLargo(ui.mes))+'</div></div>'+
-      '<div class="cifra"><div class="k">De los cierres</div><div class="v">'+eur(amarillaDeCaja())+'</div>'+
-        '<div class="n">'+plural(deCierres.length,"día","días")+'</div></div>'+
+      '<div class="cifra"><div class="k">Ha sobrado este mes</div><div class="v amarilla">'+eur(sobraMes)+'</div>'+
+        '<div class="n">'+esc(mesLargo(ui.mes))+', por encima de '+eur(objetivo)+'</div></div>'+
+      '<div class="cifra"><div class="k">Días con recuento</div><div class="v">'+deCierres.length+'</div>'+
+        '<div class="n">anotados en los cierres</div></div>'+
       '<div class="cifra"><div class="k">Metido de fuera</div><div class="v">'+eur(amarillaDeFuera())+'</div>'+
-        '<div class="n">'+plural(deFuera.length,"aportación","aportaciones")+'</div></div>'+
+        '<div class="n">'+plural(deFuera.length,"apunte","apuntes")+', sólo como registro</div></div>'+
       '<div class="cifra"><div class="k">Retiradas</div><div class="v malo">'+eur(amarillaSacado())+'</div>'+
-        '<div class="n">'+plural(salidas.length,"salida","salidas")+'</div></div>'+
+        '<div class="n">'+plural(salidas.length,"apunte","apuntes")+', sólo como registro</div></div>'+
     '</div>'+
 
     '<div class="tarjeta"><div class="tarjeta-cab"><h2>Movimientos</h2></div>'+
@@ -904,17 +944,18 @@ function verAmarilla(main){
   caja.innerHTML = !movimientos.length
     ? '<div class="vacio"><strong>Todavía no hay movimientos</strong>'+
       'Cada día que guardes algo en el cierre, aparecerá aquí.</div>'
-    : '<table><thead><tr><th>Fecha</th><th>Concepto</th><th>Origen</th><th class="num">Entra</th>'+
-      '<th class="num">Sale</th><th></th></tr></thead><tbody>'+
+    : '<table><thead><tr><th>Fecha</th><th>Concepto</th><th>Qué es</th><th class="num">Hay dentro</th>'+
+      '<th class="num">Sobra</th><th></th></tr></thead><tbody>'+
       movimientos.slice(0,60).map(function(m){
-        var origen = m.origen==="cierre" ? '<span class="chapa neutra">De la caja</span>'
-                   : m.origen==="fuera"  ? '<span class="chapa amarilla">De fuera</span>'
-                   :                       '<span class="chapa malo">Salida</span>';
-        return "<tr><td>"+esc(dmy(m.fecha))+"</td><td>"+esc(m.motivo)+"</td><td>"+origen+"</td>"+
-          '<td class="num" style="color:var(--amarilla)">'+(m.tipo==="entrada"?eur(m.importe):"—")+"</td>"+
-          '<td class="num" style="color:var(--malo)">'+(m.tipo==="salida"?eur(m.importe):"—")+"</td>"+
+        var quees = m.origen==="cierre" ? '<span class="chapa amarilla">Recuento</span>'
+                  : m.origen==="fuera"  ? '<span class="chapa neutra">Metido de fuera</span>'
+                  :                       '<span class="chapa malo">Sacado</span>';
+        return "<tr><td>"+esc(dmy(m.fecha))+"</td><td>"+esc(m.motivo)+"</td><td>"+quees+"</td>"+
+          '<td class="num"'+(m.tipo==="nivel"?' style="color:var(--amarilla)"':' style="color:var(--muted)"')+
+            ">"+(m.tipo==="nivel"?"<strong>"+eur(m.importe)+"</strong>":eur(m.importe))+"</td>"+
+          '<td class="num">'+(m.tipo==="nivel" && m.sobra>0 ? eur(m.sobra) : "—")+"</td>"+
           "<td>"+(m.origen==="cierre"
-            ? '<span style="color:var(--muted);font-size:12px">del día '+esc(dmy(m.fecha))+'</span>'
+            ? '<span style="color:var(--muted);font-size:12px">en el cierre</span>'
             : '<div class="acciones-fila"><button class="btn suave sm malo" data-mdel="'+m.origen+'|'+m.id+'">Borrar</button></div>')+
           "</td></tr>";
       }).join("")+"</tbody></table>";
@@ -950,8 +991,9 @@ function cambiarObjetivo(){
 function meterEnAmarilla(){
   var guardado=amarillaGuardado(), falta=faltaAmarilla();
   abrirVentana("Meter dinero en la caja amarilla",
-    '<p class="nota">Para reponer con dinero que <strong>no sale de la caja del día</strong>. '+
-    'No cambia ningún cierre: solo suma al fondo.</p>'+
+    '<p class="nota">Para dejar constancia de una reposición con dinero que '+
+    '<strong>no sale de la caja del día</strong>. Queda apuntada aquí, pero el saldo de la '+
+    'amarilla sale del recuento que anotes en el cierre: acuérdate de subirlo allí.</p>'+
     (falta>0
       ? '<div class="aviso-caja" style="background:var(--amarilla-suave);border-color:var(--amarilla-linea);'+
         'color:var(--amarilla)">Ahora hay '+eur(guardado)+'. Faltan <strong>'+eur(falta)+
@@ -982,60 +1024,49 @@ function meterEnAmarilla(){
     }, {aceptar:"Meter"});
 }
 
-/* Dejar la amarilla a cero se puede entender de dos maneras, y no dan
-   el mismo resultado, asi que se elige:
-
-     - sacando el dinero: queda una retirada por el saldo, y los cierres
-       de los dias anteriores se quedan como estaban;
-     - empezando de cero: se borra tambien lo que cada dia aparto, y eso
-       cambia el sobrante de aquellos dias, porque ese dinero pasa a
-       contarse como sobrante. */
+/* Poner la amarilla a cero es, sencillamente, anotar un recuento de 0 €
+   hoy: como la caja amarilla es lo que se cuenta cada día, dejarla vacía
+   es un recuento más. La retirada queda apuntada al lado como registro
+   de adónde fue el dinero. */
 function ponerAmarillaACero(){
   var guardado=amarillaGuardado();
-  if(guardado===0 && !contarMovimientos()){
-    avisar("La amarilla ya está a cero.", true); return;
-  }
+  if(guardado<=0){ avisar("El último recuento ya es de 0 €.", true); return; }
+
   abrirVentana("Poner la caja amarilla a cero",
-    '<p style="margin:0 0 12px">Ahora hay <strong>'+eur(guardado)+'</strong>: '+
-    eur(amarillaDeCaja())+' apartados en los cierres y '+eur(amarillaDeFuera())+
-    ' metidos de fuera, menos '+eur(amarillaSacado())+' ya retirados.</p>'+
-    '<label style="display:flex;gap:10px;align-items:flex-start;padding:10px;'+
-      'border:1px solid var(--linea);border-radius:10px;cursor:pointer">'+
-      '<input type="radio" name="modo_cero" value="sacar" checked style="margin-top:3px">'+
-      '<span><strong>He sacado el dinero</strong><br>'+
-      '<span class="nota">Queda anotada una retirada de '+eur(guardado)+'. '+
-      'Los cierres de cada día no se tocan y el historial sigue entero.</span></span></label>'+
-    '<label style="display:flex;gap:10px;align-items:flex-start;padding:10px;margin-top:8px;'+
-      'border:1px solid var(--malo);border-radius:10px;cursor:pointer">'+
-      '<input type="radio" name="modo_cero" value="limpiar" style="margin-top:3px">'+
-      '<span><strong>Empezar de cero, sin historial</strong><br>'+
-      '<span class="nota">Se borran las entradas y salidas, y se pone a cero lo que '+
-      'apartaste cada día. <strong>Ojo:</strong> eso sube el sobrante de esos días, '+
-      'porque ese dinero pasa a contar como sobrante.</span></span></label>',
+    '<p style="margin:0 0 12px">El último recuento, del '+esc(dmy(fechaAmarilla()))+
+    ', es de <strong>'+eur(guardado)+'</strong>. Se anota un recuento de '+
+    '<strong>0 €</strong> con fecha de hoy y la amarilla queda vacía.</p>'+
+    '<div class="campo" style="margin-bottom:12px">'+
+      '<label class="lbl" for="c_motivo">Adónde ha ido el dinero</label>'+
+      '<input id="c_motivo" value="Vaciado de la caja amarilla" '+
+      'placeholder="Ingreso en el banco, se lo lleva Juan…"></div>'+
+    '<label style="display:flex;gap:8px;align-items:center;cursor:pointer">'+
+      '<input type="checkbox" id="c_apunte" style="width:auto" checked>'+
+      '<span>Dejarlo apuntado como retirada de '+eur(guardado)+'</span></label>'+
+    '<p class="nota" style="margin:12px 0 0">Los cierres de los días anteriores no se tocan: '+
+    'cada uno guarda el recuento que tenía.</p>',
     function(){
-      var elegido=document.querySelector('input[name="modo_cero"]:checked');
-      var modo=elegido?elegido.value:"sacar";
-      if(modo==="sacar"){
-        if(guardado<=0){ avisar("No hay nada que sacar.", true); return true; }
+      var hoy=hoyISO();
+      var d=diaDe(hoy);
+      if(d){ d.aAmarilla=0; }
+      else { libro.dias.push({id:uid(), fecha:hoy, visa:0, efectivo:0, gastos:0,
+                              detalle:[], aAmarilla:0, fondoCaja:0, nota:""}); }
+      if(marcado("c_apunte")){
         libro.retiradas=libro.retiradas||[];
-        libro.retiradas.push({id:uid(), fecha:hoyISO(), importe:guardado,
-                              motivo:"Vaciado de la caja amarilla"});
-        guardar(); pintar();
-        avisar("Amarilla a cero. Anotada la retirada de "+eur(guardado));
-      } else {
-        libro.aportaciones=[]; libro.retiradas=[];
-        (libro.dias||[]).forEach(function(d){ d.aAmarilla=0; });
-        guardar(); pintar();
-        avisar("Amarilla a cero, sin historial");
+        libro.retiradas.push({id:uid(), fecha:hoy, importe:guardado,
+                              motivo:valor("c_motivo")||"Vaciado de la caja amarilla"});
       }
+      guardar(); pintar();
+      avisar("Amarilla a cero. Anotado el recuento de hoy.");
     }, {aceptar:"Poner a cero", malo:true});
 }
 
 function sacarDeAmarilla(){
   var guardado=amarillaGuardado();
   abrirVentana("Sacar de la caja amarilla",
-    '<p class="nota">Ahora mismo hay <strong>'+eur(guardado)+'</strong>. '+
-    'Lo que saques se descuenta y el fondo quedará por debajo del objetivo.</p>'+
+    '<p class="nota">En el último recuento había <strong>'+eur(guardado)+'</strong>. '+
+    'Esto queda apuntado como registro de adónde va el dinero; el saldo sale del '+
+    'recuento que anotes en el cierre del día.</p>'+
     '<div class="rejilla">'+
       '<div class="campo"><label class="lbl" for="sa_fecha">Fecha</label>'+
         '<input type="date" id="sa_fecha" value="'+esc(hoyISO())+'"></div>'+
@@ -1050,9 +1081,7 @@ function sacarDeAmarilla(){
       libro.retiradas.push({id:uid(), fecha:valor("sa_fecha")||hoyISO(),
                             importe:imp, motivo:valor("sa_mot")||"Retirada"});
       guardar(); pintar();
-      var falta=faltaAmarilla();
-      avisar(falta>0 ? "Sacados "+eur(imp)+". Faltan "+eur(falta)+" para el objetivo."
-                     : "Sacados "+eur(imp));
+      avisar("Anotada la salida de "+eur(imp)+". Ajusta el recuento en el cierre del día.");
     }, {aceptar:"Sacar"});
 }
 
@@ -1102,10 +1131,9 @@ function verAjustes(main){
     '<div class="tarjeta" style="max-width:560px;margin-top:16px">'+
       '<div class="tarjeta-cab"><h2>Cómo se calcula</h2></div>'+
       '<div class="tarjeta-cuerpo" style="font-size:13px;color:var(--muted);line-height:1.7">'+
-        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Sobrante</strong> lo pones tú: '+
-        'es el dinero que cuentas al cerrar. La app calcula aparte lo que debería salir '+
-        '—efectivo − pagos − caja amarilla − caja registradora— y sólo lo usa para '+
-        'sugerírtelo y para avisarte si lo contado no cuadra.</p>'+
+        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Sobra c. amarilla</strong> es '+
+        'el dinero que entra en la amarilla cuando ya están los '+eur(objetivoAmarilla())+'. '+
+        'La app te lo sugiere —lo que pase del objetivo— pero lo pones tú.</p>'+
         '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Fondo de caja</strong> es el dinero que '+
         'no se retira, y está en dos sitios: la <strong style="color:var(--tinta)">caja amarilla</strong>, '+
         'que se va guardando hasta el objetivo, y la '+
