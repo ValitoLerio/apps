@@ -26,7 +26,7 @@ function libroVacio(){
   return {
     v:1, actualizado:new Date().toISOString(),
     ajustes:{ personas:["Valeriano","Loli","Sara"] },
-    supermercados:[], productos:[], precios:[],
+    supermercados:[], productos:[], precios:[], lista:[],
     compras:[], medico:[],
     coche:{ matricula:"", modelo:"",
             seguro:{compania:"", poliza:"", prima:0, caduca:""},
@@ -118,6 +118,7 @@ function confirmar(titulo, cuerpo, alAceptar, opciones){
 }
 function valor(id){ var e=document.getElementById(id); return e?e.value.trim():""; }
 function numero(id){ var e=document.getElementById(id); return e?(+e.value||0):0; }
+function marcado(id){ var e=document.getElementById(id); return e?!!e.checked:false; }
 
 /* ══════════════════════════════════════════════════════════════
    CÁLCULOS COMPARTIDOS
@@ -395,6 +396,11 @@ function verCompra(main){
     '</div>'+
 
     '<div class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab">'+
+      '<h2>Lista de la compra</h2>'+
+      '<span class="pista">Lo que hay que comprar, y dónde sale más barato</span></div>'+
+      '<div class="tarjeta-cuerpo" id="listaCompra"></div></div>'+
+
+    '<div class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab">'+
       '<h2>Comparador de precios</h2>'+
       '<span class="pista">En verde, el más barato de cada producto</span></div>'+
       '<div class="tabla-caja" id="comparador"></div></div>'+
@@ -407,8 +413,232 @@ function verCompra(main){
   document.getElementById("nuevoProd").addEventListener("click", function(){ editarProducto(null); });
   document.getElementById("nuevaCompra").addEventListener("click", function(){ editarCompra(null); });
 
+  pintarLista();
   pintarComparador();
   pintarCompras();
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LISTA DE LA COMPRA
+   ══════════════════════════════════════════════════════════════
+   Lo que hay que comprar, marcable a medida que cae en el carro.
+   Con los precios ya anotados, dice lo que costaría en cada
+   supermercado, que es para lo que sirve tener el comparador.
+   ══════════════════════════════════════════════════════════════ */
+function laLista(){ return libro.lista||(libro.lista=[]); }
+
+/* Lo que costaría la lista en un supermercado. Devuelve también cuántos
+   productos no tienen precio allí, para no dar por buena una cuenta
+   coja. */
+function costeLista(superId){
+  var total=0, sinPrecio=0;
+  laLista().forEach(function(it){
+    if(it.hecho || !it.productoId) return;
+    var pr=precioDe(it.productoId, superId);
+    if(pr) total+=(+it.cantidad||1)*(+pr.precio||0);
+    else sinPrecio++;
+  });
+  return {total:r2(total), sinPrecio:sinPrecio};
+}
+
+function pintarLista(){
+  var caja=document.getElementById("listaCompra"); if(!caja) return;
+  var items=laLista();
+  var pendientes=items.filter(function(i){ return !i.hecho; });
+  var hechos=items.filter(function(i){ return i.hecho; });
+  var supers=libro.supermercados||[];
+
+  /* Lo que costaría en cada sitio, de más barato a más caro */
+  var costes=supers.map(function(s){
+    var c=costeLista(s.id);
+    return {id:s.id, nombre:s.nombre, total:c.total, sinPrecio:c.sinPrecio};
+  }).filter(function(c){ return c.total>0 || c.sinPrecio>0; })
+    .sort(function(a,b){ return a.total-b.total; });
+
+  caja.innerHTML=
+    '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'+
+      '<button class="btn fuerte sm" id="l_nuevo">+ Añadir a la lista</button>'+
+      (hechos.length?'<button class="btn sm" id="l_limpiar">Quitar lo ya cogido ('+hechos.length+')</button>':"")+
+      (pendientes.length?'<button class="btn sm" id="l_compra">Pasarla a compra</button>':"")+
+    '</div>'+
+
+    (!items.length
+      ? '<div class="vacio"><strong>La lista está vacía</strong>'+
+        'Ve apuntando lo que falta en casa y márcalo cuando lo cojas.</div>'
+      : '<div id="itemsLista">'+
+        items.slice().sort(function(a,b){ return (a.hecho?1:0)-(b.hecho?1:0); })
+             .map(filaLista).join("")+'</div>')+
+
+    (pendientes.length && costes.length
+      ? '<div style="border-top:1px solid var(--linea);margin-top:14px;padding-top:14px">'+
+        '<p class="nota" style="margin:0 0 8px">Lo que costaría lo que queda por coger:</p>'+
+        '<div class="tabla-caja"><table><tbody>'+
+        costes.map(function(c,i){
+          return '<tr><td>'+(i===0&&costes.length>1?'<span class="chapa ok">Más barato</span> ':"")+
+            esc(c.nombre)+'</td>'+
+            '<td class="num"><strong>'+eur(c.total)+'</strong></td>'+
+            '<td style="color:var(--muted);font-size:12px">'+
+            (c.sinPrecio? c.sinPrecio+(c.sinPrecio===1?" sin precio ahí":" sin precio ahí") : "todos con precio")+
+            '</td></tr>';
+        }).join("")+'</tbody></table></div>'+
+        (function(){
+          var avisos=[];
+          if(costes.some(function(c){ return c.sinPrecio; }))
+            avisos.push('Los que no tienen precio en un sitio no cuentan en su total: pon el precio '+
+                        'en el comparador y cuadrará.');
+          var aMano=pendientes.filter(function(i){ return !i.productoId; }).length;
+          if(aMano)
+            avisos.push(aMano===1
+              ? 'Lo escrito a mano no entra en la cuenta, porque no tiene precio en ningún sitio.'
+              : 'Los '+aMano+' escritos a mano no entran en la cuenta, porque no tienen precio '+
+                'en ningún sitio.');
+          return avisos.length
+            ? '<p class="nota" style="margin:8px 0 0">'+avisos.join(" ")+'</p>' : "";
+        })()+
+        '</div>'
+      : "");
+
+  document.getElementById("l_nuevo").addEventListener("click", function(){ editarItem(null); });
+  var limpiar=document.getElementById("l_limpiar");
+  if(limpiar) limpiar.addEventListener("click", function(){
+    confirmar("Quitar lo ya cogido",
+      '<p style="margin:0">Se van de la lista '+
+      (hechos.length===1?"<strong>el producto marcado</strong>":"los <strong>"+hechos.length+" productos marcados</strong>")+
+      '. Lo que queda por coger no se toca.</p>',
+      function(){
+        libro.lista=laLista().filter(function(i){ return !i.hecho; });
+        guardar(); pintar(); avisar("Lista limpia");
+      }, {aceptar:"Quitar", malo:true});
+  });
+  var aCompra=document.getElementById("l_compra");
+  if(aCompra) aCompra.addEventListener("click", listaACompra);
+
+  caja.querySelectorAll("[data-lcheck]").forEach(function(c){
+    c.addEventListener("change", function(){
+      var it=laLista().filter(function(x){ return x.id===c.getAttribute("data-lcheck"); })[0];
+      if(it){ it.hecho=c.checked; guardar(); pintarLista(); }
+    });
+  });
+  caja.querySelectorAll("[data-ledit]").forEach(function(b){
+    b.addEventListener("click", function(){ editarItem(b.getAttribute("data-ledit")); });
+  });
+  caja.querySelectorAll("[data-ldel]").forEach(function(b){
+    b.addEventListener("click", function(){
+      libro.lista=laLista().filter(function(x){ return x.id!==b.getAttribute("data-ldel"); });
+      guardar(); pintarLista(); avisar("Quitado de la lista");
+    });
+  });
+}
+
+function filaLista(it){
+  var nombre = it.productoId ? nombreProducto(it.productoId) : (it.texto||"");
+  return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;'+
+    'border-bottom:1px solid var(--linea-suave)'+(it.hecho?";opacity:.5":"")+'">'+
+    '<input type="checkbox" data-lcheck="'+esc(it.id)+'"'+(it.hecho?" checked":"")+
+      ' style="width:auto;flex:0 0 auto">'+
+    '<span style="flex:1;min-width:0'+(it.hecho?";text-decoration:line-through":"")+'">'+
+      esc(nombre)+
+      ((+it.cantidad||1)>1?' <span style="color:var(--muted)">× '+(+it.cantidad)+'</span>':"")+
+      (it.nota?'<div style="color:var(--muted);font-size:12px">'+esc(it.nota)+'</div>':"")+
+    '</span>'+
+    '<div class="acciones-fila">'+
+      '<button class="btn suave sm" data-ledit="'+esc(it.id)+'">Editar</button>'+
+      '<button class="btn suave sm malo" data-ldel="'+esc(it.id)+'">✕</button>'+
+    '</div></div>';
+}
+
+function editarItem(id){
+  var it=id?laLista().filter(function(x){ return x.id===id; })[0]
+           :{id:uid(), productoId:"", texto:"", cantidad:1, nota:"", hecho:false};
+  var productos=(libro.productos||[]).slice()
+    .sort(function(a,b){ return a.nombre.localeCompare(b.nombre,"es"); });
+
+  abrirVentana(id?"Editar de la lista":"Añadir a la lista",
+    '<div class="campo" style="margin-bottom:12px">'+
+      '<label class="lbl" for="l_prod">Producto</label>'+
+      '<select id="l_prod">'+
+        '<option value="">— escribirlo a mano —</option>'+
+        productos.map(function(p){
+          return '<option value="'+esc(p.id)+'"'+(it.productoId===p.id?" selected":"")+'>'+
+                 esc(nombreProducto(p.id))+'</option>';
+        }).join("")+
+      '</select></div>'+
+    '<div class="campo" id="cajaTexto" style="margin-bottom:12px">'+
+      '<label class="lbl" for="l_texto">Escríbelo</label>'+
+      '<input id="l_texto" value="'+esc(it.texto||"")+'" placeholder="Pan, pilas, bombilla…"></div>'+
+    '<div class="rejilla">'+
+      '<div class="campo"><label class="lbl" for="l_cant">Cuántos</label>'+
+        '<input type="number" id="l_cant" min="1" step="1" value="'+esc(it.cantidad||1)+'"></div>'+
+      '<div class="campo"><label class="lbl" for="l_nota">Nota</label>'+
+        '<input id="l_nota" value="'+esc(it.nota||"")+'" placeholder="El de la tapa azul…"></div>'+
+    '</div>'+
+    '<p class="nota" style="margin:12px 0 0">Los de la lista de productos entran en la cuenta de '+
+    'lo que costaría en cada supermercado. Los escritos a mano, no: para eso dales de alta '+
+    'como producto.</p>',
+    function(){
+      var pid=valor("l_prod");
+      var texto=valor("l_texto");
+      if(!pid && !texto){ avisar("Elige un producto o escríbelo.", true); return true; }
+      it.productoId=pid; it.texto=pid?"":texto;
+      it.cantidad=Math.max(1, Math.round(numero("l_cant")))||1;
+      it.nota=valor("l_nota");
+      if(!id) laLista().push(it);
+      guardar(); pintar(); avisar(id?"Actualizado":"Añadido a la lista");
+    }, {aceptar:id?"Guardar":"Añadir"});
+
+  /* El hueco de escribir a mano sólo estorba si ya eligió un producto */
+  function refrescar(){
+    document.getElementById("cajaTexto").style.display = valor("l_prod") ? "none" : "";
+  }
+  document.getElementById("l_prod").addEventListener("change", refrescar);
+  refrescar();
+}
+
+/* Pasar lo que queda por coger a una compra ya hecha, con los precios
+   que tenga anotados ese supermercado. */
+function listaACompra(){
+  var pendientes=laLista().filter(function(i){ return !i.hecho && i.productoId; });
+  if(!pendientes.length){
+    avisar("En la lista no hay productos del catálogo por coger.", true); return;
+  }
+  var supers=libro.supermercados||[];
+  if(!supers.length){ avisar("Antes da de alta un supermercado.", true); return; }
+
+  abrirVentana("Pasar la lista a compra",
+    '<p class="nota" style="margin:0 0 12px">Se crea una compra con '+
+    pendientes.length+' '+(pendientes.length===1?"producto":"productos")+
+    ', con el último precio anotado en ese supermercado. Después la puedes retocar.</p>'+
+    '<div class="rejilla">'+
+      '<div class="campo"><label class="lbl" for="lc_fecha">Fecha</label>'+
+        '<input type="date" id="lc_fecha" value="'+esc(hoyISO())+'"></div>'+
+      '<div class="campo"><label class="lbl" for="lc_super">Supermercado</label>'+
+        '<select id="lc_super">'+supers.map(function(s){
+          return '<option value="'+esc(s.id)+'">'+esc(s.nombre)+'</option>'; }).join("")+
+      '</select></div>'+
+    '</div>'+
+    '<label class="marca-check" style="margin-top:14px">'+
+      '<input type="checkbox" id="lc_quitar" checked>'+
+      '<span>Quitarlos de la lista al pasarlos</span></label>',
+    function(){
+      var superId=valor("lc_super");
+      var lineas=pendientes.map(function(it){
+        var pr=precioDe(it.productoId, superId);
+        return {productoId:it.productoId, cantidad:+it.cantidad||1, precio:pr?+pr.precio:0};
+      });
+      var c={id:uid(), fecha:valor("lc_fecha")||hoyISO(), superId:superId, lineas:lineas};
+      c.total=r2(lineas.reduce(function(s,l){ return s+l.cantidad*l.precio; },0));
+      libro.compras.push(c);
+      if(marcado("lc_quitar")){
+        var ids={};
+        pendientes.forEach(function(it){ ids[it.id]=1; });
+        libro.lista=laLista().filter(function(i){ return !ids[i.id]; });
+      }
+      guardar(); pintar();
+      var sinPrecio=lineas.filter(function(l){ return !l.precio; }).length;
+      avisar(sinPrecio
+        ? "Compra creada. "+sinPrecio+" sin precio: ponlos en la compra."
+        : "Compra creada por "+eur(c.total));
+    }, {aceptar:"Crear la compra"});
 }
 
 function pintarComparador(){
