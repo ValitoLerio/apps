@@ -669,21 +669,17 @@ function filaLista(it){
 function editarItem(id){
   var it=id?laLista().filter(function(x){ return x.id===id; })[0]
            :{id:uid(), productoId:"", texto:"", cantidad:1, nota:"", hecho:false};
-  var productos=(libro.productos||[]).slice()
-    .sort(function(a,b){ return a.nombre.localeCompare(b.nombre,"es"); });
+  /* Lo elegido mientras la ventana está abierta, para poder cambiar de
+     idea sin tocar la lista hasta que se guarde. */
+  var elegido = it.productoId || "";
 
   abrirVentana(id?"Editar de la lista":"Añadir a la lista",
-    '<div class="campo" style="margin-bottom:12px">'+
-      '<label class="lbl" for="l_prod">Producto</label>'+
-      '<select id="l_prod">'+
-        '<option value="">— escribirlo a mano —</option>'+
-        productos.map(function(p){
-          return '<option value="'+esc(p.id)+'"'+(it.productoId===p.id?" selected":"")+'>'+
-                 esc(nombreProducto(p.id))+'</option>';
-        }).join("")+
-      '</select></div>'+
+    '<div class="campo" style="margin-bottom:10px">'+
+      '<label class="lbl" for="l_busca">Buscar en tus productos</label>'+
+      '<input id="l_busca" placeholder="leche, aceite, Ariel…" autocomplete="off"></div>'+
+    '<div id="l_resultados" style="margin-bottom:12px"></div>'+
     '<div class="campo" id="cajaTexto" style="margin-bottom:12px">'+
-      '<label class="lbl" for="l_texto">Escríbelo</label>'+
+      '<label class="lbl" for="l_texto">O escríbelo a mano</label>'+
       '<input id="l_texto" value="'+esc(it.texto||"")+'" placeholder="Pan, pilas, bombilla…"></div>'+
     '<div class="rejilla">'+
       '<div class="campo"><label class="lbl" for="l_cant">Cuántos</label>'+
@@ -691,26 +687,110 @@ function editarItem(id){
       '<div class="campo"><label class="lbl" for="l_nota">Nota</label>'+
         '<input id="l_nota" value="'+esc(it.nota||"")+'" placeholder="El de la tapa azul…"></div>'+
     '</div>'+
-    '<p class="nota" style="margin:12px 0 0">Los de la lista de productos entran en la cuenta de '+
-    'lo que costaría en cada supermercado. Los escritos a mano, no: para eso dales de alta '+
-    'como producto.</p>',
+    '<p class="nota" style="margin:12px 0 0">Los de tu lista de productos entran en la cuenta de '+
+    'lo que cuesta en cada supermercado y en el reparto por tiendas. Los escritos a mano, no.</p>',
+
     function(){
-      var pid=valor("l_prod");
       var texto=valor("l_texto");
-      if(!pid && !texto){ avisar("Elige un producto o escríbelo.", true); return true; }
-      it.productoId=pid; it.texto=pid?"":texto;
+      if(!elegido && !texto){ avisar("Busca un producto o escríbelo a mano.", true); return true; }
+      it.productoId=elegido; it.texto=elegido?"":texto;
       it.cantidad=Math.max(1, Math.round(numero("l_cant")))||1;
       it.nota=valor("l_nota");
       if(!id) laLista().push(it);
       guardar(); pintar(); avisar(id?"Actualizado":"Añadido a la lista");
     }, {aceptar:id?"Guardar":"Añadir"});
 
-  /* El hueco de escribir a mano sólo estorba si ya eligió un producto */
-  function refrescar(){
-    document.getElementById("cajaTexto").style.display = valor("l_prod") ? "none" : "";
+  var busca=document.getElementById("l_busca");
+  var caja=document.getElementById("l_resultados");
+  var cajaTexto=document.getElementById("cajaTexto");
+
+  /* Busca por nombre, marca y formato a la vez: así «ariel» encuentra el
+     detergente aunque el producto se llame sólo «Detergente». */
+  function buscar(texto){
+    var t=texto.trim().toLowerCase();
+    var lista=(libro.productos||[]).slice()
+      .sort(function(a,b){ return a.nombre.localeCompare(b.nombre,"es"); });
+    if(!t) return lista.slice(0,6);
+    return lista.filter(function(p){
+      return (p.nombre+" "+(p.marca||"")+" "+(p.formato||"")).toLowerCase().indexOf(t)>=0;
+    }).slice(0, 12);
   }
-  document.getElementById("l_prod").addEventListener("change", refrescar);
-  refrescar();
+
+  function pintarResultados(){
+    if(elegido){
+      var p=(libro.productos||[]).filter(function(x){ return x.id===elegido; })[0];
+      caja.innerHTML='<div style="display:flex;align-items:center;gap:10px;padding:9px 11px;'+
+        'background:var(--acento-suave);border:1px solid var(--acento);border-radius:8px">'+
+        '<span style="flex:1"><strong>'+esc(p?nombreProducto(elegido):"")+'</strong></span>'+
+        '<button type="button" class="btn suave sm" id="l_quitar">Cambiar</button></div>';
+      document.getElementById("l_quitar").addEventListener("click", function(){
+        elegido=""; pintarResultados(); busca.focus();
+      });
+      busca.style.display="none";
+      busca.previousElementSibling.style.display="none";
+      cajaTexto.style.display="none";
+      return;
+    }
+    busca.style.display="";
+    busca.previousElementSibling.style.display="";
+    cajaTexto.style.display="";
+
+    var encontrados=buscar(busca.value);
+    var hayCatalogo=(libro.productos||[]).length>0;
+
+    caja.innerHTML = !hayCatalogo
+      ? '<p class="nota" style="margin:0">Todavía no tienes productos dados de alta. '+
+        'Escríbelo a mano aquí abajo, o créalo con «Nuevo producto».</p>'
+      : (!encontrados.length
+          ? '<p class="nota" style="margin:0">Ninguno de tus productos se llama así. '+
+            'Escríbelo a mano aquí abajo, o dalo de alta con «Nuevo producto» para que '+
+            'entre en la comparación de precios.</p>'
+          : '<div style="border:1px solid var(--linea);border-radius:8px;overflow:hidden;'+
+            'max-height:200px;overflow-y:auto">'+
+            encontrados.map(function(p){
+              return '<button type="button" class="l-opcion" data-pick="'+esc(p.id)+'" '+
+                'style="display:block;width:100%;text-align:left;border:0;'+
+                'border-bottom:1px solid var(--linea-suave);background:transparent;'+
+                'padding:8px 11px;cursor:pointer;font:inherit;color:inherit">'+
+                '<strong>'+esc(p.nombre)+'</strong>'+
+                ((p.marca||p.formato)
+                  ? '<span style="color:var(--muted);font-size:12px"> · '+
+                    esc([p.marca,p.formato].filter(function(x){return !!x;}).join(", "))+'</span>'
+                  : "")+
+                '</button>';
+            }).join("")+'</div>'+
+            (busca.value.trim()
+              ? "" : '<p class="nota" style="margin:6px 0 0">Escribe para buscar entre '+
+                     plural((libro.productos||[]).length,"producto","productos")+'.</p>'));
+
+    caja.querySelectorAll("[data-pick]").forEach(function(b){
+      b.addEventListener("click", function(){
+        elegido=b.getAttribute("data-pick");
+        document.getElementById("l_texto").value="";
+        pintarResultados();
+      });
+    });
+  }
+
+  busca.addEventListener("input", pintarResultados);
+  /* Con Intro, si sólo queda uno, se elige sin tener que apuntar con el
+     ratón. La tecla se para aquí: si sigue subiendo, la ventana la toma
+     por un «Guardar» y se cierra a medio buscar. */
+  busca.addEventListener("keydown", function(e){
+    if(e.key!=="Enter") return;
+    e.preventDefault();
+    e.stopPropagation();
+    var encontrados=buscar(busca.value);
+    if(encontrados.length===1){
+      elegido=encontrados[0].id;
+      document.getElementById("l_texto").value="";
+      pintarResultados();
+    } else if(encontrados.length>1){
+      avisar("Hay "+encontrados.length+" que encajan: elige uno.", true);
+    }
+  });
+  pintarResultados();
+  if(!elegido) busca.focus();
 }
 
 /* Pasar lo que queda por coger a una compra ya hecha, con los precios

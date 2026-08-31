@@ -120,6 +120,9 @@ input[type=checkbox]{width:auto;min-width:0;accent-color:var(--acento);margin:0}
 .btn.sm{padding:4px 9px;font-size:12.5px}
 
 .rejilla{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+/* Los resultados de buscar un producto para la lista de la compra */
+.l-opcion:last-child{border-bottom:0!important}
+.l-opcion:hover{background:var(--sup2)!important}
 .rejilla3{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
 .barra{display:flex;gap:9px;flex-wrap:wrap;align-items:end;margin-bottom:14px}
 .nota{font-size:12.5px;color:var(--muted);margin:0 0 12px;max-width:72ch}
@@ -193,7 +196,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202608311106"></script>
+<script src="sync.js?v=202608311113"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -201,7 +204,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('casa').then(function(){
     var s = document.createElement('script');
-    s.src = 'casa.js?v=202608311106';
+    s.src = 'casa.js?v=202608311113';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar casa.js. Recarga la pagina.'; };
     document.body.appendChild(s);
