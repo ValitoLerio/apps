@@ -1470,12 +1470,22 @@ function verCoche(main){
       (activo?'<button class="btn" id="nuevoRepo">Anotar gasolina</button>'+
               '<button class="btn fuerte" id="nuevaRev">Anotar taller</button>':""))+
 
-    (coches.length>1
-      ? '<div class="filtros" style="margin-bottom:16px"><div class="grupo">'+
+    /* Cada vehículo con su equis al lado: buscar cómo borrar uno dentro
+       de su ficha no se le ocurre a nadie. */
+    (coches.length
+      ? '<div class="filtros" style="margin-bottom:16px">'+
         coches.map(function(x){
-          return '<button data-coche="'+esc(x.id)+'" aria-pressed="'+(activo&&x.id===activo.id)+'">'+
-                 esc(nombreCoche(x))+'</button>';
-        }).join("")+'</div></div>'
+          var puesto=(activo&&x.id===activo.id);
+          return '<div class="grupo">'+
+            '<button data-coche="'+esc(x.id)+'" aria-pressed="'+puesto+'">'+
+              esc(nombreCoche(x))+
+              (x.matricula&&x.modelo
+                ? ' <span style="color:var(--muted);font-size:11.5px">'+esc(x.matricula)+'</span>'
+                : "")+'</button>'+
+            '<button data-cochedel="'+esc(x.id)+'" title="Borrar '+esc(nombreCoche(x))+'" '+
+              'style="color:var(--malo);padding:6px 10px">✕</button>'+
+          '</div>';
+        }).join("")+'</div>'
       : "")+
 
     (!activo
@@ -1507,6 +1517,11 @@ function verCoche(main){
 
   main.querySelectorAll("[data-coche]").forEach(function(b){
     b.addEventListener("click", function(){ ui.coche=b.getAttribute("data-coche"); pintar(); });
+  });
+  main.querySelectorAll("[data-cochedel]").forEach(function(b){
+    b.addEventListener("click", function(e){
+      e.stopPropagation(); borrarCoche(b.getAttribute("data-cochedel"));
+    });
   });
   document.getElementById("nuevoCoche").addEventListener("click", function(){ editarCoche(null); });
   if(!activo) return;
