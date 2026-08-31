@@ -94,7 +94,10 @@ function abrirVentana(titulo, cuerpoHTML, alGuardar, opciones){
   d.innerHTML='<div class="dlg-cab"><h3>'+esc(titulo)+'</h3>'+
               '<button class="btn suave" data-x>Cerrar</button></div>'+
               '<div class="dlg-cuerpo">'+cuerpoHTML+'</div>'+
-              '<div class="dlg-pie"><button class="btn" data-x>Cancelar</button>'+
+              /* opciones.extra: un botón más a la izquierda, para las
+                 acciones que no son ni guardar ni cancelar */
+              '<div class="dlg-pie">'+(opciones.extra||"")+
+              '<button class="btn" data-x>Cancelar</button>'+
               '<button class="btn '+(opciones.malo?"malo":"fuerte")+'" data-ok>'+
               esc(opciones.aceptar||"Guardar")+'</button></div>';
   document.body.appendChild(d);
@@ -110,6 +113,7 @@ function abrirVentana(titulo, cuerpoHTML, alGuardar, opciones){
   });
   d.showModal();
   var primero=d.querySelector("input,select,textarea"); if(primero) primero.focus();
+  return d;   /* para poder cerrarla desde un botón extra */
 }
 function confirmar(titulo, cuerpo, alAceptar, opciones){
   opciones=opciones||{};
@@ -371,6 +375,17 @@ function ponerPrecio(productoId, superId, precio){
   if(p && p.fecha===hoyISO()){ p.precio=precio; }
   else libro.precios.push({id:uid(), productoId:productoId, superId:superId, precio:precio, fecha:hoyISO()});
   guardar();
+}
+
+/* Quita lo anotado de ese producto en ese supermercado. El producto se
+   queda: sólo desaparece su precio de esa columna. */
+function quitarPrecio(productoId, superId){
+  var antes=(libro.precios||[]).length;
+  libro.precios=(libro.precios||[]).filter(function(x){
+    return !(x.productoId===productoId && x.superId===superId);
+  });
+  guardar();
+  return antes-(libro.precios||[]).length;
 }
 
 function verCompra(main){
@@ -912,17 +927,40 @@ function pintarComparador(){
 
 function editarPrecio(productoId, superId){
   var actual=precioDe(productoId, superId);
-  abrirVentana("Precio de "+nombreProducto(productoId),
+
+  var d=abrirVentana("Precio de "+nombreProducto(productoId),
     '<p class="nota">En <strong>'+esc(nombreSuper(superId))+'</strong>'+
     (actual?'. Última anotación: '+eur(actual.precio)+' el '+dmy(actual.fecha):"")+'</p>'+
     '<div class="campo"><label class="lbl" for="pr_val">Precio (€)</label>'+
-    '<input type="number" id="pr_val" min="0" step="0.01" value="'+(actual?esc(actual.precio):"")+'"></div>',
+    '<input type="number" id="pr_val" min="0" step="0.01" value="'+
+    (actual?esc(actual.precio):"")+'" placeholder="0,00"></div>'+
+    '<p class="nota" style="margin:12px 0 0">Para quitarlo, deja el hueco vacío o pon 0: '+
+    'el producto se queda, sólo desaparece su precio en '+esc(nombreSuper(superId))+'. '+
+    'Un precio de 0 € no se guarda como tal a propósito, porque saldría el más barato '+
+    'de todos y falsearía la comparación.</p>',
     function(){
+      var crudo=valor("pr_val");
       var v=numero("pr_val");
-      if(!v){ avisar("Pon un precio.", true); return true; }
+      /* Vacío o cero significan lo mismo: quítalo de ahí. */
+      if(crudo==="" || v<=0){
+        if(!actual){ avisar("Ahí no había ningún precio.", true); return; }
+        quitarPrecio(productoId, superId);
+        pintar(); avisar("Precio quitado de "+nombreSuper(superId));
+        return;
+      }
       ponerPrecio(productoId, superId, v);
       pintar(); avisar("Precio guardado");
-    });
+    },
+    {extra: actual
+      ? '<button class="btn malo" id="pr_quitar">Quitar el precio</button>'
+      : ""});
+
+  var quitar=document.getElementById("pr_quitar");
+  if(quitar) quitar.addEventListener("click", function(){
+    quitarPrecio(productoId, superId);
+    d.close(); d.remove();
+    pintar(); avisar("Precio quitado de "+nombreSuper(superId));
+  });
 }
 
 function editarSuper(id){
