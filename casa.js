@@ -28,16 +28,14 @@ function libroVacio(){
     ajustes:{ personas:["Valeriano","Loli","Sara"] },
     supermercados:[], productos:[], precios:[], lista:[],
     compras:[], medico:[],
-    coche:{ matricula:"", modelo:"",
-            seguro:{compania:"", poliza:"", prima:0, caduca:""},
-            itv:{caduca:"", coste:0} },
+    coches:[],
     repostajes:[], revisiones:[],
     fijos:[], viajes:[], otros:[]
   };
 }
 
 var libro = libroVacio();
-var ui = { vista:"resumen", mes:hoyISO().slice(0,7), viaje:null };
+var ui = { vista:"resumen", mes:hoyISO().slice(0,7), viaje:null, coche:null };
 
 /* ── Dinero, fechas y textos ──────────────────────────────────── */
 function r2(n){ return Math.round((n+Number.EPSILON)*100)/100; }
@@ -69,7 +67,7 @@ function cargar(){
     var base=libroVacio();
     Object.keys(base).forEach(function(k){ if(d[k]===undefined) d[k]=base[k]; });
     if(!d.ajustes || !d.ajustes.personas || !d.ajustes.personas.length) d.ajustes=base.ajustes;
-    if(!d.coche) d.coche=base.coche;
+    if(!d.coches) d.coches=[];
     libro=d;
   }catch(e){}
 }
@@ -208,7 +206,43 @@ function gastoDelMes(ym){
   return g;
 }
 
-/* Avisos de caducidad: ITV y seguro del coche */
+/* Antes sólo cabía un coche. El que hubiera pasa a ser el primero de la
+   lista, y la gasolina y el taller que ya estaban anotados se quedan
+   colgando de él, que es de donde salieron. */
+function pasarACochesVarios(){
+  if(!libro.coches) libro.coches=[];
+  var viejo=libro.coche;
+  if(!viejo) return;
+  var tieneAlgo = viejo.modelo || viejo.matricula ||
+                  (viejo.seguro&&(viejo.seguro.compania||viejo.seguro.caduca||viejo.seguro.prima)) ||
+                  (viejo.itv&&(viejo.itv.caduca||viejo.itv.coste));
+  if(tieneAlgo){
+    var id=uid();
+    libro.coches.push({id:id, modelo:viejo.modelo||"", matricula:viejo.matricula||"",
+                       seguro:viejo.seguro||{}, itv:viejo.itv||{}});
+    (libro.repostajes||[]).forEach(function(r){ if(!r.cocheId) r.cocheId=id; });
+    (libro.revisiones||[]).forEach(function(r){ if(!r.cocheId) r.cocheId=id; });
+  }
+  delete libro.coche;
+  guardar();
+}
+
+function losCoches(){ return libro.coches||(libro.coches=[]); }
+function cocheDe(id){
+  return losCoches().filter(function(c){ return c.id===id; })[0] || null;
+}
+function nombreCoche(c){
+  if(!c) return "";
+  return c.modelo || c.matricula || "Sin nombre";
+}
+/* El que se está mirando; si no hay ninguno elegido, el primero */
+function cocheActivo(){
+  var c=ui.coche && cocheDe(ui.coche);
+  if(c) return c;
+  return losCoches()[0] || null;
+}
+
+/* Avisos de caducidad: ITV y seguro, de todos los vehículos */
 function avisosCaducidad(){
   var avisos=[];
   function mirar(nombre, fecha, extra){
@@ -217,8 +251,12 @@ function avisosCaducidad(){
     if(d<0)        avisos.push({nivel:"malo",  texto:nombre+" caducó hace "+Math.abs(d)+" días ("+dmy(fecha)+")", extra:extra});
     else if(d<=45) avisos.push({nivel:"aviso", texto:nombre+" caduca en "+d+" días ("+dmy(fecha)+")", extra:extra});
   }
-  mirar("La ITV", (libro.coche.itv||{}).caduca);
-  mirar("El seguro del coche", (libro.coche.seguro||{}).caduca);
+  losCoches().forEach(function(c){
+    /* Con varios coches hay que decir de cuál se habla */
+    var quien = losCoches().length>1 ? " de "+nombreCoche(c) : " del coche";
+    mirar("La ITV"+(losCoches().length>1?" de "+nombreCoche(c):""), (c.itv||{}).caduca);
+    mirar("El seguro"+quien, (c.seguro||{}).caduca);
+  });
   return avisos;
 }
 
@@ -1401,12 +1439,18 @@ function editarVisita(id){
    COCHE
    ══════════════════════════════════════════════════════════════ */
 function verCoche(main){
-  var c=libro.coche||{};
-  var repos=(libro.repostajes||[]).slice().sort(function(a,b){ return (b.fecha||"").localeCompare(a.fecha||""); });
-  var revs=(libro.revisiones||[]).slice().sort(function(a,b){ return (b.fecha||"").localeCompare(a.fecha||""); });
+  var coches=losCoches();
+  var activo=cocheActivo();
+  var c=activo||{};
+  /* Todo lo de esta pantalla es del coche que se está mirando */
+  var mios=function(lista){
+    return (lista||[]).filter(function(r){ return !activo || r.cocheId===activo.id; });
+  };
+  var repos=mios(libro.repostajes).slice().sort(function(a,b){ return (b.fecha||"").localeCompare(a.fecha||""); });
+  var revs=mios(libro.revisiones).slice().sort(function(a,b){ return (b.fecha||"").localeCompare(a.fecha||""); });
   var anio=ui.mes.slice(0,4);
-  var gasolinaAno=suma((libro.repostajes||[]).filter(function(r){ return (r.fecha||"").slice(0,4)===anio; }), "importe");
-  var tallerAno=r2((libro.revisiones||[]).filter(function(r){ return (r.fecha||"").slice(0,4)===anio; })
+  var gasolinaAno=suma(repos.filter(function(r){ return (r.fecha||"").slice(0,4)===anio; }), "importe");
+  var tallerAno=r2(revs.filter(function(r){ return (r.fecha||"").slice(0,4)===anio; })
                     .reduce(function(s,r){ return s+costeRevision(r); },0));
 
   function chapaFecha(fecha){
@@ -1418,14 +1462,32 @@ function verCoche(main){
   }
 
   main.innerHTML=
-    cabecera("Coche",
-      "El seguro y la ITV con sus fechas, la gasolina y lo que se lleva el taller.",
-      '<button class="btn" id="editCoche">Datos del coche</button>'+
-      '<button class="btn" id="nuevoRepo">Anotar gasolina</button>'+
-      '<button class="btn fuerte" id="nuevaRev">Anotar taller</button>')+
+    cabecera(coches.length>1 ? "Vehículos" : "Coche",
+      "El seguro y la ITV con sus fechas, la gasolina y lo que se lleva el taller. "+
+      (coches.length>1 ? "Cada vehículo lleva sus cuentas por separado." : ""),
+      (activo?'<button class="btn" id="editCoche">Datos del vehículo</button>':"")+
+      '<button class="btn" id="nuevoCoche">+ Otro vehículo</button>'+
+      (activo?'<button class="btn" id="nuevoRepo">Anotar gasolina</button>'+
+              '<button class="btn fuerte" id="nuevaRev">Anotar taller</button>':""))+
+
+    (coches.length>1
+      ? '<div class="filtros" style="margin-bottom:16px"><div class="grupo">'+
+        coches.map(function(x){
+          return '<button data-coche="'+esc(x.id)+'" aria-pressed="'+(activo&&x.id===activo.id)+'">'+
+                 esc(nombreCoche(x))+'</button>';
+        }).join("")+'</div></div>'
+      : "")+
+
+    (!activo
+      ? '<div class="vacio"><strong>Todavía no hay ningún vehículo</strong>'+
+        'Dale a «Otro vehículo» y pon su modelo, la matrícula, el seguro y la ITV.</div>'
+      : "")+
+
+    (!activo ? "" :
     '<div class="cifras">'+
       '<div class="cifra"><div class="k">Gasolina '+anio+'</div><div class="v acento">'+eur(gasolinaAno)+'</div>'+
-        '<div class="n">'+((libro.repostajes||[]).filter(function(r){return (r.fecha||"").slice(0,4)===anio;}).length)+' repostajes</div></div>'+
+        '<div class="n">'+plural(repos.filter(function(r){return (r.fecha||"").slice(0,4)===anio;}).length,
+          "repostaje","repostajes")+'</div></div>'+
       '<div class="cifra"><div class="k">Taller '+anio+'</div><div class="v">'+eur(tallerAno)+'</div>'+
         '<div class="n">piezas y mano de obra</div></div>'+
       '<div class="cifra"><div class="k">Seguro</div><div class="v" style="font-size:15px">'+
@@ -1441,9 +1503,14 @@ function verCoche(main){
       '<div class="tabla-caja" id="tablaRev"></div></div>'+
 
     '<div class="tarjeta"><div class="tarjeta-cab"><h2>Gasolina</h2></div>'+
-      '<div class="tabla-caja" id="tablaRepo"></div></div>';
+      '<div class="tabla-caja" id="tablaRepo"></div></div>');
 
-  document.getElementById("editCoche").addEventListener("click", editarCoche);
+  main.querySelectorAll("[data-coche]").forEach(function(b){
+    b.addEventListener("click", function(){ ui.coche=b.getAttribute("data-coche"); pintar(); });
+  });
+  document.getElementById("nuevoCoche").addEventListener("click", function(){ editarCoche(null); });
+  if(!activo) return;
+  document.getElementById("editCoche").addEventListener("click", function(){ editarCoche(activo.id); });
   document.getElementById("nuevoRepo").addEventListener("click", function(){ editarRepostaje(null); });
   document.getElementById("nuevaRev").addEventListener("click", function(){ editarRevision(null); });
 
@@ -1509,10 +1576,12 @@ function verCoche(main){
   });
 }
 
-function editarCoche(){
-  var c=libro.coche||{seguro:{},itv:{}};
+function editarCoche(id){
+  var nuevo=!id;
+  var c=id ? cocheDe(id) : {id:uid(), modelo:"", matricula:"", seguro:{}, itv:{}};
+  if(!c) return;
   var s=c.seguro||{}, i=c.itv||{};
-  abrirVentana("Datos del coche",
+  var d=abrirVentana(nuevo?"Nuevo vehículo":"Datos de "+nombreCoche(c),
     '<div class="rejilla">'+
       '<div class="campo"><label class="lbl" for="k_modelo">Modelo</label>'+
         '<input id="k_modelo" value="'+esc(c.modelo||"")+'" placeholder="Seat León"></div>'+
@@ -1537,16 +1606,51 @@ function editarCoche(){
       '<div class="campo"><label class="lbl" for="k_icos">Lo que costó (€)</label>'+
         '<input type="number" id="k_icos" min="0" step="0.01" value="'+esc(i.coste||"")+'"></div>'+
     '</div>'+
-    '<p class="nota" style="margin-top:14px">Con las fechas puestas, el resumen te avisa 45 días antes.</p>',
+    '<p class="nota" style="margin-top:14px">Con las fechas puestas, el resumen te avisa 45 días antes, '+
+    'diciendo de qué vehículo se trata.</p>',
     function(){
-      libro.coche={
-        modelo:valor("k_modelo"), matricula:valor("k_mat"),
-        seguro:{compania:valor("k_comp"), poliza:valor("k_pol"),
-                prima:numero("k_prima"), caduca:valor("k_scad")},
-        itv:{caduca:valor("k_icad"), coste:numero("k_icos")}
-      };
-      guardar(); pintar(); avisar("Datos del coche guardados");
-    });
+      if(!valor("k_modelo") && !valor("k_mat")){
+        avisar("Ponle al menos el modelo o la matrícula.", true); return true;
+      }
+      c.modelo=valor("k_modelo"); c.matricula=valor("k_mat");
+      c.seguro={compania:valor("k_comp"), poliza:valor("k_pol"),
+                prima:numero("k_prima"), caduca:valor("k_scad")};
+      c.itv={caduca:valor("k_icad"), coste:numero("k_icos")};
+      if(nuevo){ losCoches().push(c); ui.coche=c.id; }
+      guardar(); pintar();
+      avisar(nuevo?nombreCoche(c)+" añadido":"Datos guardados");
+    },
+    {extra: nuevo ? "" : '<button class="btn malo" id="k_borrar">Borrar el vehículo</button>'});
+
+  var borrar=document.getElementById("k_borrar");
+  if(borrar) borrar.addEventListener("click", function(){
+    d.close(); d.remove();
+    borrarCoche(c.id);
+  });
+}
+
+/* Borrar un vehículo se lleva su gasolina y su taller: son suyos, no
+   tienen sentido sueltos. Se dice cuántos apuntes antes de aceptar. */
+function borrarCoche(id){
+  var c=cocheDe(id); if(!c) return;
+  var repos=(libro.repostajes||[]).filter(function(r){ return r.cocheId===id; }).length;
+  var revs=(libro.revisiones||[]).filter(function(r){ return r.cocheId===id; }).length;
+
+  confirmar("Borrar "+nombreCoche(c),
+    '<p style="margin:0 0 10px">Se va el vehículo con su seguro y su ITV.</p>'+
+    ((repos||revs)
+      ? '<p class="nota" style="margin:0">Con él se van también '+
+        [repos?plural(repos,"repostaje","repostajes"):"", revs?plural(revs,"visita al taller","visitas al taller"):""]
+          .filter(function(x){ return !!x; }).join(" y ")+
+        ', que eran suyos.</p>'
+      : '<p class="nota" style="margin:0">No tiene gasolina ni taller anotados.</p>'),
+    function(){
+      libro.coches=losCoches().filter(function(x){ return x.id!==id; });
+      libro.repostajes=(libro.repostajes||[]).filter(function(r){ return r.cocheId!==id; });
+      libro.revisiones=(libro.revisiones||[]).filter(function(r){ return r.cocheId!==id; });
+      if(ui.coche===id) ui.coche=null;
+      guardar(); pintar(); avisar(nombreCoche(c)+" borrado");
+    }, {aceptar:"Borrar", malo:true});
 }
 
 function editarRepostaje(id){
@@ -1570,7 +1674,14 @@ function editarRepostaje(id){
       r.estacion=valor("g_est");
       r.litros=numero("g_lit"); r.importe=numero("g_imp"); r.km=numero("g_km");
       if(!r.importe){ avisar("Pon el importe.", true); return true; }
-      if(!id) libro.repostajes.push(r);
+      if(!id){
+        /* Cuelga del vehículo que se está mirando: si no, con varios
+           coches no se sabría de cuál es esa gasolina. */
+        var activo=cocheActivo();
+        if(!activo){ avisar("Antes da de alta un vehículo.", true); return true; }
+        r.cocheId=activo.id;
+        libro.repostajes.push(r);
+      }
       guardar(); pintar(); avisar(id?"Repostaje actualizado":"Repostaje anotado");
     });
 }
@@ -1609,7 +1720,12 @@ function editarRevision(id){
       r.taller=valor("t_taller"); r.motivo=valor("t_motivo");
       r.km=numero("t_km"); r.manoObra=numero("t_mano");
       r.piezas=piezas;
-      if(!id) libro.revisiones.push(r);
+      if(!id){
+        var activoRev=cocheActivo();
+        if(!activoRev){ avisar("Antes da de alta un vehículo.", true); return true; }
+        r.cocheId=activoRev.id;
+        libro.revisiones.push(r);
+      }
       guardar(); pintar(); avisar(id?"Actualizado":"Visita al taller anotada: "+eur(costeRevision(r)));
     });
 
@@ -1982,6 +2098,7 @@ function editarOtro(id){
 
 /* ══════════════════════════════════════════════════════════════ */
 cargar();
+pasarACochesVarios();
 repartirDevoluciones();
 pintar();
 

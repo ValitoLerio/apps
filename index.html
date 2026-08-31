@@ -457,7 +457,7 @@
 
 </div>
 
-<script src="sync.js?v=202608311145"></script>
+<script src="sync.js?v=202608311152"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
@@ -818,13 +818,16 @@
     pon('d-casa-fijos',  euros(fijos));
     pon('d-casa-compra', euros(compra));
 
-    // Caducidades del coche: lo que conviene no olvidar
-    var coche2 = libro.coche || {};
+    // Caducidades de los vehículos: lo que conviene no olvidar.
+    // Se admite tanto la lista nueva como el coche único de antes.
+    var coches = libro.coches || (libro.coche ? [libro.coche] : []);
     var pendientes = 0;
-    [(coche2.itv||{}).caduca, (coche2.seguro||{}).caduca].forEach(function(f){
-      if (!f) return;
-      var dias = Math.round((new Date(f+'T12:00:00') - new Date()) / 86400000);
-      if (dias <= 45) pendientes++;
+    coches.forEach(function(c){
+      [((c||{}).itv||{}).caduca, ((c||{}).seguro||{}).caduca].forEach(function(f){
+        if (!f) return;
+        var dias = Math.round((new Date(f+'T12:00:00') - new Date()) / 86400000);
+        if (dias <= 45) pendientes++;
+      });
     });
     pon('d-casa-avisos', pendientes ? String(pendientes) : '—');
   }
