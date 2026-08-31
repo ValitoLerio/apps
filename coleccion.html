@@ -239,7 +239,7 @@ dialog::backdrop{background:rgba(16,13,8,.55)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202608311138"></script>
+<script src="sync.js?v=202608311145"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -247,7 +247,7 @@ dialog::backdrop{background:rgba(16,13,8,.55)}
 
   Sync.iniciar('coleccion').then(function(){
     var s = document.createElement('script');
-    s.src = 'coleccion.js?v=202608311138';
+    s.src = 'coleccion.js?v=202608311145';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar coleccion.js. Recarga la pagina.'; };
     document.body.appendChild(s);

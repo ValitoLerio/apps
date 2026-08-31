@@ -143,9 +143,52 @@ function totalCompra(c){
 function costeRevision(r){
   return r2((+r.manoObra||0) + (r.piezas||[]).reduce(function(s,p){ return s+(+p.precio||0); },0));
 }
+/* Cada visita tiene dos gastos que se recuperan por separado: la consulta
+   y la farmacia. De cada uno devuelve una parte la CASS y el resto lo
+   cubre el seguro complementario, así que las devoluciones se llevan por
+   concepto y no en un solo saco: si no, no se sabe cuál de los dos está
+   pendiente de cobro. */
+function pendienteDe(v, concepto){
+  return concepto==="farmacia"
+    ? r2((+v.medicinas||0)-(+v.cassFarm||0)-(+v.segFarm||0))
+    : r2((+v.consulta ||0)-(+v.cassCons||0)-(+v.segCons||0));
+}
 function pendienteMedico(v){
-  /* Lo que aún no te han devuelto de esa visita */
-  return r2((+v.consulta||0)+(+v.medicinas||0)-(+v.cass||0)-(+v.seguro||0));
+  /* Lo que aún no te han devuelto de esa visita, las dos cosas juntas */
+  return r2(pendienteDe(v,"consulta")+pendienteDe(v,"farmacia"));
+}
+function cassTotal(v){ return r2((+v.cassCons||0)+(+v.cassFarm||0)); }
+function seguroTotal(v){ return r2((+v.segCons||0)+(+v.segFarm||0)); }
+
+/* Las visitas de antes llevaban un solo importe de CASS y otro de seguro,
+   sin decir de qué eran. Para repartirlos no hace falta adivinar: de un
+   concepto no te devuelven más de lo que pagaste, así que se llena
+   primero la consulta hasta su importe y lo que sobra es de la farmacia.
+   Primero la CASS, que paga antes, y luego el complementario.
+
+   Si aun así no cuadra con lo que pasó, se mueve a mano en la ficha. */
+function repartirDevoluciones(){
+  var tocado=false;
+  (libro.medico||[]).forEach(function(v){
+    if(v.cassCons!==undefined || v.cassFarm!==undefined) return;
+    if(v.cass===undefined && v.seguro===undefined) return;
+
+    var consulta=+v.consulta||0;
+    var cass=+v.cass||0, seguro=+v.seguro||0;
+
+    var cassCons=Math.min(cass, consulta);
+    var cassFarm=r2(cass-cassCons);
+
+    var faltaConsulta=r2(consulta-cassCons);
+    var segCons=Math.min(seguro, faltaConsulta);
+    var segFarm=r2(seguro-segCons);
+
+    v.cassCons=r2(cassCons); v.cassFarm=cassFarm;
+    v.segCons =r2(segCons);  v.segFarm =segFarm;
+    delete v.cass; delete v.seguro;
+    tocado=true;
+  });
+  if(tocado) guardar();
 }
 function totalViaje(v){ return suma(v.gastos, "importe"); }
 
@@ -1168,21 +1211,28 @@ function verMedico(main){
   var visitas=(libro.medico||[]).slice().sort(function(a,b){ return (b.fecha||"").localeCompare(a.fecha||""); });
   var delAno=visitas.filter(function(v){ return (v.fecha||"").slice(0,4)===ui.mes.slice(0,4); });
   var gastado=r2(delAno.reduce(function(s,v){ return s+(+v.consulta||0)+(+v.medicinas||0); },0));
-  var devuelto=r2(delAno.reduce(function(s,v){ return s+(+v.cass||0)+(+v.seguro||0); },0));
-  var pendiente=r2(delAno.filter(function(v){ return !v.cobrado; })
-                        .reduce(function(s,v){ return s+pendienteMedico(v); },0));
+  var devuelto=r2(delAno.reduce(function(s,v){ return s+cassTotal(v)+seguroTotal(v); },0));
+  var sinCerrar=delAno.filter(function(v){ return !v.cobrado; });
+  var pendiente=r2(sinCerrar.reduce(function(s,v){ return s+pendienteMedico(v); },0));
+  /* Lo pendiente, separado: no es lo mismo reclamar la consulta que la
+     farmacia, y se reclaman en sitios distintos. */
+  var pendCons=r2(sinCerrar.reduce(function(s,v){ return s+pendienteDe(v,"consulta"); },0));
+  var pendFarm=r2(sinCerrar.reduce(function(s,v){ return s+pendienteDe(v,"farmacia"); },0));
 
   main.innerHTML=
     cabecera("Médico",
-      "Cada visita con lo que costó y lo que devuelven la CASS y el seguro. Lo pendiente es lo que aún no te han reembolsado.",
+      "Cada visita con lo que costó y lo que devuelven la CASS y el seguro complementario. "+
+      "La consulta y la farmacia van por separado, porque se recuperan por separado.",
       '<button class="btn fuerte" id="nuevaVisita">Anotar visita</button>')+
     '<div class="cifras">'+
       '<div class="cifra"><div class="k">Pagado en '+ui.mes.slice(0,4)+'</div><div class="v">'+eur(gastado)+'</div>'+
         '<div class="n">consultas y farmacia</div></div>'+
       '<div class="cifra"><div class="k">Devuelto</div><div class="v" style="color:var(--ok)">'+eur(devuelto)+'</div>'+
         '<div class="n">CASS y seguro</div></div>'+
-      '<div class="cifra"><div class="k">Pendiente de cobrar</div><div class="v malo">'+eur(pendiente)+'</div>'+
-        '<div class="n">visitas sin cerrar</div></div>'+
+      '<div class="cifra"><div class="k">Te deben</div><div class="v malo">'+eur(pendiente)+'</div>'+
+        '<div class="n">'+((pendCons>0.004||pendFarm>0.004)
+          ? eur(pendCons)+' de consultas · '+eur(pendFarm)+' de farmacia'
+          : "visitas sin cerrar")+'</div></div>'+
       '<div class="cifra"><div class="k">Visitas</div><div class="v">'+delAno.length+'</div>'+
         '<div class="n">en '+ui.mes.slice(0,4)+'</div></div>'+
     '</div>'+
@@ -1202,7 +1252,8 @@ function verMedico(main){
     '<th>Nº recibo</th>'+
     '<th class="num">Consulta</th><th class="num">Farmacia</th>'+
     '<th class="num">CASS</th>'+
-    '<th class="num">Seguro</th><th class="num">Te queda</th><th>Estado</th><th></th></tr></thead><tbody>'+
+    '<th class="num">Seguro compl.</th><th class="num">Te deben</th>'+
+    '<th>Estado</th><th></th></tr></thead><tbody>'+
     visitas.map(function(v){
       var queda=pendienteMedico(v);
       return "<tr>"+
@@ -1217,9 +1268,15 @@ function verMedico(main){
         '<td class="num">'+eur(v.medicinas)+
           (v.farmacia?'<div style="color:var(--muted);font-size:11px;font-weight:400">'+
             esc(v.farmacia)+'</div>':"")+"</td>"+
-        '<td class="num">'+eur(v.cass)+"</td>"+
-        '<td class="num">'+eur(v.seguro)+"</td>"+
-        '<td class="num"><strong>'+eur(queda)+"</strong></td>"+
+        '<td class="num">'+eur(cassTotal(v))+"</td>"+
+        '<td class="num">'+eur(seguroTotal(v))+"</td>"+
+        '<td class="num"><strong>'+eur(queda)+"</strong>"+
+          /* El desglose sólo cuando hay las dos cosas: si no, estorba */
+          ((+v.consulta||0)>0 && (+v.medicinas||0)>0
+            ? '<div style="color:var(--muted);font-size:11px;font-weight:400">'+
+              eur(pendienteDe(v,"consulta"))+' consulta · '+
+              eur(pendienteDe(v,"farmacia"))+' farmacia</div>'
+            : "")+"</td>"+
         "<td>"+(v.cobrado
                  ? '<span class="chapa ok">Cobrado</span>'
                  : (queda>0.004 ? '<span class="chapa aviso">Pendiente</span>'
@@ -1267,22 +1324,30 @@ function editarVisita(id){
     '</div>'+
     '<p class="nota" style="margin:8px 0 0">El número del recibo de la consulta es el '+
     'comprobante de la visita: lo primero que te piden si hay cualquier problema.</p>'+
-    '<p class="nota" style="margin:16px 0 8px">Lo que pagas</p>'+
+    '<p class="nota" style="margin:16px 0 8px">La consulta y lo que te devuelven de ella</p>'+
     '<div class="rejilla3">'+
       '<div class="campo"><label class="lbl" for="v_cons">Consulta (€)</label>'+
         '<input type="number" id="v_cons" min="0" step="0.01" value="'+esc(v.consulta||"")+'"></div>'+
+      '<div class="campo"><label class="lbl" for="v_cassCons">CASS (€)</label>'+
+        '<input type="number" id="v_cassCons" min="0" step="0.01" value="'+esc(v.cassCons||"")+'"></div>'+
+      '<div class="campo"><label class="lbl" for="v_segCons">Seguro compl. (€)</label>'+
+        '<input type="number" id="v_segCons" min="0" step="0.01" value="'+esc(v.segCons||"")+'"></div>'+
+    '</div>'+
+    '<div class="nota" id="v_calcCons" style="margin:6px 0 0"></div>'+
+
+    '<p class="nota" style="margin:18px 0 8px">La farmacia y lo que te devuelven de ella</p>'+
+    '<div class="rejilla3">'+
       '<div class="campo"><label class="lbl" for="v_medi">Farmacia (€)</label>'+
         '<input type="number" id="v_medi" min="0" step="0.01" value="'+esc(v.medicinas||"")+'"></div>'+
-      '<div class="campo"><label class="lbl" for="v_farmacia">Qué farmacia</label>'+
-        '<input id="v_farmacia" value="'+esc(v.farmacia||"")+'" placeholder="Farmàcia Pyrénées…"></div>'+
+      '<div class="campo"><label class="lbl" for="v_cassFarm">CASS (€)</label>'+
+        '<input type="number" id="v_cassFarm" min="0" step="0.01" value="'+esc(v.cassFarm||"")+'"></div>'+
+      '<div class="campo"><label class="lbl" for="v_segFarm">Seguro compl. (€)</label>'+
+        '<input type="number" id="v_segFarm" min="0" step="0.01" value="'+esc(v.segFarm||"")+'"></div>'+
     '</div>'+
-    '<p class="nota" style="margin:16px 0 8px">Lo que te devuelven</p>'+
-    '<div class="rejilla3">'+
-      '<div class="campo"><label class="lbl" for="v_cass">CASS (€)</label>'+
-        '<input type="number" id="v_cass" min="0" step="0.01" value="'+esc(v.cass||"")+'"></div>'+
-      '<div class="campo"><label class="lbl" for="v_seg">Seguro complementario (€)</label>'+
-        '<input type="number" id="v_seg" min="0" step="0.01" value="'+esc(v.seguro||"")+'"></div>'+
-    '</div>'+
+    '<div class="campo" style="margin-top:10px;max-width:280px">'+
+      '<label class="lbl" for="v_farmacia">Qué farmacia</label>'+
+      '<input id="v_farmacia" value="'+esc(v.farmacia||"")+'" placeholder="Farmàcia Pyrénées…"></div>'+
+    '<div class="nota" id="v_calcFarm" style="margin:6px 0 0"></div>'+
     '<label class="marca-check" style="margin-top:14px">'+
       '<input type="checkbox" id="v_cobrado"'+(v.cobrado?" checked":"")+'>'+
       '<span>Ya me lo han devuelto todo</span></label>'+
@@ -1296,22 +1361,37 @@ function editarVisita(id){
       v.medicinas=numero("v_medi");
       v.farmacia=valor("v_farmacia");
       v.recibo=valor("v_recibo");
-      v.cass=numero("v_cass");
-      v.seguro=numero("v_seg");
+      v.cassCons=numero("v_cassCons"); v.segCons=numero("v_segCons");
+      v.cassFarm=numero("v_cassFarm"); v.segFarm=numero("v_segFarm");
       v.cobrado=document.getElementById("v_cobrado").checked;
       if(!id) libro.medico.push(v);
       guardar(); pintar(); avisar(id?"Visita actualizada":"Visita anotada");
     });
 
-  /* Cuenta en vivo de lo que queda por recuperar */
+  /* Cuenta en vivo: cada concepto por su lado y el total abajo */
+  function frase(pagado, devuelto, queda, quien){
+    if(!pagado) return "";
+    if(queda>0.004)  return 'De los '+eur(pagado)+' te han devuelto '+eur(devuelto)+
+                            ': te deben <strong>'+eur(queda)+'</strong> '+quien+'.';
+    if(queda<-0.004) return 'Te han devuelto <strong>'+eur(Math.abs(queda))+
+                            '</strong> de más '+quien+'.';
+    return 'Recuperado del todo '+quien+'.';
+  }
   function recalcular(){
-    var queda=r2(numero("v_cons")+numero("v_medi")-numero("v_cass")-numero("v_seg"));
+    var cons=numero("v_cons"), cassC=numero("v_cassCons"), segC=numero("v_segCons");
+    var farm=numero("v_medi"), cassF=numero("v_cassFarm"), segF=numero("v_segFarm");
+    var quedaC=r2(cons-cassC-segC), quedaF=r2(farm-cassF-segF);
+    document.getElementById("v_calcCons").innerHTML=frase(cons, r2(cassC+segC), quedaC, "de la consulta");
+    document.getElementById("v_calcFarm").innerHTML=frase(farm, r2(cassF+segF), quedaF, "de la farmacia");
+
+    var total=r2(quedaC+quedaF);
     document.getElementById("v_calculo").innerHTML=
-      queda>0.004 ? 'Te quedarían por recuperar <strong>'+eur(queda)+'</strong>.'
-    : queda<-0.004 ? 'Te han devuelto <strong>'+eur(Math.abs(queda))+'</strong> de más.'
+      total>0.004 ? 'En total te deben <strong>'+eur(total)+'</strong>'+
+        (cons>0 && farm>0 ? ' ('+eur(quedaC)+' de la consulta y '+eur(quedaF)+' de la farmacia)' : "")+'.'
+    : total<-0.004 ? 'Te han devuelto <strong>'+eur(Math.abs(total))+'</strong> de más.'
     : 'Cuadra: no queda nada pendiente.';
   }
-  ["v_cons","v_medi","v_cass","v_seg"].forEach(function(id2){
+  ["v_cons","v_medi","v_cassCons","v_segCons","v_cassFarm","v_segFarm"].forEach(function(id2){
     document.getElementById(id2).addEventListener("input", recalcular);
   });
   recalcular();
@@ -1902,6 +1982,7 @@ function editarOtro(id){
 
 /* ══════════════════════════════════════════════════════════════ */
 cargar();
+repartirDevoluciones();
 pintar();
 
 })();
