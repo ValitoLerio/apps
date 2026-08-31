@@ -115,7 +115,16 @@ function confirmar(titulo, cuerpo, alAceptar, opciones){
                {aceptar:opciones.aceptar||"Aceptar", malo:opciones.malo});
 }
 function contarDias(){ return (libro.dias||[]).length; }
+function contarHojas(){ return Object.keys(libro.hojas||{}).length; }
+function pesoHojas(){
+  var letras=Object.keys(libro.hojas||{}).reduce(function(s,k){
+    return s+String(libro.hojas[k]||"").length; },0);
+  var bytes=Math.round(letras*0.75);   /* base64 abulta un tercio */
+  return bytes>1048576 ? num(bytes/1048576,1)+" MB" : num(bytes/1024,0)+" kB";
+}
 function plural(n, uno, varios){ return n+" "+(n===1?uno:varios); }
+/* elige la frase entera, para que concuerden el verbo y el artículo */
+function segunCuantos(n, uno, varios){ return n===1 ? uno : varios; }
 /* elige la frase entera según sean uno o varios, para que concuerden
    el verbo y el artículo */
 function conArticulo(n, uno, varios){ return n===1 ? uno : varios; }
@@ -740,11 +749,20 @@ function verMes(main){
     '</div>'+
     '<div class="tarjeta"><div class="tarjeta-cab"><h2>Días</h2>'+
       '<span class="pista">Pulsa un día para abrirlo</span></div>'+
-      '<div class="tabla-caja" id="cuadrante"></div></div>';
+      '<div class="tabla-caja" id="cuadrante"></div></div>'+
+
+    /* La hoja de papel del mes, escaneada. Sirve de respaldo y para
+       contrastar cuando un número no cuadra. */
+    '<div class="tarjeta" style="margin-top:16px">'+
+      '<div class="tarjeta-cab"><h2>La hoja de '+esc(mesLargo(ui.mes))+'</h2>'+
+        '<span class="pista">La foto de tu cuadrante en papel</span></div>'+
+      '<div class="tarjeta-cuerpo" id="cajaHoja"></div></div>';
 
   document.getElementById("m_mes").addEventListener("change", function(){
     ui.mes=this.value; ui.dia=this.value+"-01"; pintar();
   });
+
+  pintarHoja();   /* va aparte de la tabla: un mes sin días también puede tener su hoja */
 
   var caja=document.getElementById("cuadrante");
   if(!dias.length){
@@ -786,6 +804,104 @@ function verMes(main){
       ui.dia=tr.getAttribute("data-dia"); ui.vista="dia"; pintar();
     });
   });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LA HOJA DE PAPEL
+   ══════════════════════════════════════════════════════════════
+   Una foto por mes, guardada con el resto de los datos. Se reduce
+   antes de guardarla, pero no tanto como en el álbum de monedas:
+   aquí hay que poder leer las cifras escritas a mano.
+   ══════════════════════════════════════════════════════════════ */
+function hojaDelMes(ym){ return (libro.hojas||{})[ym||ui.mes] || null; }
+
+function pintarHoja(){
+  var caja=document.getElementById("cajaHoja"); if(!caja) return;
+  var foto=hojaDelMes();
+
+  caja.innerHTML = foto
+    ? '<img src="'+esc(foto)+'" alt="La hoja de '+esc(mesLargo(ui.mes))+'" '+
+      'id="hojaFoto" style="width:100%;max-width:620px;border-radius:8px;'+
+      'border:1px solid var(--linea);cursor:zoom-in;display:block">'+
+      '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'+
+        '<button class="btn sm" id="hoja_ver">Verla grande</button>'+
+        '<button class="btn sm" id="hoja_cambiar">Cambiar la foto</button>'+
+        '<button class="btn sm malo" id="hoja_quitar">Quitarla</button>'+
+      '</div>'+
+      '<input type="file" id="hoja_archivo" accept="image/*" capture="environment" '+
+      'style="display:none">'
+    : '<p class="nota" style="margin:0 0 12px">Haz una foto a la hoja del mes y déjala aquí. '+
+      'Queda guardada con los datos, así que la tienes en cualquier dispositivo y sirve para '+
+      'contrastar cuando un número no cuadre.</p>'+
+      '<input type="file" id="hoja_archivo" accept="image/*" capture="environment" '+
+      'style="width:auto">';
+
+  var archivo=document.getElementById("hoja_archivo");
+  archivo.addEventListener("change", function(){
+    var f=this.files && this.files[0];
+    if(!f) return;
+    encogerFoto(f, function(dataUrl){
+      libro.hojas=libro.hojas||{};
+      libro.hojas[ui.mes]=dataUrl;
+      guardar(); pintar();
+      avisar("Hoja de "+mesLargo(ui.mes)+" guardada");
+    });
+  });
+
+  if(!foto) return;
+  document.getElementById("hoja_cambiar").addEventListener("click", function(){ archivo.click(); });
+  document.getElementById("hoja_ver").addEventListener("click", verHojaGrande);
+  document.getElementById("hojaFoto").addEventListener("click", verHojaGrande);
+  document.getElementById("hoja_quitar").addEventListener("click", function(){
+    confirmar("Quitar la hoja de "+mesLargo(ui.mes),
+      '<p style="margin:0">Se borra la foto. Los días anotados no se tocan.</p>',
+      function(){
+        if(libro.hojas) delete libro.hojas[ui.mes];
+        guardar(); pintar(); avisar("Foto quitada");
+      }, {aceptar:"Quitar", malo:true});
+  });
+}
+
+function verHojaGrande(){
+  var foto=hojaDelMes(); if(!foto) return;
+  var vieja=document.getElementById("dlg"); if(vieja) vieja.remove();
+  var d=document.createElement("dialog"); d.id="dlg";
+  d.style.maxWidth="min(1000px, calc(100% - 32px))";
+  d.innerHTML='<div class="dlg-cab"><h3>La hoja de '+esc(mesLargo(ui.mes))+'</h3>'+
+    '<button class="btn suave" data-x>Cerrar</button></div>'+
+    '<div class="dlg-cuerpo" style="max-height:80vh"><img src="'+esc(foto)+'" alt="" '+
+    'style="width:100%;display:block;border-radius:6px"></div>';
+  document.body.appendChild(d);
+  d.querySelectorAll("[data-x]").forEach(function(b){
+    b.addEventListener("click", function(){ d.close(); d.remove(); });
+  });
+  d.showModal();
+}
+
+/* La foto se reduce antes de guardarla: 1100 px de lado largo, que es lo
+   que hace falta para leer los números a mano sin que el archivo se
+   dispare. El libro entero sube a GitHub en cada cambio. */
+function encogerFoto(archivo, listo){
+  var lector=new FileReader();
+  lector.onload=function(){
+    var img=new Image();
+    img.onload=function(){
+      var max=1100;
+      var ancho=img.width, alto=img.height;
+      if(ancho>alto && ancho>max){ alto=Math.round(alto*max/ancho); ancho=max; }
+      else if(alto>=ancho && alto>max){ ancho=Math.round(ancho*max/alto); alto=max; }
+      var cv=document.createElement("canvas");
+      cv.width=ancho; cv.height=alto;
+      var cx=cv.getContext("2d");
+      cx.fillStyle="#fff"; cx.fillRect(0,0,ancho,alto);
+      cx.drawImage(img,0,0,ancho,alto);
+      listo(cv.toDataURL("image/jpeg", 0.72));
+    };
+    img.onerror=function(){ avisar("No he podido leer esa imagen.", true); };
+    img.src=lector.result;
+  };
+  lector.onerror=function(){ avisar("No he podido leer ese archivo.", true); };
+  lector.readAsDataURL(archivo);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -1153,6 +1269,12 @@ function verAjustes(main){
         '<p class="nota" style="margin:0 0 14px">Lo borrado se va también de GitHub, '+
         'y no hay forma de recuperarlo desde aquí.</p>'+
         '<div style="display:flex;flex-direction:column;gap:10px">'+
+          '<div><button class="btn malo" id="b_hojas">Quitar las fotos de las hojas</button>'+
+            '<div class="nota" style="margin-top:4px">'+
+            (contarHojas()
+              ? plural(contarHojas(),"hoja guardada","hojas guardadas")+', '+pesoHojas()+
+                '. Los días anotados se quedan.'
+              : "no hay ninguna foto guardada")+'</div></div>'+
           '<div><button class="btn malo" id="b_dias">Borrar los días</button>'+
             '<div class="nota" style="margin-top:4px">'+
             (contarDias()? plural(contarDias(),"cierre anotado","cierres anotados")
@@ -1205,6 +1327,19 @@ function verAjustes(main){
     var e=document.getElementById(id); if(e) e.addEventListener("input", previoDestino);
   });
   previoDestino();
+
+  document.getElementById("b_hojas").addEventListener("click", function(){
+    if(!contarHojas()){ avisar("No hay ninguna foto guardada.", true); return; }
+    confirmar("Quitar las fotos de las hojas",
+      '<p style="margin:0 0 10px">'+segunCuantos(contarHojas(),
+        "Se va <strong>la única foto</strong>",
+        "Se van <strong>las "+contarHojas()+" fotos</strong>")+
+      ' de las hojas de papel ('+pesoHojas()+').</p>'+
+      '<p class="nota" style="margin:0">Los días anotados no se tocan.</p>',
+      function(){
+        libro.hojas={}; guardar(); pintar(); avisar("Fotos quitadas");
+      }, {aceptar:"Quitar", malo:true});
+  });
 
   document.getElementById("b_dias").addEventListener("click", function(){
     if(!contarDias()){ avisar("No hay ningún día que borrar.", true); return; }
