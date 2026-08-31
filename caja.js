@@ -161,7 +161,7 @@ function cuentasDia(d){
   /* El sobrante es lo que entra en la amarilla por encima del objetivo:
      cuando ya están los 1500, lo demás sobra. Se sigue pudiendo escribir
      a mano, y entonces manda lo escrito. */
-  var cuenta=r2(Math.max(0, amarilla-objetivoAmarilla()));
+  var cuenta=objetivoAmarilla()>0 ? r2(Math.max(0, amarilla-objetivoAmarilla())) : 0;
   var anotado=sobranteAnotado(d);
   return {
     /* El fondo de caja son los dos sitios juntos: lo que se aparta a la
@@ -225,8 +225,12 @@ function faltaAmarilla(){ return r2(Math.max(0, objetivoAmarilla()-amarillaGuard
 /* Lo que sobra de la amarilla: lo que entra una vez que ya están los
    1500. Es la última columna de la hoja. */
 function sobraAmarilla(d){
+  /* Sin objetivo no hay nada por encima de lo que sobrar. Antes se
+     restaba de cero y salía que sobraba todo lo que había dentro. */
+  var objetivo=objetivoAmarilla();
+  if(objetivo<=0) return 0;
   var am=(d && d.aAmarilla!=null && d.aAmarilla!=="") ? r2(+d.aAmarilla||0) : 0;
-  return r2(Math.max(0, am-objetivoAmarilla()));
+  return r2(Math.max(0, am-objetivo));
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -281,6 +285,11 @@ function verDia(main){
   var guardado=amarillaGuardado(), falta=faltaAmarilla();
 
   main.innerHTML=
+    (objetivoAmarilla()<=0
+      ? '<div class="aviso-caja">La caja amarilla no tiene objetivo puesto, así que la app no '+
+        'puede saber cuánto sobra. Ponlo en <strong>Caja amarilla → Cambiar objetivo</strong> '+
+        '(los 1.500 € de siempre) y esta cuenta saldrá sola.</div>'
+      : "")+
     cabecera("Cierre del "+dmy(ui.dia),
       esc(diaSemana(ui.dia).charAt(0).toUpperCase()+diaSemana(ui.dia).slice(1))+
       ". Anota lo cobrado y lo pagado; el reparto se calcula solo.",
@@ -318,11 +327,14 @@ function verDia(main){
             ? '<tr><td style="color:var(--muted)">Por encima de '+eur(objetivoAmarilla())+' saldrían</td>'+
               '<td class="num" style="color:var(--muted)">'+eur(c.sobranteCuenta)+'</td></tr>'
             : "")+
-          '<tr style="border-top:2px solid var(--linea)"><td><strong>Sobra c. amarilla'+
-            (sobranteAnotado(d)!=null?' <span style="color:var(--muted);font-size:12px">(anotado)</span>':"")+
+          '<tr style="border-top:2px solid var(--linea)"><td><strong'+
+            (c.sobrante>0.004?"":' style="color:var(--muted)"')+'>Sobra c. amarilla'+
+            (sobranteAnotado(d)!=null && c.sobrante>0.004
+              ?' <span style="color:var(--muted);font-size:12px">(anotado)</span>':"")+
             '</strong></td>'+
-            '<td class="num"><strong style="font-size:16px'+(c.sobrante<0?";color:var(--malo)":"")+'">'+
-            eur(c.sobrante)+'</strong></td></tr>'+
+            '<td class="num">'+(c.sobrante>0.004
+              ? '<strong style="font-size:16px">'+eur(c.sobrante)+'</strong>'
+              : '<span style="color:var(--muted)">—</span>')+'</td></tr>'+
         '</tbody></table>'+
         (c.amarilla>0 && objetivoAmarilla()>0 && c.amarilla<objetivoAmarilla()
           ? '<div class="nota" style="margin:14px 0 0">A la amarilla le faltan '+
@@ -411,7 +423,8 @@ function pintarFormularioDia(d){
   function refrescar(){
     var visa=numero("f_visa"), efec=numero("f_efec"), g=totalG();
     var am=numero("f_amar"), fondo=numero("f_fondo");
-    var neto=r2(efec-g), cuenta=r2(Math.max(0, am-objetivoAmarilla()));
+    var neto=r2(efec-g);
+    var cuenta=objetivoAmarilla()>0 ? r2(Math.max(0, am-objetivoAmarilla())) : 0;
     var campoSobra=document.getElementById("f_sobra");
     var puesto=(campoSobra && campoSobra.value!=="") ? r2(+campoSobra.value||0) : null;
     var sobra=(puesto!=null?puesto:cuenta);
@@ -516,9 +529,11 @@ function textoDia(fecha, opciones){
     ["Efectivo",    c.efectivo],
     ["Pagos",       c.gastos],
     ["C. amarilla", c.amarilla],
-    ["Fondo caja",  c.fondo],
-    ["Sobra c. am.", c.sobrante]
+    ["Fondo caja",  c.fondo]
   ];
+  /* Como en la hoja: la casilla del sobrante se queda en blanco mientras
+     la amarilla no pase del objetivo. Sólo aparece cuando hay de más. */
+  if(c.sobrante>0.004) lineas.push(["Sobra c. am.", c.sobrante]);
   var anchoTexto=Math.max.apply(null, lineas.map(function(x){ return x[0].length; }));
   var anchoImporte=Math.max.apply(null, lineas.map(function(x){ return eur(x[1]).length; }));
 
@@ -785,7 +800,7 @@ function verMes(main){
         '<td class="num"'+(c.amarilla>0?' style="color:var(--amarilla);font-weight:600"':"")+">"+
           (c.amarilla>0?eur(c.amarilla):"—")+"</td>"+
         '<td class="num">'+(c.fondo>0?eur(c.fondo):"—")+"</td>"+
-        '<td class="num"><strong>'+eur(c.sobrante)+"</strong></td>"+
+        '<td class="num">'+(c.sobrante>0.004?"<strong>"+eur(c.sobrante)+"</strong>":"—")+"</td>"+
         '<td class="num">'+eur(c.ventas)+"</td>"+
         '<td style="font-size:12.5px;color:var(--muted)">'+esc(d.nota||"")+"</td></tr>";
     }).join("")+
@@ -1009,6 +1024,11 @@ function verAmarilla(main){
   var cuando=fechaAmarilla();
 
   main.innerHTML=
+    (objetivo<=0
+      ? '<div class="aviso-caja">Todavía no le has puesto objetivo. Sin él no se puede saber '+
+        'cuánto sobra cada día ni cuánto falta para completarlo. '+
+        '<button class="btn sm" id="am_objetivo0" style="margin-left:6px">Ponerlo ahora</button></div>'
+      : "")+
     cabecera("Caja amarilla",
       "Lo que hay dentro lo cuentas tú y lo anotas en el cierre de cada día. "+
       "Aquí ves el último recuento y todo lo que ha ido pasando.",
@@ -1052,6 +1072,8 @@ function verAmarilla(main){
       '<div class="tabla-caja" id="tablaAmarilla"></div></div>';
 
   document.getElementById("am_objetivo").addEventListener("click", cambiarObjetivo);
+  var atajo=document.getElementById("am_objetivo0");
+  if(atajo) atajo.addEventListener("click", cambiarObjetivo);
   document.getElementById("am_cero").addEventListener("click", ponerAmarillaACero);
   document.getElementById("am_sacar").addEventListener("click", sacarDeAmarilla);
   document.getElementById("am_meter").addEventListener("click", meterEnAmarilla);
@@ -1093,13 +1115,24 @@ function verAmarilla(main){
 
 function cambiarObjetivo(){
   abrirVentana("Objetivo de la caja amarilla",
-    '<p class="nota">Cuánto tiene que haber guardado en la amarilla.</p>'+
+    '<p class="nota">Cuánto tiene que haber guardado en la amarilla. '+
+    'De ahí sale lo que sobra cada día: lo que entra cuando ya está completa.</p>'+
     '<div class="campo" style="max-width:200px"><label class="lbl" for="ob_val">Objetivo (€)</label>'+
-    '<input type="number" id="ob_val" class="grande" min="0" step="10" value="'+esc(objetivoAmarilla())+'"></div>',
+    '<input type="number" id="ob_val" class="grande" min="0" step="10" value="'+
+    esc(objetivoAmarilla()||"")+'" placeholder="1500"></div>'+
+    (objetivoAmarilla()<=0
+      ? '<p class="nota" style="margin:10px 0 0">Lo habitual aquí son <strong>1.500 €</strong>. '+
+        '<button type="button" class="btn sm" id="ob_1500" style="margin-left:4px">Poner 1.500</button></p>'
+      : ""),
     function(){
       libro.ajustes.objetivoAmarilla=numero("ob_val");
       guardar(); pintar(); avisar("Objetivo: "+eur(objetivoAmarilla()));
     });
+
+  var rapido=document.getElementById("ob_1500");
+  if(rapido) rapido.addEventListener("click", function(){
+    document.getElementById("ob_val").value=1500;
+  });
 }
 
 /* Reponer la amarilla con dinero que no sale de la caja del día:
