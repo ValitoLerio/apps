@@ -1140,7 +1140,7 @@ function verMedico(main){
       '<button class="btn fuerte" id="nuevaVisita">Anotar visita</button>')+
     '<div class="cifras">'+
       '<div class="cifra"><div class="k">Pagado en '+ui.mes.slice(0,4)+'</div><div class="v">'+eur(gastado)+'</div>'+
-        '<div class="n">consultas y medicinas</div></div>'+
+        '<div class="n">consultas y farmacia</div></div>'+
       '<div class="cifra"><div class="k">Devuelto</div><div class="v" style="color:var(--ok)">'+eur(devuelto)+'</div>'+
         '<div class="n">CASS y seguro</div></div>'+
       '<div class="cifra"><div class="k">Pendiente de cobrar</div><div class="v malo">'+eur(pendiente)+'</div>'+
@@ -1161,8 +1161,8 @@ function verMedico(main){
     return;
   }
   caja.innerHTML='<table><thead><tr><th>Fecha</th><th>Quién</th><th>Médico</th><th>Motivo</th>'+
-    '<th class="num">Consulta</th><th class="num">Medicinas<br>'+
-    '<span style="font-weight:400;text-transform:none;letter-spacing:0">y su recibo</span></th>'+
+    '<th>Nº recibo</th>'+
+    '<th class="num">Consulta</th><th class="num">Farmacia</th>'+
     '<th class="num">CASS</th>'+
     '<th class="num">Seguro</th><th class="num">Te queda</th><th>Estado</th><th></th></tr></thead><tbody>'+
     visitas.map(function(v){
@@ -1172,10 +1172,11 @@ function verMedico(main){
         "<td><strong>"+esc(v.persona||"")+"</strong></td>"+
         "<td>"+esc(v.medico||"—")+"</td>"+
         "<td>"+esc(v.motivo||"—")+"</td>"+
+        '<td class="mono">'+(v.recibo
+          ? esc(v.recibo)
+          : '<span style="color:var(--muted)">—</span>')+"</td>"+
         '<td class="num">'+eur(v.consulta)+"</td>"+
         '<td class="num">'+eur(v.medicinas)+
-          (v.recibo?'<div class="mono" style="color:var(--muted);font-size:11px;'+
-            'font-weight:400">'+esc(v.recibo)+'</div>':"")+
           (v.farmacia?'<div style="color:var(--muted);font-size:11px;font-weight:400">'+
             esc(v.farmacia)+'</div>':"")+"</td>"+
         '<td class="num">'+eur(v.cass)+"</td>"+
@@ -1219,24 +1220,24 @@ function editarVisita(id){
         '<input id="v_medico" value="'+esc(v.medico)+'" placeholder="Dr. Puig, dentista…"></div>'+
       '<div class="campo"><label class="lbl" for="v_motivo">Motivo</label>'+
         '<input id="v_motivo" value="'+esc(v.motivo)+'" placeholder="Revisión, gripe…"></div>'+
+      /* El comprobante de la consulta: es lo primero que piden si hay
+         cualquier problema, así que va arriba, con los datos de la visita
+         y no escondido entre los importes. */
+      '<div class="campo"><label class="lbl" for="v_recibo">Nº de recibo</label>'+
+        '<input id="v_recibo" class="mono" value="'+esc(v.recibo||"")+'" '+
+        'placeholder="A-2026/0134"></div>'+
     '</div>'+
+    '<p class="nota" style="margin:8px 0 0">El número del recibo de la consulta es el '+
+    'comprobante de la visita: lo primero que te piden si hay cualquier problema.</p>'+
     '<p class="nota" style="margin:16px 0 8px">Lo que pagas</p>'+
     '<div class="rejilla3">'+
       '<div class="campo"><label class="lbl" for="v_cons">Consulta (€)</label>'+
         '<input type="number" id="v_cons" min="0" step="0.01" value="'+esc(v.consulta||"")+'"></div>'+
-      '<div class="campo"><label class="lbl" for="v_medi">Medicinas (€)</label>'+
+      '<div class="campo"><label class="lbl" for="v_medi">Farmacia (€)</label>'+
         '<input type="number" id="v_medi" min="0" step="0.01" value="'+esc(v.medicinas||"")+'"></div>'+
-    '</div>'+
-    /* El número del recibo de la farmacia es lo que piden luego para
-       devolverte el dinero, así que se guarda con la visita. */
-    '<div class="rejilla" style="margin-top:10px">'+
-      '<div class="campo"><label class="lbl" for="v_farmacia">Farmacia</label>'+
+      '<div class="campo"><label class="lbl" for="v_farmacia">Qué farmacia</label>'+
         '<input id="v_farmacia" value="'+esc(v.farmacia||"")+'" placeholder="Farmàcia Pyrénées…"></div>'+
-      '<div class="campo"><label class="lbl" for="v_recibo">Nº de recibo</label>'+
-        '<input id="v_recibo" class="mono" value="'+esc(v.recibo||"")+'" placeholder="A-2026/0134"></div>'+
     '</div>'+
-    '<p class="nota" style="margin:8px 0 0">El número del recibo es lo que te van a pedir '+
-    'para devolverte lo de las medicinas.</p>'+
     '<p class="nota" style="margin:16px 0 8px">Lo que te devuelven</p>'+
     '<div class="rejilla3">'+
       '<div class="campo"><label class="lbl" for="v_cass">CASS (€)</label>'+
