@@ -15,6 +15,13 @@ function blankState(){
     settings:{
       name:"", nrt:"", address:"", city:"", phone:"", email:"",
       igi:4.5, iban:"", dueDays:30, terms:"Transferencia bancaria",
+      /* Lo que se lee al pie de la factura. {IBAN} se cambia por el del
+         perfil que la emite, para no tener el número escrito en dos
+         sitios y que un día dejen de coincidir. */
+      cierre:"Os adjunto la factura de las comidas del periodo indicado, junto con el detalle "+
+             "de albaranes.\nNuestro IBAN es el siguiente: {IBAN}\n\n"+
+             "Sin otro particular y esperando vuestro pago, os mandamos un cordial saludo.\n\n"+
+             "Cristina\nLa palmera de Soldeu",
       prefix:"F", nextNumber:1, perfilActivo:"",
       paperCopy:true, pricesIncludeIgi:true, countryCode:"376",
       defaultPrice:13.5, defaultDesc:"Menú del día",
@@ -55,6 +62,7 @@ function asegurarPerfiles(){
     id: uid(), name: s.name || "", nrt: s.nrt || "", address: s.address || "",
     city: s.city || "", phone: s.phone || "", email: s.email || "",
     iban: s.iban || "", terms: s.terms || "Transferencia bancaria",
+    cierre: (s.cierre!==undefined ? s.cierre : blankState().settings.cierre),
     prefix: s.prefix || "F", nextNumber: +s.nextNumber || 1
   });
   state.settings.perfilActivo = perfiles()[0].id;
@@ -724,9 +732,31 @@ function draftInvoice(cid, ym){
             email:correosDe(c)[0]||"", emails:correosDe(c), contact:c.contact, phone:c.phone},
     issuer:{name:em.name,nrt:em.nrt,address:em.address,city:em.city,
             phone:em.phone,email:em.email},
-    terms:(c.terms||em.terms||st.terms), iban:em.iban||st.iban
+    terms:(c.terms||em.terms||st.terms), iban:em.iban||st.iban,
+    cierre:textoDeCierre(em.cierre||st.cierre, em.iban||st.iban)
   };
 }
+/* La despedida de una factura. Las emitidas antes de que esto existiera
+   no la llevan guardada, y el texto es de presentación, no un dato
+   fiscal: se resuelve al pintarla y así también salen las viejas. */
+function cierreDeFactura(inv){
+  if(inv && inv.cierre) return inv.cierre;
+  var st=state.settings||{};
+  var em=(inv && inv.perfilId) ? perfil(inv.perfilId) : null;
+  return textoDeCierre((em&&em.cierre)||st.cierre, (inv&&inv.iban)||(em&&em.iban)||st.iban);
+}
+
+/* El texto del pie, con el IBAN puesto donde toque. Si no hay IBAN
+   guardado, se quita la frase entera en vez de dejar un hueco raro. */
+function textoDeCierre(texto, iban){
+  var t=String(texto||"").trim();
+  if(!t) return "";
+  if(t.indexOf("{IBAN}")<0) return t;
+  if(iban) return t.split("{IBAN}").join(iban);
+  return t.split("\n").filter(function(linea){ return linea.indexOf("{IBAN}")<0; })
+          .join("\n").replace(/\n{3,}/g,"\n\n").trim();
+}
+
 /* ── Control de facturas repetidas ───────────────────────────────────
    Un numero de factura no puede salir dos veces: es el identificador
    del documento que ya esta en manos del cliente y de Hacienda. */
@@ -932,6 +962,17 @@ function viewAjustes(main){
 
     "</div></div>"+
 
+    '<div class="card" style="margin-bottom:18px"><div class="card-head"><h2>Despedida de la factura</h2></div>'+
+    '<div class="card-body">'+
+      '<p class="section-note" style="margin:0 0 10px">Lo que se lee al pie de la factura, debajo del '+
+      'total. Escribe <span class="mono">{IBAN}</span> donde quieras que salga el número de cuenta '+
+      'y se pone solo el del perfil que emite: así no lo tienes escrito en dos sitios. '+
+      'Si un perfil no tiene IBAN, esa línea desaparece.</p>'+
+      '<textarea id="s_cierre" rows="8">'+esc(s.cierre||"")+"</textarea>"+
+      '<p class="section-note" style="margin:10px 0 0">Un perfil de emisor puede llevar su propia '+
+      'despedida; si la tiene, manda sobre ésta.</p>'+
+    "</div></div>"+
+
     '<div class="card" style="margin-bottom:18px"><div class="card-head"><h2>Texto del correo</h2></div><div class="card-body">'+
       '<p class="section-note">Es el cuerpo que se copia al portapapeles cuando envías la factura. El asunto y los importes se añaden solos.</p>'+
       '<textarea id="s_mail" rows="5">'+esc(s.mailIntro)+"</textarea>"+
@@ -944,7 +985,7 @@ function viewAjustes(main){
       '<input type="file" id="impFile" accept="application/json,.json" hidden></div>'+
     "</div></div>";
 
-  var map={s_mail:"mailIntro", s_cc:"countryCode", s_ddesc:"defaultDesc"};
+  var map={s_mail:"mailIntro", s_cc:"countryCode", s_ddesc:"defaultDesc", s_cierre:"cierre"};
   Object.keys(map).forEach(function(id){
     var el=document.getElementById(id); if(!el) return;
     el.addEventListener("change", function(){ state.settings[map[id]]=this.value.trim?this.value.trim():this.value; touch(); });
@@ -1033,7 +1074,7 @@ function borrarPerfil(id){
 
 function editarPerfil(id){
   var p=id?perfil(id):{id:uid(), name:"", nrt:"", address:"", city:"", phone:"", email:"",
-                       iban:"", terms:"Transferencia bancaria", prefix:"F", nextNumber:1};
+                       iban:"", terms:"Transferencia bancaria", cierre:"", prefix:"F", nextNumber:1};
   openDialog(id?"Editar perfil":"Nuevo perfil de emisor",
     '<div class="grid2">'+
       '<div class="field" style="grid-column:1/-1"><label class="lbl" for="p_name">Nombre fiscal</label><input id="p_name" value="'+esc(p.name)+'" placeholder="Restaurant Cal Miquel, SL"></div>'+
@@ -1045,6 +1086,9 @@ function editarPerfil(id){
       '<div class="field"><label class="lbl" for="p_city">Población</label><input id="p_city" value="'+esc(p.city)+'"></div>'+
       '<div class="field"><label class="lbl" for="p_iban">IBAN para el cobro</label><input id="p_iban" class="mono" value="'+esc(p.iban)+'"></div>'+
       '<div class="field" style="grid-column:1/-1"><label class="lbl" for="p_terms">Condiciones de pago</label><input id="p_terms" value="'+esc(p.terms)+'"></div>'+
+      '<div class="field" style="grid-column:1/-1"><label class="lbl" for="p_cierre">Despedida propia de este perfil</label>'+
+        '<textarea id="p_cierre" rows="5" placeholder="Si lo dejas vacío se usa la de Ajustes">'+
+        esc(p.cierre||"")+"</textarea></div>"+
       '<div class="field"><label class="lbl" for="p_prefix">Serie</label><input id="p_prefix" class="mono" value="'+esc(p.prefix)+'"></div>'+
       '<div class="field"><label class="lbl" for="p_next">Siguiente número</label><input type="number" id="p_next" min="1" step="1" value="'+esc(p.nextNumber)+'"></div>'+
     '</div>'+
@@ -1060,6 +1104,7 @@ function editarPerfil(id){
       p.city=document.getElementById("p_city").value.trim();
       p.iban=document.getElementById("p_iban").value.trim();
       p.terms=document.getElementById("p_terms").value.trim();
+      p.cierre=document.getElementById("p_cierre").value.trim();
       p.prefix=document.getElementById("p_prefix").value.trim()||"F";
       p.nextNumber=+document.getElementById("p_next").value||1;
       if(!id){ perfiles().push(p); if(!state.settings.perfilActivo){ state.settings.perfilActivo=p.id; ui.perfil=p.id; } }
@@ -1295,6 +1340,10 @@ function invoiceHTML(inv){
       }).join("")+
       '<div class="r grand"><span>TOTAL A PAGAR</span><span>'+eur(inv.total)+"</span></div>"+
     "</div>"+
+    (function(){
+      var texto=cierreDeFactura(inv);
+      return texto ? '<div class="p-cierre" style="white-space:pre-wrap">'+esc(texto)+'</div>' : "";
+    })()+
     '<div class="p-foot"><div><div class="k">Forma de pago</div><div>'+esc(inv.terms||"—")+"</div>"+
       (inv.iban?'<div class="k" style="margin-top:8px">IBAN</div><div class="mono">'+esc(inv.iban)+"</div>":"")+
       "</div>"+
@@ -1435,6 +1484,18 @@ function layoutInvoice(inv, opts){
   T(eur(inv.total), R-10, y+15, 12.5, true, [1,1,1], "right");
   y+=44;
 
+  /* El texto de cierre, antes del pie de pago */
+  var textoCierre=cierreDeFactura(inv);
+  if(textoCierre){
+    LN(L,y,R,y,0.5,C_LINE); y+=15;
+    lineasDeTexto(textoCierre, R-L, 9).forEach(function(linea){
+      if(y>PAGE.h-PAGE.m-70){ pages.push(ops); ops=[]; y=PAGE.m+20; }
+      if(linea) T(linea, L, y, 9);
+      y+=12;
+    });
+    y+=6;
+  }
+
   /* footer */
   LN(L,y,R,y,0.5,C_LINE); y+=14;
   T("FORMA DE PAGO", L, y, 7.4, true, C_MUT);
@@ -1472,6 +1533,24 @@ function clip(s,n){ return s.length>n ? s.slice(0,n-1)+"…" : s; }
 /* ============================ PDF writer ============================ */
 var HW=[278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
 var HB=[278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
+/* Parte un texto en líneas que quepan en el ancho dado. Respeta los
+   saltos que ya trae escritos: el pie de la factura es una carta, no un
+   párrafo suelto. */
+function lineasDeTexto(texto, ancho, size){
+  var salida=[];
+  String(texto).split("\n").forEach(function(parrafo){
+    if(!parrafo.trim()){ salida.push(""); return; }
+    var linea="";
+    parrafo.split(/\s+/).forEach(function(palabra){
+      var prueba = linea ? linea+" "+palabra : palabra;
+      if(textW(prueba, size, false) > ancho && linea){ salida.push(linea); linea=palabra; }
+      else linea=prueba;
+    });
+    if(linea) salida.push(linea);
+  });
+  return salida;
+}
+
 function charW(ch,bold){
   var t=bold?HB:HW, cc=ch.charCodeAt(0);
   if(cc>=32&&cc<=126) return t[cc-32];

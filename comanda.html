@@ -180,7 +180,10 @@ tfoot td{border-top:1px solid var(--line); border-bottom:0; font-weight:600; bac
 .paper .totals{margin-top:18px; margin-left:auto; width:290px}
 .paper .totals .r{display:flex; justify-content:space-between; padding:6px 10px; font-variant-numeric:tabular-nums}
 .paper .totals .r.grand{background:#7B2D3B; color:#fff; font-weight:700; font-size:15.5px; border-radius:4px; padding:10px}
-.paper .p-foot{margin-top:26px; padding-top:14px; border-top:1px solid #EFE9E7; color:#5B4E50; font-size:11.5px; display:grid; grid-template-columns:1fr 1fr; gap:16px}
+/* El texto de despedida al pie de la factura */
+.paper .p-cierre{margin-top:26px; padding-top:14px; border-top:1px solid #EFE9E7;
+                 color:#3A2F31; font-size:12px; line-height:1.6; max-width:78ch}
+.paper .p-foot{margin-top:22px; padding-top:14px; border-top:1px solid #EFE9E7; color:#5B4E50; font-size:11.5px; display:grid; grid-template-columns:1fr 1fr; gap:16px}
 .paper .p-foot .k{font-weight:700; color:#221B1C; font-size:10px; letter-spacing:.08em; text-transform:uppercase}
 
 /* ---------- misc ---------- */
@@ -253,7 +256,7 @@ dialog::backdrop{background:rgba(20,14,15,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609011012"></script>
+<script src="sync.js?v=202609011033"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -261,7 +264,7 @@ dialog::backdrop{background:rgba(20,14,15,.5)}
 
   Sync.iniciar('comanda').then(function(){
     var s = document.createElement('script');
-    s.src = 'comanda.js?v=202609011012';
+    s.src = 'comanda.js?v=202609011033';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar comanda.js. Recarga la pagina.'; };
     document.body.appendChild(s);
