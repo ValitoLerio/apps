@@ -71,10 +71,16 @@ function correosDe(c){
   else if (c.email) lista = String(c.email).split(/[;,\s]+/);
   return lista.map(function(x){ return String(x).trim(); }).filter(Boolean);
 }
+/* Al enviar una factura se ofrecen los correos que tenía cuando se emitió
+   y también los que la empresa tenga ahora: si has añadido una dirección
+   nueva, no tiene sentido que no aparezca al reenviar una factura vieja.
+   Los datos fiscales de la factura sí se quedan como estaban. */
 function correosDeFactura(inv){
-  var vivo = company(inv.companyId);
   var guardados = (inv.client && inv.client.emails) || [];
-  return (guardados.length ? guardados : correosDe(vivo));
+  var ahora = correosDe(company(inv.companyId));
+  var todos = guardados.concat(ahora);
+  return todos.map(function(x){ return String(x).trim(); })
+              .filter(function(x, i, lista){ return x && lista.indexOf(x)===i; });
 }
 var state = blankState();
 var ui = { view:"servicios", month:todayISO().slice(0,7), fCompany:"", fStatus:"",
@@ -546,9 +552,15 @@ function editCompany(id){
       '<div class="field" style="grid-column:1/-1"><label class="lbl" for="c_addr">Dirección</label><input id="c_addr" value="'+esc(c.address)+'"></div>'+
       '<div class="field"><label class="lbl" for="c_city">Población</label><input id="c_city" value="'+esc(c.city)+'"></div>'+
       '<div class="field"><label class="lbl" for="c_contact">Persona de contacto</label><input id="c_contact" value="'+esc(c.contact)+'"></div>'+
-      '<div class="field" style="grid-column:1/-1"><label class="lbl" for="c_email">Correos de facturación</label>'+
-        '<input id="c_email" value="'+esc(correosDe(c).join(", "))+'" placeholder="uno@empresa.ad, otro@empresa.ad">'+
-        '<span style="font-size:11.5px;color:var(--muted)">Separa varios con comas. La factura se envía a todos.</span></div>'+
+      /* Una línea por correo. Antes era un solo hueco donde había que
+         escribirlos separados por comas, y así nadie se enteraba de que
+         se podía poner más de uno. */
+      '<div class="field" style="grid-column:1/-1"><label class="lbl">Correos de facturación</label>'+
+        '<div id="c_correos"></div>'+
+        '<button type="button" class="btn ghost" id="c_masCorreo" style="margin-top:8px;align-self:flex-start">'+
+        '+ Añadir otro correo</button>'+
+        '<span style="font-size:11.5px;color:var(--muted);margin-top:6px">Puedes poner los que hagan falta: '+
+        'al enviar la factura salen todos marcados y quitas los que no toquen ese mes.</span></div>'+
       '<div class="field"><label class="lbl" for="c_phone">Teléfono (WhatsApp)</label><input id="c_phone" value="'+esc(c.phone)+'" placeholder="+376 800 111"></div>'+
       '<div class="field" style="grid-column:1/-1"><label class="lbl" for="c_terms">Condiciones de pago propias</label><input id="c_terms" value="'+esc(c.terms)+'" placeholder="Si lo dejas vacío se usan las de Ajustes"></div>'+
     '</div>',
@@ -561,14 +573,56 @@ function editCompany(id){
       c.address=document.getElementById("c_addr").value.trim();
       c.city=document.getElementById("c_city").value.trim();
       c.contact=document.getElementById("c_contact").value.trim();
-      c.emails=document.getElementById("c_email").value.split(/[;,\s]+/)
-                 .map(function(x){ return x.trim(); }).filter(Boolean);
+      c.emails=leerCorreos();
       c.email=c.emails[0]||"";
       c.phone=document.getElementById("c_phone").value.trim();
       c.terms=document.getElementById("c_terms").value.trim();
       if(!id) state.companies.push(c);
       touch(); render(); toast(id?"Empresa actualizada":"Empresa dada de alta");
     });
+
+  /* ── Los correos, uno por fila ── */
+  var cajaCorreos=document.getElementById("c_correos");
+
+  function filaCorreo(valor){
+    var f=document.createElement("div");
+    f.className="fila-correo";
+    f.style.cssText="display:flex;gap:6px;margin-bottom:6px;align-items:center";
+    var i=document.createElement("input");
+    i.type="email"; i.className="c-correo"; i.value=valor||"";
+    i.placeholder="facturacion@empresa.ad";
+    i.autocomplete="off";
+    var x=document.createElement("button");
+    x.type="button"; x.className="btn ghost"; x.textContent="✕";
+    x.title="Quitar este correo";
+    x.style.cssText="padding:6px 10px;flex:0 0 auto";
+    x.addEventListener("click", function(){
+      f.remove();
+      /* que nunca se quede sin ninguna fila: si no, no hay dónde escribir */
+      if(!cajaCorreos.querySelector(".c-correo")) cajaCorreos.appendChild(filaCorreo(""));
+    });
+    f.appendChild(i); f.appendChild(x);
+    return f;
+  }
+
+  function leerCorreos(){
+    return Array.prototype.slice.call(cajaCorreos.querySelectorAll(".c-correo"))
+      .map(function(i){ return i.value.trim(); })
+      .filter(function(v, idx, todos){
+        /* fuera los vacíos y los repetidos */
+        return v && todos.indexOf(v)===idx;
+      });
+  }
+
+  var yaTiene=correosDe(c);
+  (yaTiene.length?yaTiene:[""]).forEach(function(dir){
+    cajaCorreos.appendChild(filaCorreo(dir));
+  });
+  document.getElementById("c_masCorreo").addEventListener("click", function(){
+    var f=filaCorreo("");
+    cajaCorreos.appendChild(f);
+    f.querySelector("input").focus();
+  });
 }
 
 /* ============================ view: facturar ============================ */

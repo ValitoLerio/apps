@@ -253,7 +253,7 @@ dialog::backdrop{background:rgba(20,14,15,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202608311203"></script>
+<script src="sync.js?v=202609011002"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -261,7 +261,7 @@ dialog::backdrop{background:rgba(20,14,15,.5)}
 
   Sync.iniciar('comanda').then(function(){
     var s = document.createElement('script');
-    s.src = 'comanda.js?v=202608311203';
+    s.src = 'comanda.js?v=202609011002';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar comanda.js. Recarga la pagina.'; };
     document.body.appendChild(s);
