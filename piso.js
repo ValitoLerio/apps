@@ -250,6 +250,17 @@ function actualizarDisplaySaldo(saldo){
 }
 
 
+/* La cuota que le tocaba a ese mes. Antes de la fecha en que empezó a
+   cobrarse no hay cuota, aunque en Configuración haya una puesta: si no,
+   los meses viejos salían con 100 € que nunca se cobraron y el recibo no
+   cuadraba con su propio total guardado. */
+function cuotaDelMes(m){
+  if(!m) return 0;
+  const desde = cfg.cuotaDesde || '';
+  if(desde && m.mes < desde) return 0;
+  return (m.cuota!=null) ? m.cuota : (cfg.cuota||0);
+}
+
 function calcularSaldoAcumulado(hastaExcluido){
   const desde = cfg.cuotaDesde || '0000-00'; // si no hay fecha, cuenta todo
   const ordenados=[...meses]
@@ -747,7 +758,7 @@ function renderRecibos(){
           </tr></thead>
           <tbody>`;
     ms.forEach(m=>{
-      const cuota=(m.cuota!=null)?m.cuota:(cfg.cuota||0);
+      const cuota=cuotaDelMes(m);
       const totalConsumo=(m.cal_cob||0)+(m.agua_cob||0)+(m.elec_cob||0);
       /* El saldo que se emitio manda. El de hoy solo sirve para avisar
          de que algo cambio despues de enviar el recibo. */
@@ -966,6 +977,8 @@ function renderGastos(){
        <span class="text-danger fw500">${fmt(totalTodos)} €</span></div>`;
   }
 
+  renderSaldoMensual();
+
   document.getElementById('lista-gastos').innerHTML=sorted.length===0?'<div class="empty">Sin gastos de este tipo.</div>':
     `<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th class="tr">Importe</th><th></th></tr></thead>
     <tbody>${sorted.map(g=>`<tr>
@@ -976,6 +989,62 @@ function renderGastos(){
       <td style="text-align:right"><button class="btn-ghost" onclick="delGasto(${g.id})">×</button></td>
     </tr>`).join('')}</tbody></table>
     <div class="total-row"><span class="text-muted" style="font-size:12px">${filtro==='todos'?'Total gastos':'Total de este tipo'}</span><span class="text-danger fw500">${fmt(total)} €</span></div>`;
+}
+
+/* El mes a mes: lo que se cobró con el recibo de ese mes, lo que se fue
+   en gastos, y la diferencia. Es lo que de verdad queda en el bolsillo,
+   que no se veía en ninguna parte: la lista de gastos iba toda seguida. */
+function renderSaldoMensual(){
+  const caja=document.getElementById('saldo-mensual');
+  if(!caja) return;
+
+  const filas={};
+  function fila(mes){
+    return filas[mes] || (filas[mes]={mes:mes, cobrado:0, gastado:0, recibo:false});
+  }
+  meses.forEach(m=>{
+    const f=fila(m.mes);
+    /* Lo cobrado es el recibo entero: alquiler más la cuota de consumo */
+    f.cobrado = (m.alq||0)+cuotaDelMes(m);
+    f.recibo=true;
+  });
+  gastos.forEach(g=>{
+    const mes=(g.fecha||'').slice(0,7);
+    if(!mes) return;
+    fila(mes).gastado += g.imp||0;
+  });
+
+  const orden=Object.keys(filas).sort((a,b)=>b.localeCompare(a));
+  if(!orden.length){ caja.innerHTML='<div class="empty">Todavía no hay recibos ni gastos.</div>'; return; }
+
+  const mesActual=new Date().toISOString().slice(0,7);
+  const totCobrado=orden.reduce((s,k)=>s+filas[k].cobrado,0);
+  const totGastado=orden.reduce((s,k)=>s+filas[k].gastado,0);
+
+  caja.innerHTML=
+    `<table><thead><tr><th>Mes</th><th class="tr">Cobrado</th><th class="tr">Gastos</th>
+      <th class="tr">Saldo del mes</th></tr></thead><tbody>`+
+    orden.slice(0,24).map(k=>{
+      const f=filas[k];
+      const saldo=f.cobrado-f.gastado;
+      const esteMes=(k===mesActual);
+      return `<tr${esteMes?' style="background:var(--surface2)"':''}>
+        <td style="white-space:nowrap">${fmtMes(k)}${esteMes?' <span class="text-muted" style="font-size:11px">· este mes</span>':''}
+          ${f.recibo?'':' <span class="text-muted" style="font-size:11px">· sin recibo</span>'}</td>
+        <td class="tr" style="white-space:nowrap">${f.cobrado?fmt(f.cobrado)+' €':'—'}</td>
+        <td class="tr text-danger" style="white-space:nowrap">${f.gastado?fmt(f.gastado)+' €':'—'}</td>
+        <td class="tr fw500" style="white-space:nowrap;color:${saldo<0?'var(--danger)':'var(--accent)'}">
+          ${saldo>=0?'':'− '}${fmt(Math.abs(saldo))} €</td></tr>`;
+    }).join('')+
+    `</tbody></table>
+    <div class="total-row"><span class="text-muted" style="font-size:12px">
+      ${orden.length>24?'Últimos 24 meses en la tabla · totales de todo':'Total'}</span>
+      <span class="fw500" style="color:${(totCobrado-totGastado)<0?'var(--danger)':'var(--accent)'}">
+      ${fmt(totCobrado-totGastado)} €</span></div>
+    <p class="text-muted" style="font-size:11.5px;margin:8px 0 0">
+      Cobrado es el recibo del mes, alquiler más la cuota de consumo. Los gastos son los de
+      esta misma pantalla, por su fecha. El saldo es la diferencia: lo que queda tras pagar
+      lo del piso.</p>`;
 }
 
 function filtrarGastos(tipo){
