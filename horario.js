@@ -39,8 +39,67 @@ var weekStart = null;
 // ================================================================
 function staff()        { return ENC.concat(COC).concat(CAM); }
 function visibleStaff() { return staff().filter(function(s){ return !hidden[s.id]; }); }
-function dim(y,m)       { return new Date(y, m+1, 0).getDate(); }
+
+// ----------------------------------------------------------------
+// EL MES EMPIEZA EL PRIMER LUNES
+// ----------------------------------------------------------------
+// El mes del horario no es el del calendario: va del PRIMER LUNES al
+// domingo de antes del primer lunes del mes siguiente, para que todas
+// las semanas esten enteras y las horas semanales signifiquen algo.
+//
+// Los dias sueltos del principio (del 1 al primer lunes) son del mes
+// anterior, que termina en ellos. Asi los meses encajan uno detras de
+// otro sin huecos: ningun dia se queda fuera ni sale en dos sitios.
+//
+// Los turnos se siguen guardando por su fecha real (sched[ano][mes][dia]),
+// asi que esto solo cambia como se agrupan y se enseñan: no hay que tocar
+// ni un dato de los que ya estan.
+function primerLunes(y, m) {
+  var dow = new Date(y, m, 1).getDay();          // 0 domingo ... 6 sabado
+  return new Date(y, m, 1 + (dow === 1 ? 0 : (8 - dow) % 7));
+}
+function diasDelMes(y, m) {
+  var fin = primerLunes(m === 11 ? y + 1 : y, (m + 1) % 12);
+  var lista = [], d = primerLunes(y, m);
+  while (d < fin) {
+    lista.push({y:d.getFullYear(), m:d.getMonth(), d:d.getDate(), dow:d.getDay()});
+    d.setDate(d.getDate() + 1);
+  }
+  return lista;
+}
+// A que mes del horario pertenece una fecha: al suyo si ya paso su primer
+// lunes y, si no, al anterior.
+function mesDeFecha(fecha) {
+  var y = fecha.getFullYear(), m = fecha.getMonth();
+  if (fecha < primerLunes(y, m)) { m--; if (m < 0) { m = 11; y--; } }
+  return {y:y, m:m};
+}
+// La celda de un dia cualquiera, sea del mes que sea.
+function gcAt(sid, dia) {
+  var sM = curM, sY = curY;
+  curM = dia.m; curY = dia.y;
+  var c = gc(sid, dia.d);
+  curM = sM; curY = sY;
+  return c;
+}
+function esHoy(dia, hoy) {
+  return hoy.getDate() === dia.d && hoy.getMonth() === dia.m && hoy.getFullYear() === dia.y;
+}
+// "7" si el dia es del mes, "4/10" si ya es del siguiente.
+function etiquetaDia(dia, m) {
+  return dia.m === m ? String(dia.d) : dia.d + '/' + (dia.m + 1);
+}
+// "7 oct - 3 nov", para que se vea de un vistazo donde empieza y acaba.
+function rangoDelMes(y, m) {
+  var dd = diasDelMes(y, m);
+  if (!dd.length) return '';
+  var a = dd[0], b = dd[dd.length - 1];
+  var cor = function(x){ return x.d + ' ' + MESES[x.m].substring(0,3).toLowerCase(); };
+  return cor(a) + ' - ' + cor(b);
+}
 function autoS(m)       { return VERANO.indexOf(m) >= 0 ? 'verano' : 'invierno'; }
+function esc(t)         { return String(t==null?'':t).replace(/[&<>"']/g, function(c){
+                            return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 function fmtH(t)        { if (!t) return '?'; return t.slice(-2) === ':00' ? t.slice(0,-3) : t; }
 
 function tgtH(sid) {
@@ -182,16 +241,20 @@ function renderAll() {
   // Sync hours year selector
   var hyr = document.getElementById('hours-year-sel');
   if (hyr) hyr.value = curY;
-  renderNav(); renderTable(); renderStats(); renderCov(); renderHours(); renderAusencias();
+  renderNav(); renderTable(); renderStats(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
 }
 
 // ================================================================
 // HOURS SUMMARY TABLE
 // ================================================================
+// Las horas de un mes son las de SUS dias, que es lo que ahora va del
+// primer lunes al domingo de antes del primer lunes siguiente. Antes se
+// vaciaba el cajon sched[ano][mes] entero, y con los meses corridos eso
+// dejaba fuera la ultima semana y colaba los dias sueltos del principio.
 function calcStaffHours(sid, y, m) {
-  if (!sched[y]||!sched[y][m]||!sched[y][m][sid]) return {h:0, d:0};
   var totalH = 0, totalD = 0;
-  Object.values(sched[y][m][sid]).forEach(function(c){
+  diasDelMes(y, m).forEach(function(dia){
+    var c = ((((sched[dia.y]||{})[dia.m]||{})[sid])||{})[dia.d];
     if (!c) return;
     if (c.estado === 'trabajo') {
       totalD++;
@@ -251,13 +314,20 @@ function calcStaffWeek(sid, week) {
   return {h:Math.round(h*10)/10, d:d};
 }
 
+// Ahora el mes empieza en lunes y acaba en domingo, asi que las semanas
+// salen todas de siete dias: no hay ni primera ni ultima semana coja.
 function getWeeksOfMonth(y, m) {
-  var days=dim(y,m), weeks=[], wk=null;
-  for(var d=1;d<=days;d++){
-    var dow=new Date(y,m,d).getDay();
-    if(!wk||dow===1){ if(wk)weeks.push(wk); var jan1=new Date(y,0,1); var doy=Math.floor((new Date(y,m,d)-jan1)/86400000); var wn=Math.ceil((doy+jan1.getDay()+1)/7); wk={label:'S'+wn,days:[]}; }
-    wk.days.push({y:y,m:m,d:d});
-  }
+  var weeks=[], wk=null;
+  diasDelMes(y, m).forEach(function(dia){
+    if(!wk || dia.dow===1){
+      if(wk) weeks.push(wk);
+      var jan1=new Date(dia.y,0,1);
+      var doy=Math.floor((new Date(dia.y,dia.m,dia.d)-jan1)/86400000);
+      var wn=Math.ceil((doy+jan1.getDay()+1)/7);
+      wk={label:'S'+wn, days:[]};
+    }
+    wk.days.push({y:dia.y, m:dia.m, d:dia.d});
+  });
   if(wk&&wk.days.length)weeks.push(wk);
   return weeks;
 }
@@ -347,21 +417,27 @@ var AUS_TIPOS = {
 };
 
 /* Agrupa los dias sueltos en tramos: 3,4,5 y 9 -> "3-5" y "9". Asi se
-   lee "del 3 al 5" en vez de una lista larga de numeros. */
+   lee "del 3 al 5" en vez de una lista larga de numeros.
+
+   Cada dia lleva su fecha entera, no solo el numero: como el mes del
+   horario puede terminar en el mes de al lado, un 30 y un 1 son dias
+   seguidos y tienen que salir como un tramo, no como dos sueltos. */
+function serie(dia){ return Date.UTC(dia.y, dia.m, dia.d) / 86400000; }
 function tramos(dias){
   if (!dias.length) return [];
-  var orden = dias.slice().sort(function(a,b){ return a-b; });
+  var orden = dias.slice().sort(function(a,b){ return serie(a)-serie(b); });
   var salida = [], ini = orden[0], prev = orden[0];
   for (var i = 1; i < orden.length; i++) {
-    if (orden[i] === prev + 1) { prev = orden[i]; continue; }
+    if (serie(orden[i]) === serie(prev) + 1) { prev = orden[i]; continue; }
     salida.push([ini, prev]); ini = prev = orden[i];
   }
   salida.push([ini, prev]);
   return salida;
 }
-function textoTramos(dias){
+function textoTramos(dias, m){
   return tramos(dias).map(function(t){
-    return t[0] === t[1] ? String(t[0]) : t[0] + '-' + t[1];
+    var a = etiquetaDia(t[0], m), b = etiquetaDia(t[1], m);
+    return a === b ? a : a + '-' + b;
   }).join(', ');
 }
 
@@ -371,18 +447,19 @@ function recogerAusencias(){
   var meses = alcance === 'ano' ? [] : [curM];
   if (alcance === 'ano') for (var m = 0; m < 12; m++) meses.push(m);
 
-  var porPersona = {};   // sid -> mes -> tipo -> [dias]
+  var porPersona = {};   // sid -> mes -> tipo -> [{y,m,d}]
   var totales = {vacaciones:0, festivo:0, baja:0, ausencia:0};
 
   staff().forEach(function(s){
     meses.forEach(function(m){
-      var celdas = ((sched[curY] || {})[m] || {})[s.id] || {};
-      Object.keys(celdas).forEach(function(dia){
-        var c = celdas[dia];
+      // Los dias del mes del horario, que arranca el primer lunes y puede
+      // acabar ya dentro del mes siguiente.
+      diasDelMes(curY, m).forEach(function(dia){
+        var c = ((((sched[dia.y] || {})[dia.m] || {})[s.id]) || {})[dia.d];
         if (!c || !AUS_TIPOS[c.estado]) return;
         porPersona[s.id] = porPersona[s.id] || {};
         porPersona[s.id][m] = porPersona[s.id][m] || {};
-        (porPersona[s.id][m][c.estado] = porPersona[s.id][m][c.estado] || []).push(+dia);
+        (porPersona[s.id][m][c.estado] = porPersona[s.id][m][c.estado] || []).push(dia);
         totales[c.estado]++;
       });
     });
@@ -434,7 +511,7 @@ function renderAusencias(){
     if (!todos.length) {
       tbl.innerHTML = '<tbody><tr><td style="padding:26px 4px;text-align:center;color:var(--text2)">' +
         'Nadie tiene ' + AUS_TIPOS[ausFiltro].lbl.toLowerCase() + ' ' +
-        (datos.alcance === 'ano' ? 'en ' + curY : 'en ' + MESES[curM]) + '.</td></tr></tbody>';
+        (datos.alcance === 'ano' ? 'en ' + curY : 'en ' + MESES[curM] + ' (' + rangoDelMes(curY, curM) + ')') + '.</td></tr></tbody>';
       return;
     }
   }
@@ -468,7 +545,7 @@ function renderAusencias(){
            '<span style="color:' + RCOL[s.role] + ';font-weight:600;font-size:.8rem">' + s.name + '</span>' +
            '<span class="rt r' + s.role + '" style="margin-left:3px">' + RLBL[s.role] + '</span></td>';
   }
-  function celdasTipos(porTipo){
+  function celdasTipos(porTipo, mes){
     var total = 0;
     var html = tipos.map(function(k){
       var dias = (porTipo && porTipo[k]) || [];
@@ -476,7 +553,7 @@ function renderAusencias(){
       return '<td style="padding:7px 10px;border:1px solid var(--border)">' +
              (dias.length
                ? '<span class="tb ' + AUS_TIPOS[k].cls + '" style="cursor:default;font-size:.78rem;padding:3px 8px">' +
-                 textoTramos(dias) + '<span style="opacity:.7;margin-left:5px">(' + dias.length + 'd)</span></span>'
+                 textoTramos(dias, mes) + '<span style="opacity:.7;margin-left:5px">(' + dias.length + 'd)</span></span>'
                : '<span style="color:var(--border)">·</span>') +
              '</td>';
     }).join('');
@@ -504,7 +581,7 @@ function renderAusencias(){
             (datos.alcance === 'ano'
               ? '<td style="padding:7px 10px;border:1px solid var(--border);color:var(--border)">—</td>'
               : '') +
-            celdasTipos(null) + '</tr>';
+            celdasTipos(null, curM) + '</tr>';
       return;
     }
     mesesConAlgo.forEach(function(m, idx){
@@ -514,8 +591,121 @@ function renderAusencias(){
         tb += '<td style="padding:7px 10px;border:1px solid var(--border);color:var(--text2);white-space:nowrap">' +
               MESES[m] + '</td>';
       }
-      tb += celdasTipos(porMes[m]) + '</tr>';
+      tb += celdasTipos(porMes[m], m) + '</tr>';
     });
+  });
+  tb += '</tbody>';
+  tbl.innerHTML = th + tb;
+}
+
+
+// ================================================================
+// CUADRANTE DE VACACIONES
+// ================================================================
+// Un cuadrante aparte que no lleva nada configurado: ni horas, ni turnos,
+// ni temporada. Solo dias. Un toque pone el dia de vacaciones y otro lo
+// quita.
+//
+// No guarda las vacaciones en ningun sitio suyo: escribe en los mismos
+// turnos que el horario, asi que lo que se marca aqui sale enseguida en
+// el cuadrante del mes, en el de la semana y en el recuento de horas.
+function esVacaciones(sid, dia){
+  var c = ((((sched[dia.y] || {})[dia.m] || {})[sid]) || {})[dia.d];
+  return !!(c && c.estado === 'vacaciones');
+}
+function estadoDe(sid, dia){
+  var c = ((((sched[dia.y] || {})[dia.m] || {})[sid]) || {})[dia.d];
+  return c ? c.estado : 'libre';
+}
+function diasVacacionesAno(sid, y){
+  var n = 0;
+  for (var m = 0; m < 12; m++) {
+    diasDelMes(y, m).forEach(function(dia){ if (esVacaciones(sid, dia)) n++; });
+  }
+  return n;
+}
+// Un dia que ya tiene turno, festivo o baja se avisa al pisarlo: en el
+// cuadrante se ve la marca, pero mas vale decirlo que borrarlo callando.
+function toggleVac(sid, y, m, d){
+  var sM = curM, sY = curY;
+  curM = m; curY = y;
+  var c = gc(sid, d);
+  var antes = c ? c.estado : 'libre';
+  if (antes === 'vacaciones') {
+    var mes = (sched[curY] || {})[curM] || {};
+    if (mes[sid]) delete mes[sid][d];
+    save();
+  } else {
+    sc(sid, d, {estado:'vacaciones', nota:(c && c.nota) || ''});
+  }
+  curM = sM; curY = sY;
+  if (antes === 'trabajo') toast('Ese dia tenia turno: ahora son vacaciones');
+  else if (antes !== 'libre' && antes !== 'vacaciones') toast('Ese dia estaba como ' + antes + ': ahora son vacaciones');
+  renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
+}
+
+function renderVacaciones(){
+  var tbl = document.getElementById('vactbl'); if (!tbl) return;
+  var dias = diasDelMes(curY, curM);
+  var hoy  = new Date();
+  var all  = visibleStaff();
+
+  var rot = document.getElementById('vac-rango');
+  if (rot) rot.textContent = MESES[curM] + ' ' + curY + ' - ' + rangoDelMes(curY, curM);
+
+  if (!all.length) {
+    tbl.innerHTML = '<tbody><tr><td style="padding:26px 4px;text-align:center;color:var(--text2)">' +
+      'Aun no hay personal dado de alta.</td></tr></tbody>';
+    return;
+  }
+
+  var th = '<thead><tr><th style="background:var(--surface);color:var(--gold);font-family:Playfair Display,serif;' +
+    'font-size:.82rem;padding:9px 12px;border:1px solid var(--border);text-align:left;position:sticky;left:0;' +
+    'z-index:10;min-width:130px">Personal</th>';
+  dias.forEach(function(dia){
+    var we  = dia.dow===0||dia.dow===6;
+    var tod = esHoy(dia, hoy);
+    th += '<th style="background:' + (tod?'rgba(201,168,76,.18)':(we?'#1e1c14':'var(--surface)')) + ';color:' +
+          (tod?'var(--gold2)':(we?'var(--gold)':'var(--text2)')) + ';padding:6px 3px;border:1px solid var(--border);' +
+          'text-align:center;min-width:34px;font-size:.66rem;white-space:nowrap">' + DC[dia.dow] +
+          '<br><span style="font-size:.82rem;font-weight:700">' + etiquetaDia(dia, curM) + '</span></th>';
+  });
+  th += '<th style="background:#1a2010;color:var(--gold2);padding:6px 10px;border:1px solid var(--border);' +
+        'text-align:center;min-width:74px;font-size:.72rem;font-weight:700">Mes / Año</th></tr></thead>';
+
+  var tb = '<tbody>';
+  var ultimoRol = null;
+  all.forEach(function(s){
+    if (s.role !== ultimoRol) {
+      if (ultimoRol !== null) tb += '<tr><td colspan="' + (dias.length+2) + '" style="height:3px;background:var(--border);padding:0;border:none"></td></tr>';
+      ultimoRol = s.role;
+    }
+    var enElMes = 0;
+    var celdas = dias.map(function(dia){
+      var est = estadoDe(s.id, dia);
+      var vac = est === 'vacaciones';
+      if (vac) enElMes++;
+      var we  = dia.dow===0||dia.dow===6;
+      // Los otros estados se ven, apagados, para no pisarlos sin querer:
+      // un dia con turno se distingue del que esta libre.
+      var marca = vac ? 'V' : (est === 'trabajo' ? 'T' : est === 'libre' ? '' : EICO[est] || '');
+      var fondo = vac ? 'rgba(41,128,185,.28)' : (we ? 'rgba(30,28,20,.5)' : 'transparent');
+      var color = vac ? '#8ec8f0' : (est === 'trabajo' ? '#4e7a52' : est === 'libre' ? 'var(--border)' : '#8a7a4a');
+      return '<td onclick="toggleVac(\'' + s.id + '\',' + dia.y + ',' + dia.m + ',' + dia.d + ')" ' +
+             'title="' + esc(s.name) + ' - ' + etiquetaDia(dia, curM) + (vac ? ' - quitar vacaciones' : ' - poner vacaciones') + '" ' +
+             'style="cursor:pointer;text-align:center;padding:7px 2px;border:1px solid var(--border);' +
+             'background:' + fondo + ';color:' + color + ';font-weight:700;font-size:.78rem;user-select:none">' +
+             (marca || '&middot;') + '</td>';
+    }).join('');
+    var ano = diasVacacionesAno(s.id, curY);
+    tb += '<tr><td style="background:var(--surface);position:sticky;left:0;z-index:5;padding:7px 12px;' +
+          'border:1px solid var(--border);white-space:nowrap">' +
+          '<span style="color:' + RCOL[s.role] + ';font-weight:600;font-size:.8rem">' + esc(s.name) + '</span>' +
+          '<span class="rt r' + s.role + '" style="margin-left:3px">' + RLBL[s.role] + '</span></td>' +
+          celdas +
+          '<td style="background:#1a2010;padding:7px 10px;border:1px solid var(--border);text-align:center">' +
+          '<div style="font-size:.9rem;font-weight:900;color:#8ec8f0">' + enElMes + 'd</div>' +
+          '<div style="font-size:.7rem;color:var(--text2)">' + ano + ' en ' + curY + '</div></td></tr>';
   });
   tb += '</tbody>';
   tbl.innerHTML = th + tb;
@@ -529,12 +719,12 @@ function renderNav() {
     return '<button class="mb'+(i===curM?' on':'')+'" onclick="selMonth('+i+')">'+ic+' '+n+'</button>';
   }).join('');
   var myl = document.getElementById('myl');
-  if (myl) myl.textContent = MESES[curM]+' '+curY;
+  if (myl) myl.textContent = MESES[curM]+' '+curY+' ('+rangoDelMes(curY, curM)+')';
 }
 function renderStats() {
   var c = SCFG[curS];
   var stm=document.getElementById('stm'), sts=document.getElementById('sts'), sth=document.getElementById('sth');
-  if (stm) stm.textContent = MESES[curM];
+  if (stm) stm.textContent = MESES[curM]+' - '+rangoDelMes(curY, curM);
   if (sts) sts.textContent = c.lbl;
   if (sth) sth.textContent = c.h;
 }
@@ -546,34 +736,33 @@ function renderTable() {
   if (weekMode) { renderWeekTable(); return; }
   var area  = document.getElementById('sarea');
   if (!area) return;
-  var days  = dim(curY, curM);
+  var dias  = diasDelMes(curY, curM);
   var today = new Date();
   var all   = visibleStaff();
 
   var th = '<thead><tr><th class="nch" style="position:sticky;left:0;top:0;z-index:20;background:var(--surface);min-width:130px;text-align:center">Personal</th>';
-  for (var d = 1; d <= days; d++) {
-    var dow = new Date(curY, curM, d).getDay();
-    var we  = dow===0||dow===6;
-    var tod = today.getDate()===d && today.getMonth()===curM && today.getFullYear()===curY;
-    th += '<th class="dh'+(we?' we':'')+(tod?' tod':'')+'">'+DC[dow]+'<br><span style="font-size:.95rem;font-weight:700">'+d+'</span></th>';
-  }
+  dias.forEach(function(dia){
+    var we  = dia.dow===0||dia.dow===6;
+    var tod = esHoy(dia, today);
+    th += '<th class="dh'+(we?' we':'')+(tod?' tod':'')+'">'+DC[dia.dow]+'<br><span style="font-size:.95rem;font-weight:700">'+etiquetaDia(dia, curM)+'</span></th>';
+  });
   th += '</tr></thead>';
 
   var tb = '<tbody>';
   var lastR = null;
   all.forEach(function(s, si){
     if (s.role !== lastR) {
-      if (si > 0) tb += '<tr class="gs"><td colspan="'+(days+1)+'"></td></tr>';
+      if (si > 0) tb += '<tr class="gs"><td colspan="'+(dias.length+1)+'"></td></tr>';
       lastR = s.role;
     }
     tb += '<tr><td class="nc"><div style="display:flex;align-items:center;justify-content:center;gap:4px" class="nc-row">'
        +  '<div style="text-align:center"><span style="color:'+RCOL[s.role]+';font-weight:600">'+s.name+'</span><span class="rt r'+s.role+'">'+RLBL[s.role]+'</span></div>'
        +  '<button onclick="toggleHide(\''+s.id+'\')" class="hide-btn" title="Ocultar">O</button>'
        +  '</div></td>';
-    for (var d = 1; d <= days; d++) {
-      var cell = gc(s.id, d);
-      var dow  = new Date(curY, curM, d).getDay();
-      var we   = dow===0||dow===6;
+    dias.forEach(function(dia){
+      var d    = dia.d;
+      var cell = gcAt(s.id, dia);
+      var we   = dia.dow===0||dia.dow===6;
       var est  = cell ? cell.estado : 'libre';
       var cls  = ECLS[est]||'el';
       var inn  = '';
@@ -585,25 +774,25 @@ function renderTable() {
         var radius= align==='flex-start' ? 'border-radius:0 5px 5px 0' : align==='flex-end' ? 'border-radius:5px 0 0 5px' : 'border-radius:5px';
         var bgCol = shiftBg(align);
         inn = '<div style="width:100%;display:flex;justify-content:'+align+';'+pad+'">'
-            + '<span class="tb '+cls+'" style="'+radius+';background:'+bgCol+'" onclick="openCell(\''+s.id+'\','+d+',event)">'
+            + '<span class="tb '+cls+'" style="'+radius+';background:'+bgCol+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'
             + '<span class="th">'+fmtH(cell.inicio)+'-'+fmtH(cell.fin)+'</span></span></div>';
         if (cell.nota) inn += '<div style="width:100%;display:flex;justify-content:'+align+';'+pad+'"><span style="font-size:.6rem;color:var(--text2);max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+cell.nota+'</span></div>';
       } else if (est !== 'libre') {
         var lbl = est==='baja'?'B Baja':est==='ausencia'?'A Aus':EICO[est]||est;
-        inn = '<span class="tb '+cls+'" onclick="openCell(\''+s.id+'\','+d+',event)">'+lbl+'</span>';
+        inn = '<span class="tb '+cls+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'+lbl+'</span>';
       } else {
-        inn = '<span class="tb '+cls+'" onclick="openCell(\''+s.id+'\','+d+',event)">+</span>';
+        inn = '<span class="tb '+cls+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">+</span>';
       }
       tb += '<td style="'+(we?'background:rgba(30,28,20,.5)':'')+'"><div class="ci">'+inn+'</div></td>';
-    }
+    });
     tb += '</tr>';
   });
 
   // Ocultos
   var hiddenStaff = staff().filter(function(s){ return hidden[s.id]; });
   if (hiddenStaff.length > 0) {
-    tb += '<tr class="gs"><td colspan="'+(days+1)+'"></td></tr>';
-    tb += '<tr><td class="nc" colspan="'+(days+1)+'" style="padding:7px 12px;background:#1a1410">'
+    tb += '<tr class="gs"><td colspan="'+(dias.length+1)+'"></td></tr>';
+    tb += '<tr><td class="nc" colspan="'+(dias.length+1)+'" style="padding:7px 12px;background:#1a1410">'
         + '<span style="font-size:.7rem;color:var(--text2);margin-right:8px">Ocultos:</span>'
         + hiddenStaff.map(function(s){
             return '<button onclick="toggleHide(\''+s.id+'\')" style="background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.3);color:var(--gold);border-radius:10px;padding:2px 9px;cursor:pointer;font-size:.73rem;font-family:\'DM Sans\',sans-serif;margin-right:4px">'+s.name+' Mostrar</button>';
@@ -742,49 +931,50 @@ function cbg(n) {
 function renderCov() {
   var tbl  = document.getElementById('covtbl');
   if (!tbl) return;
-  var days = dim(curY, curM);
+  var dias = diasDelMes(curY, curM);
   var all  = visibleStaff();
   var today= new Date();
+  // Se indexa por la posicion en el mes, no por el numero del dia: el mes
+  // puede llevar un 30 y un 1 y se pisarian entre ellos.
   var cov  = {}, who = {};
   SLOTS.forEach(function(slot){
     cov[slot] = {}; who[slot] = {};
-    for (var d=1; d<=days; d++) { cov[slot][d]=0; who[slot][d]=[]; }
+    dias.forEach(function(dia, i){ cov[slot][i]=0; who[slot][i]=[]; });
   });
-  for (var d=1; d<=days; d++) {
+  dias.forEach(function(dia, i){
     all.forEach(function(s){
-      var cell = gc(s.id, d);
+      var cell = gcAt(s.id, dia);
       if (!cell||cell.estado!=='trabajo') return;
       SLOTS.forEach(function(slot){
         if (isW(cell.inicio, cell.fin, slot)) {
-          cov[slot][d]++;
-          who[slot][d].push(s.name.split(' ')[0]);
+          cov[slot][i]++;
+          who[slot][i].push(s.name.split(' ')[0]);
         }
       });
     });
-  }
+  });
   var html = '<thead><tr><th style="background:var(--surface);color:var(--gold);font-family:Playfair Display,serif;font-size:.82rem;padding:8px 14px;border:1px solid var(--border);text-align:left;position:sticky;left:0;z-index:10;white-space:nowrap">Hora</th>';
-  for (var d=1; d<=days; d++) {
-    var dow = new Date(curY,curM,d).getDay();
-    var we  = dow===0||dow===6;
-    var tod = today.getDate()===d&&today.getMonth()===curM&&today.getFullYear()===curY;
-    html += '<th style="background:'+(tod?'rgba(201,168,76,.18)':(we?'#1e1c14':'var(--surface)'))+';color:'+(tod?'var(--gold2)':(we?'var(--gold)':'var(--text2)'))+';padding:7px 4px;border:1px solid var(--border);text-align:center;min-width:38px;font-size:.7rem;white-space:nowrap">'+DC[dow]+'<br><span style="font-size:.88rem;font-weight:700">'+d+'</span></th>';
-  }
+  dias.forEach(function(dia){
+    var we  = dia.dow===0||dia.dow===6;
+    var tod = esHoy(dia, today);
+    html += '<th style="background:'+(tod?'rgba(201,168,76,.18)':(we?'#1e1c14':'var(--surface)'))+';color:'+(tod?'var(--gold2)':(we?'var(--gold)':'var(--text2)'))+';padding:7px 4px;border:1px solid var(--border);text-align:center;min-width:38px;font-size:.7rem;white-space:nowrap">'+DC[dia.dow]+'<br><span style="font-size:.88rem;font-weight:700">'+etiquetaDia(dia, curM)+'</span></th>';
+  });
   html += '</tr></thead><tbody>';
   SLOTS.forEach(function(slot, si){
     var isMid = slot===0||slot===1;
     var lbl   = (slot<10?'0':'')+slot+':00';
-    if (slot===12||slot===20) html += '<tr><td colspan="'+(days+1)+'" style="height:3px;background:var(--border);padding:0;border:none"></td></tr>';
+    if (slot===12||slot===20) html += '<tr><td colspan="'+(dias.length+1)+'" style="height:3px;background:var(--border);padding:0;border:none"></td></tr>';
     var rbg = isMid?'rgba(142,68,173,.07)':(si%2===0?'rgba(255,255,255,.013)':'transparent');
     html += '<tr style="background:'+rbg+'"><td style="position:sticky;left:0;z-index:5;background:'+(isMid?'rgba(142,68,173,.15)':'var(--surface)')+';color:'+(isMid?'#c090e8':'var(--gold)')+';font-weight:700;font-size:.8rem;padding:6px 14px;border:1px solid var(--border);white-space:nowrap">'+lbl+(isMid?' L':'')+' </td>';
-    for (var d=1; d<=days; d++) {
-      var n   = cov[slot][d];
+    dias.forEach(function(dia, i){
+      var n   = cov[slot][i];
       var col = cbg(n);
-      var tip = n===0?'Nadie':n+' persona'+(n>1?'s':'')+': '+who[slot][d].join(', ');
-      html += '<td title="'+lbl+' Dia '+d+' - '+tip+'" style="text-align:center;padding:5px 2px;background:'+col.bg+';border:1px solid rgba(46,43,34,.35);cursor:default;transition:filter .1s" onmouseover="this.style.filter=\'brightness(1.5)\'" onmouseout="this.style.filter=\'none\'">'
+      var tip = n===0?'Nadie':n+' persona'+(n>1?'s':'')+': '+who[slot][i].join(', ');
+      html += '<td title="'+lbl+' Dia '+etiquetaDia(dia, curM)+' - '+tip+'" style="text-align:center;padding:5px 2px;background:'+col.bg+';border:1px solid rgba(46,43,34,.35);cursor:default;transition:filter .1s" onmouseover="this.style.filter=\'brightness(1.5)\'" onmouseout="this.style.filter=\'none\'">'
             + '<div style="color:'+col.fg+';font-size:'+(n>0?'1.1rem':'.75rem')+';font-weight:'+(n>0?'900':'400')+';line-height:1">'+(n>0?n:'.') +'</div>'
             + (n>0?'<div style="color:rgba(255,255,255,.55);font-size:.56rem;margin-top:1px">pers.</div>':'')
             + '</td>';
-    }
+    });
     html += '</tr>';
   });
   html += '</tbody>';
@@ -800,10 +990,13 @@ function openCell(sid, day, event, mo, yr) {
   if (mo !== undefined) { curM = mo; curY = yr; }
 
   if (clip) {
+    // La etiqueta se saca antes de devolver curM a su sitio: es la del dia
+    // en el que se ha pegado, que puede ser del mes de al lado.
+    var donde = etiquetaDia({y:curY, m:curM, d:day}, savedM);
     sc(sid, day, Object.assign({}, clip));
     curM = savedM; curY = savedY;
     renderTable(); renderCov(); renderAusencias();
-    toast('Turno pegado en dia '+day);
+    toast('Turno pegado en el '+donde);
     return;
   }
 
@@ -815,7 +1008,9 @@ function openCell(sid, day, event, mo, yr) {
   var est = cell ? cell.estado : 'libre';
   var s   = staff().find(function(x){ return x.id===sid; });
   var pt  = document.getElementById('ptitle');
-  if (pt) pt.textContent = s.name+' - Dia '+day;
+  // Con los meses corridos, un "dia 6" puede ser del mes de al lado: se
+  // dice cual para no anotar el turno en el dia equivocado.
+  if (pt) pt.textContent = s.name+' - Dia '+etiquetaDia({y:active.yr, m:active.mo, d:day}, savedM);
 
   document.querySelectorAll('.pb').forEach(function(b){ b.classList.remove('on'); });
   var btn = document.querySelector('.pb[onclick*="\''+est+'\'"]');
@@ -1180,7 +1375,14 @@ function closeTheme() { var el=document.getElementById('themeov'); if(el)el.clas
 // ================================================================
 function iniciarHorario(){
   load(); loadTheme();
-  curM = new Date().getMonth();
+  // Se abre por el mes al que pertenece hoy, que ya no es el del
+  // calendario: los primeros dias de septiembre son todavia de agosto.
+  var ahora = mesDeFecha(new Date());
+  curM = ahora.m;
+  var yr = document.getElementById('yr');
+  if (yr && [].some.call(yr.options, function(o){ return +o.value === ahora.y; })) {
+    yr.value = ahora.y;
+  }
   curS = autoS(curM);
   var bv=document.getElementById('bv'), bi=document.getElementById('bi');
   if(bv) bv.classList.toggle('on', curS==='verano');
