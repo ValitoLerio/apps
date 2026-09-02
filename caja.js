@@ -6,14 +6,21 @@
      Visas         cobrado con tarjeta
      Efectivo      cobrado en metálico
      Pagos         lo que se paga de la caja
-     C. amarilla   lo que se aparta al fondo
+     C. amarilla   lo que hay dentro de la amarilla esa noche
      Fondo caja    lo que se deja de cambio para mañana
-     Sobrante      lo que queda tras repartir
+     Sobra am.     lo que pasa del objetivo de la amarilla
 
-     Sobrante = efectivo − pagos − c. amarilla − fondo caja
+   Y una columna de control, «Debería haber»: sabiendo qué parte de las
+   ventas se cobra con tarjeta (80 % de partida, editable en Ajustes),
+   sale el metálico que tendría que aparecer, y al lado lo que baila.
 
-   La amarilla tiene un objetivo (1500 € de partida, editable): la app
-   dice cuánto lleva, cuánto falta y, si sacas dinero, cuánto reponer.
+   La caja amarilla es el fondo del negocio: 1.500 € (editable) que se
+   van recuperando poco a poco. Cada noche se cuenta lo que hay dentro y
+   se anota, así que es un RECUENTO, no una entrega del día. Sumar los
+   recuentos de varios días da una cifra que no existe en ninguna parte
+   y no cuadra con nada. Por eso, aquí, la amarilla nunca se suma: el
+   saldo es el último recuento anotado, y en el mes y en el año se
+   enseña el recuento de cierre.
 
    Los datos los guarda sync.js en el repositorio privado.
    ══════════════════════════════════════════════════════════════════ */
@@ -29,8 +36,8 @@ function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(
 function libroVacio(){
   return {
     v:1, actualizado:new Date().toISOString(),
-    ajustes:{ nombre:"", objetivoAmarilla:1500, fondoHabitual:0,
-              destinatario:"", telefono:"" },
+    ajustes:{ nombre:"", objetivoAmarilla:1500, fondoHabitual:0, pctVisa:80,
+              gente:[] },      /* {id, nombre, telefono} — a quien va el parte */
     dias:[],          /* {id, fecha, visa, efectivo, gastos, detalle:[…], aAmarilla, fondoCaja, nota} */
     aportaciones:[],  /* {id, fecha, importe, motivo} — dinero que entra sin ser de la caja */
     retiradas:[]      /* {id, fecha, importe, motivo} — dinero que sale de la amarilla */
@@ -68,6 +75,7 @@ function cargar(){
     Object.keys(base).forEach(function(k){ if(d[k]===undefined) d[k]=base[k]; });
     if(!d.ajustes) d.ajustes=base.ajustes;
     if(d.ajustes.objetivoAmarilla==null) d.ajustes.objetivoAmarilla=1500;
+    if(d.ajustes.pctVisa==null) d.ajustes.pctVisa=80;
     libro=d;
   }catch(e){}
 }
@@ -153,11 +161,19 @@ function sobranteAnotado(d){
 }
 function cuentasDia(d){
   if(!d) return {visa:0, efectivo:0, gastos:0, ventas:0, neto:0, fondoTotal:0,
+                 efectivoPrevisto:0, difEfectivo:0,
                  amarilla:0, fondo:0, sobrante:0, sobranteCuenta:0, descuadre:0};
   var visa=+d.visa||0, efectivo=+d.efectivo||0;
   var gastos=totalGastos(d), amarilla=+d.aAmarilla||0;
   var fondo=+d.fondoCaja||0;
   var neto=r2(efectivo-gastos);
+  /* Si de cada 100 € de venta 80 se pagan con visa, los otros 20 tienen
+     que aparecer en metálico: por cada euro de visa, 20/80 en efectivo.
+     Es una referencia para ver de un vistazo si falta dinero, no una
+     cuenta exacta: hay días que se sale de la media. */
+  var pct=pctVisa();
+  var hayPct=(pct>0 && pct<100);
+  var previsto=hayPct ? r2(visa*(100-pct)/pct) : 0;
   /* El sobrante es lo que entra en la amarilla por encima del objetivo:
      cuando ya están los 1500, lo demás sobra. Se sigue pudiendo escribir
      a mano, y entonces manda lo escrito. */
@@ -170,6 +186,8 @@ function cuentasDia(d){
     visa:visa, efectivo:efectivo, gastos:gastos,
     ventas:r2(visa+efectivo),
     neto:neto,                    /* lo que queda tras los pagos */
+    efectivoPrevisto:previsto,    /* lo que tocaria en metalico segun el % */
+    difEfectivo:hayPct ? r2(efectivo-previsto) : 0,
     amarilla:amarilla,
     fondo:fondo,                  /* lo que se deja de cambio */
     sobrante:(anotado!=null?anotado:cuenta),
@@ -181,9 +199,13 @@ function diasDe(prefijo){
   return (libro.dias||[]).filter(function(d){ return (d.fecha||"").indexOf(prefijo)===0; })
                          .sort(function(a,b){ return a.fecha.localeCompare(b.fecha); });
 }
+/* Aquí no entran ni la amarilla ni el cambio de la registradora: son el
+   recuento de una noche, y el total de un mes de recuentos no significa
+   nada. Para el saldo del periodo está recuentoHasta(). */
 function sumaCuentas(dias){
   var t={visa:0, efectivo:0, gastos:0, ventas:0, neto:0,
-         amarilla:0, fondo:0, sobrante:0, sobranteCuenta:0, descuadre:0,
+         efectivoPrevisto:0, difEfectivo:0,
+         sobrante:0, sobranteCuenta:0, descuadre:0,
          dias:dias.length};
   dias.forEach(function(d){
     var c=cuentasDia(d);
@@ -197,12 +219,18 @@ function sumaCuentas(dias){
    de todos los días y salía una cifra que no existía en ninguna parte.
 
    Por eso lo que hay guardado es, sencillamente, lo último que se anotó. */
-function ultimoDiaConAmarilla(){
+/* El último recuento anotado hasta el final de un periodo ("2026",
+   "2026-03" o vacío para todo). Si dentro del periodo no se contó ningún
+   día, vale el de antes: el dinero sigue en la caja aunque nadie lo haya
+   apuntado ese mes. Nunca suma nada. */
+function recuentoHasta(prefijo){
+  var fin=(prefijo||"")+"\uffff";
   var candidatos=(libro.dias||[]).filter(function(d){
-    return d.aAmarilla!=null && d.aAmarilla!=="";
+    return d.aAmarilla!=null && d.aAmarilla!=="" && (d.fecha||"")<fin;
   }).sort(function(a,b){ return a.fecha.localeCompare(b.fecha); });
   return candidatos.length ? candidatos[candidatos.length-1] : null;
 }
+function ultimoDiaConAmarilla(){ return recuentoHasta(""); }
 function amarillaGuardado(){
   var d=ultimoDiaConAmarilla();
   return d ? r2(+d.aAmarilla||0) : 0;
@@ -220,6 +248,21 @@ function amarillaSacado(){
   return r2((libro.retiradas||[]).reduce(function(s,r){ return s+(+r.importe||0); },0));
 }
 function objetivoAmarilla(){ return +libro.ajustes.objetivoAmarilla || 0; }
+/* Qué parte de las ventas se cobra con tarjeta, de media. De ahí sale el
+   efectivo que debería haber. */
+function pctVisa(){
+  var p=+libro.ajustes.pctVisa;
+  return (isFinite(p) && p>0 && p<100) ? p : 0;
+}
+/* "faltan 40 €" / "sobran 12 €", que es como se mira de verdad. */
+function textoDiferencia(dif){
+  if(Math.abs(dif)<0.005) return "cuadra";
+  return (dif<0 ? "faltan " : "sobran ")+eur(Math.abs(dif));
+}
+function colorDiferencia(dif){
+  if(Math.abs(dif)<0.005) return "var(--ok)";
+  return dif<0 ? "var(--malo)" : "var(--muted)";
+}
 function faltaAmarilla(){ return r2(Math.max(0, objetivoAmarilla()-amarillaGuardado())); }
 
 /* Lo que sobra de la amarilla: lo que entra una vez que ya están los
@@ -304,6 +347,14 @@ function verDia(main){
         '<div class="n">'+(c.ventas>0?num(c.visa/c.ventas*100,0)+"% del total":"—")+'</div></div>'+
       '<div class="cifra"><div class="k">Efectivo</div><div class="v">'+eur(c.efectivo)+'</div>'+
         '<div class="n">'+(c.ventas>0?num(c.efectivo/c.ventas*100,0)+"% del total":"—")+'</div></div>'+
+      /* Lo que debería haber en metálico si ese día se cumple la media de
+         visa. Sirve para ver enseguida si falta dinero. */
+      '<div class="cifra"><div class="k">Debería haber</div><div class="v">'+
+        (pctVisa()?eur(c.efectivoPrevisto):"—")+'</div>'+
+        '<div class="n"'+(pctVisa()&&c.visa>0?' style="color:'+colorDiferencia(c.difEfectivo)+'"':"")+'>'+
+        (!pctVisa() ? "pon el % en Ajustes"
+          : c.visa>0 ? esc(textoDiferencia(c.difEfectivo))
+          : "con el "+num(pctVisa(),0)+"% en visa")+'</div></div>'+
       '<div class="cifra"><div class="k">Pagos</div><div class="v malo">'+eur(c.gastos)+'</div>'+
         '<div class="n">'+((d&&(d.detalle||[]).length)?d.detalle.length+" apuntes":"pagados de caja")+'</div></div>'+
     '</div>'+
@@ -389,6 +440,7 @@ function pintarFormularioDia(d){
       '<div class="campo"><label class="lbl" for="f_efec">Efectivo (€)</label>'+
         '<input type="number" class="grande" id="f_efec" min="0" step="0.01" value="'+esc(actual.efectivo)+'"></div>'+
       '<div class="campo"><label class="lbl" for="f_amar">Caja amarilla (€)</label>'+
+      '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo que hay dentro esta noche, contado</div>'+
         '<input type="number" class="grande" id="f_amar" min="0" step="0.01" value="'+esc(actual.aAmarilla)+'"></div>'+
       '<div class="campo"><label class="lbl" for="f_fondo">Caja registradora (€)</label>'+
         '<input type="number" class="grande" id="f_fondo" min="0" step="0.01" value="'+
@@ -599,16 +651,25 @@ function soloNumero(bruto){
   if(t.indexOf("00")===0 && t.length>4) return t.slice(2);
   return t;
 }
-function telefonoCompleto(){
-  return soloNumero(libro.ajustes.telefono);
+/* El parte puede ir a varias personas. WhatsApp abre un chat cada vez,
+   asi que no se manda a todas de golpe: se elige a quien en el momento
+   de enviar, y la lista esta aqui para no tener que buscar el numero. */
+function gente(){
+  return (libro.ajustes.gente||[]).filter(function(g){
+    return String(g.nombre||"").trim() || soloNumero(g.telefono);
+  });
 }
-function telefonoBonito(){
-  var tel=telefonoCompleto();
-  return tel ? "+"+tel : "";
+function telefonoDe(g){ return g ? soloNumero(g.telefono) : ""; }
+function bonito(tel){ return tel ? "+"+tel : ""; }
+function nombreDe(g){
+  if(!g) return "quien elijas";
+  return String(g.nombre||"").trim() || bonito(telefonoDe(g)) || "quien elijas";
 }
-function nombreDestino(){
-  return libro.ajustes.destinatario || (telefonoBonito()||"quien elijas");
-}
+/* El primero de la lista es el de siempre: el que sale marcado al abrir
+   el parte y el que se nombra en los avisos. */
+function telefonoCompleto(){ return telefonoDe(gente()[0]); }
+function telefonoBonito(){ return bonito(telefonoCompleto()); }
+function nombreDestino(){ return nombreDe(gente()[0]); }
 
 /* Enviar el parte. En vez de abrir WhatsApp a ciegas —que muchos
    navegadores bloquean sin avisar— se enseña el parte con un enlace de
@@ -617,9 +678,14 @@ function enviarDiaPorWhatsApp(fecha){
   var texto=textoDia(fecha, {alineado:true});   /* para leer y copiar */
   var plano=textoDia(fecha);                    /* para el enlace */
   if(!texto){ avisar("Ese dia no tiene nada anotado. Guardalo primero.", true); return; }
-  var tel=telefonoCompleto();
-  var destino="https://wa.me/"+tel+"?text="+encodeURIComponent(plano);
-  var porNavegador="https://web.whatsapp.com/send?phone="+tel+"&text="+encodeURIComponent(plano);
+  /* La lista de Ajustes. Se manda a uno, se vuelve y se manda al
+     siguiente: WhatsApp no abre dos chats de una vez. */
+  var lista=gente();
+  var tel=telefonoDe(lista[0]);
+  function enlaceApp(t){ return "https://wa.me/"+t+"?text="+encodeURIComponent(plano); }
+  function enlaceWeb(t){ return "https://web.whatsapp.com/send?phone="+t+"&text="+encodeURIComponent(plano); }
+  var destino=enlaceApp(tel);
+  var porNavegador=enlaceWeb(tel);
 
   var vieja=document.getElementById("dlg"); if(vieja) vieja.remove();
   var d=document.createElement("dialog"); d.id="dlg";
@@ -627,12 +693,20 @@ function enviarDiaPorWhatsApp(fecha){
     '<div class="dlg-cab"><h3>Parte del '+esc(dmy(fecha))+'</h3>'+
       '<button class="btn suave" data-x>Cerrar</button></div>'+
     '<div class="dlg-cuerpo">'+
+      (lista.length>1
+        ? '<p class="nota" style="margin:0 0 6px">A quien se lo mandas:</p>'+
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px">'+
+          lista.map(function(g,i){
+            return '<button class="btn sm'+(i===0?" fuerte":"")+'" data-quien="'+i+'">'+
+                   esc(nombreDe(g))+'</button>'; }).join("")+
+          '</div>'
+        : "")+
       (tel
-        ? '<p class="nota">Se abrira el chat de <strong>'+esc(nombreDestino())+'</strong> '+
-          '<span class="mono">'+esc(telefonoBonito())+'</span>. '+
+        ? '<p class="nota"><span id="aQuien">Se abrira el chat de <strong>'+esc(nombreDe(lista[0]))+
+          '</strong> <span class="mono">'+esc(bonito(tel))+'</span>.</span> '+
           '<button class="btn suave sm" data-otro style="padding:2px 6px">Enviar a otro</button></p>'
-        : '<p class="nota">No hay ningun numero guardado, asi que WhatsApp te dejara elegir el contacto. '+
-          'Ponlo en Ajustes y el parte ira siempre al mismo sitio.</p>')+
+        : '<p class="nota"><span id="aQuien">No hay ningun numero guardado, asi que WhatsApp te dejara '+
+          'elegir el contacto. Pon a quien quieras en Ajustes y ya no habra que buscarlo.</span></p>')+
       /* En la vista previa se quitan las marcas de bloque: aqui ya se ve
          con letra de maquina, y en WhatsApp se envian igualmente. */
       '<div class="parte" id="parteTexto">'+esc(texto.split("\n").filter(function(x){
@@ -669,19 +743,33 @@ function enviarDiaPorWhatsApp(fecha){
   d.querySelector("[data-copiar]").addEventListener("click", function(){
     copiarTexto(texto, this);   /* al copiar va la version alineada */
   });
+  /* Reapuntar los dos enlaces al numero elegido. Los botones de abajo
+     son los mismos; lo unico que cambia es a donde llevan. */
+  function apuntarA(t, comoSeLlama){
+    d.querySelector("[data-abrir]").setAttribute("href", enlaceApp(t));
+    d.querySelector("[data-web]").setAttribute("href", enlaceWeb(t));
+    var nota=d.querySelector("#aQuien");
+    if(nota) nota.innerHTML='Se abrira el chat de <strong>'+esc(comoSeLlama)+'</strong> '+
+      '<span class="mono">'+esc(bonito(t))+'</span>.';   /* el boton de al lado se queda */
+  }
+  d.querySelectorAll("[data-quien]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var g=lista[+b.getAttribute("data-quien")];
+      var t=telefonoDe(g);
+      if(!t){ avisar(nombreDe(g)+" no tiene numero puesto en Ajustes.", true); return; }
+      d.querySelectorAll("[data-quien]").forEach(function(o){ o.classList.remove("fuerte"); });
+      b.classList.add("fuerte");
+      apuntarA(t, nombreDe(g));
+    });
+  });
   var otro=d.querySelector("[data-otro]");
   if(otro) otro.addEventListener("click", function(){
-    var escrito=prompt("¿A qué número lo mando? (con el prefijo del país)",
-                       telefonoBonito());
+    var escrito=prompt("¿A qué número lo mando? (con el prefijo del país)", bonito(tel));
     if(escrito===null) return;
     var limpio=escrito.replace(/[^\d]/g,"");
     if(!limpio){ avisar("Ese número no vale.", true); return; }
-    d.querySelector("[data-abrir]").setAttribute("href",
-      "https://wa.me/"+limpio+"?text="+encodeURIComponent(plano));
-    d.querySelector("[data-web]").setAttribute("href",
-      "https://web.whatsapp.com/send?phone="+limpio+"&text="+encodeURIComponent(plano));
-    d.querySelector(".nota").innerHTML='Se abrira el chat de <span class="mono">+'+esc(limpio)+'</span>, '+
-      'solo para este envio.';
+    d.querySelectorAll("[data-quien]").forEach(function(o){ o.classList.remove("fuerte"); });
+    apuntarA(limpio, "+"+limpio);
     avisar("Este parte ira a +"+limpio);
   });
 
@@ -740,6 +828,7 @@ function copiarAMano(texto, hecho){
 function verMes(main){
   var dias=diasDe(ui.mes);
   var t=sumaCuentas(dias);
+  var cierreMes=recuentoHasta(ui.mes);
 
   main.innerHTML=
     cabecera("Cuadrante de "+mesLargo(ui.mes),
@@ -753,11 +842,17 @@ function verMes(main){
         '<div class="n">'+(t.ventas>0?num(t.visa/t.ventas*100,0)+"%":"—")+'</div></div>'+
       '<div class="cifra"><div class="k">Efectivo</div><div class="v">'+eur(t.efectivo)+'</div>'+
         '<div class="n">'+(t.ventas>0?num(t.efectivo/t.ventas*100,0)+"%":"—")+'</div></div>'+
+      '<div class="cifra"><div class="k">Debería haber</div><div class="v">'+
+        (pctVisa()?eur(t.efectivoPrevisto):"—")+'</div>'+
+        '<div class="n"'+(pctVisa()?' style="color:'+colorDiferencia(t.difEfectivo)+'"':"")+'>'+
+        (pctVisa()?esc(textoDiferencia(t.difEfectivo)):"pon el % en Ajustes")+'</div></div>'+
       '<div class="cifra"><div class="k">Pagos</div><div class="v malo">'+eur(t.gastos)+'</div>'+
         '<div class="n">pagados de caja</div></div>'+
+      /* El recuento con el que se cierra ESTE mes, no el de hoy: mirando
+         un mes de hace medio año salía el saldo de ahora. */
       '<div class="cifra"><div class="k">C. amarilla</div><div class="v amarilla">'+
-        eur(amarillaGuardado())+'</div>'+
-        '<div class="n">'+(fechaAmarilla()?"último recuento, "+esc(dmy(fechaAmarilla())):"sin recuentos")+
+        eur(cierreMes?r2(+cierreMes.aAmarilla||0):0)+'</div>'+
+        '<div class="n">'+(cierreMes?"recuento del "+esc(dmy(cierreMes.fecha)):"sin recuentos")+
         '</div></div>'+
       '<div class="cifra"><div class="k">Sobra amarilla</div><div class="v">'+eur(t.sobrante)+'</div>'+
         '<div class="n">lo que pasó de '+eur(objetivoAmarilla())+'</div></div>'+
@@ -786,7 +881,7 @@ function verMes(main){
     return;
   }
   caja.innerHTML='<table><thead><tr><th>Día</th><th class="num">Visas</th><th class="num">Efectivo</th>'+
-    '<th class="num">Pagos</th><th class="num">C. amarilla</th><th class="num">Fondo caja</th>'+
+    '<th class="num">Debería haber</th><th class="num">Pagos</th><th class="num">C. amarilla</th><th class="num">Fondo caja</th>'+
     '<th class="num">Sobra am.</th><th class="num">Ventas</th><th>Nota</th></tr></thead><tbody>'+
     dias.map(function(d){
       var c=cuentasDia(d);
@@ -796,6 +891,12 @@ function verMes(main){
           '<span style="color:var(--muted);font-size:12px">'+diaSemana(d.fecha).slice(0,3)+"</span></td>"+
         '<td class="num">'+eur(c.visa)+"</td>"+
         '<td class="num">'+eur(c.efectivo)+"</td>"+
+        /* Lo que tocaría en metálico con el % de visa, y debajo lo que baila. */
+        '<td class="num" style="color:var(--muted)">'+(pctVisa()
+          ? eur(c.efectivoPrevisto)+
+            '<div style="font-size:11px;color:'+colorDiferencia(c.difEfectivo)+'">'+
+            esc(textoDiferencia(c.difEfectivo))+'</div>'
+          : "—")+"</td>"+
         '<td class="num"'+(c.gastos>0?' style="color:var(--malo)"':"")+">"+(c.gastos>0?eur(c.gastos):"—")+"</td>"+
         '<td class="num"'+(c.amarilla>0?' style="color:var(--amarilla);font-weight:600"':"")+">"+
           (c.amarilla>0?eur(c.amarilla):"—")+"</td>"+
@@ -806,6 +907,7 @@ function verMes(main){
     }).join("")+
     '</tbody><tfoot><tr><td>'+t.dias+' días</td>'+
       '<td class="num">'+eur(t.visa)+'</td><td class="num">'+eur(t.efectivo)+'</td>'+
+      '<td class="num" style="color:var(--muted)">'+(pctVisa()?eur(t.efectivoPrevisto):"—")+'</td>'+
       /* La amarilla y el fondo son recuentos: sumar los de todos los días
          daría una cifra que no existe en ninguna parte. */
       '<td class="num">'+eur(t.gastos)+'</td>'+
@@ -931,9 +1033,10 @@ function verAnio(main){
   var porMes=[];
   for(var m=1;m<=12;m++){
     var ym=ui.anio+"-"+p2(m);
-    porMes.push({ym:ym, t:sumaCuentas(diasDe(ym))});
+    porMes.push({ym:ym, t:sumaCuentas(diasDe(ym)), cierre:recuentoHasta(ym)});
   }
   var total=sumaCuentas(diasDe(ui.anio));
+  var cierreAnio=recuentoHasta(ui.anio);
   var mejorMes=porMes.slice().sort(function(a,b){ return b.t.ventas-a.t.ventas; })[0];
 
   main.innerHTML=
@@ -949,8 +1052,9 @@ function verAnio(main){
       '<div class="cifra"><div class="k">Efectivo</div><div class="v">'+eur(total.efectivo)+'</div></div>'+
       '<div class="cifra"><div class="k">Pagos</div><div class="v malo">'+eur(total.gastos)+'</div></div>'+
       '<div class="cifra"><div class="k">C. amarilla</div><div class="v amarilla">'+
-        eur(amarillaGuardado())+'</div>'+
-        '<div class="n">último recuento</div></div>'+
+        eur(cierreAnio?r2(+cierreAnio.aAmarilla||0):0)+'</div>'+
+        '<div class="n">'+(cierreAnio?"recuento del "+esc(dmy(cierreAnio.fecha)):"sin recuentos")+
+        '</div></div>'+
       '<div class="cifra"><div class="k">Sobra amarilla</div><div class="v">'+eur(total.sobrante)+'</div></div>'+
       '<div class="cifra"><div class="k">Media por día</div>'+
         '<div class="v">'+eur(total.dias>0?r2(total.ventas/total.dias):0)+'</div>'+
@@ -966,7 +1070,7 @@ function verAnio(main){
   document.getElementById("tablaAnio").innerHTML=
     '<table><thead><tr><th>Mes</th><th class="num">Días</th><th class="num">Visa</th>'+
     '<th class="num">Efectivo</th><th class="num">Ventas</th><th class="num">Gastos</th>'+
-    '<th class="num">Amarilla</th><th style="width:130px"></th></tr></thead><tbody>'+
+    '<th class="num">Amarilla al cierre</th><th style="width:130px"></th></tr></thead><tbody>'+
     porMes.map(function(p){
       var vacio=p.t.dias===0;
       return '<tr'+(vacio?' style="opacity:.45"':' style="cursor:pointer"')+' data-mes="'+p.ym+'">'+
@@ -976,7 +1080,11 @@ function verAnio(main){
         '<td class="num">'+(vacio?"—":eur(p.t.efectivo))+"</td>"+
         '<td class="num"><strong>'+(vacio?"—":eur(p.t.ventas))+"</strong></td>"+
         '<td class="num">'+(vacio?"—":eur(p.t.gastos))+"</td>"+
-        '<td class="num" style="color:var(--amarilla)">'+(vacio?"—":eur(p.t.amarilla))+"</td>"+
+        /* Lo que había en la amarilla al acabar el mes, que es un
+           recuento. Antes aquí se sumaban los de todos sus días y salía
+           una cifra disparatada. */
+        '<td class="num" style="color:var(--amarilla)">'+
+          ((vacio||!p.cierre)?"—":eur(r2(+p.cierre.aAmarilla||0)))+"</td>"+
         '<td><div style="background:var(--sup2);border-radius:4px;height:7px;overflow:hidden">'+
           '<div style="background:var(--acento);height:100%;width:'+(p.t.ventas/maximo*100).toFixed(1)+'%"></div>'+
         "</div></td></tr>";
@@ -984,7 +1092,8 @@ function verAnio(main){
     '</tbody><tfoot><tr><td>Total</td><td class="num">'+total.dias+'</td>'+
     '<td class="num">'+eur(total.visa)+'</td><td class="num">'+eur(total.efectivo)+'</td>'+
     '<td class="num">'+eur(total.ventas)+'</td><td class="num">'+eur(total.gastos)+'</td>'+
-    '<td class="num" style="color:var(--muted)">—</td><td></td></tr></tfoot></table>';
+    '<td class="num" style="color:var(--amarilla)">'+
+      (cierreAnio?eur(r2(+cierreAnio.aAmarilla||0)):"—")+'</td><td></td></tr></tfoot></table>';
 
   document.querySelectorAll("#tablaAnio [data-mes]").forEach(function(tr){
     tr.addEventListener("click", function(){
@@ -1249,31 +1358,29 @@ function verAjustes(main){
         '<div class="campo"><label class="lbl" for="aj_fondo">Fondo de caja habitual (€)</label>'+
           '<input type="number" id="aj_fondo" min="0" step="0.01" value="'+esc(libro.ajustes.fondoHabitual||"")+'"'+
           ' placeholder="349"></div>'+
+        '<div class="campo"><label class="lbl" for="aj_visa">Ventas que se pagan con visa (%)</label>'+
+          '<input type="number" id="aj_visa" min="0" max="99" step="1" '+
+          'value="'+esc(libro.ajustes.pctVisa!=null?libro.ajustes.pctVisa:80)+'" placeholder="80"></div>'+
       '</div>'+
       '<p class="nota" style="margin:12px 0 0">El fondo habitual es el cambio que sueles dejar en la caja. '+
       'Viene puesto en cada día nuevo y lo cambias si un día dejas otra cantidad.</p>'+
+      '<p class="nota" style="margin:8px 0 0">Con el <strong>% de visa</strong> la app calcula la columna '+
+      '<strong style="color:var(--tinta)">Debería haber</strong>: si de cada 100 € de venta '+
+      num(pctVisa()||80,0)+' se cobran con tarjeta, los otros '+num(100-(pctVisa()||80),0)+' tienen que '+
+      'estar en metálico. Es una referencia de la media, no una cuenta exacta: hay días que se salen. '+
+      'Ponlo a 0 y la columna desaparece.</p>'+
 
-      '<p class="nota" style="margin:18px 0 8px"><strong style="color:var(--tinta)">A quién se manda el parte</strong></p>'+
-      '<div class="rejilla">'+
-        '<div class="campo"><label class="lbl" for="aj_dest">Nombre</label>'+
-          '<input id="aj_dest" value="'+esc(libro.ajustes.destinatario||"")+'" placeholder="Valeriano"></div>'+
-        '<div class="campo" style="grid-column:span 2">'+
-          '<label class="lbl" for="aj_tel">Teléfono con el código del país</label>'+
-          /* type=tel e inputmode: en el movil sale el teclado de numeros y
-             el autorrelleno ofrece telefonos. Sin esto ofrecia el correo, y
-             si lo aceptas te queda una arroba donde va el numero. */
-          '<input id="aj_tel" class="mono" type="tel" inputmode="tel" autocomplete="tel" '+
-          'value="'+esc(libro.ajustes.telefono||"")+'" placeholder="+376 800100"></div>'+
-      '</div>'+
-      '<p class="nota" style="margin:10px 0 0" id="aj_previo"></p>'+
-      '<p class="nota" style="margin:14px 0 0">Escríbelo entero, empezando por el país: '+
+      '<p class="nota" style="margin:18px 0 8px"><strong style="color:var(--tinta)">A quién se manda el parte</strong> '+
+      '— pon a toda la gente que quieras; al enviar eliges a cuál de ellos.</p>'+
+      '<div id="aj_gente"></div>'+
+      '<button class="btn suave" id="aj_mas" style="margin-top:8px">+ Añadir a alguien</button>'+
+      '<p class="nota" style="margin:14px 0 0">Escribe el teléfono entero, empezando por el país: '+
       '<span class="mono">+376</span> Andorra, <span class="mono">+34</span> España. '+
       'Es el mismo número que ves en la ficha del contacto en WhatsApp. '+
-      'Si lo dejas vacío, tendrás que elegir el chat a mano.</p>'+
+      'El primero de la lista es el que sale marcado al abrir el parte. '+
+      'Si no pones a nadie, tendrás que elegir el chat a mano cada vez.</p>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">'+
         '<button class="btn fuerte" id="aj_guardar">Guardar</button>'+
-        '<a class="btn suave" id="aj_probar" href="#" target="_blank" rel="noopener" '+
-        'style="text-decoration:none">Probar el número</a>'+
       '</div>'+
     '</div></div>'+
 
@@ -1289,8 +1396,12 @@ function verAjustes(main){
         '<strong style="color:var(--tinta)">caja registradora</strong>, el cambio para el día siguiente. '+
         'Los dos los pones tú; no son un resultado.</p>'+
         '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Ventas</strong> = visas + efectivo.</p>'+
-        '<p style="margin:0"><strong style="color:var(--tinta)">Caja amarilla</strong> = lo apartado cada día, '+
-        'más lo que metas de fuera, menos lo que saques.</p>'+
+        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Debería haber</strong> = las visas '+
+        'del día por '+num(100-(pctVisa()||80),0)+'/'+num(pctVisa()||80,0)+'. Es el metálico que saldría si '+
+        'ese día se cumpliera la media; debajo se ve lo que falta o lo que sobra.</p>'+
+        '<p style="margin:0"><strong style="color:var(--tinta)">Caja amarilla</strong> = el recuento de '+
+        'la última noche que la contaste. No se van sumando los días: se anota lo que hay dentro y '+
+        'eso es el saldo. En el mes y en el año se enseña el recuento con el que se cerró.</p>'+
       '</div></div>'+
 
     /* Zona de borrado. Va la ultima y aparte, para no tropezarse con
@@ -1324,42 +1435,103 @@ function verAjustes(main){
         '</div>'+
       '</div></div>';
 
+  /* La lista se edita sobre un borrador: así añadir o quitar a alguien
+     no se lleva por delante lo que haya escrito sin guardar. */
+  var borrador=(libro.ajustes.gente||[]).map(function(g){
+    return {id:g.id||uid(), nombre:g.nombre||"", telefono:g.telefono||""};
+  });
+  if(!borrador.length) borrador.push({id:uid(), nombre:"", telefono:""});
+
+  function leerBorrador(){
+    borrador.forEach(function(g){
+      var n=document.getElementById("g_nom_"+g.id), t=document.getElementById("g_tel_"+g.id);
+      if(n) g.nombre=n.value;
+      if(t) g.telefono=t.value;
+    });
+  }
+
   /* Mientras escribe, le enseñamos el número tal cual lo verá WhatsApp,
      y el botón de probar abre ese chat sin mandar nada: así se sabe si
      el problema es el número o el parte. */
-  function previoDestino(){
-    var caja=document.getElementById("aj_previo"); if(!caja) return;
-    var tel=soloNumero(valor("aj_tel"));
-    var probar=document.getElementById("aj_probar");
-    if(probar){
-      probar.setAttribute("href", tel ? "https://wa.me/"+tel : "#");
-      probar.style.opacity = tel ? "" : ".4";
-      probar.style.pointerEvents = tel ? "" : "none";
-    }
+  function avisoNumero(escrito){
     /* Si el movil ha colado un correo o un nombre, decirlo claro: al
        quitarle las letras quedaria un numero inventado. */
-    var escrito=valor("aj_tel");
-    if(/[a-zA-Z@]/.test(escrito)){
-      caja.innerHTML='<strong style="color:var(--malo)">Eso no es un teléfono.</strong> '+
-        'Parece que el móvil ha rellenado el campo por su cuenta. '+
-        'Borra lo que hay y escribe sólo el número, empezando por el país.';
-      if(probar){ probar.setAttribute("href","#"); probar.style.opacity=".4";
-                  probar.style.pointerEvents="none"; }
-      return;
-    }
-    if(!tel){ caja.textContent="Sin número, tendrás que elegir el chat a mano cada vez."; return; }
-    var crudo=valor("aj_tel").replace(/\D/g,"");
-    caja.innerHTML='Se abrirá <strong>wa.me/'+esc(tel)+'</strong>'+
-      (valor("aj_dest")?' — '+esc(valor("aj_dest")):"")+
-      '. Pulsa <strong>Probar el número</strong>: si abre el chat correcto, ya está.'+
+    if(/[a-zA-Z@]/.test(escrito))
+      return '<strong style="color:var(--malo)">Eso no es un teléfono.</strong> '+
+             'Parece que el móvil ha rellenado el campo por su cuenta. Borra lo que hay '+
+             'y escribe sólo el número, empezando por el país.';
+    var tel=soloNumero(escrito);
+    if(!tel) return "Sin número no se le puede mandar el parte: tendrías que elegir el chat a mano.";
+    var crudo=String(escrito).replace(/\D/g,"");
+    return 'Se abrirá <strong>wa.me/'+esc(tel)+'</strong>. Pulsa <strong>Probar el número</strong>: '+
+      'si abre el chat correcto, ya está.'+
       (crudo!==tel ? ' <strong>Le he quitado el 00 del principio</strong>, que es lo mismo '+
                      'que el + y WhatsApp no lo admite.' : "")+
       (tel.length<8 ? ' <strong>Parece corto: ¿le falta el país?</strong>' : "");
   }
-  ["aj_tel","aj_dest"].forEach(function(id){
-    var e=document.getElementById(id); if(e) e.addEventListener("input", previoDestino);
+  function refrescarFila(g){
+    var t=document.getElementById("g_tel_"+g.id);
+    var pie=document.getElementById("g_pie_"+g.id);
+    var probar=document.getElementById("g_probar_"+g.id);
+    if(!t || !pie) return;
+    var limpio=/[a-zA-Z@]/.test(t.value) ? "" : soloNumero(t.value);
+    pie.innerHTML=avisoNumero(t.value);
+    if(probar){
+      probar.setAttribute("href", limpio ? "https://wa.me/"+limpio : "#");
+      probar.style.opacity = limpio ? "" : ".4";
+      probar.style.pointerEvents = limpio ? "" : "none";
+    }
+  }
+  function pintarGente(){
+    var caja=document.getElementById("aj_gente"); if(!caja) return;
+    caja.innerHTML=borrador.map(function(g,i){
+      return '<div style="border:1px solid var(--linea);border-radius:10px;padding:12px;margin-bottom:8px">'+
+        '<div class="rejilla">'+
+          '<div class="campo"><label class="lbl" for="g_nom_'+g.id+'">Nombre</label>'+
+            '<input id="g_nom_'+g.id+'" value="'+esc(g.nombre)+'" placeholder="Valeriano"></div>'+
+          '<div class="campo" style="grid-column:span 2">'+
+            '<label class="lbl" for="g_tel_'+g.id+'">Teléfono con el código del país</label>'+
+            /* type=tel e inputmode: en el movil sale el teclado de numeros y
+               el autorrelleno ofrece telefonos. Sin esto ofrecia el correo, y
+               si lo aceptas te queda una arroba donde va el numero. */
+            '<input id="g_tel_'+g.id+'" class="mono" type="tel" inputmode="tel" autocomplete="tel" '+
+            'value="'+esc(g.telefono)+'" placeholder="+376 800100"></div>'+
+        '</div>'+
+        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">'+
+          '<a class="btn suave sm" id="g_probar_'+g.id+'" href="#" target="_blank" rel="noopener" '+
+          'style="text-decoration:none">Probar el número</a>'+
+          '<button class="btn suave sm malo" data-quitar="'+g.id+'">Quitar</button>'+
+          (i===0 ? '<span class="chapa neutra">Sale marcado al enviar</span>' : "")+
+        '</div>'+
+        '<p class="nota" style="margin:8px 0 0" id="g_pie_'+g.id+'"></p>'+
+      '</div>';
+    }).join("");
+    borrador.forEach(function(g){
+      ["g_nom_","g_tel_"].forEach(function(pre){
+        var e=document.getElementById(pre+g.id);
+        if(e) e.addEventListener("input", function(){ refrescarFila(g); });
+      });
+      refrescarFila(g);
+    });
+    caja.querySelectorAll("[data-quitar]").forEach(function(b){
+      b.addEventListener("click", function(){
+        leerBorrador();
+        var fuera=b.getAttribute("data-quitar");
+        borrador=borrador.filter(function(x){ return x.id!==fuera; });
+        /* Nunca se queda sin ninguna fila: si no, no habria donde escribir. */
+        if(!borrador.length) borrador.push({id:uid(), nombre:"", telefono:""});
+        pintarGente();
+      });
+    });
+  }
+  pintarGente();
+  document.getElementById("aj_mas").addEventListener("click", function(){
+    leerBorrador();
+    borrador.push({id:uid(), nombre:"", telefono:""});
+    pintarGente();
+    var ultimo=document.getElementById("g_nom_"+borrador[borrador.length-1].id);
+    if(ultimo) ultimo.focus();
   });
-  previoDestino();
 
   document.getElementById("b_hojas").addEventListener("click", function(){
     if(!contarHojas()){ avisar("No hay ninguna foto guardada.", true); return; }
@@ -1425,17 +1597,28 @@ function verAjustes(main){
   document.getElementById("aj_guardar").addEventListener("click", function(){
     libro.ajustes.nombre=valor("aj_nom");
     libro.ajustes.objetivoAmarilla=numero("aj_obj");
-    if(/[a-zA-Z@]/.test(valor("aj_tel"))){
-      avisar("El teléfono lleva letras o una arroba. Déjalo sólo en números.", true);
+    leerBorrador();
+    var conLetras=borrador.filter(function(g){ return /[a-zA-Z@]/.test(g.telefono||""); })[0];
+    if(conLetras){
+      avisar("El teléfono de "+nombreDe(conLetras)+" lleva letras o una arroba. "+
+             "Déjalo sólo en números.", true);
       return;
     }
-    libro.ajustes.telefono=valor("aj_tel");
-    libro.ajustes.destinatario=valor("aj_dest");
+    /* Las filas vacias no se guardan, y el numero queda ya escrito como
+       lo quiere WhatsApp: con el + y sin espacios. */
+    libro.ajustes.gente=borrador.filter(function(g){
+      return String(g.nombre||"").trim() || soloNumero(g.telefono);
+    }).map(function(g){
+      var limpio=soloNumero(g.telefono);
+      return {id:g.id, nombre:String(g.nombre||"").trim(), telefono:limpio?"+"+limpio:""};
+    });
     libro.ajustes.fondoHabitual=numero("aj_fondo");
+    libro.ajustes.pctVisa=numero("aj_visa");
     guardar(); pintar();
-    avisar(telefonoCompleto()
-      ? "El parte irá a "+nombreDestino()+" "+telefonoBonito()
-      : "Ajustes guardados");
+    var cuantos=gente().length;
+    avisar(cuantos===0 ? "Ajustes guardados"
+      : cuantos===1 ? "El parte irá a "+nombreDestino()+" "+telefonoBonito()
+      : "El parte se lo podrás mandar a "+cuantos+" personas");
   });
 }
 
@@ -1464,10 +1647,24 @@ function quitarCeros(){
   }
 }
 
+/* Antes solo se podia guardar a una persona. Ese destinatario pasa a ser
+   el primero de la lista, y los campos viejos se quedan donde estan por
+   si un movil todavia tiene abierta la version anterior de la app. */
+function unificarGente(){
+  var a=libro.ajustes; if(!a) return;
+  if(Array.isArray(a.gente)) return;
+  a.gente=[];
+  if(String(a.destinatario||"").trim() || soloNumero(a.telefono)){
+    a.gente.push({id:uid(), nombre:a.destinatario||"", telefono:a.telefono||""});
+  }
+  guardar();
+}
+
 /* ══════════════════════════════════════════════════════════════ */
 cargar();
 unificarTelefono();
 quitarCeros();
+unificarGente();
 pintar();
 
 })();
