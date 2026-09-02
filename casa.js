@@ -1362,7 +1362,9 @@ function editarVisita(id){
     '</div>'+
     '<p class="nota" style="margin:8px 0 0">El número del recibo de la consulta es el '+
     'comprobante de la visita: lo primero que te piden si hay cualquier problema.</p>'+
-    '<p class="nota" style="margin:16px 0 8px">La consulta y lo que te devuelven de ella</p>'+
+    '<p class="nota" style="margin:16px 0 8px">La consulta y lo que te devuelven de ella. '+
+    'El <strong style="color:var(--tinta)">seguro complementario</strong> paga lo que no paga la CASS, '+
+    'así que ese importe se pone solo: escribe lo que costó y lo que devuelve la CASS.</p>'+
     '<div class="rejilla3">'+
       '<div class="campo"><label class="lbl" for="v_cons">Consulta (€)</label>'+
         '<input type="number" id="v_cons" min="0" step="0.01" value="'+esc(v.consulta||"")+'"></div>'+
@@ -1373,7 +1375,8 @@ function editarVisita(id){
     '</div>'+
     '<div class="nota" id="v_calcCons" style="margin:6px 0 0"></div>'+
 
-    '<p class="nota" style="margin:18px 0 8px">La farmacia y lo que te devuelven de ella</p>'+
+    '<p class="nota" style="margin:18px 0 8px">La farmacia y lo que te devuelven de ella. '+
+    'Igual que arriba: el resto de lo que no paga la CASS lo pone el seguro.</p>'+
     '<div class="rejilla3">'+
       '<div class="campo"><label class="lbl" for="v_medi">Farmacia (€)</label>'+
         '<input type="number" id="v_medi" min="0" step="0.01" value="'+esc(v.medicinas||"")+'"></div>'+
@@ -1406,6 +1409,21 @@ function editarVisita(id){
       guardar(); pintar(); avisar(id?"Visita actualizada":"Visita anotada");
     });
 
+  /* El seguro complementario paga lo que no paga la CASS, asi que ese
+     importe no hay que escribirlo: se rellena solo. Solo se deja de
+     rellenar si el se pone a escribirlo a mano, y en las visitas viejas
+     en las que el seguro pago otra cosa, que se respetan tal cual: ahi
+     queda el boton para ponerle el resto. */
+  function esElResto(pagado, cass, seguro){
+    return Math.abs(r2(pagado-cass-seguro))<0.005;
+  }
+  var autoCons=esElResto(+v.consulta||0,  +v.cassCons||0, +v.segCons||0);
+  var autoFarm=esElResto(+v.medicinas||0, +v.cassFarm||0, +v.segFarm||0);
+  function ponerImporte(id2, n){
+    var e=document.getElementById(id2); if(!e) return;
+    e.value = Math.abs(n)<0.005 ? "" : String(n);
+  }
+
   /* Cuenta en vivo: cada concepto por su lado y el total abajo */
   function frase(pagado, devuelto, queda, quien){
     if(!pagado) return "";
@@ -1415,12 +1433,37 @@ function editarVisita(id){
                             '</strong> de más '+quien+'.';
     return 'Recuperado del todo '+quien+'.';
   }
+  /* Cuando el seguro pone el resto, el aviso lo dice; cuando no, se
+     ofrece el boton para que lo ponga. */
+  function aviso(auto, cual, pagado, cass, seguro, queda, quien){
+    if(!pagado) return "";
+    if(auto) return 'La CASS devuelve '+eur(cass)+' y el seguro complementario pone el resto, '+
+                    '<strong>'+eur(seguro)+'</strong>. No queda nada pendiente '+quien+'.';
+    return frase(pagado, r2(cass+seguro), queda, quien)+
+      (Math.abs(queda)>0.004
+        ? ' <button type="button" class="btn suave sm" data-resto="'+cual+'" '+
+          'style="padding:2px 6px">Que lo pague el seguro</button>'
+        : "");
+  }
   function recalcular(){
-    var cons=numero("v_cons"), cassC=numero("v_cassCons"), segC=numero("v_segCons");
-    var farm=numero("v_medi"), cassF=numero("v_cassFarm"), segF=numero("v_segFarm");
+    var cons=numero("v_cons"), cassC=numero("v_cassCons");
+    var farm=numero("v_medi"), cassF=numero("v_cassFarm");
+    /* El seguro se rellena antes de leerlo: es lo que falta por cubrir. */
+    if(autoCons) ponerImporte("v_segCons", Math.max(0, r2(cons-cassC)));
+    if(autoFarm) ponerImporte("v_segFarm", Math.max(0, r2(farm-cassF)));
+    var segC=numero("v_segCons"), segF=numero("v_segFarm");
     var quedaC=r2(cons-cassC-segC), quedaF=r2(farm-cassF-segF);
-    document.getElementById("v_calcCons").innerHTML=frase(cons, r2(cassC+segC), quedaC, "de la consulta");
-    document.getElementById("v_calcFarm").innerHTML=frase(farm, r2(cassF+segF), quedaF, "de la farmacia");
+    document.getElementById("v_calcCons").innerHTML=
+      aviso(autoCons, "cons", cons, cassC, segC, quedaC, "de la consulta");
+    document.getElementById("v_calcFarm").innerHTML=
+      aviso(autoFarm, "farm", farm, cassF, segF, quedaF, "de la farmacia");
+    [["cons",true],["farm",false]].forEach(function(par){
+      var b=document.querySelector('[data-resto="'+par[0]+'"]');
+      if(b) b.addEventListener("click", function(){
+        if(par[1]) autoCons=true; else autoFarm=true;
+        recalcular();
+      });
+    });
 
     var total=r2(quedaC+quedaF);
     document.getElementById("v_calculo").innerHTML=
@@ -1429,6 +1472,8 @@ function editarVisita(id){
     : total<-0.004 ? 'Te han devuelto <strong>'+eur(Math.abs(total))+'</strong> de más.'
     : 'Cuadra: no queda nada pendiente.';
   }
+  document.getElementById("v_segCons").addEventListener("input", function(){ autoCons=false; });
+  document.getElementById("v_segFarm").addEventListener("input", function(){ autoFarm=false; });
   ["v_cons","v_medi","v_cassCons","v_segCons","v_cassFarm","v_segFarm"].forEach(function(id2){
     document.getElementById(id2).addEventListener("input", recalcular);
   });

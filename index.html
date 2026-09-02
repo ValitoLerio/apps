@@ -457,7 +457,7 @@
 
 </div>
 
-<script src="sync.js?v=202609011033"></script>
+<script src="sync.js?v=202609020829"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
@@ -809,8 +809,15 @@
                  (delMes(libro.revisiones)||[]).reduce(function(s,r){
                    return s + (+r.manoObra||0) + (r.piezas||[]).reduce(function(t,p){ return t+(+p.precio||0); },0);
                  }, 0);
+    // Las devoluciones se guardan separadas por concepto desde que la
+    // consulta y la farmacia se reclaman por su lado. Aqui se seguian
+    // leyendo los campos viejos, que ya no existen, y el gasto de medico
+    // salia entero, como si no devolviera nadie nada. Se admiten los dos.
     var medico = (delMes(libro.medico)||[]).reduce(function(s,v){
-                   return s + (+v.consulta||0)+(+v.medicinas||0)-(+v.cass||0)-(+v.seguro||0); }, 0);
+                   var devuelto = (v.cassCons!==undefined || v.cassFarm!==undefined)
+                     ? (+v.cassCons||0)+(+v.cassFarm||0)+(+v.segCons||0)+(+v.segFarm||0)
+                     : (+v.cass||0)+(+v.seguro||0);
+                   return s + (+v.consulta||0)+(+v.medicinas||0)-devuelto; }, 0);
     var otros  = suma(delMes(libro.otros), 'importe');
     var viajes = (libro.viajes||[]).reduce(function(s,v){ return s + suma(delMes(v.gastos), 'importe'); }, 0);
 
