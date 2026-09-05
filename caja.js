@@ -17,6 +17,12 @@
    Y una columna de control, «Debería haber», enseña esa misma cifra
    y al lado lo que baila.
 
+   Y un apartado, «Sin retirar», para las temporadas en que el dinero se
+   queda dentro porque no hay quien lo saque: esos días quedan agrupados
+   en un tramo, con su fondo aparte y con lo que se ha ido quedando
+   encima, que es lo que habrá que entregar. Ahí tampoco se suman
+   recuentos: la cifra buena es la última noche menos el fondo.
+
    La caja amarilla es el fondo del negocio: 1.500 € (editable) que se
    van recuperando poco a poco. Cada noche se cuenta lo que hay dentro y
    se anota, así que es un RECUENTO, no una entrega del día. Sumar los
@@ -43,7 +49,8 @@ function libroVacio(){
               gente:[] },      /* {id, nombre, telefono} — a quien va el parte */
     dias:[],          /* {id, fecha, visa, efectivo, gastos, detalle:[…], aAmarilla, fondoCaja, nota} */
     aportaciones:[],  /* {id, fecha, importe, motivo} — dinero que entra sin ser de la caja */
-    retiradas:[]      /* {id, fecha, importe, motivo} — dinero que sale de la amarilla */
+    retiradas:[],     /* {id, fecha, importe, motivo} — dinero que sale de la amarilla */
+    tramos:[]         /* {id, desde, hasta, motivo, entregado, fechaEntrega} — dias sin retirar */
   };
 }
 
@@ -251,6 +258,77 @@ function amarillaSacado(){
   return r2((libro.retiradas||[]).reduce(function(s,r){ return s+(+r.importe||0); },0));
 }
 function objetivoAmarilla(){ return +libro.ajustes.objetivoAmarilla || 0; }
+
+/* ── Tramos sin retirar ─────────────────────────────────────────
+   Hay temporadas en que no se saca nada: el jefe no está y el dinero se
+   va quedando dentro hasta que vuelva o diga. Un tramo son esos días
+   juntos, apartados del resto, con su fondo y todo lo que se ha ido
+   quedando encima.
+
+   Un tramo no mueve ni un euro: los días siguen siendo los mismos y la
+   amarilla sigue siendo el recuento de cada noche. Lo único que hace es
+   agrupar y decir cuánto hay que entregar cuando vuelva. */
+function tramosOrdenados(){
+  return (libro.tramos||[]).slice().sort(function(a,b){
+    return (b.desde||"").localeCompare(a.desde||"");
+  });
+}
+function tramoAbierto(){
+  return (libro.tramos||[]).filter(function(t){ return !t.hasta; })[0] || null;
+}
+/* El tramo que cubre un día, si lo hay: sirve para avisar al anotar. */
+function tramoDe(fecha){
+  return (libro.tramos||[]).filter(function(t){
+    return (t.desde||"")<=fecha && (!t.hasta || fecha<=t.hasta);
+  })[0] || null;
+}
+function diasDelTramo(t){
+  if(!t) return [];
+  var desde=t.desde||"", hasta=t.hasta||"\uffff";
+  return (libro.dias||[]).filter(function(d){
+    var f=d.fecha||"";
+    return f>=desde && f<=hasta;
+  }).sort(function(a,b){ return a.fecha.localeCompare(b.fecha); });
+}
+/* El último recuento anotado ANTES de una fecha: con cuánto empezó el
+   tramo, para ver lo que ha subido desde entonces. */
+function recuentoAntesDe(fecha){
+  var previos=(libro.dias||[]).filter(function(d){
+    return d.aAmarilla!=null && d.aAmarilla!=="" && (d.fecha||"")<fecha;
+  }).sort(function(a,b){ return a.fecha.localeCompare(b.fecha); });
+  return previos.length ? previos[previos.length-1] : null;
+}
+/* OJO con la tentación de sumar aquí el sobrante de cada día. Cuando el
+   dinero se saca a diario, cada sobrante es una entrega suelta y sumarlos
+   tiene sentido: es lo que hace el mes. Pero en un tramo no se saca nada,
+   así que la amarilla va subiendo y el sobrante de cada noche ya lleva
+   dentro el de las anteriores. Sumarlos contaría el mismo dinero muchas
+   veces. Aquí la cifra buena es el nivel: lo que hay dentro la última
+   noche, menos el fondo. */
+function cuentasTramo(t){
+  var dias=diasDelTramo(t);
+  var s=sumaCuentas(dias);
+  var conRecuento=dias.filter(function(d){ return d.aAmarilla!=null && d.aAmarilla!==""; });
+  var ultimo=conRecuento.length ? conRecuento[conRecuento.length-1] : null;
+  var previo=recuentoAntesDe(t.desde||"");
+  var dentro=ultimo ? r2(+ultimo.aAmarilla||0) : null;
+  var partida=previo ? r2(+previo.aAmarilla||0) : null;
+  var fondo=objetivoAmarilla();
+  return {
+    dias:dias, nDias:dias.length, conRecuento:conRecuento.length,
+    ventas:s.ventas, gastos:s.gastos,
+    fondo:fondo,
+    dentro:dentro,                 /* el nivel de la ultima noche */
+    fecha:ultimo?ultimo.fecha:null,
+    partida:partida,               /* con cuanto empezo */
+    encima:(dentro==null)?null:r2(Math.max(0, dentro-fondo)),
+    subido:(dentro==null||partida==null)?null:r2(dentro-partida)
+  };
+}
+/* Lo que ya se entregó de tramos cerrados, solo para el resumen. */
+function entregadoEnTramos(){
+  return r2((libro.tramos||[]).reduce(function(s,t){ return s+(+t.entregado||0); },0));
+}
 /* Qué parte de las ventas se cobra con tarjeta, de media. De ahí sale el
    efectivo que debería haber. */
 function pctVisa(){
@@ -287,6 +365,7 @@ var APARTADOS=[
   {id:"mes",      nombre:"Mes"},
   {id:"anio",     nombre:"Año"},
   {id:"amarilla", nombre:"Caja amarilla"},
+  {id:"tramos",   nombre:"Sin retirar"},
   {id:"ajustes",  nombre:"Ajustes"}
 ];
 
@@ -313,7 +392,8 @@ function pintar(){
   if(window.Sync && Sync.mostrarEstadoEn) Sync.mostrarEstadoEn(document.getElementById("sync-estado"));
 
   var main=document.getElementById("main");
-  ({dia:verDia, mes:verMes, anio:verAnio, amarilla:verAmarilla, ajustes:verAjustes})[ui.vista](main);
+  ({dia:verDia, mes:verMes, anio:verAnio, amarilla:verAmarilla,
+    tramos:verTramos, ajustes:verAjustes})[ui.vista](main);
 }
 
 function cabecera(titulo, sub, derecha){
@@ -436,7 +516,16 @@ function verDia(main){
 function pintarFormularioDia(d){
   var caja=document.getElementById("formDia");
   var actual=d||{visa:"", efectivo:"", gastos:"", aAmarilla:"", nota:"", detalle:[]};
+  /* Si el día cae dentro de un tramo sin retirar, más vale decirlo aquí:
+     ese día el dinero se queda dentro y la amarilla va a ir subiendo. */
+  var elTramo=tramoDe(ui.dia);
   caja.innerHTML=
+    (elTramo
+      ? '<div class="aviso-caja" style="margin-bottom:14px">Este día entra en un tramo '+
+        'sin retirar'+(elTramo.motivo?" ("+esc(elTramo.motivo)+")":"")+', desde el '+
+        esc(dmy(elTramo.desde))+'. El dinero se queda en la amarilla: anota el recuento '+
+        'con lo que haya dentro, aunque pase del fondo.</div>'
+      : "")+
     '<div class="rejilla">'+
       '<div class="campo"><label class="lbl" for="f_visa">Visa (€)</label>'+
         '<input type="number" class="grande" id="f_visa" min="0" step="0.01" value="'+esc(actual.visa)+'"></div>'+
@@ -1426,6 +1515,262 @@ function sacarDeAmarilla(){
 /* ══════════════════════════════════════════════════════════════
    AJUSTES
    ══════════════════════════════════════════════════════════════ */
+/* ═════════════════════════════════════════════════════════════
+   SIN RETIRAR
+   ═════════════════════════════════════════════════════════════ */
+function verTramos(main){
+  var lista=tramosOrdenados(), abierto=tramoAbierto(), objetivo=objetivoAmarilla();
+  var cAbierto=abierto?cuentasTramo(abierto):null;
+
+  main.innerHTML=
+    (objetivo<=0
+      ? '<div class="aviso-caja">La amarilla no tiene objetivo, y sin él no se sabe qué parte es '+
+        'fondo y qué parte sobra. Pónselo en la pestaña de la caja amarilla.</div>'
+      : "")+
+    cabecera("Sin retirar",
+      "Los días que el dinero se queda dentro porque no hay quien lo saque. Cada tramo va "+
+      "aparte, con su fondo y con todo lo que se ha ido quedando encima.",
+      (abierto
+        ? '<button class="btn" id="tr_editar">Cambiar fechas</button>'+
+          '<button class="btn fuerte" id="tr_cerrar">Cerrarlo y entregar</button>'
+        : '<button class="btn fuerte" id="tr_nuevo">Empezar un tramo</button>'))+
+
+    '<div class="cifras">'+
+      '<div class="cifra"><div class="k">Esperando entrega</div>'+
+        '<div class="v amarilla">'+(cAbierto&&cAbierto.encima!=null?eur(cAbierto.encima):"—")+'</div>'+
+        '<div class="n">'+(abierto
+          ? (cAbierto.encima!=null
+              ? "por encima del fondo de "+eur(cAbierto.fondo)
+              : "aún no has anotado ningún recuento")
+          : "ahora mismo no hay ningún tramo abierto")+'</div></div>'+
+      '<div class="cifra"><div class="k">Días sin retirar</div>'+
+        '<div class="v">'+(abierto?cAbierto.nDias:0)+'</div>'+
+        '<div class="n">'+(abierto
+          ? "desde el "+esc(dmy(abierto.desde))
+          : "—")+'</div></div>'+
+      '<div class="cifra"><div class="k">Tramos guardados</div><div class="v">'+lista.length+'</div>'+
+        '<div class="n">'+plural(lista.filter(function(t){return !!t.hasta;}).length,"cerrado","cerrados")+'</div></div>'+
+      '<div class="cifra"><div class="k">Ya entregado</div><div class="v">'+eur(entregadoEnTramos())+'</div>'+
+        '<div class="n">de los tramos cerrados</div></div>'+
+    '</div>'+
+
+    '<div id="listaTramos"></div>';
+
+  var bNuevo=document.getElementById("tr_nuevo");
+  if(bNuevo) bNuevo.addEventListener("click", empezarTramo);
+  var bCerrar=document.getElementById("tr_cerrar");
+  if(bCerrar) bCerrar.addEventListener("click", function(){ cerrarTramo(abierto); });
+  var bEditar=document.getElementById("tr_editar");
+  if(bEditar) bEditar.addEventListener("click", function(){ editarTramo(abierto); });
+
+  var caja=document.getElementById("listaTramos");
+  caja.innerHTML = !lista.length
+    ? '<div class="tarjeta"><div class="vacio"><strong>Todavía no hay ningún tramo</strong>'+
+      'Cuando el dinero se vaya a quedar dentro unos días, empieza uno y esos días quedan '+
+      'apartados aquí con su cuenta.</div></div>'
+    : lista.map(tarjetaTramo).join("");
+
+  /* Pinchar una fila lleva al cierre de ese día, como en el mes. */
+  caja.querySelectorAll("tr[data-dia]").forEach(function(tr){
+    tr.style.cursor="pointer";
+    tr.addEventListener("click", function(){
+      ui.dia=tr.getAttribute("data-dia"); ui.vista="dia"; pintar();
+    });
+  });
+  caja.querySelectorAll("[data-tr]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var partes=b.getAttribute("data-tr").split("|");
+      var t=(libro.tramos||[]).filter(function(x){ return x.id===partes[1]; })[0];
+      if(!t) return;
+      if(partes[0]==="cerrar") cerrarTramo(t);
+      else if(partes[0]==="editar") editarTramo(t);
+      else if(partes[0]==="reabrir") reabrirTramo(t);
+      else borrarTramo(t);
+    });
+  });
+}
+
+function tarjetaTramo(t){
+  var c=cuentasTramo(t);
+  var abierto=!t.hasta;
+  var titulo=dmy(t.desde)+(t.hasta ? " – "+dmy(t.hasta) : " – sigue abierto");
+
+  /* La tabla enseña el nivel de cada noche y lo que ha subido respecto a
+     la anterior. No hay ninguna suma de recuentos: sumarlos daría una
+     cifra que no existe. */
+  var anterior=c.partida;
+  var filas=c.dias.map(function(d){
+    var cd=cuentasDia(d);
+    var hay=(d.aAmarilla!=null && d.aAmarilla!=="") ? r2(+d.aAmarilla||0) : null;
+    var sube=(hay!=null && anterior!=null) ? r2(hay-anterior) : null;
+    if(hay!=null) anterior=hay;
+    return '<tr data-dia="'+esc(d.fecha)+'"><td>'+esc(dmy(d.fecha))+'</td>'+
+      '<td class="num">'+eur(cd.ventas)+'</td>'+
+      '<td class="num"'+(hay!=null?' style="color:var(--amarilla)"':'')+'>'+
+        (hay!=null?"<strong>"+eur(hay)+"</strong>":"—")+'</td>'+
+      '<td class="num">'+(sube==null?"—":(sube>0?"+":"")+eur(sube))+'</td>'+
+      '<td>'+esc(d.nota||"")+'</td></tr>';
+  }).join("");
+
+  return '<div class="tarjeta" style="margin-bottom:16px">'+
+    '<div class="tarjeta-cab">'+
+      '<h2>'+esc(titulo)+'</h2>'+
+      '<div class="pista">'+(t.motivo?esc(t.motivo)+" · ":"")+
+        plural(c.nDias,"día anotado","días anotados")+
+        (abierto?' <span class="chapa amarilla">Abierto</span>'
+                :' <span class="chapa ok">Cerrado</span>')+'</div>'+
+    '</div>'+
+    '<div class="tarjeta-cuerpo">'+
+      '<div class="cifras" style="margin:0 0 14px">'+
+        '<div class="cifra"><div class="k">Fondo</div><div class="v">'+eur(c.fondo)+'</div>'+
+          '<div class="n">esto no se toca</div></div>'+
+        '<div class="cifra"><div class="k">Hay dentro</div>'+
+          '<div class="v amarilla">'+(c.dentro!=null?eur(c.dentro):"—")+'</div>'+
+          '<div class="n">'+(c.fecha?"recuento del "+esc(dmy(c.fecha)):"sin recuento anotado")+'</div></div>'+
+        '<div class="cifra"><div class="k">'+(t.hasta&&t.entregado?"Se entregó":"Por encima del fondo")+'</div>'+
+          '<div class="v">'+(t.hasta&&t.entregado!=null&&t.entregado!==""
+              ? eur(+t.entregado||0)
+              : (c.encima!=null?eur(c.encima):"—"))+'</div>'+
+          '<div class="n">'+(t.hasta&&t.fechaEntrega
+              ? "el "+esc(dmy(t.fechaEntrega))
+              : "es lo que hay que entregar")+'</div></div>'+
+        '<div class="cifra"><div class="k">Ha subido</div>'+
+          '<div class="v">'+(c.subido!=null?(c.subido>0?"+":"")+eur(c.subido):"—")+'</div>'+
+          '<div class="n">'+(c.partida!=null
+              ? "empezó con "+eur(c.partida)
+              : "no hay recuento de antes")+'</div></div>'+
+      '</div>'+
+      '<p class="nota" style="margin:0 0 12px">Ventas del tramo: <strong>'+eur(c.ventas)+'</strong>. '+
+      'Lo de la amarilla es el recuento de cada noche, así que no se suma: la cifra buena es la '+
+      'última, y lo que hay que entregar es lo que pasa del fondo.</p>'+
+      '<div class="tabla-caja">'+
+        (filas
+          ? '<table><thead><tr><th>Fecha</th><th class="num">Ventas</th>'+
+            '<th class="num">Hay dentro</th><th class="num">Sube</th><th>Nota</th></tr></thead>'+
+            '<tbody>'+filas+'</tbody></table>'
+          : '<div class="vacio"><strong>Ningún día anotado en estas fechas</strong>'+
+            'En cuanto guardes un cierre dentro del tramo, sale aquí.</div>')+
+      '</div>'+
+      '<div class="acciones-fila" style="margin-top:14px">'+
+        '<button class="btn suave sm" data-tr="editar|'+esc(t.id)+'">Cambiar fechas</button>'+
+        (abierto
+          ? '<button class="btn sm fuerte" data-tr="cerrar|'+esc(t.id)+'">Cerrarlo y entregar</button>'
+          : '<button class="btn suave sm" data-tr="reabrir|'+esc(t.id)+'">Reabrir</button>')+
+        '<button class="btn suave sm malo" data-tr="borrar|'+esc(t.id)+'">Borrar</button>'+
+      '</div>'+
+    '</div></div>';
+}
+
+function empezarTramo(){
+  var yaHay=tramoAbierto();
+  if(yaHay){
+    avisar("Ya hay un tramo abierto desde el "+dmy(yaHay.desde)+". Ciérralo primero.", true);
+    return;
+  }
+  abrirVentana("Empezar un tramo sin retirar",
+    '<p class="nota">Desde este día el dinero se queda dentro de la amarilla. Los cierres se '+
+    'anotan igual que siempre; aquí solo quedan apartados para saber cuánto hay que entregar '+
+    'cuando se pueda sacar.</p>'+
+    '<div class="rejilla">'+
+      '<div class="campo"><label class="lbl" for="tr_desde">Desde</label>'+
+        '<input type="date" id="tr_desde" value="'+esc(hoyISO())+'"></div>'+
+      '<div class="campo" style="grid-column:1/-1"><label class="lbl" for="tr_motivo">Por qué</label>'+
+        '<input id="tr_motivo" placeholder="El jefe fuera, sin órdenes de sacar…"></div>'+
+    '</div>',
+    function(){
+      var desde=valor("tr_desde");
+      if(!desde){ avisar("Pon el día en que empieza.", true); return true; }
+      libro.tramos=libro.tramos||[];
+      libro.tramos.push({id:uid(), desde:desde, hasta:"", motivo:valor("tr_motivo"),
+                         entregado:null, fechaEntrega:null});
+      guardar(); pintar();
+      avisar("Tramo empezado el "+dmy(desde));
+    }, {aceptar:"Empezar"});
+}
+
+function editarTramo(t){
+  if(!t) return;
+  abrirVentana("Cambiar las fechas del tramo",
+    '<p class="nota">Los días del tramo son los cierres que caen entre las dos fechas. '+
+    'Déjalo sin fecha de fin si todavía sigue.</p>'+
+    '<div class="rejilla">'+
+      '<div class="campo"><label class="lbl" for="te_desde">Desde</label>'+
+        '<input type="date" id="te_desde" value="'+esc(t.desde||"")+'"></div>'+
+      '<div class="campo"><label class="lbl" for="te_hasta">Hasta</label>'+
+        '<input type="date" id="te_hasta" value="'+esc(t.hasta||"")+'"></div>'+
+      '<div class="campo" style="grid-column:1/-1"><label class="lbl" for="te_motivo">Por qué</label>'+
+        '<input id="te_motivo" value="'+esc(t.motivo||"")+'"></div>'+
+    '</div>',
+    function(){
+      var desde=valor("te_desde"), hasta=valor("te_hasta");
+      if(!desde){ avisar("Pon el día en que empieza.", true); return true; }
+      if(hasta && hasta<desde){ avisar("La fecha de fin es anterior a la de inicio.", true); return true; }
+      t.desde=desde; t.hasta=hasta; t.motivo=valor("te_motivo");
+      guardar(); pintar(); avisar("Tramo cambiado");
+    });
+}
+
+function cerrarTramo(t){
+  if(!t) return;
+  var c=cuentasTramo(t);
+  var sugerido=(c.encima!=null?c.encima:0);
+  abrirVentana("Cerrar el tramo y entregar",
+    '<p class="nota">'+
+      (c.dentro!=null
+        ? 'En el último recuento del tramo, el del '+esc(dmy(c.fecha))+', había <strong>'+
+          eur(c.dentro)+'</strong>. Quitando el fondo de '+eur(c.fondo)+', por encima quedan '+
+          '<strong>'+eur(sugerido)+'</strong>.'
+        : 'En este tramo no hay ningún recuento anotado, así que la cifra la pones tú.')+
+    '</p>'+
+    '<div class="rejilla">'+
+      '<div class="campo"><label class="lbl" for="tc_hasta">Último día</label>'+
+        '<input type="date" id="tc_hasta" value="'+esc(hoyISO())+'"></div>'+
+      '<div class="campo"><label class="lbl" for="tc_imp">Se entrega (€)</label>'+
+        '<input type="number" id="tc_imp" min="0" step="0.01" value="'+esc(sugerido||"")+'"></div>'+
+    '</div>'+
+    '<p class="nota" style="margin:10px 0 0">Queda apuntado también como salida de la amarilla, '+
+    'para que el historial cuadre. Acuérdate de anotar en el cierre de ese día el recuento '+
+    'que quede dentro después de sacarlo.</p>',
+    function(){
+      var hasta=valor("tc_hasta")||hoyISO();
+      if(hasta<(t.desde||"")){ avisar("Ese día es anterior al principio del tramo.", true); return true; }
+      var imp=numero("tc_imp");
+      t.hasta=hasta; t.entregado=imp; t.fechaEntrega=hasta;
+      if(imp>0){
+        libro.retiradas=libro.retiradas||[];
+        libro.retiradas.push({id:uid(), fecha:hasta, importe:imp,
+                              motivo:"Entregado al cerrar el tramo"+(t.motivo?" · "+t.motivo:"")});
+      }
+      guardar(); pintar();
+      avisar(imp>0 ? "Tramo cerrado y anotada la entrega de "+eur(imp)
+                   : "Tramo cerrado, sin entrega anotada");
+    }, {aceptar:"Cerrar"});
+}
+
+function reabrirTramo(t){
+  if(!t) return;
+  if(tramoAbierto()){ avisar("Ya hay otro tramo abierto. Ciérralo primero.", true); return; }
+  confirmar("Reabrir el tramo",
+    '<p class="nota">Vuelve a quedar sin fecha de fin y el dinero sigue contando como no '+
+    'retirado. La salida que se apuntó en la amarilla no se borra: si no la quieres, '+
+    'quítala desde la caja amarilla.</p>',
+    function(){
+      t.hasta=""; t.entregado=null; t.fechaEntrega=null;
+      guardar(); pintar(); avisar("Tramo reabierto");
+    }, {aceptar:"Reabrir"});
+}
+
+function borrarTramo(t){
+  if(!t) return;
+  confirmar("Borrar el tramo",
+    '<p class="nota">Se borra solo la agrupación: los cierres de esos días y lo que hay en '+
+    'la amarilla se quedan como están.</p>',
+    function(){
+      libro.tramos=(libro.tramos||[]).filter(function(x){ return x.id!==t.id; });
+      guardar(); pintar(); avisar("Tramo borrado");
+    }, {aceptar:"Borrar", malo:true});
+}
+
 function verAjustes(main){
   main.innerHTML=
     cabecera("Ajustes", "El nombre que sale en el parte y a quién se lo mandas.")+
