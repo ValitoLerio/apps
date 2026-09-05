@@ -28,6 +28,9 @@ SLOTS.push(0); SLOTS.push(1);
 // ================================================================
 var curM = new Date().getMonth(), curY = 2026, curS = 'verano';
 var sched = {};
+// El cuadrante de vacaciones va por su cuenta: su propio cajon, que no
+// se cruza con `sched` ni con nada del horario. vac[año][mes][id][dia]
+var vac   = {};
 var active = null;
 var clip   = null;
 var hidden = {};
@@ -127,6 +130,7 @@ function save() {
   try { localStorage.setItem('rsch', JSON.stringify(sched)); } catch(e){}
   try { localStorage.setItem('rcam', JSON.stringify({enc:ENC, coc:COC, cam:CAM})); } catch(e){}
   try { localStorage.setItem('rhid', JSON.stringify(hidden));} catch(e){}
+  try { localStorage.setItem('rvac', JSON.stringify(vac));   } catch(e){}
 }
 function load() {
   try { var d=localStorage.getItem('rsch');   if(d){var p=JSON.parse(d);if(typeof p==='object')sched=p;} } catch(e){}
@@ -143,6 +147,7 @@ function load() {
     }
   } catch(e){}
   try { var d=localStorage.getItem('rhid');   if(d){var p=JSON.parse(d);if(typeof p==='object')hidden=p;}} catch(e){}
+  try { var d=localStorage.getItem('rvac');   if(d){var p=JSON.parse(d);if(typeof p==='object')vac=p;}   } catch(e){}
 }
 
 // ================================================================
@@ -603,19 +608,16 @@ function renderAusencias(){
 // CUADRANTE DE VACACIONES
 // ================================================================
 // Un cuadrante aparte que no lleva nada configurado: ni horas, ni turnos,
-// ni temporada. Solo dias. Un toque pone el dia de vacaciones y otro lo
-// quita.
+// ni temporada, ni el horario. Solo dias. Un toque pone el dia de
+// vacaciones y otro lo quita.
 //
-// No guarda las vacaciones en ningun sitio suyo: escribe en los mismos
-// turnos que el horario, asi que lo que se marca aqui sale enseguida en
-// el cuadrante del mes, en el de la semana y en el recuento de horas.
+// Y aparte de verdad: tiene su propio cajon, `vac`, que se guarda en
+// 'rvac'. Lo que se marca aqui NO sale en el cuadrante del mes, ni en
+// el de la semana, ni en el recuento de horas, ni en ausencias; y al
+// reves, lo que haya puesto en el horario no asoma aqui. Son dos
+// cuadrantes distintos que no se pisan el uno al otro.
 function esVacaciones(sid, dia){
-  var c = ((((sched[dia.y] || {})[dia.m] || {})[sid]) || {})[dia.d];
-  return !!(c && c.estado === 'vacaciones');
-}
-function estadoDe(sid, dia){
-  var c = ((((sched[dia.y] || {})[dia.m] || {})[sid]) || {})[dia.d];
-  return c ? c.estado : 'libre';
+  return !!((((vac[dia.y] || {})[dia.m] || {})[sid] || {})[dia.d]);
 }
 function diasVacacionesAno(sid, y){
   var n = 0;
@@ -624,24 +626,16 @@ function diasVacacionesAno(sid, y){
   }
   return n;
 }
-// Un dia que ya tiene turno, festivo o baja se avisa al pisarlo: en el
-// cuadrante se ve la marca, pero mas vale decirlo que borrarlo callando.
+// Un toque pone el dia y otro lo quita. Nada mas: no mira el horario ni
+// avisa de nada, porque aqui el horario no cuenta.
 function toggleVac(sid, y, m, d){
-  var sM = curM, sY = curY;
-  curM = m; curY = y;
-  var c = gc(sid, d);
-  var antes = c ? c.estado : 'libre';
-  if (antes === 'vacaciones') {
-    var mes = (sched[curY] || {})[curM] || {};
-    if (mes[sid]) delete mes[sid][d];
-    save();
-  } else {
-    sc(sid, d, {estado:'vacaciones', nota:(c && c.nota) || ''});
-  }
-  curM = sM; curY = sY;
-  if (antes === 'trabajo') toast('Ese dia tenia turno: ahora son vacaciones');
-  else if (antes !== 'libre' && antes !== 'vacaciones') toast('Ese dia estaba como ' + antes + ': ahora son vacaciones');
-  renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
+  if (!vac[y])           vac[y] = {};
+  if (!vac[y][m])        vac[y][m] = {};
+  if (!vac[y][m][sid])   vac[y][m][sid] = {};
+  if (vac[y][m][sid][d]) delete vac[y][m][sid][d];
+  else                   vac[y][m][sid][d] = 1;
+  save();
+  renderVacaciones();
 }
 
 function renderVacaciones(){
@@ -682,17 +676,16 @@ function renderVacaciones(){
     }
     var enElMes = 0;
     var celdas = dias.map(function(dia){
-      var est = estadoDe(s.id, dia);
-      var vac = est === 'vacaciones';
-      if (vac) enElMes++;
+      // Aqui solo hay dos cosas: o el dia esta de vacaciones o no. Del
+      // horario no se ve nada, que para eso es otro cuadrante.
+      var deVac = esVacaciones(s.id, dia);
+      if (deVac) enElMes++;
       var we  = dia.dow===0||dia.dow===6;
-      // Los otros estados se ven, apagados, para no pisarlos sin querer:
-      // un dia con turno se distingue del que esta libre.
-      var marca = vac ? 'V' : (est === 'trabajo' ? 'T' : est === 'libre' ? '' : EICO[est] || '');
-      var fondo = vac ? 'rgba(41,128,185,.28)' : (we ? 'rgba(30,28,20,.5)' : 'transparent');
-      var color = vac ? '#8ec8f0' : (est === 'trabajo' ? '#4e7a52' : est === 'libre' ? 'var(--border)' : '#8a7a4a');
+      var marca = deVac ? 'V' : '';
+      var fondo = deVac ? 'rgba(41,128,185,.28)' : (we ? 'rgba(30,28,20,.5)' : 'transparent');
+      var color = deVac ? '#8ec8f0' : 'var(--border)';
       return '<td onclick="toggleVac(\'' + s.id + '\',' + dia.y + ',' + dia.m + ',' + dia.d + ')" ' +
-             'title="' + esc(s.name) + ' - ' + etiquetaDia(dia, curM) + (vac ? ' - quitar vacaciones' : ' - poner vacaciones') + '" ' +
+             'title="' + esc(s.name) + ' - ' + etiquetaDia(dia, curM) + (deVac ? ' - quitar vacaciones' : ' - poner vacaciones') + '" ' +
              'style="cursor:pointer;text-align:center;padding:7px 2px;border:1px solid var(--border);' +
              'background:' + fondo + ';color:' + color + ';font-weight:700;font-size:.78rem;user-select:none">' +
              (marca || '&middot;') + '</td>';
@@ -1241,7 +1234,7 @@ function renderCamList() {
 function resetAll() {
   if (!confirm('Borrar todos los datos?')) return;
   localStorage.clear();
-  sched={}; hidden={};
+  sched={}; hidden={}; vac={};
   ENC=[]; COC=[]; CAM=[];
   renderAll(); toast('Datos borrados');
 }
@@ -1266,6 +1259,7 @@ function exportarHorario(){
     rsch: sched,
     rcam: {enc:ENC, coc:COC, cam:CAM},
     rhid: hidden,
+    rvac: vac,
     rtheme: getThemeVals()
   };
   var nombre = 'horario-copia-' + datos.fecha + '.json';
@@ -1285,11 +1279,12 @@ function importarHorario(ev){
   lector.onload = function(e){
     try {
       var d = JSON.parse(e.target.result);
-      if(!d.rsch && !d.rcam) throw new Error('El archivo no es una copia del horario');
+      if(!d.rsch && !d.rcam && !d.rvac) throw new Error('El archivo no es una copia del horario');
       if(!confirm('Esto reemplaza el horario que haya ahora. Continuar?')) { ev.target.value=''; return; }
       if(d.rsch)   localStorage.setItem('rsch',   JSON.stringify(d.rsch));
       if(d.rcam)   localStorage.setItem('rcam',   JSON.stringify(d.rcam));
       if(d.rhid)   localStorage.setItem('rhid',   JSON.stringify(d.rhid));
+      if(d.rvac)   localStorage.setItem('rvac',   JSON.stringify(d.rvac));
       if(d.rtheme) localStorage.setItem('rtheme', JSON.stringify(d.rtheme));
       location.reload();
     } catch(err){

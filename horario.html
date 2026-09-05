@@ -270,21 +270,22 @@
 </div>
 
 <!-- CUADRANTE DE VACACIONES -->
-<!-- Un cuadrante aparte, sin nada configurado: solo dias. Un toque pone
-     unas vacaciones y otro las quita, y como escribe en los mismos turnos
-     que el horario, lo marcado aqui sale en el mes y en la semana. -->
+<!-- Un cuadrante aparte, sin nada configurado y sin nada del horario:
+     solo dias. Un toque pone unas vacaciones y otro las quita, y se
+     guardan en su propio cajon ('rvac'), asi que lo marcado aqui no sale
+     en el mes ni en la semana, ni al reves. -->
 <div id="vac-section" style="background:var(--bg);border-top:2px solid var(--border);padding-bottom:40px">
   <div style="display:flex;align-items:center;gap:14px;padding:13px 20px 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap">
     <div>
       <div style="font-family:'Playfair Display',serif;font-size:1rem;color:var(--gold2)">&#127958;&#65039; Cuadrante de vacaciones</div>
-      <div style="font-size:.71rem;color:var(--text2)">Solo vacaciones: pulsa un d&iacute;a para ponerlas o quitarlas. Se ven en el horario del mes y en el de la semana.</div>
+      <div style="font-size:.71rem;color:var(--text2)">Solo vacaciones: pulsa un d&iacute;a para ponerlas o quitarlas. Va por su cuenta, no toca el horario ni las horas.</div>
     </div>
     <div style="margin-left:auto;font-size:.75rem;color:var(--gold)" id="vac-rango"></div>
   </div>
   <div style="display:flex;gap:14px;padding:10px 20px 0;flex-wrap:wrap;font-size:.7rem;color:var(--text2)">
     <span><span style="display:inline-block;width:16px;height:16px;border:1px solid var(--border);background:rgba(41,128,185,.28);color:#8ec8f0;text-align:center;font-weight:700;line-height:16px;font-size:.66rem;vertical-align:middle">V</span> vacaciones</span>
-    <span><span style="display:inline-block;width:16px;height:16px;border:1px solid var(--border);color:var(--border);text-align:center;line-height:16px;vertical-align:middle">&middot;</span> libre o con turno</span>
-    <span>F festivo &middot; B baja &middot; A ausencia (se ponen desde el horario)</span>
+    <span><span style="display:inline-block;width:16px;height:16px;border:1px solid var(--border);color:var(--border);text-align:center;line-height:16px;vertical-align:middle">&middot;</span> sin vacaciones</span>
+    <span>Aqu&iacute; no se ve el horario: turnos, festivos y bajas se llevan en su cuadrante.</span>
   </div>
   <div style="overflow-x:auto;padding:12px 20px 0">
     <table id="vactbl" style="border-collapse:collapse;font-size:.8rem;min-width:100%"></table>
@@ -401,7 +402,7 @@
 
 
 
-<script src="sync.js?v=202609020903"></script>
+<script src="sync.js?v=202609050857"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -409,7 +410,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609020903';
+    s.src = 'horario.js?v=202609050857';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
