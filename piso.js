@@ -1582,9 +1582,15 @@ function getDatosFactura(){
   const alq=n('r-alq');
   const cuota=cfg.cuota||0;
   const saldoAnt=calcularSaldoAcumulado(mes);
-  const cal=parseFloat((document.getElementById('cal-cob')||{}).value)||0;
-  const agua=parseFloat((document.getElementById('agua-cob')||{}).value)||0;
-  const elec=parseFloat((document.getElementById('elec-cob')||{}).value)||0;
+  /* OJO: los campos "-cob" son texto ya formateado ("8,15 €"). Si se leen
+     con parseFloat se pierden los centimos (8,15 -> 8). Se recalcula. */
+  function cobLect(pref,pctKey){
+    const cons=Math.max(0, n(pref+'-act')-n(pref+'-ant'));
+    return cons*n(pref+'-preu')*(1+(cfg[pctKey]||0)/100);
+  }
+  const cal=cobLect('cal','cal');
+  const agua=cobLect('agua','agua');
+  const elec=n('elec-directo')*(1+(cfg.elec||0)/100);
   const totalConsumo=cal+agua+elec;
   const desde=cfg.cuotaDesde||'0000-00';
   const mesesAnt=[...meses].filter(m=>m.mes<mes&&m.mes>=desde);
