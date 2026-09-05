@@ -17,6 +17,7 @@
     --casa:#7fc4e8; --casa-tenue:#152c3899;
     --caja:#a99ae0; --caja-tenue:#221f3a99;
     --coleccion:#e0b464; --coleccion-tenue:#2f251599;
+    --patrimonio:#63c9c0; --patrimonio-tenue:#12302d99;
     --alerta:#ef8a76; --alerta-tenue:#331a16;
     --display:'Fraunces',Georgia,serif;
     --texto:'Archivo','Helvetica Neue',sans-serif;
@@ -34,6 +35,8 @@
       --casa:#1f5673; --casa-tenue:#e0ebf1;
       --caja:#5b4a9e; --caja-tenue:#e7e4f3;
     --coleccion:#7c5518; --coleccion-tenue:#f3e8d5;
+    --patrimonio:#12655e; --patrimonio-tenue:#dcecea;
+    --patrimonio:#12655e; --patrimonio-tenue:#dcecea;
       --alerta:#96331f; --alerta-tenue:#f7e2de;
       --sombra:0 16px 34px -26px rgba(15,22,24,.5);
     }
@@ -156,6 +159,7 @@
   .p-casa{--tono:var(--casa)}
   .p-caja{--tono:var(--caja)}
   .p-coleccion{--tono:var(--coleccion)}
+  .p-patrimonio{--tono:var(--patrimonio)}
 
   /* ── Conexión ──────────────────────────────────────────────────── */
   .conexion{background:var(--sup);border:1px solid var(--linea);border-radius:16px;
@@ -433,6 +437,22 @@
         <div class="entrar">Abrir <span class="flecha">→</span></div>
       </a>
 
+      <a class="puerta p-patrimonio" href="patrimonio.html">
+        <span class="rotulo">Patrimonio</span>
+        <h2>Lo que tengo</h2>
+        <p class="que">Los pisos, el parking, la inversión y el ahorro: lo que costaron y lo que valen hoy.</p>
+        <div class="cifra">
+          <span class="n" id="d-pat-neto">—</span>
+          <span class="u">patrimonio neto</span>
+        </div>
+        <div class="tira">
+          <div class="celda"><span class="k">Vale hoy</span><span class="v" id="d-pat-valor">—</span></div>
+          <div class="celda"><span class="k">Debo</span><span class="v" id="d-pat-deuda">—</span></div>
+          <div class="celda"><span class="k">Plusvalía</span><span class="v" id="d-pat-plus">—</span></div>
+        </div>
+        <div class="entrar">Abrir <span class="flecha">→</span></div>
+      </a>
+
     </div>
 
     <section class="notas">
@@ -627,10 +647,11 @@
 
   // ── Candados ───────────────────────────────────────────
   var TARJETAS = {piso:'.p-piso', horario:'.p-resto', comanda:'.p-comanda',
-                  casa:'.p-casa', caja:'.p-caja', coleccion:'.p-coleccion'};
+                  casa:'.p-casa', caja:'.p-caja', coleccion:'.p-coleccion',
+                  patrimonio:'.p-patrimonio'};
   var NOMBRES  = {piso:'Piso Soldeu', horario:'Horario Restaurante',
                   comanda:'Comanda', casa:'Casa', caja:'Caja',
-                  coleccion:'Colección'};
+                  coleccion:'Colección', patrimonio:'Patrimonio'};
   var seguridad = {};
 
   function pintarCandados(){
@@ -661,7 +682,8 @@
       comanda: ['d-pendiente','d-empresas','d-servicios','d-facturas'],
       casa:    ['d-casa-mes','d-casa-fijos','d-casa-compra','d-casa-avisos'],
       caja:    ['d-caja-mes','d-caja-amarilla','d-caja-dias','d-caja-hoy'],
-      coleccion: ['d-col-piezas','d-col-monedas','d-col-billetes','d-col-faltan']
+      coleccion: ['d-col-piezas','d-col-monedas','d-col-billetes','d-col-faltan'],
+      patrimonio: ['d-pat-neto','d-pat-valor','d-pat-deuda','d-pat-plus']
     }[sec] || [];
     ids.forEach(function(id){ pon(id, '···'); });
   }
@@ -877,19 +899,46 @@
     pon('d-col-faltan',   String(piezas.length - tengo.length) );
   }
 
+  function resumenPatrimonio(seccion){
+    var libro = leer(seccion['patrimonio.libro.v1'], {});
+    var bienes = libro.bienes || [];
+    /* Las mismas cuentas que dentro de la app: lo que costó es la compra
+       con sus gastos y sus reformas, y lo que vale es la última valoración
+       apuntada; si no hay ninguna, vale lo que costó. */
+    function coste(b){ return (+b.compra||0) + (+b.gastos||0) + (+b.mejoras||0); }
+    function valorHoy(b){
+      var v = (b.valores || []).slice().sort(function(a,c){
+        return String(a.f||'').localeCompare(String(c.f||''));
+      });
+      return v.length ? (+v[v.length-1].v || 0) : coste(b);
+    }
+    var vale = 0, costo = 0, debo = 0;
+    bienes.forEach(function(b){
+      vale  += valorHoy(b);
+      costo += coste(b);
+      debo  += (+((b.hipoteca || {}).pendiente) || 0);
+    });
+
+    pon('d-pat-neto',  bienes.length ? euros(vale - debo) : 'sin bienes');
+    pon('d-pat-valor', bienes.length ? euros(vale) : '—');
+    pon('d-pat-deuda', debo ? euros(debo) : 'nada');
+    pon('d-pat-plus',  bienes.length ? euros(vale - costo) : '—');
+  }
+
   function pintarResumen(){
     return Sync.descargarTodo().then(function(datos){
       datos = datos || {};
       var seg = datos.seguridad || {};
       seguridad = {piso: !!seg.piso, horario: !!seg.horario,
                    comanda: !!seg.comanda, casa: !!seg.casa, caja: !!seg.caja,
-                   coleccion: !!seg.coleccion};
+                   coleccion: !!seg.coleccion, patrimonio: !!seg.patrimonio};
       resumenPiso(datos.piso || {});
       resumenHorario(datos.horario || {});
       resumenComanda(datos.comanda || {});
       resumenCasa(datos.casa || {});
       resumenCaja(datos.caja || {});
       resumenColeccion(datos.coleccion || {});
+      resumenPatrimonio(datos.patrimonio || {});
       Object.keys(seguridad).forEach(function(sec){ if (seguridad[sec]) ocultarCifras(sec); });
       pintarCandados();
       pon('ultimo-guardado', haceCuanto(datos.actualizado));

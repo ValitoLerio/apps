@@ -1,8 +1,9 @@
 # Escritorio
 
-Panel privado con cinco herramientas: la gestión del piso de Soldeu, el
+Panel privado con siete herramientas: la gestión del piso de Soldeu, el
 horario del restaurante, la facturación de comidas de empresa, las
-cuentas de casa y la caja del restaurante. Publicado
+cuentas de casa, la caja del restaurante, el álbum de monedas y el
+patrimonio. Publicado
 con GitHub Pages en **https://valitolerio.github.io/apps/**
 
 ## Cómo está montado
@@ -18,7 +19,9 @@ Este repo (público)                Repo de datos (privado)
 ├── horario.html + horario.js           ├── horario: turnos, personal, colores
 ├── comanda.html + comanda.js           ├── comanda: empresas, servicios, facturas
 ├── casa.html    + casa.js              ├── casa:    compra, médico, coche, fijos…
-├── caja.html    + caja.js              └── caja:    cierre diario del restaurante
+├── caja.html    + caja.js              ├── caja:    cierre diario del restaurante
+├── coleccion.html + coleccion.js       ├── coleccion: monedas y billetes
+├── patrimonio.html + patrimonio.js     └── patrimonio: bienes, valores, hipotecas
 └── sync.js      guardado
 ```
 
@@ -35,6 +38,20 @@ IBM Plex Mono para etiquetas y datos, sobre los mismos grises del
 escritorio. Cada app conserva su acento —verde el piso, cobre el horario,
 granate Comanda— para reconocerla de un vistazo. Las apps se marcan con
 `data-app` en el `<html>`; no se ha tocado su lógica.
+
+## Patrimonio: de dónde salen las cifras
+
+De cada bien se guardan tres cosas que no se mezclan: **lo que costó**
+(el precio más los gastos de la compra y las reformas), **lo que vale**
+—una lista de valoraciones con su fecha, y manda la última— y **lo que
+debes** de hipoteca. Todo lo demás se calcula: el neto es lo que vale
+menos lo que debes, y la rentabilidad del alquiler se mide siempre
+contra lo que costó, no contra lo que vale hoy.
+
+La app no inventa ninguna cifra. Mientras no apuntes una valoración, un
+bien vale lo que te costó, y la línea de evolución sólo dibuja lo que le
+hayas ido apuntando. Los colores de los gráficos van con el bien, no con
+su puesto en la lista: filtrar o reordenar no repinta nada.
 
 ## Trabajar en dos dispositivos sin pisarse
 
