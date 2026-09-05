@@ -10,9 +10,12 @@
      Fondo caja    lo que se deja de cambio para mañana
      Sobra am.     lo que pasa del objetivo de la amarilla
 
-   Y una columna de control, «Debería haber»: sabiendo qué parte de las
-   ventas se cobra con tarjeta (80 % de partida, editable en Ajustes),
-   sale el metálico que tendría que aparecer, y al lado lo que baila.
+   El efectivo no se escribe: sabiendo qué parte de las ventas se cobra
+   con tarjeta (80 % de partida, editable en Ajustes y también al lado
+   del propio campo), sale solo a partir de las visas — 20/80 por cada
+   euro de visa. Se puede escribir encima cuando un día no cuadre.
+   Y una columna de control, «Debería haber», enseña esa misma cifra
+   y al lado lo que baila.
 
    La caja amarilla es el fondo del negocio: 1.500 € (editable) que se
    van recuperando poco a poco. Cada noche se cuenta lo que hay dentro y
@@ -438,7 +441,15 @@ function pintarFormularioDia(d){
       '<div class="campo"><label class="lbl" for="f_visa">Visa (€)</label>'+
         '<input type="number" class="grande" id="f_visa" min="0" step="0.01" value="'+esc(actual.visa)+'"></div>'+
       '<div class="campo"><label class="lbl" for="f_efec">Efectivo (€)</label>'+
-        '<input type="number" class="grande" id="f_efec" min="0" step="0.01" value="'+esc(actual.efectivo)+'"></div>'+
+      '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">se pone solo</div>'+
+        '<input type="number" class="grande" id="f_efec" min="0" step="0.01" value="'+esc(actual.efectivo)+'">'+
+        '<div style="font-size:12px;color:var(--muted);margin:6px 0 0;display:flex;'+
+        'align-items:center;gap:6px;flex-wrap:wrap">'+
+        '<input type="number" id="f_pct" min="1" max="99" step="1" value="'+
+        esc(libro.ajustes.pctVisa!=null?libro.ajustes.pctVisa:80)+'" '+
+        'style="width:56px;padding:3px 6px;font-size:12px">'+
+        '<span>% de la venta va en visa</span></div>'+
+        '<div class="nota" style="margin:4px 0 0" id="f_efecNota"></div></div>'+
       '<div class="campo"><label class="lbl" for="f_amar">Caja amarilla (€)</label>'+
       '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo que hay dentro esta noche, contado</div>'+
         '<input type="number" class="grande" id="f_amar" min="0" step="0.01" value="'+esc(actual.aAmarilla)+'"></div>'+
@@ -467,6 +478,30 @@ function pintarFormularioDia(d){
     '</div>';
 
   var cajaGastos=document.getElementById("gastos");
+
+  /* El efectivo ya no se escribe: sale de las visas. Si de cada 100 € de
+     venta el 80 se cobra con tarjeta, los otros 20 son metálico, o sea
+     20/80 por cada euro de visa. El % se toca aquí mismo, junto al campo,
+     y al soltarlo queda guardado en Ajustes como el de siempre.
+     Si un día hace falta poner otra cifra, se escribe encima y el campo
+     se queda quieto hasta que se pulse «Volver al %». */
+  var efecAMano=false;
+  function pctDelForm(){
+    var campo=document.getElementById("f_pct");
+    var p=campo ? +campo.value : 0;
+    return (isFinite(p) && p>0 && p<100) ? p : 0;
+  }
+  function efectivoPorPct(){
+    var p=pctDelForm();
+    return p ? r2(numero("f_visa")*(100-p)/p) : null;
+  }
+  function ponerEfectivo(){
+    if(efecAMano) return;
+    var e=efectivoPorPct();
+    if(e==null) return;
+    document.getElementById("f_efec").value = numero("f_visa")>0 ? e : "";
+  }
+
   function totalG(){
     var t=0;
     cajaGastos.querySelectorAll(".gasto").forEach(function(f){ t+=+f.querySelector(".g_imp").value||0; });
@@ -510,8 +545,29 @@ function pintarFormularioDia(d){
       ? "Fondo de caja de hoy: <strong>"+eur(r2(am+fondo))+"</strong> — "+
         eur(am)+" en la amarilla y "+eur(fondo)+" en la registradora."
       : "El fondo de caja son las dos juntas: lo que apartas a la amarilla y lo que dejas de cambio.";
+    var efn=document.getElementById("f_efecNota");
+    if(efn){
+      var p=pctDelForm();
+      if(!p){
+        efn.innerHTML="Pon un % entre 1 y 99 y el efectivo se pone solo.";
+      } else if(efecAMano){
+        efn.innerHTML='Escrito a mano. Con el '+num(p,0)+'% saldrían <strong>'+
+          eur(efectivoPorPct())+'</strong>. '+
+          '<button type="button" class="btn sm suave" id="f_volverPct" '+
+          'style="padding:2px 8px">Volver al %</button>';
+        var volver=document.getElementById("f_volverPct");
+        if(volver) volver.addEventListener("click", function(){
+          efecAMano=false; ponerEfectivo(); refrescar();
+        });
+      } else {
+        efn.innerHTML="Puesto solo: el "+num(100-p,0)+"% de la venta, con el "+
+                      num(p,0)+"% en visa. Escribe encima si un día no cuadra.";
+      }
+    }
     document.getElementById("f_resumen").innerHTML=
       "Visas <strong>"+eur(visa)+"</strong> · "+
+      "efectivo <strong>"+eur(efec)+"</strong> · "+
+      "ventas <strong>"+eur(r2(visa+efec))+"</strong> · "+
       "tras pagos <strong>"+eur(neto)+"</strong> · "+
       "sobra amarilla <strong>"+eur(sobra)+"</strong>";
   }
@@ -530,9 +586,33 @@ function pintarFormularioDia(d){
   (actual.detalle||[]).forEach(añadirGasto);
   if(!(actual.detalle||[]).length) añadirGasto();
   document.getElementById("masGasto").addEventListener("click", function(){ añadirGasto(); refrescar(); });
-  ["f_visa","f_efec","f_amar","f_fondo","f_sobra"].forEach(function(id){
+  /* El de las visas va antes que el refresco: primero se pone el
+     efectivo y luego se recalcula todo con la cifra ya puesta. */
+  document.getElementById("f_visa").addEventListener("input", ponerEfectivo);
+  var campoPct=document.getElementById("f_pct");
+  campoPct.addEventListener("input", ponerEfectivo);
+  campoPct.addEventListener("change", function(){
+    var p=pctDelForm();
+    if(p && p!==+libro.ajustes.pctVisa){
+      libro.ajustes.pctVisa=p; guardar();
+      avisar("Guardado: el "+num(p,0)+"% de las ventas va en visa");
+    }
+  });
+  /* Escribir en el campo a mano lo deja quieto; ponerEfectivo() cambia
+     el value sin disparar "input", así que no se pisa a sí mismo. */
+  document.getElementById("f_efec").addEventListener("input", function(){
+    efecAMano=true;
+  });
+  ["f_visa","f_efec","f_pct","f_amar","f_fondo","f_sobra"].forEach(function(id){
     document.getElementById(id).addEventListener("input", refrescar);
   });
+  /* Un día ya guardado se abre a mano solo si su efectivo no es el que
+     tocaba por el %; así no se le cambia la cifra por detrás. */
+  if(d){
+    var tocaba=efectivoPorPct();
+    efecAMano = !(tocaba!=null && Math.abs((+actual.efectivo||0)-tocaba)<0.005);
+  }
+  ponerEfectivo();
   refrescar();
 
   document.getElementById("f_guardar").addEventListener("click", function(){
