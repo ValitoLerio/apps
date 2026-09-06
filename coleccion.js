@@ -14,7 +14,9 @@
    poder llevar encima lo que buscas sin apuntarlo en otro sitio.
 
    Las fotos se guardan reducidas a 320 px. El álbum entero viaja a
-   GitHub en cada cambio, así que en Ajustes se ve cuánto ocupa.
+   GitHub en cada cambio, así que en Ajustes se ve cuánto ocupa. Las del
+   iPhone vienen en HEIC, que el navegador no sabe abrir: esas se
+   convierten aquí mismo antes de guardarlas.
    ══════════════════════════════════════════════════════════════════ */
 (function(){
 
@@ -575,13 +577,17 @@ function editarPieza(p, ambitoPorDefecto){
       '</div>'+
       '<p class="nota" id="e_fotoMal" style="margin:7px 0 0;color:var(--malo);display:none"></p>'+
       '<p class="nota" style="margin:6px 0 0">Elígela con el botón, arrástrala hasta el recuadro '+
-      'o cópiala y pégala con ⌘V. Se guarda reducida a 320 px: el álbum entero viaja a GitHub en '+
-      'cada cambio, así que conviene no cargarlo de fotos enormes.</p>'+
+      'o cópiala y pégala con ⌘V. Las del iPhone (HEIC) se convierten solas, sin salir de tu '+
+      'ordenador. Se guarda reducida a 320 px: el álbum entero viaja a GitHub en cada cambio, '+
+      'así que conviene no cargarlo de fotos enormes.</p>'+
     '</div>',
 
     function(){
       var v=document.getElementById("e_valor").value;
       if(v===""){ avisar("Ponle el valor, aunque sea aproximado.", true); return true; }
+      /* Guardar con la foto a medio convertir la dejaría fuera sin que
+         se note, que es justo lo que pasaba antes. */
+      if(fotoCargando){ avisar("Espera un momento, que la foto aún se está preparando.", true); return true; }
       p.ambito=valor("e_ambito"); p.tipo=valor("e_tipo");
       p.valor=r2(+v||0);
       p.divisa=valor("e_divisa");
@@ -601,13 +607,18 @@ function editarPieza(p, ambitoPorDefecto){
       if(!p.alta) p.alta=hoyISO();
       if(nueva) libro.piezas.push(p);
       guardar(); pintar();
-      avisar(nueva?"Pieza añadida":"Pieza guardada");
+      /* Si la foto se quedó por el camino, se dice al guardar: antes la
+         pieza entraba tan tranquila y la foto no aparecía nunca. */
+      avisar((nueva?"Pieza añadida":"Pieza guardada")+
+             (fotoFallo && !fotoPendiente ? ", pero la foto no ha entrado" : ""), fotoFallo);
     },
     {aceptar:nueva?"Añadir":"Guardar"});
 
   /* Mientras la ventana está abierta, la foto nueva vive aquí: así se
      puede quitar sin tocar la ficha hasta que se guarde. */
   var fotoPendiente;
+  var fotoCargando=false;   /* se está convirtiendo o encogiendo */
+  var fotoFallo=false;      /* la última que pusiste no pudo entrar */
 
   function refrescarCampos(){
     var ambito=valor("e_ambito");
@@ -628,30 +639,39 @@ function editarPieza(p, ambitoPorDefecto){
   var quitar=document.getElementById("e_quitarFoto");
   var previa=document.getElementById("e_previa");
 
-  function quejarse(texto){
+  /* El mismo renglón sirve para el «estoy en ello» y para el motivo del
+     fallo: en gris mientras trabaja, en rojo cuando algo no ha podido
+     ser, y se queda escrito hasta que pongas otra foto. */
+  function decir(texto, tranquilo){
     aviso.textContent=texto||"";
     aviso.style.display=texto?"":"none";
+    aviso.style.color=tranquilo?"var(--muted)":"var(--malo)";
+    fotoFallo = !!texto && !tranquilo;
   }
   function ponerFoto(archivo){
     if(!archivo) return;
     var nombre=archivo.name||"esa foto";
-    /* El HEIC se caza por el nombre: ni siquiera merece la pena
-       intentarlo, porque el navegador no lo abre y el error no diría de
-       qué va. */
-    if(/hei[cf]/i.test(archivo.type||"") || /\.hei[cf]$/i.test(nombre)){
-      quejarse("«"+nombre+"» es una foto HEIC, el formato del iPhone, y el navegador no sabe "+
-               "abrirla. Ábrela en Vista Previa y usa Archivo › Exportar… eligiendo JPEG, o "+
-               "cambia el iPhone a Ajustes › Cámara › Formatos › Más compatible. También puedes "+
-               "copiarla y pegarla aquí con ⌘V.");
-      return;
-    }
-    quejarse("");
-    encogerFoto(archivo, function(dataUrl){
-      fotoPendiente=dataUrl;
-      previa.src=dataUrl; previa.style.display="";
-      quitar.style.display="";
-    }, function(porQue){
-      quejarse(porQue+" ("+nombre+")");
+    fotoCargando=true;
+    decir(esHeic(archivo)
+      ? "Convirtiendo «"+nombre+"», que viene del iPhone. Tarda unos segundos."
+      : "Preparando «"+nombre+"»…", true);
+
+    comoSePuedaAbrir(archivo).then(function(abrible){
+      encogerFoto(abrible, function(dataUrl){
+        fotoCargando=false;
+        fotoPendiente=dataUrl;
+        previa.src=dataUrl; previa.style.display="";
+        quitar.style.display="";
+        decir("");
+      }, function(porQue){
+        fotoCargando=false;
+        decir(porQue+" ("+nombre+")");
+      });
+    }).catch(function(){
+      fotoCargando=false;
+      decir("«"+nombre+"» es una foto HEIC, la del iPhone, y no he podido convertirla: la "+
+            "primera vez hace falta internet. Ábrela en Vista Previa y usa Archivo › Exportar… "+
+            "eligiendo JPEG, o cópiala y pégala aquí con ⌘V.");
     });
   }
 
@@ -660,7 +680,7 @@ function editarPieza(p, ambitoPorDefecto){
     previa.style.display="none";
     document.getElementById("e_foto").value="";
     quitar.style.display="none";
-    quejarse("");
+    decir("");
   });
 
   document.getElementById("e_foto").addEventListener("change", function(){
@@ -694,6 +714,43 @@ function editarPieza(p, ambitoPorDefecto){
         return;
       }
     }
+  });
+}
+
+/* Las fotos del iPhone vienen en HEIC y ningún navegador de escritorio
+   las abre: hasta ahora se quedaban fuera y parecía que la app no
+   guardaba la foto. Como casi todas las monedas se fotografían con el
+   móvil, la app se trae un convertidor y las pasa a JPEG. Se pide sólo
+   cuando aparece un HEIC, una vez por sesión, y la foto se convierte en
+   el propio ordenador: no sale de aquí. Sin internet no hay conversión,
+   y entonces se dice con los pasos para hacerlo a mano. */
+var CONVERSOR_HEIC = "https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js";
+var conversorPedido = null;
+
+function esHeic(archivo){
+  return /hei[cf]/i.test(archivo.type||"") || /\.hei[cf]$/i.test(archivo.name||"");
+}
+function traerConversor(){
+  if(conversorPedido) return conversorPedido;
+  conversorPedido = new Promise(function(bien, mal){
+    if(window.heic2any) return bien(window.heic2any);
+    var s=document.createElement("script");
+    s.src=CONVERSOR_HEIC;
+    s.onload=function(){ window.heic2any ? bien(window.heic2any) : mal(new Error("sin conversor")); };
+    s.onerror=function(){ conversorPedido=null; mal(new Error("sin conversor")); };
+    document.head.appendChild(s);
+  });
+  return conversorPedido;
+}
+/* Devuelve algo que el navegador sepa abrir: el mismo archivo si ya lo
+   era, o el HEIC pasado a JPEG. Una foto «viva» trae varios cuadros;
+   nos quedamos con el primero. */
+function comoSePuedaAbrir(archivo){
+  if(!esHeic(archivo)) return Promise.resolve(archivo);
+  return traerConversor().then(function(convertir){
+    return convertir({blob:archivo, toType:"image/jpeg", quality:0.82});
+  }).then(function(salida){
+    return Array.isArray(salida) ? salida[0] : salida;
   });
 }
 
