@@ -105,6 +105,31 @@ function esc(t)         { return String(t==null?'':t).replace(/[&<>"']/g, functi
                             return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 function fmtH(t)        { if (!t) return '?'; return t.slice(-2) === ':00' ? t.slice(0,-3) : t; }
 
+// ----------------------------------------------------------------
+// TURNO PARTIDO
+// ----------------------------------------------------------------
+// Un dia puede llevar dos tramos: el del mediodia y el de la noche, que
+// en un restaurante es lo corriente. El segundo es optativo y vive en
+// inicio2/fin2. Sin el, un turno es exactamente lo que era antes: los
+// dias ya apuntados no se enteran de que esto existe.
+function minutosDe(ini, fin) {
+  if (!ini || !fin) return 0;
+  var a = parseInt(ini.split(':')[0])*60 + parseInt(ini.split(':')[1]);
+  var b = parseInt(fin.split(':')[0])*60 + parseInt(fin.split(':')[1]);
+  var d = b - a; if (d < 0) d += 1440;      // el que sale de madrugada
+  return d;
+}
+function esPartido(c) { return !!(c && c.inicio2 && c.fin2); }
+// Las horas del dia son las de los dos tramos juntos.
+function horasDeCelda(c) {
+  if (!c) return 0;
+  return (minutosDe(c.inicio, c.fin) + minutosDe(c.inicio2, c.fin2)) / 60;
+}
+function textoTurno(c) {
+  if (!c || !c.inicio) return '';
+  return fmtH(c.inicio)+'-'+fmtH(c.fin) + (esPartido(c) ? ' / '+fmtH(c.inicio2)+'-'+fmtH(c.fin2) : '');
+}
+
 function tgtH(sid) {
   var s = staff().find(function(x){ return x.id === sid; });
   if (!s) return 8;
@@ -263,12 +288,7 @@ function calcStaffHours(sid, y, m) {
     if (!c) return;
     if (c.estado === 'trabajo') {
       totalD++;
-      if (c.inicio && c.fin) {
-        var a = parseInt(c.inicio.split(':')[0])*60+parseInt(c.inicio.split(':')[1]);
-        var b = parseInt(c.fin.split(':')[0])*60+parseInt(c.fin.split(':')[1]);
-        var diff = b - a; if (diff < 0) diff += 1440;
-        totalH += diff/60;
-      }
+      totalH += horasDeCelda(c);
     }
   });
   return {h: Math.round(totalH*10)/10, d: totalD};
@@ -310,11 +330,7 @@ function calcStaffWeek(sid, week) {
     curM=sM; curY=sY;
     if(!cell||cell.estado!=='trabajo') return;
     d++;
-    if(cell.inicio&&cell.fin){
-      var a=parseInt(cell.inicio.split(':')[0])*60+parseInt(cell.inicio.split(':')[1]);
-      var b=parseInt(cell.fin.split(':')[0])*60+parseInt(cell.fin.split(':')[1]);
-      var diff=b-a; if(diff<0)diff+=1440; h+=diff/60;
-    }
+    h += horasDeCelda(cell);
   });
   return {h:Math.round(h*10)/10, d:d};
 }
@@ -768,7 +784,9 @@ function renderTable() {
         var bgCol = shiftBg(align);
         inn = '<div style="width:100%;display:flex;justify-content:'+align+';'+pad+'">'
             + '<span class="tb '+cls+'" style="'+radius+';background:'+bgCol+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'
-            + '<span class="th">'+fmtH(cell.inicio)+'-'+fmtH(cell.fin)+'</span></span></div>';
+            + '<span class="th">'+fmtH(cell.inicio)+'-'+fmtH(cell.fin)
+            + (esPartido(cell) ? '<br>'+fmtH(cell.inicio2)+'-'+fmtH(cell.fin2) : '')
+            + '</span></span></div>';
         if (cell.nota) inn += '<div style="width:100%;display:flex;justify-content:'+align+';'+pad+'"><span style="font-size:.6rem;color:var(--text2);max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+cell.nota+'</span></div>';
       } else if (est !== 'libre') {
         var lbl = est==='baja'?'B Baja':est==='ausencia'?'A Aus':EICO[est]||est;
@@ -858,6 +876,9 @@ function renderWeekTable() {
               + '<div style="display:inline-flex;align-items:center;gap:3px;'+wradius+';background:'+wbgCol+';padding:3px 6px">'
               + '<div style="font-size:.95rem;font-weight:900;color:#e0ffe0;white-space:nowrap">'+fmtH(cell.inicio)+'</div>'
               + '<div style="font-size:.82rem;font-weight:700;color:#8ac898">-'+fmtH(cell.fin)+'</div>'
+              + (esPartido(cell)
+                  ? '<div style="font-size:.82rem;font-weight:700;color:#8ac898">/ '+fmtH(cell.inicio2)+'-'+fmtH(cell.fin2)+'</div>'
+                  : '')
               + (cell.nota?'<div style="font-size:.62rem;color:#6a9a78;margin-left:2px">'+cell.nota+'</div>':'')
               + '</div></div>';
       } else if (est === 'vacaciones') { inner = 'VAC'; }
@@ -939,7 +960,8 @@ function renderCov() {
       var cell = gcAt(s.id, dia);
       if (!cell||cell.estado!=='trabajo') return;
       SLOTS.forEach(function(slot){
-        if (isW(cell.inicio, cell.fin, slot)) {
+        if (isW(cell.inicio, cell.fin, slot) ||
+            (esPartido(cell) && isW(cell.inicio2, cell.fin2, slot))) {
           cov[slot][i]++;
           who[slot][i].push(s.name.split(' ')[0]);
         }
@@ -1017,6 +1039,9 @@ function openCell(sid, day, event, mo, yr) {
       ta.style.display = 'block';
       var ini = document.getElementById('ini'); if (ini) ini.value = cell&&cell.inicio?cell.inicio:'';
       var fin = document.getElementById('fin'); if (fin) fin.value = cell&&cell.fin?cell.fin:'';
+      var i2 = document.getElementById('ini2'); if (i2) i2.value = cell&&cell.inicio2?cell.inicio2:'';
+      var f2 = document.getElementById('fin2'); if (f2) f2.value = cell&&cell.fin2?cell.fin2:'';
+      togglePartido(esPartido(cell));
       var nota = document.getElementById('nota'); if (nota) nota.value = cell&&cell.nota?cell.nota:'';
       var hl = document.getElementById('hl');
       if (cell&&cell.inicio) calcFin(); else if (hl) hl.textContent = 'Introduce la hora de entrada';
@@ -1049,16 +1074,59 @@ function calcFin() {
   var ini = document.getElementById('ini');
   if (!ini||!active) return;
   var v = ini.value; if (!v) return;
+  var pop = document.getElementById('popup');
+  var partido = !!(pop && pop._partido);
   var h = tgtH(active.sid);
-  var p = v.split(':');
-  var tot = parseInt(p[0])*60+parseInt(p[1])+h*60;
-  var fh = Math.floor(tot/60)%24, fm = tot%60;
-  var fs = (fh<10?'0':'')+fh+':'+(fm<10?'0':'')+fm;
-  var felm = document.getElementById('fin'); if (felm) felm.value = fs;
+  var felm = document.getElementById('fin');
+  var fs;
+  /* Con turno partido la salida no se puede adivinar: el primer tramo no
+     dura la jornada entera. Se escriben los dos a mano y aqui se dice lo
+     que suman contra las horas que tocan. */
+  if (partido) {
+    fs = felm ? felm.value : '';
+  } else {
+    var p = v.split(':');
+    var tot = parseInt(p[0])*60+parseInt(p[1])+h*60;
+    var fh = Math.floor(tot/60)%24, fm = tot%60;
+    fs = (fh<10?'0':'')+fh+':'+(fm<10?'0':'')+fm;
+    if (felm) felm.value = fs;
+  }
   var s2 = staff().find(function(x){ return x.id===active.sid; });
   var rl = s2.role==='enc'?'Encargado':s2.role==='coc'?'Cocinero':'Camarero';
   var hl = document.getElementById('hl');
-  if (hl) hl.innerHTML = '<span style="color:var(--gold2);font-weight:600">'+h+'h</span> - '+rl+' - '+(curS==='verano'?'Verano':'Invierno')+' - '+fmtH(v)+' to '+fmtH(fs);
+  if (!hl) return;
+  if (partido) {
+    var i2 = (document.getElementById('ini2')||{}).value||'';
+    var f2 = (document.getElementById('fin2')||{}).value||'';
+    var suma = Math.round(((minutosDe(v,fs)+minutosDe(i2,f2))/60)*10)/10;
+    hl.innerHTML = '<span style="color:var(--gold2);font-weight:600">'+suma+'h</span> de '+h+'h - '+rl+
+                   ' - partido: '+fmtH(v)+'-'+fmtH(fs)+
+                   (i2&&f2 ? ' y '+fmtH(i2)+'-'+fmtH(f2) : ' y falta el segundo tramo');
+  } else {
+    hl.innerHTML = '<span style="color:var(--gold2);font-weight:600">'+h+'h</span> - '+rl+' - '+(curS==='verano'?'Verano':'Invierno')+' - '+fmtH(v)+' to '+fmtH(fs);
+  }
+}
+
+/* Enseña o esconde el segundo tramo. Con un valor se pone como se le
+   diga (al abrir un dia ya guardado); sin el, es el boton. */
+function togglePartido(forzar) {
+  var pop = document.getElementById('popup'); if (!pop) return;
+  var fila = document.getElementById('partido-row');
+  var btn  = document.getElementById('partido-btn');
+  var on   = (forzar === undefined) ? !pop._partido : !!forzar;
+  pop._partido = on;
+  if (fila) fila.style.display = on ? 'block' : 'none';
+  if (btn) {
+    btn.textContent = on ? '- Quitar el segundo turno' : '+ Turno partido';
+    btn.style.color = on ? 'var(--gold2)' : 'var(--text2)';
+  }
+  if (!on) {
+    var i2 = document.getElementById('ini2'); if (i2) i2.value = '';
+    var f2 = document.getElementById('fin2'); if (f2) f2.value = '';
+  }
+  /* Al abrirlo a mano se recalcula la pista; al pintar un dia guardado no,
+     que ya lo hace quien llama. */
+  if (forzar === undefined) calcFin();
 }
 
 /* Guarda un estado sin datos extra (festivo, vacaciones, baja, ausencia)
@@ -1120,6 +1188,12 @@ function saveCell() {
   if (est === 'trabajo') {
     var ini = document.getElementById('ini'); data.inicio = ini?ini.value:'';
     var fin = document.getElementById('fin'); data.fin    = fin?fin.value:'';
+    /* El segundo tramo solo se guarda si esta entero: medio turno
+       partido no es nada. */
+    var i2 = document.getElementById('ini2'), f2 = document.getElementById('fin2');
+    if (pop._partido && i2 && f2 && i2.value && f2.value) {
+      data.inicio2 = i2.value; data.fin2 = f2.value;
+    }
     if (pop._align) data.align = pop._align;
   }
   var nota = document.getElementById('nota'); data.nota = nota?nota.value:'';
@@ -1152,7 +1226,7 @@ function copyCell() {
   if (!cell) return;
   clip = Object.assign({}, cell);
   var s = staff().find(function(x){ return x.id===active.sid; });
-  var desc = cell.estado==='trabajo'&&cell.inicio?(fmtH(cell.inicio)+'-'+fmtH(cell.fin)):cell.estado;
+  var desc = cell.estado==='trabajo'&&cell.inicio?textoTurno(cell):cell.estado;
   var ci = document.getElementById('clip-info'); if (ci) ci.textContent = 'Copiado: '+s.name+' - '+desc;
   var cs = document.getElementById('clip-sub'); if (cs) cs.textContent = 'Haz clic en cualquier celda para pegar';
   var banner = document.getElementById('clip-banner'); if (banner) banner.classList.add('show');
@@ -1206,6 +1280,24 @@ function doAdd() {
   nn.value = '';
   nn.focus();
 }
+// El orden del cuadrante es el de estas listas, asi que colocar a
+// alguien en su sitio es moverlo dentro de la suya. Cada uno se mueve
+// entre los de su oficio: el cuadrante va por grupos (encargados,
+// cocina, sala) y sacarlo de ahi lo dejaria en tierra de nadie.
+function moverPersona(id, paso) {
+  var lista = null;
+  [ENC, COC, CAM].forEach(function(l){
+    if (l.some(function(c){ return c.id===id; })) lista = l;
+  });
+  if (!lista) return;
+  var i = -1;
+  lista.forEach(function(c, k){ if (c.id===id) i = k; });
+  var j = i + paso;
+  if (i < 0 || j < 0 || j >= lista.length) return;   // ya esta el primero o el ultimo
+  var tmp = lista[i]; lista[i] = lista[j]; lista[j] = tmp;
+  save(); renderCamList(); renderAll();
+}
+
 function delCam(id) {
   ENC = ENC.filter(function(c){ return c.id!==id; });
   COC = COC.filter(function(c){ return c.id!==id; });
@@ -1220,12 +1312,29 @@ function renderCamList() {
     return;
   }
   el.innerHTML = todos.map(function(c){
-    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--surface2);border-radius:6px;margin-bottom:4px;border:1px solid var(--border)">'
+    var suya = listaDe(c.role);
+    var pos  = -1;
+    suya.forEach(function(x, k){ if (x.id===c.id) pos = k; });
+    var esPrimero = pos <= 0, esUltimo = pos >= suya.length-1;
+    function flecha(paso, signo, apagada, titulo) {
+      return '<button onclick="moverPersona(\''+c.id+'\','+paso+')"'+(apagada?' disabled':'')
+           + ' title="'+titulo+'" style="background:var(--surface);border:1px solid var(--border);'
+           + 'color:'+(apagada?'#3a3530':'var(--text2)')+';border-radius:5px;padding:3px 7px;'
+           + 'cursor:'+(apagada?'default':'pointer')+';font-size:.75rem;line-height:1">'+signo+'</button>';
+    }
+    return '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;background:var(--surface2);border-radius:6px;margin-bottom:4px;border:1px solid var(--border)">'
          + '<span style="font-size:.85rem;color:'+RCOL[c.role]+'">'+c.name
          + '<span class="rt r'+c.role+'" style="margin-left:5px">'+RLBL[c.role]+'</span></span>'
+         + '<span style="display:flex;gap:4px;align-items:center">'
+         + flecha(-1, '&#9650;', esPrimero, 'Subirlo en la lista')
+         + flecha( 1, '&#9660;', esUltimo,  'Bajarlo en la lista')
          + '<button onclick="delCam(\''+c.id+'\')" style="background:rgba(192,57,43,.2);border:1px solid rgba(192,57,43,.4);color:#e87c6f;border-radius:5px;padding:3px 8px;cursor:pointer;font-size:.75rem;font-family:\'DM Sans\',sans-serif">X Eliminar</button>'
+         + '</span>'
          + '</div>';
-  }).join('');
+  }).join('')
+    + '<div style="font-size:.7rem;color:var(--text2);padding:6px 4px 0">Las flechas colocan a cada uno '
+    + 'donde quieras: el cuadrante sale en este mismo orden. Cada persona se mueve entre las de su '
+    + 'oficio.</div>';
 }
 
 // ================================================================

@@ -310,6 +310,14 @@
         <div style="color:var(--text2);margin-top:12px">-></div>
         <div style="flex:1"><div style="font-size:.63rem;color:var(--text2);margin-bottom:2px">Salida <span style="color:var(--gold);font-size:.58rem">(auto)</span></div><input class="pi" id="fin" type="time" style="width:100%"></div>
       </div>
+      <div id="partido-row" style="display:none;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
+        <div style="display:flex;gap:7px;align-items:center">
+          <div style="flex:1"><div style="font-size:.63rem;color:var(--text2);margin-bottom:2px">2&ordf; entrada</div><input class="pi" id="ini2" type="time" oninput="calcFin()" style="width:100%"></div>
+          <div style="color:var(--text2);margin-top:12px">-&gt;</div>
+          <div style="flex:1"><div style="font-size:.63rem;color:var(--text2);margin-bottom:2px">2&ordf; salida</div><input class="pi" id="fin2" type="time" oninput="calcFin()" style="width:100%"></div>
+        </div>
+      </div>
+      <button id="partido-btn" type="button" onclick="togglePartido()" style="margin-top:7px;width:100%;padding:5px;border-radius:5px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-size:.68rem;letter-spacing:.04em">+ Turno partido</button>
     </div>
     <input class="pi" id="nota" type="text" placeholder="Nota (opcional)" style="margin-top:5px">
     <div id="align-row" style="display:none;margin-top:7px">
@@ -410,7 +418,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609050857';
+    s.src = 'horario.js?v=202609061800';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
