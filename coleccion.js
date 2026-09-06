@@ -565,14 +565,18 @@ function editarPieza(p, ambitoPorDefecto){
       '<textarea id="e_notas" placeholder="Rareza, defectos, de quién venía…">'+esc(p.notas||"")+'</textarea></div>'+
 
     '<div class="campo"><label class="lbl">Foto</label>'+
-      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+      '<div id="e_cajaFoto" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;'+
+        'border:1px dashed var(--linea);border-radius:9px;padding:9px">'+
         '<img id="e_previa" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:8px;'+
           'background:var(--sup2);border:1px solid var(--linea);'+(p.foto?'" src="'+esc(p.foto):'display:none')+'">'+
         '<input type="file" id="e_foto" accept="image/*" style="width:auto;flex:1;min-width:150px">'+
-        (p.foto?'<button type="button" class="btn suave" id="e_quitarFoto">Quitar</button>':"")+
+        '<button type="button" class="btn suave" id="e_quitarFoto"'+
+          (p.foto?'':' style="display:none"')+'>Quitar</button>'+
       '</div>'+
-      '<p class="nota" style="margin:6px 0 0">Se guarda reducida a 320 px. El álbum entero '+
-      'viaja a GitHub en cada cambio, así que conviene no cargarlo de fotos enormes.</p>'+
+      '<p class="nota" id="e_fotoMal" style="margin:7px 0 0;color:var(--malo);display:none"></p>'+
+      '<p class="nota" style="margin:6px 0 0">Elígela con el botón, arrástrala hasta el recuadro '+
+      'o cópiala y pégala con ⌘V. Se guarda reducida a 320 px: el álbum entero viaja a GitHub en '+
+      'cada cambio, así que conviene no cargarlo de fotos enormes.</p>'+
     '</div>',
 
     function(){
@@ -613,27 +617,92 @@ function editarPieza(p, ambitoPorDefecto){
   document.getElementById("e_ambito").addEventListener("change", refrescarCampos);
   refrescarCampos();
 
+  /* Poner la foto es donde más se atasca esto. El iPhone las guarda en
+     HEIC y el navegador no sabe abrirlas: la foto se quedaba fuera y el
+     único aviso era un cartel que se iba solo a los tres segundos, así
+     que parecía que la app no guardaba nada. Ahora el motivo se queda
+     escrito debajo del recuadro hasta que pongas otra, y la foto se
+     puede arrastrar o pegar —lo que se pega llega siempre en PNG, que
+     sí se abre, y con eso se sale del atasco sin convertir nada. */
+  var aviso=document.getElementById("e_fotoMal");
   var quitar=document.getElementById("e_quitarFoto");
-  if(quitar) quitar.addEventListener("click", function(){
+  var previa=document.getElementById("e_previa");
+
+  function quejarse(texto){
+    aviso.textContent=texto||"";
+    aviso.style.display=texto?"":"none";
+  }
+  function ponerFoto(archivo){
+    if(!archivo) return;
+    var nombre=archivo.name||"esa foto";
+    /* El HEIC se caza por el nombre: ni siquiera merece la pena
+       intentarlo, porque el navegador no lo abre y el error no diría de
+       qué va. */
+    if(/hei[cf]/i.test(archivo.type||"") || /\.hei[cf]$/i.test(nombre)){
+      quejarse("«"+nombre+"» es una foto HEIC, el formato del iPhone, y el navegador no sabe "+
+               "abrirla. Ábrela en Vista Previa y usa Archivo › Exportar… eligiendo JPEG, o "+
+               "cambia el iPhone a Ajustes › Cámara › Formatos › Más compatible. También puedes "+
+               "copiarla y pegarla aquí con ⌘V.");
+      return;
+    }
+    quejarse("");
+    encogerFoto(archivo, function(dataUrl){
+      fotoPendiente=dataUrl;
+      previa.src=dataUrl; previa.style.display="";
+      quitar.style.display="";
+    }, function(porQue){
+      quejarse(porQue+" ("+nombre+")");
+    });
+  }
+
+  quitar.addEventListener("click", function(){
     fotoPendiente=null;
-    document.getElementById("e_previa").style.display="none";
-    quitar.remove();
+    previa.style.display="none";
+    document.getElementById("e_foto").value="";
+    quitar.style.display="none";
+    quejarse("");
   });
 
   document.getElementById("e_foto").addEventListener("change", function(){
-    var archivo=this.files && this.files[0];
-    if(!archivo) return;
-    encogerFoto(archivo, function(dataUrl){
-      fotoPendiente=dataUrl;
-      var previa=document.getElementById("e_previa");
-      previa.src=dataUrl; previa.style.display="";
+    ponerFoto(this.files && this.files[0]);
+  });
+
+  /* Arrastrada desde el Finder o desde Fotos. */
+  var cajaFoto=document.getElementById("e_cajaFoto");
+  ["dragenter","dragover"].forEach(function(ev){
+    cajaFoto.addEventListener(ev, function(e){
+      e.preventDefault();
+      cajaFoto.style.borderColor="var(--acento)";
     });
+  });
+  ["dragleave","drop"].forEach(function(ev){
+    cajaFoto.addEventListener(ev, function(){ cajaFoto.style.borderColor="var(--linea)"; });
+  });
+  cajaFoto.addEventListener("drop", function(e){
+    e.preventDefault();
+    var dt=e.dataTransfer;
+    ponerFoto(dt && dt.files && dt.files[0]);
+  });
+
+  /* Pegada con ⌘V, con la ventana abierta. */
+  d.addEventListener("paste", function(e){
+    var trozos=(e.clipboardData||{}).items||[];
+    for(var i=0;i<trozos.length;i++){
+      if(trozos[i].kind==="file" && /^image\//.test(trozos[i].type)){
+        e.preventDefault();
+        ponerFoto(trozos[i].getAsFile());
+        return;
+      }
+    }
   });
 }
 
 /* La foto se reduce antes de guardarla: 320 px de lado largo y JPEG,
    que para ver una moneda sobra y deja el archivo en unos pocos kB. */
-function encogerFoto(archivo, listo){
+function encogerFoto(archivo, listo, falla){
+  /* Si quien llama sabe dónde enseñar el motivo, se lo damos a él; si
+     no, cartel flotante como siempre. */
+  function mal(texto){ if(falla) falla(texto); else avisar(texto, true); }
   var lector=new FileReader();
   lector.onload=function(){
     var img=new Image();
@@ -647,10 +716,13 @@ function encogerFoto(archivo, listo){
       cv.getContext("2d").drawImage(img,0,0,ancho,alto);
       listo(cv.toDataURL("image/jpeg", 0.68));
     };
-    img.onerror=function(){ avisar("No he podido leer esa imagen.", true); };
+    img.onerror=function(){
+      mal("No he podido abrir esa imagen: el navegador no entiende ese formato. "+
+          "Guárdala en JPG o en PNG y vuelve a ponerla.");
+    };
     img.src=lector.result;
   };
-  lector.onerror=function(){ avisar("No he podido leer ese archivo.", true); };
+  lector.onerror=function(){ mal("No he podido leer ese archivo."); };
   lector.readAsDataURL(archivo);
 }
 
