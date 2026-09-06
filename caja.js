@@ -10,12 +10,13 @@
      Fondo caja    lo que se deja de cambio para mañana
      Sobra am.     lo que pasa del objetivo de la amarilla
 
-   El efectivo no se escribe: sabiendo qué parte de las ventas se cobra
-   con tarjeta (80 % de partida, editable en Ajustes y también al lado
-   del propio campo), sale solo a partir de las visas — 20/80 por cada
-   euro de visa. Se puede escribir encima cuando un día no cuadre.
-   Y una columna de control, «Debería haber», enseña esa misma cifra
-   y al lado lo que baila.
+   El efectivo es el dinero que hay de verdad al cerrar: se cuenta y se
+   escribe, y la app no lo inventa nunca. Al lado del campo, sabiendo
+   qué parte de las ventas se cobra con tarjeta (80 % de partida,
+   editable en Ajustes y ahí mismo), se dice cuánto tocaría en metálico
+   —20/80 por cada euro de visa—, cuánto baila con lo contado, y hay un
+   botón para poner esa cifra los días que valga. La columna «Debería
+   haber» enseña lo mismo en el cierre del día.
 
    Y un apartado, «Sin retirar», para las temporadas en que el dinero se
    queda dentro porque no hay quien lo saque: esos días quedan agrupados
@@ -530,7 +531,7 @@ function pintarFormularioDia(d){
       '<div class="campo"><label class="lbl" for="f_visa">Visa (€)</label>'+
         '<input type="number" class="grande" id="f_visa" min="0" step="0.01" value="'+esc(actual.visa)+'"></div>'+
       '<div class="campo"><label class="lbl" for="f_efec">Efectivo (€)</label>'+
-      '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">se pone solo</div>'+
+      '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">el que cuentas al cerrar</div>'+
         '<input type="number" class="grande" id="f_efec" min="0" step="0.01" value="'+esc(actual.efectivo)+'">'+
         '<div style="font-size:12px;color:var(--muted);margin:6px 0 0;display:flex;'+
         'align-items:center;gap:6px;flex-wrap:wrap">'+
@@ -568,13 +569,12 @@ function pintarFormularioDia(d){
 
   var cajaGastos=document.getElementById("gastos");
 
-  /* El efectivo ya no se escribe: sale de las visas. Si de cada 100 € de
-     venta el 80 se cobra con tarjeta, los otros 20 son metálico, o sea
-     20/80 por cada euro de visa. El % se toca aquí mismo, junto al campo,
-     y al soltarlo queda guardado en Ajustes como el de siempre.
-     Si un día hace falta poner otra cifra, se escribe encima y el campo
-     se queda quieto hasta que se pulse «Volver al %». */
-  var efecAMano=false;
+  /* El efectivo lo escribes tú: es lo que cuentas en el cajón. La app lo
+     dejó de rellenar sola porque el 20/80 de las visas casi nunca era la
+     cifra buena, y había que borrarla cada noche antes de poner la de
+     verdad. La cuenta sigue estando, pero al lado: cuánto tocaría con
+     ese % y cuánto baila con lo contado, más un botón para ponerla los
+     días que valga. */
   function pctDelForm(){
     var campo=document.getElementById("f_pct");
     var p=campo ? +campo.value : 0;
@@ -584,13 +584,6 @@ function pintarFormularioDia(d){
     var p=pctDelForm();
     return p ? r2(numero("f_visa")*(100-p)/p) : null;
   }
-  function ponerEfectivo(){
-    if(efecAMano) return;
-    var e=efectivoPorPct();
-    if(e==null) return;
-    document.getElementById("f_efec").value = numero("f_visa")>0 ? e : "";
-  }
-
   function totalG(){
     var t=0;
     cajaGastos.querySelectorAll(".gasto").forEach(function(f){ t+=+f.querySelector(".g_imp").value||0; });
@@ -637,20 +630,25 @@ function pintarFormularioDia(d){
     var efn=document.getElementById("f_efecNota");
     if(efn){
       var p=pctDelForm();
+      var tocaria=efectivoPorPct();
       if(!p){
-        efn.innerHTML="Pon un % entre 1 y 99 y el efectivo se pone solo.";
-      } else if(efecAMano){
-        efn.innerHTML='Escrito a mano. Con el '+num(p,0)+'% saldrían <strong>'+
-          eur(efectivoPorPct())+'</strong>. '+
-          '<button type="button" class="btn sm suave" id="f_volverPct" '+
-          'style="padding:2px 8px">Volver al %</button>';
-        var volver=document.getElementById("f_volverPct");
-        if(volver) volver.addEventListener("click", function(){
-          efecAMano=false; ponerEfectivo(); refrescar();
-        });
+        efn.innerHTML="Pon un % entre 1 y 99 y te digo cuánto tocaría en metálico.";
+      } else if(visa<=0 || tocaria==null){
+        efn.innerHTML="Escribe las visas y te digo cuánto tocaría en metálico con el "+
+                      num(p,0)+"%.";
       } else {
-        efn.innerHTML="Puesto solo: el "+num(100-p,0)+"% de la venta, con el "+
-                      num(p,0)+"% en visa. Escribe encima si un día no cuadra.";
+        var difE=r2(efec-tocaria);
+        efn.innerHTML='Con el '+num(p,0)+'% en visa tocarían <strong>'+eur(tocaria)+'</strong>. '+
+          '<button type="button" class="btn sm suave" id="f_usarPct" '+
+          'style="padding:2px 8px">Poner esa cifra</button>'+
+          (efec>0 ? ' · has contado '+eur(efec)+
+             ', <span style="color:'+colorDiferencia(difE)+'">'+esc(textoDiferencia(difE))+
+             '</span>.' : '');
+        var usar=document.getElementById("f_usarPct");
+        if(usar) usar.addEventListener("click", function(){
+          document.getElementById("f_efec").value=tocaria;
+          refrescar();
+        });
       }
     }
     document.getElementById("f_resumen").innerHTML=
@@ -675,11 +673,7 @@ function pintarFormularioDia(d){
   (actual.detalle||[]).forEach(añadirGasto);
   if(!(actual.detalle||[]).length) añadirGasto();
   document.getElementById("masGasto").addEventListener("click", function(){ añadirGasto(); refrescar(); });
-  /* El de las visas va antes que el refresco: primero se pone el
-     efectivo y luego se recalcula todo con la cifra ya puesta. */
-  document.getElementById("f_visa").addEventListener("input", ponerEfectivo);
   var campoPct=document.getElementById("f_pct");
-  campoPct.addEventListener("input", ponerEfectivo);
   campoPct.addEventListener("change", function(){
     var p=pctDelForm();
     if(p && p!==+libro.ajustes.pctVisa){
@@ -687,21 +681,9 @@ function pintarFormularioDia(d){
       avisar("Guardado: el "+num(p,0)+"% de las ventas va en visa");
     }
   });
-  /* Escribir en el campo a mano lo deja quieto; ponerEfectivo() cambia
-     el value sin disparar "input", así que no se pisa a sí mismo. */
-  document.getElementById("f_efec").addEventListener("input", function(){
-    efecAMano=true;
-  });
   ["f_visa","f_efec","f_pct","f_amar","f_fondo","f_sobra"].forEach(function(id){
     document.getElementById(id).addEventListener("input", refrescar);
   });
-  /* Un día ya guardado se abre a mano solo si su efectivo no es el que
-     tocaba por el %; así no se le cambia la cifra por detrás. */
-  if(d){
-    var tocaba=efectivoPorPct();
-    efecAMano = !(tocaba!=null && Math.abs((+actual.efectivo||0)-tocaba)<0.005);
-  }
-  ponerEfectivo();
   refrescar();
 
   document.getElementById("f_guardar").addEventListener("click", function(){
