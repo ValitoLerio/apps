@@ -48,6 +48,12 @@ debes** de hipoteca. Todo lo demás se calcula: el neto es lo que vale
 menos lo que debes, y la rentabilidad del alquiler se mide siempre
 contra lo que costó, no contra lo que vale hoy.
 
+De los pisos se guarda además **para qué los tienes**: en el que vives
+no entra alquiler, y lo que te cuesta tenerlo —la comunidad, el seguro,
+la cuota— no se resta de lo que renta el que está alquilado. En el
+resumen cada cosa tiene su casilla: «Donde vivo», con lo que sale por él
+cada mes, y el alquiler por su lado.
+
 La app no inventa ninguna cifra. Mientras no apuntes una valoración, un
 bien vale lo que te costó, y la línea de evolución sólo dibuja lo que le
 hayas ido apuntando. Los colores de los gráficos van con el bien, no con

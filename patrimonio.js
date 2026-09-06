@@ -16,6 +16,11 @@
    rentabilidad del alquiler se mide siempre contra lo que costó, no
    contra lo que vale hoy — si no, un piso que sube parece rentar menos.
 
+   De los pisos hace falta saber una cosa más: en cuál vivo y cuál
+   tengo alquilado. El que habito no renta nada y sólo cuesta —la
+   comunidad, el seguro, la cuota—, así que sus gastos no se restan del
+   alquiler del otro: cada uno lleva su cuenta y su casilla.
+
    El valor de un piso es una opinión, así que se escribe a mano y con
    fecha. La app no inventa ninguna cifra: lo que no has apuntado, no
    sale.
@@ -36,6 +41,19 @@ var TIPOS = {
   otro:      {nombre:"Otro",      icono:"📦", ladrillo:false}
 };
 var ORDEN_TIPOS = ["piso","parking","local","terreno","inversion","ahorro","otro"];
+
+/* Dos pisos iguales de tipo pueden no serlo de nada más: en uno vives y
+   el otro lo tienes alquilado. Como bien valen lo mismo —lo que cuestan
+   y lo que valen se cuentan igual—, pero de dinero al mes no: el que
+   habitas no cobra alquiler y sólo tiene gastos, y meterlos en el saco
+   del otro hundía la rentabilidad de un alquiler que no tiene la culpa.
+   Lo que no digas se queda sin decir: la app no elige dónde vives. */
+var USOS = {
+  vivo:      {nombre:"Vivo en él",              corto:"donde vivo", icono:"🛋️"},
+  alquilado: {nombre:"Lo tengo alquilado",      corto:"alquilado",  icono:"🔑"},
+  vacio:     {nombre:"Ni lo uso ni lo alquilo", corto:"vacío",      icono:"🚪"}
+};
+var ORDEN_USOS = ["vivo","alquilado","vacio"];
 
 /* Los seis tonos de serie viven en el CSS, que es quien sabe si la
    pantalla está en claro o en oscuro. Aquí sólo se reparten en su orden
@@ -138,6 +156,9 @@ function cargar(){
   libro.bienes.forEach(function(b){
     if(!b.valores) b.valores=[];
     if(!b.hipoteca) b.hipoteca={};
+    /* Los bienes de antes no traían uso. Si cobras alquiler por él, está
+       alquilado y no hay más que hablar; lo demás lo dices tú. */
+    if(!b.uso && (+b.renta||0)>0) b.uso="alquilado";
   });
 }
 function guardar(){
@@ -152,6 +173,15 @@ function porId(id){
   return todos().filter(function(b){ return b.id===id; })[0] || null;
 }
 function esLadrillo(b){ return !!(TIPOS[b.tipo]||{}).ladrillo; }
+/* El uso sólo tiene sentido en el ladrillo: una cuenta de ahorro ni se
+   habita ni se alquila. */
+function usoDe(b){ return esLadrillo(b) && USOS[b.uso] ? b.uso : ""; }
+function esVivienda(b){ return usoDe(b)==="vivo"; }
+/* Alquilado es lo que has marcado como tal y, por si viene de antes,
+   todo lo que cobre un alquiler sin ser donde vives. */
+function estaAlquilado(b){
+  return !esVivienda(b) && (usoDe(b)==="alquilado" || rentaAnual(b)>0);
+}
 
 /* El color va con el bien, por su sitio en la lista: si mañana borras
    uno, los demás no cambian de color de golpe. */
@@ -220,15 +250,25 @@ function flujoMes(b){ return r2((+b.renta||0) - gastoAnual(b)/12 - ((b.hipoteca|
 
 function totales(){
   var t={coste:0, valor:0, deuda:0, neto:0, plus:0, renta:0, gastos:0, cuotas:0, flujo:0,
+         casaNeto:0, casaGastos:0, casaCuota:0, casaMes:0,
          ladrillo:0, financiero:0};
   todos().forEach(function(b){
     t.coste  = r2(t.coste  + coste(b));
     t.valor  = r2(t.valor  + valorHoy(b));
     t.deuda  = r2(t.deuda  + deuda(b));
-    t.renta  = r2(t.renta  + rentaAnual(b));
-    t.gastos = r2(t.gastos + gastoAnual(b));
-    t.cuotas = r2(t.cuotas + cuotaAnual(b));
-    t.flujo  = r2(t.flujo  + flujoMes(b));
+    /* Donde vives va por su lado: lo que te cuesta tener tu casa no es
+       un gasto del alquiler del otro piso. */
+    if(esVivienda(b)){
+      t.casaNeto   = r2(t.casaNeto   + neto(b));
+      t.casaGastos = r2(t.casaGastos + gastoAnual(b));
+      t.casaCuota  = r2(t.casaCuota  + cuotaAnual(b));
+      t.casaMes    = r2(t.casaMes    - flujoMes(b));   /* sale, así que en positivo */
+    }else{
+      t.renta  = r2(t.renta  + rentaAnual(b));
+      t.gastos = r2(t.gastos + gastoAnual(b));
+      t.cuotas = r2(t.cuotas + cuotaAnual(b));
+      t.flujo  = r2(t.flujo  + flujoMes(b));
+    }
     if(esLadrillo(b)) t.ladrillo=r2(t.ladrillo+neto(b));
     else              t.financiero=r2(t.financiero+neto(b));
   });
@@ -499,15 +539,20 @@ function nadaTodavia(main){
     cabecera("Patrimonio","Aquí no hay nada todavía.")+
     '<div class="vacio"><strong>Empieza por un bien</strong>'+
     'Un piso, un parking, lo que tengas en el broker o en la cuenta. '+
-    'De cada uno hacen falta dos cifras: lo que te costó y lo que vale hoy.'+
+    'De cada uno hacen falta dos cifras: lo que te costó y lo que vale hoy. '+
+    'El piso donde vives cuenta igual que el que tienes alquilado: es tuyo '+
+    'y vale dinero, aunque no te entre nada por él.'+
     '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:18px">'+
-      '<button class="btn fuerte" data-nuevo="piso">🏠 Un piso</button>'+
+      '<button class="btn fuerte" data-nuevo="piso" data-uso="vivo">🛋️ El piso donde vivo</button>'+
+      '<button class="btn fuerte" data-nuevo="piso" data-uso="alquilado">🔑 El piso alquilado</button>'+
       '<button class="btn" data-nuevo="parking">🚗 Un parking</button>'+
       '<button class="btn" data-nuevo="inversion">📈 Inversión</button>'+
       '<button class="btn" data-nuevo="ahorro">🏦 Ahorro</button>'+
     '</div></div>';
   main.querySelectorAll("[data-nuevo]").forEach(function(b){
-    b.addEventListener("click", function(){ formulario(null, b.dataset.nuevo); });
+    b.addEventListener("click", function(){
+      formulario(null, b.dataset.nuevo, b.dataset.uso||"");
+    });
   });
 }
 
@@ -519,7 +564,8 @@ function pintarResumen(){
   if(!todos().length) return nadaTodavia(main);
 
   var t=totales();
-  var conRenta=todos().filter(function(b){ return rentaAnual(b)>0; });
+  var casas=todos().filter(esVivienda);
+  var alquilados=todos().filter(estaAlquilado);
 
   /* El reparto se hace sobre el neto: un piso hipotecado hasta las cejas
      no pesa en tu patrimonio lo que vale, sino lo que es tuyo de él. */
@@ -549,10 +595,18 @@ function pintarResumen(){
             t.plus>0?"ok":t.plus<0?"malo":"")+
     '</div>'+
 
-    (conRenta.length?
+    (casas.length?
       '<div class="cifras">'+
-        cifra("Alquiler al año", eur(t.renta), conRenta.length+
-              (conRenta.length===1?" bien alquilado":" bienes alquilados"))+
+        cifra("Donde vivo", eur(t.casaNeto),
+              casas.map(function(b){ return b.nombre; }).join(" · "))+
+        cifra("Me cuesta al mes", t.casaMes?eur(t.casaMes):"—",
+              "gastos y cuota de mi casa, aparte del alquiler")+
+      '</div>' : '')+
+
+    (t.renta>0?
+      '<div class="cifras">'+
+        cifra("Alquiler al año", eur(t.renta), alquilados.length+
+              (alquilados.length===1?" bien alquilado":" bienes alquilados"))+
         cifra("Gastos al año", eur(t.gastos), "comunidad, seguros, impuestos")+
         cifra("Hipoteca al año", t.cuotas?eur(t.cuotas):"—", "lo que pagas de cuotas")+
         cifra("Al mes en el bolsillo", eurFirma(t.flujo), "alquiler menos gastos y cuota",
@@ -588,12 +642,15 @@ function cifra(k, v, n, clase){
 function tablaResumen(){
   var t=totales();
   var filas=todos().map(function(b){
-    var p=plusvalia(b), pp=plusPct(b);
+    var p=plusvalia(b), pp=plusPct(b), u=usoDe(b);
+    /* Debajo del nombre, para qué lo tienes y dónde está: es lo que
+       distingue de un vistazo un piso del otro. */
+    var pieN=[u?USOS[u].corto:"", b.lugar].filter(Boolean).join(" · ");
     return '<tr data-id="'+esc(b.id)+'">'+
       '<td><span class="punto-t" style="background:'+colorDe(b)+'"></span>'+
         '<strong>'+esc(b.nombre)+'</strong>'+
-        (b.lugar?'<div style="font-size:12px;color:var(--muted);padding-left:16px">'+
-          esc(b.lugar)+'</div>':'')+'</td>'+
+        (pieN?'<div style="font-size:12px;color:var(--muted);padding-left:16px">'+
+          esc(pieN)+'</div>':'')+'</td>'+
       '<td class="num">'+eur(coste(b))+'</td>'+
       '<td class="num">'+eur(valorHoy(b))+'</td>'+
       '<td class="num '+(p>0?"sube":p<0?"baja":"")+'">'+eurFirma(p)+'</td>'+
@@ -630,7 +687,9 @@ function pintarBienes(){
       '<div class="cuerpo">'+
         '<div class="nom">'+esc(b.nombre)+'</div>'+
         '<div class="sitio">'+esc((TIPOS[b.tipo]||{}).icono||"")+' '+
-          esc((TIPOS[b.tipo]||{}).nombre||"")+(b.lugar?' · '+esc(b.lugar):'')+'</div>'+
+          esc((TIPOS[b.tipo]||{}).nombre||"")+
+          (usoDe(b)?' · '+esc(USOS[usoDe(b)].corto):'')+
+          (b.lugar?' · '+esc(b.lugar):'')+'</div>'+
         '<div class="valor">'+eur(valorHoy(b))+'</div>'+
         '<div class="bajo">costó '+eur(coste(b))+
           (fechaValor(b)?' · valorado el '+esc(fechaCorta(fechaValor(b))):'')+'</div>'+
@@ -670,9 +729,13 @@ function ficha(id){
   var tipo=TIPOS[b.tipo]||TIPOS.otro;
   var p=plusvalia(b), pp=plusPct(b), g=cagr(b), d=deuda(b);
   var vs=valoresOrdenados(b).slice(-6).reverse();
+  var u=usoDe(b);
+  var sub=[tipo.nombre, u?USOS[u].corto:"", b.lugar].filter(Boolean).join(" · ");
 
   var cuerpo=
-    '<div class="bloque"><h4>Lo que me costó</h4>'+
+    '<p class="nota" style="margin:0 0 14px">'+esc(sub)+'</p>'+
+    '<div class="bloque" style="border-top:0;margin-top:0;padding-top:0">'+
+      '<h4>Lo que me costó</h4>'+
       renglon(esLadrillo(b)?"Precio de compra":"Lo que llevo metido", eur(b.compra))+
       (esLadrillo(b)?renglon("Gastos de la compra", eur(b.gastos)):"")+
       (esLadrillo(b)?renglon("Reformas y mejoras", eur(b.mejoras)):"")+
@@ -697,6 +760,16 @@ function ficha(id){
       renglon("Es mío de este bien", eur(neto(b)))+
       (valorHoy(b)>0?renglon("Tuyo, sobre lo que vale",
         pct(Math.max(0,neto(b))/valorHoy(b),0)):"")+
+    '</div>':'')+
+
+    /* En tu casa no hay rentabilidad que medir: sólo lo que sale cada
+       mes por vivir en ella. */
+    (esVivienda(b) && (gastoAnual(b)>0 || (b.hipoteca||{}).cuota)?
+    '<div class="bloque"><h4>Lo que me cuesta vivir aquí</h4>'+
+      (gastoAnual(b)>0?renglon("Gastos al año", eur(gastoAnual(b))):"")+
+      (gastoAnual(b)>0?renglon("De gastos, al mes", eur(gastoAnual(b)/12)):"")+
+      ((b.hipoteca||{}).cuota?renglon("La cuota de la hipoteca", eur(b.hipoteca.cuota)):"")+
+      renglon("Me cuesta al mes", eur(-flujoMes(b)), "baja")+
     '</div>':'')+
 
     (rentaAnual(b)>0?
@@ -753,20 +826,29 @@ function campo(id, etiqueta, tipo, val, extra){
     (val==null||val===""?"":esc(String(val)))+'"></div>';
 }
 
-function formulario(bien, tipoNuevo){
+function formulario(bien, tipoNuevo, usoNuevo){
   var esNuevo=!bien;
-  var b=bien||{tipo:tipoNuevo||"piso", valores:[], hipoteca:{}};
+  var b=bien||{tipo:tipoNuevo||"piso", uso:usoNuevo||"", valores:[], hipoteca:{}};
   var h=b.hipoteca||{};
   var opciones=ORDEN_TIPOS.map(function(k){
     return '<option value="'+k+'"'+(b.tipo===k?' selected':'')+'>'+
            TIPOS[k].icono+' '+esc(TIPOS[k].nombre)+'</option>';
   }).join("");
+  /* La primera opción está vacía a propósito: si no lo dices tú, el
+     bien se queda sin uso y las cuentas no cambian. */
+  var opcUso='<option value="">— sin decir —</option>'+
+    ORDEN_USOS.map(function(k){
+      return '<option value="'+k+'"'+(b.uso===k?' selected':'')+'>'+
+             USOS[k].icono+' '+esc(USOS[k].nombre)+'</option>';
+    }).join("");
 
   var cuerpo=
     '<div class="bloque"><h4>Qué es</h4><div class="rejilla">'+
       campo("f_nombre","Nombre","text",b.nombre,' placeholder="Piso de Soldeu"')+
       '<div class="campo"><label class="lbl" for="f_tipo">Tipo</label>'+
         '<select id="f_tipo">'+opciones+'</select></div>'+
+      '<div class="campo solo-ladrillo"><label class="lbl" for="f_uso">Para qué lo tengo</label>'+
+        '<select id="f_uso">'+opcUso+'</select></div>'+
       campo("f_lugar","Dónde está","text",b.lugar,' placeholder="Andorra la Vella"')+
       campo("f_fecha","Cuándo lo compré","date",b.fecha)+
     '</div></div>'+
@@ -790,11 +872,12 @@ function formulario(bien, tipoNuevo){
       campo("f_interes","Interés (%)","number",h.interes,' step="0.01" min="0"')+
     '</div></div>'+
 
-    '<div class="bloque solo-ladrillo"><h4>Si está alquilado</h4><div class="rejilla">'+
+    '<div class="bloque solo-ladrillo"><h4 id="h_renta">Si está alquilado</h4><div class="rejilla">'+
       campo("f_renta","Alquiler al mes (€)","number",b.renta,' step="1" min="0"')+
       campo("f_gasto","Gastos al año (€)","number",b.gastoAnual,' step="1" min="0"')+
-    '</div><p class="nota" style="margin:10px 0 0">Los gastos del año son la comunidad, el '+
-      'seguro y los impuestos: lo que pagas por tenerlo, sin contar la hipoteca.</p></div>'+
+    '</div><p class="nota" id="n_renta" style="margin:10px 0 0">Los gastos del año son la '+
+      'comunidad, el seguro y los impuestos: lo que pagas por tenerlo, sin contar la '+
+      'hipoteca.</p></div>'+
 
     '<div class="bloque"><h4>Notas</h4>'+
       '<textarea id="f_notas" placeholder="Lo que quieras recordar">'+
@@ -817,9 +900,12 @@ function formulario(bien, tipoNuevo){
     destino.notas  = (document.getElementById("f_notas")||{}).value || "";
 
     var ladrillo=(TIPOS[destino.tipo]||{}).ladrillo;
+    destino.uso        = ladrillo&&USOS[valor("f_uso")] ? valor("f_uso") : "";
     destino.gastos     = ladrillo?numero("f_gastos"):0;
     destino.mejoras    = ladrillo?numero("f_mejoras"):0;
-    destino.renta      = ladrillo?numero("f_renta"):0;
+    /* En el piso donde vives no entra alquiler: si lo marcas así, la
+       cifra que hubiera apuntada se va. */
+    destino.renta      = ladrillo&&destino.uso!=="vivo" ? numero("f_renta") : 0;
     destino.gastoAnual = ladrillo?numero("f_gasto"):0;
     destino.hipoteca   = ladrillo
       ? {pendiente:numero("f_hip"), cuota:numero("f_cuota"), interes:numero("f_interes")}
@@ -850,8 +936,21 @@ function formulario(bien, tipoNuevo){
       document.getElementById(id).closest(".campo").style.display = ladrillo?"":"none";
     });
     document.getElementById("n_coste").style.display = ladrillo?"":"none";
+
+    /* En el piso donde vives, el bloque del alquiler deja de pedir un
+       alquiler y pasa a preguntar lo que te cuesta tenerlo. */
+    var vivo = ladrillo && document.getElementById("f_uso").value==="vivo";
+    document.getElementById("h_renta").textContent =
+      vivo ? "Lo que me cuesta tenerlo" : "Si está alquilado";
+    document.getElementById("f_renta").closest(".campo").style.display = vivo?"none":"";
+    document.getElementById("n_renta").textContent = vivo
+      ? "Donde vives no entra alquiler, así que aquí sólo va lo que te cuesta tenerlo: "+
+        "la comunidad, el seguro y los impuestos. La cuota de la hipoteca va arriba."
+      : "Los gastos del año son la comunidad, el seguro y los impuestos: lo que pagas "+
+        "por tenerlo, sin contar la hipoteca.";
   }
   document.getElementById("f_tipo").addEventListener("change", ajustar);
+  document.getElementById("f_uso").addEventListener("change", ajustar);
   ajustar();
 }
 
