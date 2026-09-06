@@ -429,6 +429,9 @@ function cabecera(titulo, sub, derecha){
 function verDia(main){
   var d=diaDe(ui.dia);
   var c=cuentasDia(d);
+  /* Si el efectivo escrito es el que salía por el %, no hay nada
+     que contar: la cifra ya lo dice todo. */
+  var difPct = !!pctVisa() && c.visa>0 && Math.abs(c.difEfectivo)>=0.005;
   var guardado=amarillaGuardado(), falta=faltaAmarilla();
 
   main.innerHTML=
@@ -449,10 +452,17 @@ function verDia(main){
         '<div class="n">visa + efectivo</div></div>'+
       '<div class="cifra"><div class="k">Visa</div><div class="v">'+eur(c.visa)+'</div>'+
         '<div class="n">'+(c.ventas>0?num(c.visa/c.ventas*100,0)+"% del total":"—")+'</div></div>'+
+      /* Aquí al lado había otra casilla, «Debería haber», con esta misma
+         cuenta. Desde que el campo se rellena solo con el %, era la misma
+         cifra escrita dos veces: sobraba. Se dice en ésta, y sólo hay algo
+         que decir cuando la cifra puesta a mano no es la que salía. */
       '<div class="cifra"><div class="k">Efectivo</div><div class="v">'+eur(c.efectivo)+'</div>'+
-        '<div class="n">'+(c.ventas>0?num(c.efectivo/c.ventas*100,0)+"% del total":"—")+'</div></div>'+
-      /* Lo que debería haber en metálico si ese día se cumple la media de
-         visa. Sirve para ver enseguida si falta dinero. */
+        '<div class="n"'+(difPct?' style="color:'+colorDiferencia(c.difEfectivo)+'"':"")+'>'+
+        (!pctVisa()
+          ? (c.ventas>0?num(c.efectivo/c.ventas*100,0)+"% del total":"—")
+          : difPct
+            ? "a mano · el "+num(100-pctVisa(),0)+"% de las visas serían "+eur(c.efectivoPrevisto)
+            : "el "+num(100-pctVisa(),0)+"% de las visas")+'</div></div>'+
       /* Lo contado en el cajón. Sin contar no se enseña un cero, que
          sería decir que el cajón estaba vacío. */
       '<div class="cifra"><div class="k">Efectivo real</div><div class="v">'+
@@ -460,12 +470,6 @@ function verDia(main){
         '<div class="n"'+(c.hayReal?' style="color:'+colorDiferencia(c.difReal)+'"':"")+'>'+
         (c.hayReal?esc(textoDiferencia(c.difReal))+" contra el efectivo":"sin contar")+
         '</div></div>'+
-      '<div class="cifra"><div class="k">Debería haber</div><div class="v">'+
-        (pctVisa()?eur(c.efectivoPrevisto):"—")+'</div>'+
-        '<div class="n"'+(pctVisa()&&c.visa>0?' style="color:'+colorDiferencia(c.difEfectivo)+'"':"")+'>'+
-        (!pctVisa() ? "pon el % en Ajustes"
-          : c.visa>0 ? esc(textoDiferencia(c.difEfectivo))
-          : "con el "+num(pctVisa(),0)+"% en visa")+'</div></div>'+
       '<div class="cifra"><div class="k">Pagos</div><div class="v malo">'+eur(c.gastos)+'</div>'+
         '<div class="n">'+((d&&(d.detalle||[]).length)?d.detalle.length+" apuntes":"pagados de caja")+'</div></div>'+
     '</div>'+
@@ -1076,10 +1080,13 @@ function verMes(main){
         '<div class="n">'+(t.ventas>0?num(t.visa/t.ventas*100,0)+"%":"—")+'</div></div>'+
       '<div class="cifra"><div class="k">Efectivo</div><div class="v">'+eur(t.efectivo)+'</div>'+
         '<div class="n">'+(t.ventas>0?num(t.efectivo/t.ventas*100,0)+"%":"—")+'</div></div>'+
-      '<div class="cifra"><div class="k">Debería haber</div><div class="v">'+
-        (pctVisa()?eur(t.efectivoPrevisto):"—")+'</div>'+
-        '<div class="n"'+(pctVisa()?' style="color:'+colorDiferencia(t.difEfectivo)+'"':"")+'>'+
-        (pctVisa()?esc(textoDiferencia(t.difEfectivo)):"pon el % en Ajustes")+'</div></div>'+
+      /* En el mes, la casilla que antes repetía la cuenta del % ahora
+         enseña lo que de verdad se contó en el cajón. */
+      '<div class="cifra"><div class="k">Efectivo real</div><div class="v">'+
+        (t.efectivoReal>0.004?eur(t.efectivoReal):"—")+'</div>'+
+        '<div class="n"'+(t.efectivoReal>0.004?' style="color:'+colorDiferencia(t.difReal)+'"':"")+'>'+
+        (t.efectivoReal>0.004?esc(textoDiferencia(t.difReal))+" contra el efectivo"
+                             :"lo que cuentas en el cajón")+'</div></div>'+
       '<div class="cifra"><div class="k">Pagos</div><div class="v malo">'+eur(t.gastos)+'</div>'+
         '<div class="n">pagados de caja</div></div>'+
       /* El recuento con el que se cierra ESTE mes, no el de hoy: mirando
