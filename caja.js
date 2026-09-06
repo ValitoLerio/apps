@@ -679,14 +679,23 @@ function pintarFormularioDia(d){
       if(!p){
         efn.innerHTML="Pon un % entre 1 y 99 y el efectivo se pone solo.";
       } else if(efecAMano){
-        efn.innerHTML='Escrito a mano. Con el '+num(p,0)+'% saldrían <strong>'+
-          eur(efectivoPorPct())+'</strong>. '+
+        efn.innerHTML='Escrito a mano. Con el '+num(p,0)+'% en visa, '+eur(visa)+
+          ' de visa serían '+eur(r2(visa*100/(p||100)))+' de venta y <strong>'+
+          eur(efectivoPorPct())+'</strong> en metálico. '+
           '<button type="button" class="btn sm suave" id="f_volverPct" '+
           'style="padding:2px 8px">Volver al %</button>';
         var volver=document.getElementById("f_volverPct");
         if(volver) volver.addEventListener("click", function(){
           efecAMano=false; ponerEfectivo(); refrescar();
         });
+      } else if(visa>0){
+        /* La cuenta, escrita entera: de la visa se saca la venta, y de la
+           venta lo que queda en metálico. Decir sólo el resultado no
+           explica de dónde sale. */
+        efn.innerHTML="Puesto solo: si el "+num(p,0)+"% de la venta va en visa, "+
+          "<strong>"+eur(visa)+"</strong> de visa son <strong>"+eur(r2(visa*100/p))+
+          "</strong> de venta, y el "+num(100-p,0)+"% que falta son <strong>"+
+          eur(efectivoPorPct())+"</strong> en metálico. Escribe encima si un día no cuadra.";
       } else {
         efn.innerHTML="Puesto solo: el "+num(100-p,0)+"% de la venta, con el "+
                       num(p,0)+"% en visa. Escribe encima si un día no cuadra.";
