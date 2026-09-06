@@ -21,8 +21,10 @@
 
    El efectivo no se escribe: sabiendo qué parte de las ventas se cobra
    con tarjeta (80 % de partida, editable en Ajustes y también al lado
-   del propio campo), sale solo a partir de las visas — 20/80 por cada
-   euro de visa. Se puede escribir encima cuando un día no cuadre.
+   del propio campo), sale solo a partir de las visas: con el 80 %, el
+   20 % de lo cobrado con tarjeta. Las visas no se tocan ni se amplían,
+   que son las del datáfono. Se puede escribir encima cuando un día no
+   cuadre.
    Y una columna de control, «Debería haber», enseña esa misma cifra
    y al lado lo que baila.
 
@@ -187,13 +189,14 @@ function cuentasDia(d){
   var gastos=totalGastos(d), amarilla=+d.aAmarilla||0;
   var fondo=+d.fondoCaja||0;
   var neto=r2(efectivo-gastos);
-  /* Si de cada 100 € de venta 80 se pagan con visa, los otros 20 tienen
-     que aparecer en metálico: por cada euro de visa, 20/80 en efectivo.
-     Es una referencia para ver de un vistazo si falta dinero, no una
-     cuenta exacta: hay días que se sale de la media. */
+  /* Las visas son las visas: lo que dice el datáfono, y ahí no se toca
+     nada. El metálico que tendría que haber es ese mismo dinero por el
+     resto del porcentaje —con el 80 %, el 20 % de las visas—, y es una
+     referencia para ver de un vistazo si falta dinero, no una cuenta
+     exacta: hay días que se sale de la media. */
   var pct=pctVisa();
   var hayPct=(pct>0 && pct<100);
-  var previsto=hayPct ? r2(visa*(100-pct)/pct) : 0;
+  var previsto=hayPct ? r2(visa*(100-pct)/100) : 0;
   /* El sobrante es lo que entra en la amarilla por encima del objetivo:
      cuando ya están los 1500, lo demás sobra. Se sigue pudiendo escribir
      a mano, y entonces manda lo escrito. */
@@ -607,9 +610,9 @@ function pintarFormularioDia(d){
 
   var cajaGastos=document.getElementById("gastos");
 
-  /* El efectivo ya no se escribe: sale de las visas. Si de cada 100 € de
-     venta el 80 se cobra con tarjeta, los otros 20 son metálico, o sea
-     20/80 por cada euro de visa. El % se toca aquí mismo, junto al campo,
+  /* El efectivo ya no se escribe: sale de las visas. Con el 80 % en
+     visa, el metálico es el 20 % de lo que hay en visas; las visas se
+     quedan como están. El % se toca aquí mismo, junto al campo,
      y al soltarlo queda guardado en Ajustes como el de siempre.
      Si un día hace falta poner otra cifra, se escribe encima y el campo
      se queda quieto hasta que se pulse «Volver al %». */
@@ -621,7 +624,7 @@ function pintarFormularioDia(d){
   }
   function efectivoPorPct(){
     var p=pctDelForm();
-    return p ? r2(numero("f_visa")*(100-p)/p) : null;
+    return p ? r2(numero("f_visa")*(100-p)/100) : null;
   }
   function ponerEfectivo(){
     if(efecAMano) return;
@@ -679,9 +682,8 @@ function pintarFormularioDia(d){
       if(!p){
         efn.innerHTML="Pon un % entre 1 y 99 y el efectivo se pone solo.";
       } else if(efecAMano){
-        efn.innerHTML='Escrito a mano. Con el '+num(p,0)+'% en visa, '+eur(visa)+
-          ' de visa serían '+eur(r2(visa*100/(p||100)))+' de venta y <strong>'+
-          eur(efectivoPorPct())+'</strong> en metálico. '+
+        efn.innerHTML='Escrito a mano. El '+num(100-p,0)+'% de las visas serían <strong>'+
+          eur(efectivoPorPct())+'</strong>. '+
           '<button type="button" class="btn sm suave" id="f_volverPct" '+
           'style="padding:2px 8px">Volver al %</button>';
         var volver=document.getElementById("f_volverPct");
@@ -689,15 +691,13 @@ function pintarFormularioDia(d){
           efecAMano=false; ponerEfectivo(); refrescar();
         });
       } else if(visa>0){
-        /* La cuenta, escrita entera: de la visa se saca la venta, y de la
-           venta lo que queda en metálico. Decir sólo el resultado no
-           explica de dónde sale. */
-        efn.innerHTML="Puesto solo: si el "+num(p,0)+"% de la venta va en visa, "+
-          "<strong>"+eur(visa)+"</strong> de visa son <strong>"+eur(r2(visa*100/p))+
-          "</strong> de venta, y el "+num(100-p,0)+"% que falta son <strong>"+
-          eur(efectivoPorPct())+"</strong> en metálico. Escribe encima si un día no cuadra.";
+        /* La cuenta, escrita tal cual se hace: un porcentaje de las
+           visas. Decir sólo el resultado no explica de dónde sale. */
+        efn.innerHTML="Puesto solo: el "+num(100-p,0)+"% de las visas — "+
+          eur(visa)+" × "+num(100-p,0)+"% = <strong>"+eur(efectivoPorPct())+
+          "</strong>. Escribe encima si un día no cuadra.";
       } else {
-        efn.innerHTML="Puesto solo: el "+num(100-p,0)+"% de la venta, con el "+
+        efn.innerHTML="Puesto solo: el "+num(100-p,0)+"% de las visas, con el "+
                       num(p,0)+"% en visa. Escribe encima si un día no cuadra.";
       }
     }
@@ -1865,10 +1865,10 @@ function verAjustes(main){
       '<p class="nota" style="margin:12px 0 0">El fondo habitual es el cambio que sueles dejar en la caja. '+
       'Viene puesto en cada día nuevo y lo cambias si un día dejas otra cantidad.</p>'+
       '<p class="nota" style="margin:8px 0 0">Con el <strong>% de visa</strong> la app calcula la columna '+
-      '<strong style="color:var(--tinta)">Debería haber</strong>: si de cada 100 € de venta '+
-      num(pctVisa()||80,0)+' se cobran con tarjeta, los otros '+num(100-(pctVisa()||80),0)+' tienen que '+
-      'estar en metálico. Es una referencia de la media, no una cuenta exacta: hay días que se salen. '+
-      'Ponlo a 0 y la columna desaparece.</p>'+
+      '<strong style="color:var(--tinta)">Debería haber</strong>: el '+
+      num(100-(pctVisa()||80),0)+'% de lo cobrado con tarjeta. Las visas no se tocan; el metálico es '+
+      'ese porcentaje de ellas. Es una referencia de la media, no una cuenta exacta: hay días que se '+
+      'salen. Ponlo a 0 y la columna desaparece.</p>'+
 
       '<p class="nota" style="margin:18px 0 8px"><strong style="color:var(--tinta)">A quién se manda el parte</strong> '+
       '— pon a toda la gente que quieras; al enviar eliges a cuál de ellos.</p>'+
@@ -1896,9 +1896,9 @@ function verAjustes(main){
         '<strong style="color:var(--tinta)">caja registradora</strong>, el cambio para el día siguiente. '+
         'Los dos los pones tú; no son un resultado.</p>'+
         '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Ventas</strong> = visas + efectivo.</p>'+
-        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Debería haber</strong> = las visas '+
-        'del día por '+num(100-(pctVisa()||80),0)+'/'+num(pctVisa()||80,0)+'. Es el metálico que saldría si '+
-        'ese día se cumpliera la media; debajo se ve lo que falta o lo que sobra.</p>'+
+        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Debería haber</strong> = el '+
+        num(100-(pctVisa()||80),0)+'% de las visas del día. Es el metálico que saldría si ese día se '+
+        'cumpliera la media; debajo se ve lo que falta o lo que sobra.</p>'+
         '<p style="margin:0"><strong style="color:var(--tinta)">Caja amarilla</strong> = el recuento de '+
         'la última noche que la contaste. No se van sumando los días: se anota lo que hay dentro y '+
         'eso es el saldo. En el mes y en el año se enseña el recuento con el que se cerró.</p>'+
