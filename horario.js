@@ -1276,6 +1276,30 @@ function guardarWaGente(){
 /* WhatsApp quiere el numero sin mas: sin +, ni espacios, ni guiones. */
 function telLimpio(t){ return String(t||'').replace(/[^0-9]/g,''); }
 
+/* A quien se le manda el horario: primero todos los que trabajan aqui,
+   que son los de siempre y ya estan escritos en Personal, y detras los
+   de fuera que se apunten a mano. El telefono de cada persona vive con
+   ella en Personal; el de los de fuera, en esta lista. */
+function waDestinos(){
+  var lista = staff().map(function(s){
+    return {id:s.id, nombre:s.name, tel:s.tel||'', personal:true};
+  });
+  return lista.concat(waGente.map(function(g){
+    return {id:g.id, nombre:g.nombre, tel:g.tel||'', personal:false};
+  }));
+}
+function waDestinoDe(id){
+  return waDestinos().filter(function(d){ return d.id===id; })[0] || null;
+}
+/* El telefono de alguien del personal se guarda en su ficha, que es
+   donde esta su nombre y donde viaja con el resto del horario. */
+function ponerTelPersonal(id, tel){
+  [ENC, COC, CAM].forEach(function(l){
+    l.forEach(function(p){ if (p.id===id) p.tel = telLimpio(tel); });
+  });
+  save();
+}
+
 function lunesDeLaSemana(){
   if (weekMode && weekStart) return new Date(weekStart);
   return getMondayOf(new Date());
@@ -1357,32 +1381,72 @@ function waSemanaMover(pasos){
 }
 function waSemanaDe(sid){ waSemanaQuien=sid||''; pintarSemanaWA(); }
 function waSemanaPara_(id){ waSemanaPara=id||''; pintarSemanaWA(); }
-function waNuevaGente(){
+/* El mismo formulario vale para apuntar a alguien de fuera y para
+   ponerle el telefono a uno del personal: si viene con una persona
+   detras, el numero se guarda en su ficha. */
+var waEditando = null;
+function waNuevaGente(quien){
+  waEditando = quien || null;
   var c=document.getElementById('wa-nueva');
-  if (c) c.style.display = c.style.display==='flex' ? 'none' : 'flex';
-  var n=document.getElementById('wa-nombre'); if (n) n.focus();
+  var n=document.getElementById('wa-nombre'), t=document.getElementById('wa-tel');
+  if (c) c.style.display='flex';
+  if (n) { n.value = waEditando ? waEditando.nombre : ''; n.readOnly = !!waEditando; }
+  if (t) { t.value = waEditando ? (waEditando.tel||'') : ''; }
+  var foco = waEditando ? t : n; if (foco) foco.focus();
+}
+function waCerrarNueva(){
+  waEditando = null;
+  var c=document.getElementById('wa-nueva'); if (c) c.style.display='none';
+  var n=document.getElementById('wa-nombre'); if (n) n.readOnly=false;
 }
 function waGenteGuardar(){
   var n=document.getElementById('wa-nombre'), t=document.getElementById('wa-tel');
   var nombre=(n&&n.value||'').trim(), tel=telLimpio(t&&t.value);
   if (!nombre) { toast('Ponle un nombre'); return; }
   if (!tel)    { toast('Pon el telefono con el pais: +376...'); return; }
-  waGente.push({id:'w_'+Date.now(), nombre:nombre, tel:tel});
-  guardarWaGente();
+  if (waEditando && waEditando.personal) {
+    ponerTelPersonal(waEditando.id, tel);
+    waSemanaPara = waEditando.id;
+    toast('Telefono de '+nombre+' guardado');
+  } else if (waEditando) {
+    waGente.forEach(function(g){ if (g.id===waEditando.id) g.tel = tel; });
+    guardarWaGente();
+    waSemanaPara = waEditando.id;
+    toast('Telefono de '+nombre+' guardado');
+  } else {
+    waGente.push({id:'w_'+Date.now(), nombre:nombre, tel:tel});
+    guardarWaGente();
+    waSemanaPara = waGente[waGente.length-1].id;
+    toast(nombre+' añadido');
+  }
   if (n) n.value=''; if (t) t.value='';
-  var c=document.getElementById('wa-nueva'); if (c) c.style.display='none';
-  waSemanaPara = waGente[waGente.length-1].id;
+  waCerrarNueva();
   pintarSemanaWA();
-  toast(nombre+' añadido');
+}
+/* Al pulsar un nombre: si tiene telefono, queda elegido; si no, se pide
+   ahi mismo en vez de mandar a otra pantalla. */
+function waElegir(id){
+  var d = waDestinoDe(id);
+  if (!d) return;
+  if (!d.tel) { waNuevaGente(d); return; }
+  waSemanaPara = id;
+  pintarSemanaWA();
 }
 function waGenteQuitar(id, ev){
   if (ev) ev.stopPropagation();
-  var q=waGente.filter(function(g){ return g.id===id; })[0];
-  if (!q) return;
-  if (!confirm('Quitar a '+q.nombre+' de la lista?')) return;
-  waGente = waGente.filter(function(g){ return g.id!==id; });
+  var d = waDestinoDe(id); if (!d) return;
+  /* Del personal no se borra a nadie desde aqui —eso es cosa de
+     Personal—: se le quita el telefono y en paz. */
+  if (d.personal) {
+    if (!confirm('Quitarle el telefono a '+d.nombre+'?')) return;
+    ponerTelPersonal(id, '');
+  } else {
+    if (!confirm('Quitar a '+d.nombre+' de la lista?')) return;
+    waGente = waGente.filter(function(g){ return g.id!==id; });
+    guardarWaGente();
+  }
   if (waSemanaPara===id) waSemanaPara='';
-  guardarWaGente(); pintarSemanaWA();
+  pintarSemanaWA();
 }
 function pintarSemanaWA(){
   var r=document.getElementById('wa-rango');
@@ -1399,22 +1463,29 @@ function pintarSemanaWA(){
   }
   var caja2=document.getElementById('wa-gente');
   if (caja2) {
-    var html = waGente.map(function(g){
+    var html = waDestinos().map(function(g){
       var on=(waSemanaPara===g.id);
+      var sinTel=!g.tel;
       return '<span style="display:inline-flex;align-items:center;background:'+(on?'#25d366':'var(--surface)')+
-             ';border:1px solid '+(on?'#25d366':'var(--border)')+';border-radius:5px;overflow:hidden">'+
-             '<button onclick="waSemanaPara_(\''+g.id+'\')" style="background:transparent;border:0;color:'+
-             (on?'#06301a':'var(--text2)')+';padding:3px 7px;cursor:pointer;font-size:.75rem">'+g.nombre+'</button>'+
-             '<button onclick="waGenteQuitar(\''+g.id+'\',event)" title="Quitarlo de la lista" '+
-             'style="background:transparent;border:0;color:'+(on?'#06301a':'#7a3a30')+
-             ';padding:3px 6px 3px 0;cursor:pointer;font-size:.7rem">&#10005;</button></span>';
+             ';border:1px '+(sinTel?'dashed':'solid')+' '+(on?'#25d366':'var(--border)')+
+             ';border-radius:5px;overflow:hidden">'+
+             '<button onclick="waElegir(\''+g.id+'\')" title="'+
+             (sinTel?'Ponle el telefono':'Mandarselo a '+g.nombre)+
+             '" style="background:transparent;border:0;color:'+
+             (on?'#06301a':(sinTel?'#7a7460':'var(--text2)'))+
+             ';padding:3px 7px;cursor:pointer;font-size:.75rem">'+g.nombre+(sinTel?' +tel':'')+'</button>'+
+             (sinTel?'':'<button onclick="waGenteQuitar(\''+g.id+'\',event)" title="'+
+               (g.personal?'Quitarle el telefono':'Quitarlo de la lista')+'" '+
+               'style="background:transparent;border:0;color:'+(on?'#06301a':'#7a3a30')+
+               ';padding:3px 6px 3px 0;cursor:pointer;font-size:.7rem">&#10005;</button>')+
+             '</span>';
     }).join('');
     var libre=(waSemanaPara==='');
     html += '<button onclick="waSemanaPara_(\'\')" style="background:'+(libre?'#25d366':'var(--surface)')+
             ';border:1px solid '+(libre?'#25d366':'var(--border)')+';color:'+(libre?'#06301a':'var(--text2)')+
             ';border-radius:5px;padding:3px 9px;cursor:pointer;font-size:.75rem">Elegir el chat</button>';
     html += '<button onclick="waNuevaGente()" style="background:transparent;border:1px dashed var(--border);'+
-            'color:var(--text2);border-radius:5px;padding:3px 9px;cursor:pointer;font-size:.75rem">+ Añadir</button>';
+            'color:var(--text2);border-radius:5px;padding:3px 9px;cursor:pointer;font-size:.75rem">+ Otro</button>';
     caja2.innerHTML = html;
   }
   var t=document.getElementById('wa-texto');
@@ -1422,7 +1493,8 @@ function pintarSemanaWA(){
 }
 function waSemanaEnviar(){
   var t=document.getElementById('wa-texto'); if (!t) return;
-  var quien=waGente.filter(function(g){ return g.id===waSemanaPara; })[0];
+  var quien=waDestinoDe(waSemanaPara);
+  if (quien && !quien.tel) quien = null;
   /* Con telefono se abre su chat directamente; sin el, WhatsApp pregunta
      a quien —que es lo que hace falta para mandarlo a un grupo, porque a
      los grupos no se llega por el numero. */
