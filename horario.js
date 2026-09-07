@@ -1281,7 +1281,9 @@ function telLimpio(t){ return String(t||'').replace(/[^0-9]/g,''); }
    de fuera que se apunten a mano. El telefono de cada persona vive con
    ella en Personal; el de los de fuera, en esta lista. */
 function waDestinos(){
-  var lista = staff().map(function(s){
+  /* Solo los que trabajan: visibleStaff() deja fuera a los que has
+     ocultado en el cuadrante, que son los que ya no estan. */
+  var lista = visibleStaff().map(function(s){
     return {id:s.id, nombre:s.name, tel:s.tel||'', personal:true};
   });
   return lista.concat(waGente.map(function(g){
