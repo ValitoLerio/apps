@@ -1249,6 +1249,127 @@ document.addEventListener('click', function(e){
 });
 
 // ================================================================
+// EL HORARIO DE LA SEMANA, PARA MANDARLO
+// ================================================================
+// De lunes a domingo, que es como se trabaja la semana aqui y como se
+// cuentan las horas en toda la app. Sale el mismo cuadrante que se ve en
+// pantalla, escrito en corto para que se lea en el movil: cada dia con
+// quien entra y a que hora, y al final las horas de cada uno. Se puede
+// mandar entero o el de una sola persona, para el que solo quiere saber
+// lo suyo.
+var waSemanaLunes = null;   // el lunes de la semana que se esta mirando
+var waSemanaQuien = '';     // '' = todos; si no, el id de la persona
+
+function lunesDeLaSemana(){
+  if (weekMode && weekStart) return new Date(weekStart);
+  return getMondayOf(new Date());
+}
+function diasDeLaSemana(lunes){
+  var lista=[];
+  for (var i=0;i<7;i++){ var d=new Date(lunes); d.setDate(d.getDate()+i); lista.push(d); }
+  return lista;
+}
+function celdaDeFecha(sid, fecha){
+  var sM=curM, sY=curY;
+  curM=fecha.getMonth(); curY=fecha.getFullYear();
+  var c=gc(sid, fecha.getDate());
+  curM=sM; curY=sY;
+  return c;
+}
+function dosCifras(n){ return (n<10?'0':'')+n; }
+function rangoSemana(lunes){
+  var d=diasDeLaSemana(lunes), a=d[0], z=d[6];
+  var m=['enero','febrero','marzo','abril','mayo','junio','julio','agosto',
+         'septiembre','octubre','noviembre','diciembre'];
+  return a.getMonth()===z.getMonth()
+    ? a.getDate()+' - '+z.getDate()+' de '+m[z.getMonth()]
+    : a.getDate()+' de '+m[a.getMonth()]+' - '+z.getDate()+' de '+m[z.getMonth()];
+}
+
+function textoSemana(lunes, sid){
+  var quien = sid ? staff().filter(function(s){ return s.id===sid; }) : visibleStaff();
+  var nombres = {festivo:'Festivo', vacaciones:'Vacaciones', baja:'Baja', ausencia:'Ausencia'};
+  var l = [];
+  l.push('*HORARIO ' + rangoSemana(lunes).toUpperCase() + '*');
+  if (sid && quien.length) l.push(quien[0].name);
+  l.push('');
+
+  var horas = {};
+  diasDeLaSemana(lunes).forEach(function(dd){
+    var lineas = [];
+    quien.forEach(function(s){
+      var c = celdaDeFecha(s.id, dd);
+      if (!c || !c.estado || c.estado==='libre') return;
+      var txt;
+      if (c.estado==='trabajo') {
+        txt = c.inicio ? (fmtH(c.inicio)+'-'+fmtH(c.fin) +
+                (esPartido(c) ? ' y '+fmtH(c.inicio2)+'-'+fmtH(c.fin2) : '')) : 'trabaja';
+        horas[s.id] = (horas[s.id]||0) + horasDeCelda(c);
+      } else {
+        txt = nombres[c.estado] || c.estado;
+      }
+      lineas.push('  ' + (sid ? '' : s.name + ': ') + txt + (c.nota ? ' ('+c.nota+')' : ''));
+    });
+    l.push('*'+DC_FULL[dd.getDay()].toUpperCase()+' '+dd.getDate()+'/'+dosCifras(dd.getMonth()+1)+'*');
+    l = l.concat(lineas.length ? lineas : ['  -']);
+    l.push('');
+  });
+
+  var conHoras = quien.filter(function(s){ return horas[s.id]; });
+  if (conHoras.length) {
+    l.push('*Horas de la semana*');
+    conHoras.forEach(function(s){
+      l.push('  '+(sid?'':s.name+': ')+(Math.round(horas[s.id]*10)/10)+'h');
+    });
+  }
+  return l.join('\n').trim();
+}
+
+function abrirSemanaWA(){
+  waSemanaLunes = lunesDeLaSemana();
+  waSemanaQuien = '';
+  pintarSemanaWA();
+  var ov=document.getElementById('waov'); if (ov) ov.classList.add('show');
+}
+function cerrarSemanaWA(){
+  var ov=document.getElementById('waov'); if (ov) ov.classList.remove('show');
+}
+function waSemanaMover(pasos){
+  waSemanaLunes.setDate(waSemanaLunes.getDate()+pasos*7);
+  pintarSemanaWA();
+}
+function waSemanaDe(sid){ waSemanaQuien=sid||''; pintarSemanaWA(); }
+function pintarSemanaWA(){
+  var r=document.getElementById('wa-rango');
+  if (r) r.textContent = rangoSemana(waSemanaLunes);
+  var caja=document.getElementById('wa-quien');
+  if (caja) {
+    var botones = [{id:'', name:'Todos'}].concat(visibleStaff());
+    caja.innerHTML = botones.map(function(s){
+      var on = (waSemanaQuien===s.id);
+      return '<button onclick="waSemanaDe(\''+s.id+'\')" style="background:'+(on?'#25d366':'var(--surface)')+
+             ';border:1px solid '+(on?'#25d366':'var(--border)')+';color:'+(on?'#06301a':'var(--text2)')+
+             ';border-radius:5px;padding:3px 9px;cursor:pointer;font-size:.75rem">'+s.name+'</button>';
+    }).join('');
+  }
+  var t=document.getElementById('wa-texto');
+  if (t) t.value = textoSemana(waSemanaLunes, waSemanaQuien);
+}
+function waSemanaEnviar(){
+  var t=document.getElementById('wa-texto'); if (!t) return;
+  window.open('https://wa.me/?text='+encodeURIComponent(t.value), '_blank');
+}
+function waSemanaCopiar(btn){
+  var t=document.getElementById('wa-texto'); if (!t) return;
+  t.select();
+  var ok=false;
+  try { ok=document.execCommand('copy'); } catch(e){ ok=false; }
+  if (!ok && navigator.clipboard) navigator.clipboard.writeText(t.value);
+  if (btn){ var v=btn.textContent; btn.textContent='Copiado'; setTimeout(function(){ btn.textContent=v; },1500); }
+  toast('Horario copiado');
+}
+
+// ================================================================
 // HIDE/SHOW
 // ================================================================
 function toggleHide(sid) {

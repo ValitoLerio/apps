@@ -159,6 +159,7 @@
   <button class="sb i" id="bi" onclick="setSeason('invierno')">&#10052;&#65039; Invierno</button>
   <button class="tbtn" style="border-color:#5b9bd5;color:#5b9bd5" onclick="openAddModal()">+ Personal</button>
   <button class="tbtn" id="bwk" style="border-color:#27ae60;color:#27ae60" onclick="toggleWeekMode()">&#128197; Vista semana</button>
+  <button class="tbtn" style="border-color:#25d366;color:#4ee383" onclick="abrirSemanaWA()" title="Mandar el horario de una semana">&#128241; WhatsApp</button>
   <button class="tbtn" style="border-color:var(--gold);color:var(--gold)" onclick="openTheme()">&#127912; Colores</button>
   <button class="tbtn" style="border-color:#27ae60;color:#6dbb85" onclick="exportarHorario()" title="Descargar una copia">&#11015;&#65039; Copia</button>
   <label class="tbtn" style="border-color:#27ae60;color:#6dbb85;display:inline-flex;align-items:center" title="Cargar una copia">&#11014;&#65039; Importar
@@ -178,6 +179,7 @@
   <span id="week-label" style="font-size:.84rem;color:#a0e0b0;font-weight:600;min-width:200px;text-align:center"></span>
   <button onclick="nextWeek()" style="background:transparent;border:1px solid #27ae60;color:#6dbb85;border-radius:5px;padding:4px 14px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.82rem">Siguiente &#9654;</button>
   <span style="font-size:.72rem;color:#4a8a60">&#183; <span id="wk-season"></span></span>
+  <button onclick="abrirSemanaWA()" style="background:transparent;border:1px solid #25d366;color:#4ee383;border-radius:5px;padding:4px 12px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.8rem">&#128241; Mandar por WhatsApp</button>
   <button onclick="toggleWeekMode()" style="margin-left:auto;background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:5px;padding:4px 10px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.75rem">&#10005; Salir</button>
 </div>
 
@@ -358,6 +360,26 @@
   </div>
 </div>
 
+<!-- MODAL WHATSAPP DE LA SEMANA -->
+<div class="ov" id="waov">
+  <div class="modal" style="max-width:460px;width:96vw">
+    <h3>Mandar el horario de la semana</h3>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <button onclick="waSemanaMover(-1)" style="background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:5px;padding:3px 9px;cursor:pointer">&#9664;</button>
+      <span id="wa-rango" style="flex:1;text-align:center;font-size:.86rem;color:#a0e0b0;font-weight:600"></span>
+      <button onclick="waSemanaMover(1)" style="background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:5px;padding:3px 9px;cursor:pointer">&#9654;</button>
+    </div>
+    <div style="font-size:.72rem;color:var(--text2);margin-bottom:5px">De quien:</div>
+    <div id="wa-quien" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px"></div>
+    <textarea id="wa-texto" readonly style="width:100%;min-height:230px;font-family:ui-monospace,Menlo,monospace;font-size:.76rem;line-height:1.45;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:9px;resize:vertical"></textarea>
+    <div class="mact">
+      <button class="bp" style="background:#25d366;border-color:#25d366;color:#06301a" onclick="waSemanaEnviar()">&#128241; Abrir WhatsApp</button>
+      <button class="bs" onclick="waSemanaCopiar(this)">Copiar</button>
+      <button class="bs" onclick="cerrarSemanaWA()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL COLORES -->
 <div class="ov" id="themeov">
   <div class="modal" style="max-width:500px;width:96vw">
@@ -418,7 +440,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609061800';
+    s.src = 'horario.js?v=202609071900';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
