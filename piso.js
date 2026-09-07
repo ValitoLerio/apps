@@ -288,7 +288,7 @@ function initRecibo(){
   const cuotaEl=document.getElementById('cuota-display');
   if(cuotaEl) cuotaEl.textContent=fmt(cfg.cuota||0)+' €';
   ['cal','agua'].forEach(k=>{
-    document.getElementById('p-'+k).textContent=cfg[k]||0;
+    document.getElementById('p-'+k).value=cfg[k]||0;
     const ultimos=[...meses].filter(m=>m[k+'_act']!=null&&m[k+'_act']!==''&&m[k+'_act']!==0)
                              .sort((a,b)=>b.mes.localeCompare(a.mes));
     const last=ultimos[0];
@@ -298,7 +298,7 @@ function initRecibo(){
     document.getElementById(k+'-preu').value=preuCfg||(last?last[k+'_preu']:'')||'';
     set(k+'-cons','');set('r-'+k,'');set(k+'-cob','');
   });
-  document.getElementById('p-elec').textContent=cfg.elec||0;
+  document.getElementById('p-elec').value=cfg.elec||0;
   document.getElementById('elec-directo').value=cfg.elecPreu||'';
   set('elec-cob','');
 
@@ -317,6 +317,26 @@ function initRecibo(){
   }
   calcular();
 }
+/* El margen de cada suministro sale del propio recibo, no de
+   Configuracion. En los años de atras no era el mismo cada mes —la luz
+   al 10%, la calefaccion al 20, 30 o 50— y sin poder escribirlo aqui no
+   habia forma de meter el historico. Lo de Configuracion es solo lo que
+   viene puesto al empezar un recibo nuevo. */
+function pctRecibo(k){
+  const el=document.getElementById('p-'+k);
+  if(!el) return cfg[k]||0;
+  const v=parseFloat(String(el.value).replace(',','.'));
+  return isFinite(v)?v:(cfg[k]||0);
+}
+/* El margen con el que se emitio un recibo: el guardado, y si es de los
+   de antes, el que se deduce de lo que costo y lo que se cobro. */
+function pctGuardado(m,k){
+  if(!m) return cfg[k]||0;
+  if(m[k+'_pct']!=null) return m[k+'_pct'];
+  const real=m[k+'_con']||0, cob=m[k+'_cob']||0;
+  return real>0 ? Math.round((cob/real-1)*1000)/10 : (cfg[k]||0);
+}
+
 function calcular(){
   const alq=n('r-alq');
 
@@ -325,7 +345,7 @@ function calcular(){
     const ant=n(pref+'-ant'), act=n(pref+'-act'), preu=n(pref+'-preu');
     const cons=Math.max(0, act-ant);
     const costeReal=cons*preu;
-    const costeCob=costeReal*(1+(cfg[pctKey]||0)/100);
+    const costeCob=costeReal*(1+pctRecibo(pctKey)/100);
     set(pref+'-cons', cons%1===0?cons.toFixed(0):cons.toFixed(3));
     set('r-'+pref, fmt(costeReal)+' €');
     set(pref+'-cob', fmt(costeCob)+' €');
@@ -335,7 +355,7 @@ function calcular(){
   // Electricidad: precio directo
   function suministroDirecto(pctKey){
     const costeReal=n('elec-directo');
-    const costeCob=costeReal*(1+(cfg[pctKey]||0)/100);
+    const costeCob=costeReal*(1+pctRecibo(pctKey)/100);
     set('elec-cob', fmt(costeCob)+' €');
     return {costeReal,costeCob,modo:'directo'};
   }
@@ -489,21 +509,25 @@ function guardarRecibo(){
     const ant=n(pref+'-ant'),act=n(pref+'-act'),preu=n(pref+'-preu');
     const cons=Math.max(0,act-ant);
     const costeReal=cons*preu;
-    const costeCob=costeReal*(1+(cfg[pctKey]||0)/100);
-    return {ant,act,preu,cons,con:costeReal,cob:costeCob};
+    const pct=pctRecibo(pctKey);
+    const costeCob=costeReal*(1+pct/100);
+    return {ant,act,preu,cons,con:costeReal,cob:costeCob,pct:pct};
   }
   const cal=getLect('cal','cal');
   const agua=getLect('agua','agua');
   const elecDir=n('elec-directo');
-  const elecCob=elecDir*(1+(cfg.elec||0)/100);
+  const elecPct=pctRecibo('elec');
+  const elecCob=elecDir*(1+elecPct/100);
   const totalConsumo=cal.cob+agua.cob+elecCob;
   const liquidacion=cuota-totalConsumo;
   const total=alq+cuota;
 
+  /* El margen se guarda con el recibo: asi un mes de 2024 conserva el
+     suyo aunque el de Configuracion cambie manana. */
   const rec={mes,alq,cuota,saldo_ant:saldoAnt,saldo_manual:!!manual,liquidacion,
-    cal_ant:cal.ant,cal_act:cal.act,cal_preu:cal.preu,cal_cons:cal.cons,cal_con:cal.con,cal_cob:cal.cob,
-    agua_ant:agua.ant,agua_act:agua.act,agua_preu:agua.preu,agua_cons:agua.cons,agua_con:agua.con,agua_cob:agua.cob,
-    elec_directo:elecDir,elec_con:elecDir,elec_cob:elecCob,
+    cal_ant:cal.ant,cal_act:cal.act,cal_preu:cal.preu,cal_cons:cal.cons,cal_con:cal.con,cal_cob:cal.cob,cal_pct:cal.pct,
+    agua_ant:agua.ant,agua_act:agua.act,agua_preu:agua.preu,agua_cons:agua.cons,agua_con:agua.con,agua_cob:agua.cob,agua_pct:agua.pct,
+    elec_directo:elecDir,elec_con:elecDir,elec_cob:elecCob,elec_pct:elecPct,
     total};
 
   const idx=meses.findIndex(m=>m.mes===mes);
@@ -687,7 +711,7 @@ function editarRecibo(mes){
   actualizarDisplaySaldo(saldoAnt);
 
   // Márgenes
-  ['cal','agua','elec'].forEach(k=>document.getElementById('p-'+k).textContent=cfg[k]||0);
+  ['cal','agua','elec'].forEach(k=>document.getElementById('p-'+k).value=pctGuardado(m,k));
   document.getElementById('cuota-mes-display').textContent='+ '+fmt(cfg.cuota||0)+' €';
   document.getElementById('saldo-origen').textContent='Saldo del recibo guardado (editable)';
 

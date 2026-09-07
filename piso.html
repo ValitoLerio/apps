@@ -135,13 +135,13 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
             Se registra automáticamente y aparece en el recibo del inquilino
           </div>
         </div>
-        <div class="info-box">⚠️ El incremento configurado se aplica sobre el coste real y <strong>no aparece en el recibo</strong> del inquilino.</div>
+        <div class="info-box">⚠️ El margen se aplica sobre el coste real y <strong>no aparece en el recibo</strong> del inquilino. Viene puesto el de Configuración, pero se puede cambiar en cada recibo: los meses de atrás no siempre llevaban el mismo.</div>
 
         <!-- CALEFACCIÓN -->
         <div class="supply-section">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
             <span>🔥 Calefacción</span>
-            <span style="font-size:11px;color:var(--muted);font-weight:400">margen: +<span id="p-cal">0</span>%</span>
+            <span style="font-size:11px;color:var(--muted);font-weight:400">margen: +<input type="number" id="p-cal" step="0.1" min="0" value="0" oninput="calcular()" style="width:56px;padding:2px 5px;font-size:11px;text-align:right;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:inherit">%</span>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
             <div class="form-group"><label>Lectura anterior</label><input type="number" id="cal-ant" step="0.001" placeholder="0" oninput="calcular()"></div>
@@ -159,7 +159,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
         <div class="supply-section">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
             <span>💧 Agua caliente</span>
-            <span style="font-size:11px;color:var(--muted);font-weight:400">margen: +<span id="p-agua">0</span>%</span>
+            <span style="font-size:11px;color:var(--muted);font-weight:400">margen: +<input type="number" id="p-agua" step="0.1" min="0" value="0" oninput="calcular()" style="width:56px;padding:2px 5px;font-size:11px;text-align:right;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:inherit">%</span>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
             <div class="form-group"><label>Lectura anterior</label><input type="number" id="agua-ant" step="0.001" placeholder="0" oninput="calcular()"></div>
@@ -177,7 +177,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
         <div class="supply-section">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
             <span>⚡ Electricidad</span>
-            <span style="font-size:11px;color:var(--muted);font-weight:400">margen: +<span id="p-elec">0</span>%</span>
+            <span style="font-size:11px;color:var(--muted);font-weight:400">margen: +<input type="number" id="p-elec" step="0.1" min="0" value="0" oninput="calcular()" style="width:56px;padding:2px 5px;font-size:11px;text-align:right;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:inherit">%</span>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div class="form-group">
@@ -473,7 +473,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
 
   Sync.iniciar('piso').then(function(){
     var s = document.createElement('script');
-    s.src = 'piso.js?v=202609020903';
+    s.src = 'piso.js?v=202609071000';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
