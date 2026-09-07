@@ -1259,6 +1259,22 @@ document.addEventListener('click', function(e){
 // lo suyo.
 var waSemanaLunes = null;   // el lunes de la semana que se esta mirando
 var waSemanaQuien = '';     // '' = todos; si no, el id de la persona
+var waSemanaPara  = '';     // a quien se le manda; '' = elegir el chat a mano
+/* La agenda de a quien se le manda el horario: nombre y telefono, tantos
+   como quiera. Va aparte del personal porque no siempre coinciden —el
+   cuadrante se le manda tambien a quien no sale en el—, y viaja a GitHub
+   con el resto del horario. */
+var waGente = [];
+function cargarWaGente(){
+  try { waGente = JSON.parse(localStorage.getItem('rwa')) || []; }
+  catch(e){ waGente = []; }
+  if (!Array.isArray(waGente)) waGente = [];
+}
+function guardarWaGente(){
+  try { localStorage.setItem('rwa', JSON.stringify(waGente)); } catch(e){}
+}
+/* WhatsApp quiere el numero sin mas: sin +, ni espacios, ni guiones. */
+function telLimpio(t){ return String(t||'').replace(/[^0-9]/g,''); }
 
 function lunesDeLaSemana(){
   if (weekMode && weekStart) return new Date(weekStart);
@@ -1326,6 +1342,7 @@ function textoSemana(lunes, sid){
 }
 
 function abrirSemanaWA(){
+  cargarWaGente();
   waSemanaLunes = lunesDeLaSemana();
   waSemanaQuien = '';
   pintarSemanaWA();
@@ -1339,6 +1356,34 @@ function waSemanaMover(pasos){
   pintarSemanaWA();
 }
 function waSemanaDe(sid){ waSemanaQuien=sid||''; pintarSemanaWA(); }
+function waSemanaPara_(id){ waSemanaPara=id||''; pintarSemanaWA(); }
+function waNuevaGente(){
+  var c=document.getElementById('wa-nueva');
+  if (c) c.style.display = c.style.display==='flex' ? 'none' : 'flex';
+  var n=document.getElementById('wa-nombre'); if (n) n.focus();
+}
+function waGenteGuardar(){
+  var n=document.getElementById('wa-nombre'), t=document.getElementById('wa-tel');
+  var nombre=(n&&n.value||'').trim(), tel=telLimpio(t&&t.value);
+  if (!nombre) { toast('Ponle un nombre'); return; }
+  if (!tel)    { toast('Pon el telefono con el pais: +376...'); return; }
+  waGente.push({id:'w_'+Date.now(), nombre:nombre, tel:tel});
+  guardarWaGente();
+  if (n) n.value=''; if (t) t.value='';
+  var c=document.getElementById('wa-nueva'); if (c) c.style.display='none';
+  waSemanaPara = waGente[waGente.length-1].id;
+  pintarSemanaWA();
+  toast(nombre+' añadido');
+}
+function waGenteQuitar(id, ev){
+  if (ev) ev.stopPropagation();
+  var q=waGente.filter(function(g){ return g.id===id; })[0];
+  if (!q) return;
+  if (!confirm('Quitar a '+q.nombre+' de la lista?')) return;
+  waGente = waGente.filter(function(g){ return g.id!==id; });
+  if (waSemanaPara===id) waSemanaPara='';
+  guardarWaGente(); pintarSemanaWA();
+}
 function pintarSemanaWA(){
   var r=document.getElementById('wa-rango');
   if (r) r.textContent = rangoSemana(waSemanaLunes);
@@ -1352,12 +1397,38 @@ function pintarSemanaWA(){
              ';border-radius:5px;padding:3px 9px;cursor:pointer;font-size:.75rem">'+s.name+'</button>';
     }).join('');
   }
+  var caja2=document.getElementById('wa-gente');
+  if (caja2) {
+    var html = waGente.map(function(g){
+      var on=(waSemanaPara===g.id);
+      return '<span style="display:inline-flex;align-items:center;background:'+(on?'#25d366':'var(--surface)')+
+             ';border:1px solid '+(on?'#25d366':'var(--border)')+';border-radius:5px;overflow:hidden">'+
+             '<button onclick="waSemanaPara_(\''+g.id+'\')" style="background:transparent;border:0;color:'+
+             (on?'#06301a':'var(--text2)')+';padding:3px 7px;cursor:pointer;font-size:.75rem">'+g.nombre+'</button>'+
+             '<button onclick="waGenteQuitar(\''+g.id+'\',event)" title="Quitarlo de la lista" '+
+             'style="background:transparent;border:0;color:'+(on?'#06301a':'#7a3a30')+
+             ';padding:3px 6px 3px 0;cursor:pointer;font-size:.7rem">&#10005;</button></span>';
+    }).join('');
+    var libre=(waSemanaPara==='');
+    html += '<button onclick="waSemanaPara_(\'\')" style="background:'+(libre?'#25d366':'var(--surface)')+
+            ';border:1px solid '+(libre?'#25d366':'var(--border)')+';color:'+(libre?'#06301a':'var(--text2)')+
+            ';border-radius:5px;padding:3px 9px;cursor:pointer;font-size:.75rem">Elegir el chat</button>';
+    html += '<button onclick="waNuevaGente()" style="background:transparent;border:1px dashed var(--border);'+
+            'color:var(--text2);border-radius:5px;padding:3px 9px;cursor:pointer;font-size:.75rem">+ Añadir</button>';
+    caja2.innerHTML = html;
+  }
   var t=document.getElementById('wa-texto');
   if (t) t.value = textoSemana(waSemanaLunes, waSemanaQuien);
 }
 function waSemanaEnviar(){
   var t=document.getElementById('wa-texto'); if (!t) return;
-  window.open('https://wa.me/?text='+encodeURIComponent(t.value), '_blank');
+  var quien=waGente.filter(function(g){ return g.id===waSemanaPara; })[0];
+  /* Con telefono se abre su chat directamente; sin el, WhatsApp pregunta
+     a quien —que es lo que hace falta para mandarlo a un grupo, porque a
+     los grupos no se llega por el numero. */
+  var url = quien ? 'https://wa.me/'+telLimpio(quien.tel)+'?text='+encodeURIComponent(t.value)
+                  : 'https://wa.me/?text='+encodeURIComponent(t.value);
+  window.open(url, '_blank');
 }
 function waSemanaCopiar(btn){
   var t=document.getElementById('wa-texto'); if (!t) return;

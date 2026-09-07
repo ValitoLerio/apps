@@ -371,6 +371,13 @@
     </div>
     <div style="font-size:.72rem;color:var(--text2);margin-bottom:5px">De quien:</div>
     <div id="wa-quien" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px"></div>
+    <div style="font-size:.72rem;color:var(--text2);margin-bottom:5px">A quien se lo mando:</div>
+    <div id="wa-gente" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px"></div>
+    <div id="wa-nueva" style="display:none;gap:6px;margin-bottom:10px">
+      <input type="text" id="wa-nombre" placeholder="Nombre" style="flex:1;margin-bottom:0;font-size:.8rem">
+      <input type="tel" id="wa-tel" placeholder="+376 300 000" style="width:130px;margin-bottom:0;font-size:.8rem">
+      <button onclick="waGenteGuardar()" style="background:#25d366;border:1px solid #25d366;color:#06301a;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:.75rem">Guardar</button>
+    </div>
     <textarea id="wa-texto" readonly style="width:100%;min-height:230px;font-family:ui-monospace,Menlo,monospace;font-size:.76rem;line-height:1.45;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:9px;resize:vertical"></textarea>
     <div class="mact">
       <button class="bp" style="background:#25d366;border-color:#25d366;color:#06301a" onclick="waSemanaEnviar()">&#128241; Abrir WhatsApp</button>
@@ -432,7 +439,7 @@
 
 
 
-<script src="sync.js?v=202609050857"></script>
+<script src="sync.js?v=202609072000"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -440,7 +447,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609071900';
+    s.src = 'horario.js?v=202609072000';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
