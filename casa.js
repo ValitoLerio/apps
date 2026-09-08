@@ -156,6 +156,9 @@ function pendienteMedico(v){
      a los papeles para quedar a cero: que lo ponga la CASS o el seguro
      da igual, el dinero es el mismo. Sin lista, lo de siempre: lo que no
      cubre nadie más lo que prometieron y pagaron corto. */
+  /* Con recibos escritos, lo que falta es lo que suman los que aún no
+     te han pagado. */
+  if(Array.isArray(v.recibos) && v.recibos.length) return faltaRecibos(v);
   if(llevaRecibos(v)){
     return r2(papelesDeLaVisita(v).reduce(function(t,p){
       return t+Math.max(0, r2(p.pagado-cobradoDelPapel(v, p.clave)));
@@ -268,6 +271,8 @@ function cobroDe(v, quien){
 /* Todo cobrado es: de los dos, los que tenian algo que devolver estan
    marcados. Si ninguno devuelve nada, no hay nada que esperar. */
 function todoCobrado(v){
+  if(Array.isArray(v.recibos) && v.recibos.length)
+    return faltaRecibos(v)<=0.004;
   /* Con la lista, cobrado es que no quede ningún papel por saldar. */
   if(llevaRecibos(v))
     return papelesDeLaVisita(v).length>0 && papelesSinSaldar(v).length===0;
@@ -1458,41 +1463,66 @@ function pintarCompras(){
 /* ══════════════════════════════════════════════════════════════
    MÉDICO
    ══════════════════════════════════════════════════════════════ */
-/* La fila de los recibos de una visita: una casilla por papel, con lo
-   que costó, y al final lo que llevas marcado. Se pinta pegada a su
-   visita y se toca sin abrir nada. */
+/* Los recibos de una visita, escritos a mano: número, importe y si te lo
+   han pagado. Se escriben en la propia pantalla, tantos como traiga la
+   farmacia, y la cuenta va sola hasta que paguen lo que es. Las visitas
+   de antes empiezan con lo que ya tenían apuntado: el recibo de la
+   consulta y los tiques. */
+function recibosDe(v){
+  if(v && Array.isArray(v.recibos)) return v.recibos;
+  var l=[];
+  if((+v.consulta||0)>0.004)
+    l.push({n:v.recibo||"Consulta", imp:r2(+v.consulta||0), pagado:papelTachado(v,"consulta")});
+  tiquesDe(v).forEach(function(t,i){
+    l.push({n:t.n||("Tique "+(i+1)), imp:r2(+t.imp||0), pagado:papelTachado(v, t.n||("tique"+(i+1)))});
+  });
+  if(!tiquesDe(v).length && (+v.medicinas||0)>0.004)
+    l.push({n:"Farmacia", imp:r2(+v.medicinas||0), pagado:papelTachado(v,"farmacia")});
+  return l;
+}
+function sumaRecibos(v){
+  return r2(recibosDe(v).reduce(function(t,r){ return t+(+r.imp||0); }, 0));
+}
+function cobradoRecibos(v){
+  return r2(recibosDe(v).filter(function(r){ return r.pagado; })
+            .reduce(function(t,r){ return t+(+r.imp||0); }, 0));
+}
+function faltaRecibos(v){ return r2(sumaRecibos(v)-cobradoRecibos(v)); }
+
+/* La fila de los recibos, pegada a su visita: se escribe ahí mismo. */
 function filaDeRecibos(v){
-  var papeles=papelesDeLaVisita(v);
-  if(!papeles.length) return "";
-  var total=r2(papeles.reduce(function(t,p){ return t+p.pagado; }, 0));
-  var puesto=0;
-  var trozos=papeles.map(function(p){
-    var cob=cobradoDelPapel(v, p.clave);
-    var saldado=r2(p.pagado-cob)<=0.004;
-    if(saldado) puesto=r2(puesto+p.pagado);
-    /* Los cobros sueltos mandan sobre la casilla: si de ese papel hay
-       un importe apuntado, aqui no se toca. */
-    var suelto=cobrosDe(v).some(function(c){ return c.papel===p.clave; });
-    return '<label class="marca-check" style="margin:0;gap:6px;padding:3px 9px;border-radius:20px;'+
-      'border:1px solid '+(saldado?"var(--ok)":"var(--linea)")+';background:'+
-      (saldado?"var(--ok-suave)":"var(--sup)")+';font-size:12px;white-space:nowrap">'+
-      '<input type="checkbox"'+(saldado?" checked":"")+(suelto?" disabled":"")+
-      ' data-tacha="'+esc(v.id)+'|'+esc(p.clave)+'"'+
-      (suelto?' title="Este tiene cobros sueltos apuntados: se toca en la ficha"':"")+'>'+
-      '<span>'+esc(p.etiqueta)+' <strong>'+eur(p.pagado)+'</strong></span></label>';
+  var l=recibosDe(v);
+  var falta=faltaRecibos(v), total=sumaRecibos(v), puesto=cobradoRecibos(v);
+  var filas=l.map(function(r, i){
+    var pagado=!!r.pagado;
+    return '<div style="display:flex;gap:5px;align-items:center;padding:3px 8px;border-radius:20px;'+
+      'border:1px solid '+(pagado?"var(--ok)":"var(--linea)")+';background:'+
+      (pagado?"var(--ok-suave)":"var(--sup)")+'">'+
+      '<input class="rec-n mono" data-rec="'+esc(v.id)+'|'+i+'|n" value="'+esc(r.n||"")+'" '+
+      'placeholder="Nº recibo" style="width:110px;padding:2px 6px;font-size:12px">'+
+      '<input class="rec-imp num" type="number" min="0" step="0.01" data-rec="'+esc(v.id)+'|'+i+'|imp" '+
+      'value="'+esc(r.imp||"")+'" placeholder="0,00" style="width:78px;padding:2px 6px;font-size:12px">'+
+      '<label class="marca-check" style="margin:0;gap:4px;font-size:11.5px;white-space:nowrap">'+
+        '<input type="checkbox" data-rec="'+esc(v.id)+'|'+i+'|pagado"'+(pagado?" checked":"")+'>'+
+        '<span>pagado</span></label>'+
+      '<button class="btn suave sm malo" data-recdel="'+esc(v.id)+'|'+i+'" title="Quitar este recibo" '+
+      'style="padding:0 5px">✕</button>'+
+      '</div>';
   }).join("");
-  var falta=r2(total-puesto);
   return '<tr class="fila-recibos"><td colspan="12" style="padding:6px 10px 12px;'+
     'border-bottom:1px solid var(--linea)">'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+
       '<span style="font-size:11px;color:var(--muted);text-transform:uppercase;'+
       'letter-spacing:.07em;margin-right:2px">Recibos</span>'+
-      trozos+
-      '<span style="font-size:12px;color:'+(falta>0.004?"var(--muted)":"var(--ok)")+';margin-left:6px">'+
-      (falta>0.004
-        ? 'marcados '+eur(puesto)+' de '+eur(total)+' · faltan <strong>'+eur(falta)+'</strong>'
-        : 'todo cobrado ✓')+
-      '</span>'+
+      filas+
+      '<button class="btn suave sm" data-recmas="'+esc(v.id)+'" style="padding:2px 9px">+ Recibo</button>'+
+      (l.length
+        ? '<span style="font-size:12px;color:'+(falta>0.004?"var(--muted)":"var(--ok)")+';margin-left:6px">'+
+          (falta>0.004
+            ? 'pagados '+eur(puesto)+' de '+eur(total)+' · faltan <strong>'+eur(falta)+'</strong>'
+            : 'todo pagado ✓')+'</span>'
+        : '<span style="font-size:12px;color:var(--muted);margin-left:6px">Escribe aquí cada recibo '+
+          'con su importe y márcalo cuando te lo paguen.</span>')+
     '</div></td></tr>';
 }
 
@@ -1571,6 +1601,13 @@ function verMedico(main){
           /* Con los cobros apuntados uno a uno, lo que dice algo es
              cuántos papeles siguen sin quedar a cero. */
           (function(){
+            /* Con los recibos escritos, lo que dice algo es cuántos van
+               pagados de los que hay. */
+            if(Array.isArray(v.recibos) && v.recibos.length){
+              var pag=v.recibos.filter(function(r){ return r.pagado; }).length;
+              return '<div style="color:var(--muted);font-size:11px;font-weight:400">'+
+                     pag+' de '+v.recibos.length+' recibos pagados</div>';
+            }
             var sin=papelesSinSaldar(v);
             if(llevaRecibos(v))
               return '<div style="color:var(--muted);font-size:11px;font-weight:400">'+
@@ -1599,21 +1636,54 @@ function verMedico(main){
         filaDeRecibos(v);
     }).join("")+"</tbody></table>";
 
-  /* Marcar un recibo desde la tabla: se guarda en el acto. */
-  caja.querySelectorAll("[data-tacha]").forEach(function(x){
-    x.addEventListener("change", function(){
-      var partes=x.getAttribute("data-tacha").split("|");
-      var v=(libro.medico||[]).filter(function(y){ return y.id===partes[0]; })[0];
-      if(!v) return;
-      var l=papelesCobrados(v).slice();
-      if(x.checked){ if(l.indexOf(partes[1])<0) l.push(partes[1]); }
-      else l=l.filter(function(k){ return k!==partes[1]; });
-      v.papelesCobrados=l;
-      v.cobrado=todoCobrado(v);
-      guardar(); pintar();
-      avisar(x.checked?"Recibo marcado como cobrado":"Recibo otra vez pendiente");
+  /* Escribir los recibos en la propia tabla: número, importe y el visto
+     de pagado. Se guarda al salir de la casilla, sin abrir nada. */
+  function visitaDe(id){ return (libro.medico||[]).filter(function(y){ return y.id===id; })[0]; }
+  function fijarRecibos(v, l){
+    v.recibos=l;
+    v.cobrado=todoCobrado(v);
+    guardar();
+  }
+  caja.querySelectorAll("[data-rec]").forEach(function(x){
+    var evento=(x.type==="checkbox")?"change":"change";
+    x.addEventListener(evento, function(){
+      var p=x.getAttribute("data-rec").split("|");
+      var v=visitaDe(p[0]); if(!v) return;
+      var l=recibosDe(v).slice().map(function(r){ return {n:r.n, imp:r.imp, pagado:!!r.pagado}; });
+      var i=+p[1]; if(!l[i]) return;
+      if(p[2]==="n")          l[i].n=x.value.trim();
+      else if(p[2]==="imp")   l[i].imp=r2(+x.value||0);
+      else                    l[i].pagado=x.checked;
+      fijarRecibos(v, l);
+      pintar();
     });
   });
+  caja.querySelectorAll("[data-recmas]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var v=visitaDe(b.getAttribute("data-recmas")); if(!v) return;
+      var l=recibosDe(v).slice().map(function(r){ return {n:r.n, imp:r.imp, pagado:!!r.pagado}; });
+      l.push({n:"", imp:"", pagado:false});
+      ui.recFoco=v.id+"|"+(l.length-1);
+      fijarRecibos(v, l);
+      pintar();
+    });
+  });
+  caja.querySelectorAll("[data-recdel]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var p=b.getAttribute("data-recdel").split("|");
+      var v=visitaDe(p[0]); if(!v) return;
+      var l=recibosDe(v).slice().map(function(r){ return {n:r.n, imp:r.imp, pagado:!!r.pagado}; });
+      l.splice(+p[1], 1);
+      fijarRecibos(v, l);
+      pintar();
+    });
+  });
+  /* El recibo recién añadido se queda con el cursor dentro. */
+  if(ui.recFoco){
+    var foco=caja.querySelector('[data-rec="'+ui.recFoco+'|n"]');
+    ui.recFoco=null;
+    if(foco) foco.focus();
+  }
   caja.querySelectorAll("[data-medit]").forEach(function(b){
     b.addEventListener("click", function(){ editarVisita(b.getAttribute("data-medit")); });
   });
