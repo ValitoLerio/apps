@@ -970,15 +970,21 @@ function pintarComparador(){
     html+="<tr><td><strong>"+esc(p.nombre)+"</strong>"+
           (p.marca?' <span style="color:var(--muted);font-size:12px">'+esc(p.marca)+'</span>':"")+
           (p.formato?'<br><span style="color:var(--muted);font-size:12px">'+esc(p.formato)+'</span>':"")+
+          (unidadesDe(p)?' <span style="color:var(--muted);font-size:12px">· '+unidadesDe(p)+' uds</span>':"")+
           "</td>";
     supers.forEach(function(s,i){
       var v=valores[i];
       var esMin=(v!=null && minimo!=null && Math.abs(v-minimo)<0.001 && conPrecio.length>1);
+      var porUd=precioUnidad(p, v);
       html+='<td class="num'+(esMin?' mejor':'')+'" style="cursor:pointer" '+
             'data-precio="'+p.id+'|'+s.id+'" title="Pulsa para poner el precio">'+
-            (v!=null?eur(v):'<span class="precio-vacio">—</span>')+"</td>";
+            (v!=null?eur(v):'<span class="precio-vacio">—</span>')+
+            (porUd!=null?'<div style="font-size:11px;color:var(--muted);font-weight:400">'+
+              esc(eurUnidad(porUd))+'</div>':"")+"</td>";
     });
-    html+='<td class="num">'+(minimo!=null?'<span class="chapa ok">'+eur(minimo)+'</span>':'<span class="precio-vacio">—</span>')+"</td>"+
+    var minUd=precioUnidad(p, minimo);
+    html+='<td class="num">'+(minimo!=null?'<span class="chapa ok">'+eur(minimo)+'</span>':'<span class="precio-vacio">—</span>')+
+          (minUd!=null?'<div style="font-size:11px;color:var(--muted)">'+esc(eurUnidad(minUd))+'</div>':"")+"</td>"+
           '<td><div class="acciones-fila">'+
           '<button class="btn suave sm" data-pedit="'+p.id+'">Editar</button>'+
           '<button class="btn suave sm malo" data-pdel="'+p.id+'">Borrar</button></div></td></tr>';
@@ -1008,6 +1014,7 @@ function pintarComparador(){
 
 function editarPrecio(productoId, superId){
   var actual=precioDe(productoId, superId);
+  var prod=(libro.productos||[]).filter(function(x){ return x.id===productoId; })[0];
 
   var d=abrirVentana("Precio de "+nombreProducto(productoId),
     '<p class="nota">En <strong>'+esc(nombreSuper(superId))+'</strong>'+
@@ -1015,6 +1022,7 @@ function editarPrecio(productoId, superId){
     '<div class="campo"><label class="lbl" for="pr_val">Precio (€)</label>'+
     '<input type="number" id="pr_val" min="0" step="0.01" value="'+
     (actual?esc(actual.precio):"")+'" placeholder="0,00"></div>'+
+    (unidadesDe(prod)?'<p class="nota" id="pr_ud" style="margin:8px 0 0"></p>':"")+
     '<p class="nota" style="margin:12px 0 0">Para quitarlo, deja el hueco vacío o pon 0: '+
     'el producto se queda, sólo desaparece su precio en '+esc(nombreSuper(superId))+'. '+
     'Un precio de 0 € no se guarda como tal a propósito, porque saldría el más barato '+
@@ -1035,6 +1043,21 @@ function editarPrecio(productoId, superId){
     {extra: actual
       ? '<button class="btn malo" id="pr_quitar">Quitar el precio</button>'
       : ""});
+
+  /* Mientras escribes el precio del envase, debajo va saliendo lo que
+     cuesta cada unidad. */
+  var cajaUd=document.getElementById("pr_ud");
+  if(cajaUd){
+    var campo=document.getElementById("pr_val");
+    var decir=function(){
+      var porUd=precioUnidad(prod, numero("pr_val"));
+      cajaUd.innerHTML = porUd!=null
+        ? 'Trae '+unidadesDe(prod)+' unidades: sale a <strong>'+esc(eurUnidad(porUd))+'</strong>.'
+        : 'Trae '+unidadesDe(prod)+' unidades.';
+    };
+    campo.addEventListener("input", decir);
+    decir();
+  }
 
   var quitar=document.getElementById("pr_quitar");
   if(quitar) quitar.addEventListener("click", function(){
@@ -1089,9 +1112,29 @@ function borrarSuper(id){
     }, {aceptar:"Borrar", malo:true});
 }
 
+/* Un pack de 6 y una botella suelta no se pueden comparar por lo que
+   marca la etiqueta. Si el producto dice cuantas unidades trae, el
+   precio por unidad sale solo y es el que de verdad dice donde sale mas
+   barato. Sin unidades apuntadas, todo sigue como antes. */
+function unidadesDe(p){
+  var n = p ? Math.round(+p.unidades||0) : 0;
+  return n > 1 ? n : 0;
+}
+function precioUnidad(p, precio){
+  var n = unidadesDe(p);
+  return (n && precio > 0) ? precio / n : null;
+}
+/* Con precios de céntimos, dos decimales se quedan cortos: un pack de 12
+   a 9,99 sale a 0,8325 la unidad y redondeando a 0,83 dos marcas empatan
+   sin empatar. */
+function eurUnidad(v){
+  return v == null ? "" : (Math.round(v*10000)/10000).toLocaleString("es-ES",
+    {minimumFractionDigits:2, maximumFractionDigits:4})+" €/ud";
+}
+
 function editarProducto(id){
   var p=id?(libro.productos||[]).filter(function(x){return x.id===id;})[0]
-          :{id:uid(), nombre:"", marca:"", formato:""};
+          :{id:uid(), nombre:"", marca:"", formato:"", unidades:""};
   /* Las marcas que ya haya escrito, para no volver a teclearlas */
   var marcas={};
   (libro.productos||[]).forEach(function(x){ if(x.marca) marcas[x.marca]=1; });
@@ -1108,14 +1151,21 @@ function editarProducto(id){
         '</datalist></div>'+
       '<div class="campo"><label class="lbl" for="p_form">Formato</label>'+
         '<input id="p_form" value="'+esc(p.formato||"")+'" placeholder="1 L, pack de 6…"></div>'+
+      '<div class="campo"><label class="lbl" for="p_uds">Unidades que trae</label>'+
+        '<input type="number" id="p_uds" min="1" step="1" value="'+
+        (unidadesDe(p)?esc(unidadesDe(p)):"")+'" placeholder="6"></div>'+
     '</div>'+
     '<p class="nota" style="margin-top:12px">La marca y el formato son lo que hace justa la '+
     'comparación: un litro de la misma marca contra un litro de la misma marca. '+
-    'Si comparas marcas distintas del mismo producto, dales de alta por separado.</p>',
+    'Si comparas marcas distintas del mismo producto, dales de alta por separado.</p>'+
+    '<p class="nota" style="margin-top:8px">Si el envase trae varias —seis briks, doce rollos—, '+
+    'ponlo en <strong>unidades</strong> y debajo de cada precio verás lo que sale la unidad. '+
+    'Déjalo vacío cuando el envase sea uno solo.</p>',
     function(){
       var n=valor("p_nom");
       if(!n){ avisar("Ponle nombre al producto.", true); return true; }
       p.nombre=n; p.marca=valor("p_marca"); p.formato=valor("p_form");
+      p.unidades=Math.max(0, Math.round(numero("p_uds")))||"";
       if(!id) libro.productos.push(p);
       guardar(); pintar(); avisar(id?"Producto actualizado":"Producto añadido");
     });
