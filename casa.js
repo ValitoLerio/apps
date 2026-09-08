@@ -158,7 +158,7 @@ function pendienteMedico(v){
      cubre nadie más lo que prometieron y pagaron corto. */
   /* Con recibos escritos, lo que falta es lo que suman los que aún no
      te han pagado. */
-  if(Array.isArray(v.recibos) && v.recibos.length) return faltaRecibos(v);
+  if(usaRecibos(v)) return Math.max(0, faltaRecibos(v));
   if(llevaRecibos(v)){
     return r2(papelesDeLaVisita(v).reduce(function(t,p){
       return t+Math.max(0, r2(p.pagado-cobradoDelPapel(v, p.clave)));
@@ -271,8 +271,7 @@ function cobroDe(v, quien){
 /* Todo cobrado es: de los dos, los que tenian algo que devolver estan
    marcados. Si ninguno devuelve nada, no hay nada que esperar. */
 function todoCobrado(v){
-  if(Array.isArray(v.recibos) && v.recibos.length)
-    return faltaRecibos(v)<=0.004;
+  if(usaRecibos(v)) return faltaRecibos(v)<=0.004;
   /* Con la lista, cobrado es que no quede ningún papel por saldar. */
   if(llevaRecibos(v))
     return papelesDeLaVisita(v).length>0 && papelesSinSaldar(v).length===0;
@@ -310,7 +309,8 @@ function pieDelCobro(v, quien){
   var pagado=importeCobrado(v, quien), falta=faltaDelCobro(v, quien);
   /* Con todos los papeles a cero, que uno haya puesto medio euro mas y
      el otro medio menos no es un problema de nadie: no se dice. */
-  if(llevaRecibos(v) && !papelesSinSaldar(v).length) falta=0;
+  if(usaRecibos(v)) falta=0;
+  else if(llevaRecibos(v) && !papelesSinSaldar(v).length) falta=0;
   return '<div style="color:var(--ok);font-size:11px;font-weight:400">✓ '+
          (c.fecha?esc(dmy(c.fecha)):"cobrado")+'</div>'+
          (falta>0.004
@@ -1487,12 +1487,19 @@ function cobradoRecibos(v){
   return r2(recibosDe(v).filter(function(r){ return r.pagado; })
             .reduce(function(t,r){ return t+(+r.imp||0); }, 0));
 }
-function faltaRecibos(v){ return r2(sumaRecibos(v)-cobradoRecibos(v)); }
+/* Lo que falta no es lo que sumen los recibos apuntados —esos son los
+   que te han pagado—, sino lo que pusiste tú menos lo que te han
+   devuelto. Si no, apuntando tres recibos de tres euros la app diría que
+   está todo cobrado. */
+function faltaRecibos(v){ return r2(pagadoDeLaVisita(v)-cobradoRecibos(v)); }
+function usaRecibos(v){ return !!(v && Array.isArray(v.recibos) && v.recibos.length); }
 
 /* La fila de los recibos, pegada a su visita: se escribe ahí mismo. */
 function filaDeRecibos(v){
   var l=recibosDe(v);
-  var falta=faltaRecibos(v), total=sumaRecibos(v), puesto=cobradoRecibos(v);
+  var total=pagadoDeLaVisita(v);          /* lo que pusiste tú */
+  var puesto=cobradoRecibos(v);           /* lo que te han devuelto ya */
+  var falta=r2(total-puesto);
   var filas=l.map(function(r, i){
     var pagado=!!r.pagado;
     return '<div style="display:flex;gap:5px;align-items:center;padding:3px 8px;border-radius:20px;'+
@@ -1525,8 +1532,10 @@ function filaDeRecibos(v){
       (l.length
         ? '<span style="font-size:12px;color:'+(falta>0.004?"var(--muted)":"var(--ok)")+';margin-left:6px">'+
           (falta>0.004
-            ? 'pagados '+eur(puesto)+' de '+eur(total)+' · faltan <strong>'+eur(falta)+'</strong>'
-            : 'todo pagado ✓')+'</span>'
+            ? 'te han pagado '+eur(puesto)+' de '+eur(total)+' · faltan <strong>'+eur(falta)+'</strong>'
+            : falta<-0.004
+              ? 'te han pagado '+eur(puesto)+', '+eur(Math.abs(falta))+' más de lo que pusiste'
+              : 'todo pagado ✓')+'</span>'
         : '<span style="font-size:12px;color:var(--muted);margin-left:6px">Escribe aquí cada recibo '+
           'con su importe y márcalo cuando te lo paguen.</span>')+
     '</div></td></tr>';
@@ -1536,7 +1545,12 @@ function verMedico(main){
   var visitas=(libro.medico||[]).slice().sort(function(a,b){ return (b.fecha||"").localeCompare(a.fecha||""); });
   var delAno=visitas.filter(function(v){ return (v.fecha||"").slice(0,4)===ui.mes.slice(0,4); });
   var gastado=r2(delAno.reduce(function(s,v){ return s+(+v.consulta||0)+(+v.medicinas||0); },0));
-  var devuelto=r2(delAno.reduce(function(s,v){ return s+cassTotal(v)+seguroTotal(v); },0));
+  /* Lo devuelto de verdad: en las visitas que llevan recibos apuntados,
+     lo que suman los cobrados; en las demás, lo que dicen la CASS y el
+     seguro que devuelven. */
+  var devuelto=r2(delAno.reduce(function(s,v){
+    return s+(usaRecibos(v) ? cobradoRecibos(v) : r2(cassTotal(v)+seguroTotal(v)));
+  },0));
   var sinCerrar=delAno.filter(function(v){ return !v.cobrado; });
   var pendiente=r2(sinCerrar.reduce(function(s,v){ return s+pendienteMedico(v); },0));
   /* Lo pendiente, separado: no es lo mismo reclamar la consulta que la
@@ -1609,10 +1623,11 @@ function verMedico(main){
           (function(){
             /* Con los recibos escritos, lo que dice algo es cuántos van
                pagados de los que hay. */
-            if(Array.isArray(v.recibos) && v.recibos.length){
+            if(usaRecibos(v)){
               var pag=v.recibos.filter(function(r){ return r.pagado; }).length;
               return '<div style="color:var(--muted);font-size:11px;font-weight:400">'+
-                     pag+' de '+v.recibos.length+' recibos pagados</div>';
+                     'cobrado '+eur(cobradoRecibos(v))+' de '+eur(pagadoDeLaVisita(v))+
+                     ' · '+pag+' de '+v.recibos.length+' recibos</div>';
             }
             var sin=papelesSinSaldar(v);
             if(llevaRecibos(v))
