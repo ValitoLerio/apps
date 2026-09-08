@@ -1458,6 +1458,44 @@ function pintarCompras(){
 /* ══════════════════════════════════════════════════════════════
    MÉDICO
    ══════════════════════════════════════════════════════════════ */
+/* La fila de los recibos de una visita: una casilla por papel, con lo
+   que costó, y al final lo que llevas marcado. Se pinta pegada a su
+   visita y se toca sin abrir nada. */
+function filaDeRecibos(v){
+  var papeles=papelesDeLaVisita(v);
+  if(!papeles.length) return "";
+  var total=r2(papeles.reduce(function(t,p){ return t+p.pagado; }, 0));
+  var puesto=0;
+  var trozos=papeles.map(function(p){
+    var cob=cobradoDelPapel(v, p.clave);
+    var saldado=r2(p.pagado-cob)<=0.004;
+    if(saldado) puesto=r2(puesto+p.pagado);
+    /* Los cobros sueltos mandan sobre la casilla: si de ese papel hay
+       un importe apuntado, aqui no se toca. */
+    var suelto=cobrosDe(v).some(function(c){ return c.papel===p.clave; });
+    return '<label class="marca-check" style="margin:0;gap:6px;padding:3px 9px;border-radius:20px;'+
+      'border:1px solid '+(saldado?"var(--ok)":"var(--linea)")+';background:'+
+      (saldado?"var(--ok-suave)":"var(--sup)")+';font-size:12px;white-space:nowrap">'+
+      '<input type="checkbox"'+(saldado?" checked":"")+(suelto?" disabled":"")+
+      ' data-tacha="'+esc(v.id)+'|'+esc(p.clave)+'"'+
+      (suelto?' title="Este tiene cobros sueltos apuntados: se toca en la ficha"':"")+'>'+
+      '<span>'+esc(p.etiqueta)+' <strong>'+eur(p.pagado)+'</strong></span></label>';
+  }).join("");
+  var falta=r2(total-puesto);
+  return '<tr class="fila-recibos"><td colspan="12" style="padding:6px 10px 12px;'+
+    'border-bottom:1px solid var(--linea)">'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+
+      '<span style="font-size:11px;color:var(--muted);text-transform:uppercase;'+
+      'letter-spacing:.07em;margin-right:2px">Recibos</span>'+
+      trozos+
+      '<span style="font-size:12px;color:'+(falta>0.004?"var(--muted)":"var(--ok)")+';margin-left:6px">'+
+      (falta>0.004
+        ? 'marcados '+eur(puesto)+' de '+eur(total)+' · faltan <strong>'+eur(falta)+'</strong>'
+        : 'todo cobrado ✓')+
+      '</span>'+
+    '</div></td></tr>';
+}
+
 function verMedico(main){
   var visitas=(libro.medico||[]).slice().sort(function(a,b){ return (b.fecha||"").localeCompare(a.fecha||""); });
   var delAno=visitas.filter(function(v){ return (v.fecha||"").slice(0,4)===ui.mes.slice(0,4); });
@@ -1554,9 +1592,28 @@ function verMedico(main){
                })()+"</td>"+
         '<td><div class="acciones-fila">'+
           '<button class="btn suave sm" data-medit="'+v.id+'">Editar</button>'+
-          '<button class="btn suave sm malo" data-mdel="'+v.id+'">Borrar</button></div></td></tr>';
+          '<button class="btn suave sm malo" data-mdel="'+v.id+'">Borrar</button></div></td></tr>'+
+        /* Debajo de cada visita, sus recibos con su casilla: se marcan
+           aqui mismo segun van pagando, sin abrir la ficha. Es lo que se
+           hace con el extracto del banco delante. */
+        filaDeRecibos(v);
     }).join("")+"</tbody></table>";
 
+  /* Marcar un recibo desde la tabla: se guarda en el acto. */
+  caja.querySelectorAll("[data-tacha]").forEach(function(x){
+    x.addEventListener("change", function(){
+      var partes=x.getAttribute("data-tacha").split("|");
+      var v=(libro.medico||[]).filter(function(y){ return y.id===partes[0]; })[0];
+      if(!v) return;
+      var l=papelesCobrados(v).slice();
+      if(x.checked){ if(l.indexOf(partes[1])<0) l.push(partes[1]); }
+      else l=l.filter(function(k){ return k!==partes[1]; });
+      v.papelesCobrados=l;
+      v.cobrado=todoCobrado(v);
+      guardar(); pintar();
+      avisar(x.checked?"Recibo marcado como cobrado":"Recibo otra vez pendiente");
+    });
+  });
   caja.querySelectorAll("[data-medit]").forEach(function(b){
     b.addEventListener("click", function(){ editarVisita(b.getAttribute("data-medit")); });
   });
