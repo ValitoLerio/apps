@@ -1499,9 +1499,13 @@ function filaDeRecibos(v){
       'border:1px solid '+(pagado?"var(--ok)":"var(--linea)")+';background:'+
       (pagado?"var(--ok-suave)":"var(--sup)")+'">'+
       '<input class="rec-n mono" data-rec="'+esc(v.id)+'|'+i+'|n" value="'+esc(r.n||"")+'" '+
-      'placeholder="Nº recibo" style="width:110px;padding:2px 6px;font-size:12px">'+
+      'placeholder="Nº recibo" title="Escribe aquí el número del recibo" '+
+      'style="width:112px;padding:3px 7px;font-size:12px;background:var(--sup);'+
+      'border:1px solid var(--linea)">'+
       '<input class="rec-imp num" type="number" min="0" step="0.01" data-rec="'+esc(v.id)+'|'+i+'|imp" '+
-      'value="'+esc(r.imp||"")+'" placeholder="0,00" style="width:78px;padding:2px 6px;font-size:12px">'+
+      'value="'+esc(r.imp||"")+'" placeholder="0,00" title="Lo que pone ese recibo" '+
+      'style="width:82px;padding:3px 7px;font-size:12px;background:var(--sup);'+
+      'border:1px solid var(--linea)">'+
       '<label class="marca-check" style="margin:0;gap:4px;font-size:11.5px;white-space:nowrap">'+
         '<input type="checkbox" data-rec="'+esc(v.id)+'|'+i+'|pagado"'+(pagado?" checked":"")+'>'+
         '<span>pagado</span></label>'+
@@ -1513,7 +1517,9 @@ function filaDeRecibos(v){
     'border-bottom:1px solid var(--linea)">'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+
       '<span style="font-size:11px;color:var(--muted);text-transform:uppercase;'+
-      'letter-spacing:.07em;margin-right:2px">Recibos</span>'+
+      'letter-spacing:.07em;margin-right:2px">Recibos que te pagan '+
+      '<span style="text-transform:none;letter-spacing:0">— escribe el nº, el importe, '+
+      'y marca «pagado» cuando te lo abonen</span></span>'+
       filas+
       '<button class="btn suave sm" data-recmas="'+esc(v.id)+'" style="padding:2px 9px">+ Recibo</button>'+
       (l.length
