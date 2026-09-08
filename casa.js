@@ -1390,7 +1390,7 @@ function verMedico(main){
     return;
   }
   caja.innerHTML='<table><thead><tr><th>Fecha</th><th>Quién</th><th>Médico</th><th>Motivo</th>'+
-    '<th>Nº recibo</th>'+
+    '<th style="white-space:nowrap;min-width:150px">Nº recibo</th>'+
     '<th class="num">Consulta</th><th class="num">Farmacia</th>'+
     '<th class="num">CASS</th>'+
     '<th class="num">Seguro compl.</th><th class="num">Te deben</th>'+
@@ -1402,11 +1402,13 @@ function verMedico(main){
         "<td><strong>"+esc(v.persona||"")+"</strong></td>"+
         "<td>"+esc(v.medico||"—")+"</td>"+
         "<td>"+esc(v.motivo||"—")+"</td>"+
-        '<td class="mono">'+(v.recibo
+        /* El número del recibo no se parte en tres líneas: la tabla ya
+           se desliza de lado si hace falta. */
+        '<td class="mono" style="white-space:nowrap">'+(v.recibo
           ? esc(v.recibo)
           : '<span style="color:var(--muted)">—</span>')+
           (tiquesDe(v).length
-            ? '<div style="color:var(--muted);font-size:11px" title="Tiques de la farmacia">'+
+            ? '<div style="color:var(--muted);font-size:11px;white-space:nowrap" title="Tiques de la farmacia">'+
               esc(tiquesDe(v).map(function(x){ return x.n||"(sin nº)"; }).join(" · "))+'</div>'
             : "")+"</td>"+
         '<td class="num">'+eur(v.consulta)+"</td>"+
