@@ -71,6 +71,47 @@ function asegurarPerfiles(){
   touch();
 }
 
+/* Los correos con los que puedes enviar: los del perfil, tantos como
+   quieras. El primero es el de siempre; el resto salen a elegir en el
+   momento de mandar la factura, que hay días que conviene uno y días
+   que conviene el otro. Los perfiles de antes traen uno solo. */
+function remitentesDe(p){
+  if(!p) return [];
+  var lista = Array.isArray(p.emails) ? p.emails.slice() : (p.email ? [p.email] : []);
+  return lista.map(function(x){ return String(x||"").trim(); })
+              .filter(function(x, i, a){ return x && a.indexOf(x)===i; });
+}
+/* Hotmail y Gmail se abren en el navegador con la cuenta que tengas
+   puesta, y ahi el remitente sale de verdad. Un mailto: abre tu programa
+   de correo, que manda con la cuenta que el tenga: por eso salia tu
+   nombre y no el del restaurante. */
+function comoSeAbre(dir){
+  var d=String(dir||"").toLowerCase();
+  if(/@(hotmail|outlook|live|msn)\./.test(d)) return "outlook";
+  if(/@(gmail|googlemail)\./.test(d))         return "gmail";
+  return "mailto";
+}
+/* Con dos cuentas abiertas en el mismo navegador, Outlook y Gmail las
+   numeran por el orden en que entraste: la primera es la 0. Se usa el
+   sitio que ocupa el correo en la lista del perfil, que es lo mas
+   parecido que hay; si abre la que no es, se cambia arriba a la derecha
+   y ya se queda. */
+function urlDelCorreo(dir, para, asunto, cuerpo, cuenta){
+  var modo=dir?comoSeAbre(dir):"mailto";
+  var n=Math.max(0, +cuenta||0);
+  if(modo==="outlook"){
+    return "https://outlook.live.com/mail/"+n+"/deeplink/compose?to="+encodeURIComponent(para.join(";"))+
+           "&subject="+encodeURIComponent(asunto)+"&body="+encodeURIComponent(cuerpo);
+  }
+  if(modo==="gmail"){
+    return "https://mail.google.com/mail/u/"+n+"/?view=cm&fs=1&to="+encodeURIComponent(para.join(","))+
+           "&su="+encodeURIComponent(asunto)+"&body="+encodeURIComponent(cuerpo);
+  }
+  /* mailto separa los destinatarios por comas, sin codificarlas */
+  return "mailto:"+para.map(function(d){ return encodeURIComponent(d); }).join(",")+
+         "?subject="+encodeURIComponent(asunto)+"&body="+encodeURIComponent(cuerpo);
+}
+
 /* Los correos de una empresa: admite el campo antiguo y la lista nueva. */
 function correosDe(c){
   if (!c) return [];
@@ -92,7 +133,8 @@ function correosDeFactura(inv){
 }
 var state = blankState();
 var ui = { view:"servicios", month:todayISO().slice(0,7), fCompany:"", fStatus:"",
-           invCompany:"", perfil:"", saving:"idle", remote:false };
+           invCompany:"", perfil:"", saving:"idle", remote:false,
+           remitente:"" };   /* con que correo se manda la factura que estas viendo */
 
 /* ============================ money & format ============================ */
 function r2(n){ return Math.round((n+Number.EPSILON)*100)/100; }
@@ -951,7 +993,7 @@ function viewAjustes(main){
 
       '<div class="grid3">'+
         '<div class="field"><label class="lbl" for="s_igi">IGI (%)</label><input type="number" id="s_igi" min="0" step="0.1" value="'+esc(s.igi)+'"></div>'+
-        '<div class="field"><label class="lbl" for="s_due">Vencimiento (días)</label><input type="number" id="s_due" min="0" step="1" value="'+esc(s.dueDays)+'"></div>'+
+        '<div class="field"><label class="lbl" for="s_due">Vencimiento (días, ya no se imprime)</label><input type="number" id="s_due" min="0" step="1" value="'+esc(s.dueDays)+'"></div>'+
         '<div class="field"><label class="lbl" for="s_cc">Prefijo país (WhatsApp)</label><input id="s_cc" class="mono" value="'+esc(s.countryCode)+'" placeholder="376"></div>'+
       "</div>"+
       '<p class="section-note" style="margin:13px 0 0">La serie, el número, las condiciones de pago y el IBAN '+
@@ -1080,8 +1122,11 @@ function editarPerfil(id){
       '<div class="field" style="grid-column:1/-1"><label class="lbl" for="p_name">Nombre fiscal</label><input id="p_name" value="'+esc(p.name)+'" placeholder="Restaurant Cal Miquel, SL"></div>'+
       '<div class="field"><label class="lbl" for="p_nrt">NRT / CIF</label><input id="p_nrt" class="mono" value="'+esc(p.nrt)+'"></div>'+
       '<div class="field"><label class="lbl" for="p_phone">Teléfono</label><input id="p_phone" value="'+esc(p.phone)+'"></div>'+
-      '<div class="field" style="grid-column:1/-1"><label class="lbl" for="p_email">Correo del remitente</label>'+
-        '<input type="email" id="p_email" value="'+esc(p.email)+'" placeholder="facturacion@ejemplo.ad"></div>'+
+      '<div class="field" style="grid-column:1/-1"><label class="lbl" for="p_email">Correos del remitente</label>'+
+        '<textarea id="p_email" rows="2" placeholder="lapalmeradesoldeu@hotmail.com&#10;tucorreo@hotmail.com">'+
+        esc(remitentesDe(p).join("\n"))+'</textarea>'+
+        '<p class="section-note" style="margin:6px 0 0">Uno por línea. El primero es el que sale impreso '+
+        'en la factura; al enviar eliges con cuál de ellos la mandas.</p></div>'+
       '<div class="field" style="grid-column:1/-1"><label class="lbl" for="p_addr">Dirección</label><input id="p_addr" value="'+esc(p.address)+'"></div>'+
       '<div class="field"><label class="lbl" for="p_city">Población</label><input id="p_city" value="'+esc(p.city)+'"></div>'+
       '<div class="field"><label class="lbl" for="p_iban">IBAN para el cobro</label><input id="p_iban" class="mono" value="'+esc(p.iban)+'"></div>'+
@@ -1092,14 +1137,17 @@ function editarPerfil(id){
       '<div class="field"><label class="lbl" for="p_prefix">Serie</label><input id="p_prefix" class="mono" value="'+esc(p.prefix)+'"></div>'+
       '<div class="field"><label class="lbl" for="p_next">Siguiente número</label><input type="number" id="p_next" min="1" step="1" value="'+esc(p.nextNumber)+'"></div>'+
     '</div>'+
-    '<p class="section-note" style="margin-top:12px">El correo es el que aparece como remitente en la factura y el que usas para enviarla.</p>',
+    '<p class="section-note" style="margin-top:12px">El primer correo es el que aparece impreso en la factura. '+
+    'Si pones más de uno, al enviar te deja elegir con cuál sale.</p>',
     function(){
       var nombre=document.getElementById("p_name").value.trim();
       if(!nombre){ toast("El perfil necesita un nombre fiscal.", true); return true; }
       p.name=nombre;
       p.nrt=document.getElementById("p_nrt").value.trim();
       p.phone=document.getElementById("p_phone").value.trim();
-      p.email=document.getElementById("p_email").value.trim();
+      p.emails=document.getElementById("p_email").value.split(/[\n;,]+/)
+                 .map(function(x){ return x.trim(); }).filter(Boolean);
+      p.email=p.emails[0]||"";
       p.address=document.getElementById("p_addr").value.trim();
       p.city=document.getElementById("p_city").value.trim();
       p.iban=document.getElementById("p_iban").value.trim();
@@ -1155,16 +1203,41 @@ function showInvoice(inv, isDraft){
   document.body.appendChild(d);
   d.querySelectorAll("[data-x]").forEach(function(b){ b.addEventListener("click",function(){ d.close(); d.remove(); }); });
   if(!isDraft){
-    d.querySelector("[data-pdf]").addEventListener("click", function(){ downloadInvoice(inv,"pdf"); });
     d.querySelector("[data-paper]").addEventListener("click", function(){ downloadInvoice(inv,"paper"); });
     d.querySelector("[data-png]").addEventListener("click", function(){ downloadInvoice(inv,"png"); });
-    d.querySelector("[data-mail]").addEventListener("click", function(){ copyMail(inv); });
-    d.querySelector("[data-mailto]").addEventListener("click", function(){ openMail(inv); });
-    d.querySelector("[data-wa]").addEventListener("click", function(){ openWhatsApp(inv); });
-    var sh=d.querySelector("[data-share]");
-    if(sh) sh.addEventListener("click", function(){ shareInvoice(inv); });
+    engancharEnvio(d, inv);
   }
   d.showModal();
+}
+/* Los botones del panel de envio. Va aparte porque el panel se vuelve a
+   pintar al cambiar de remitente. */
+function engancharEnvio(d, inv){
+  d.querySelector("[data-pdf]").addEventListener("click", function(){ downloadInvoice(inv,"pdf"); });
+  d.querySelector("[data-mail]").addEventListener("click", function(){ copyMail(inv); });
+  d.querySelector("[data-mailto]").addEventListener("click", function(){ openMail(inv); });
+    /* Elegir con que correo sale: se repinta solo el panel de envio, que
+       los destinatarios marcados se quedan como estan. */
+  d.querySelectorAll("[data-remite]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var marcados=Array.prototype.map.call(d.querySelectorAll(".dest-mail"), function(x){
+          return {v:x.value, on:x.checked}; });
+        var otro=(d.querySelector("#otroCorreo")||{}).value||"";
+        ui.remitente=b.dataset.remite;
+        var caja=d.querySelector(".send-box");
+        var nueva=document.createElement("div");
+        nueva.innerHTML=sendBoxHTML(inv);
+        caja.replaceWith(nueva.firstChild);
+        marcados.forEach(function(m){
+          var x=d.querySelector('.dest-mail[value="'+m.v.replace(/"/g,'\\"')+'"]');
+          if(x) x.checked=m.on;
+        });
+        var o=d.querySelector("#otroCorreo"); if(o) o.value=otro;
+        engancharEnvio(d, inv);
+      });
+    });
+  d.querySelector("[data-wa]").addEventListener("click", function(){ openWhatsApp(inv); });
+  var sh=d.querySelector("[data-share]");
+  if(sh) sh.addEventListener("click", function(){ shareInvoice(inv); });
 }
 /* Ni mailto: ni wa.me admiten adjuntos: abren el mensaje escrito y el PDF lo
    añade la persona. En el móvil, navigator.share sí lleva el archivo dentro. */
@@ -1186,6 +1259,19 @@ function sendBoxHTML(inv){
     : '<p class="section-note" style="margin:0 0 8px">Esta empresa no tiene correos guardados. '+
       'Añádelos en Empresas, o escribe uno aquí abajo.</p>';
 
+  /* Con quien se manda: los correos del perfil y, al final, el programa
+     de correo de siempre por si algun dia hace falta. */
+  var remitentes=remitentesDe(em);
+  if(!ui.remitente || (remitentes.indexOf(ui.remitente)<0 && ui.remitente!=="__mailto__"))
+    ui.remitente = remitentes[0] || "__mailto__";
+  var eleccion = remitentes.map(function(dir){
+      var on=(ui.remitente===dir);
+      return '<button class="btn'+(on?" primary":" ghost")+'" data-remite="'+esc(dir)+'" '+
+             'style="padding:5px 10px;font-size:12.5px">'+esc(dir)+'</button>';
+    }).join("")+
+    '<button class="btn'+(ui.remitente==="__mailto__"?" primary":" ghost")+'" data-remite="__mailto__" '+
+    'style="padding:5px 10px;font-size:12.5px">Mi programa de correo</button>';
+
   return '<div class="send-box"><h4>Enviar a '+esc(c.name||"la empresa")+"</h4>"+
     '<p class="lead">El PDF se adjunta a mano: ni el correo ni WhatsApp permiten que una web adjunte archivos por su cuenta. '+
     'Descárgalo primero y adjúntalo en el mensaje que se abre'+(canShareFiles()?", o usa «Compartir PDF», que sí lo lleva dentro.":".")+"</p>"+
@@ -1195,6 +1281,12 @@ function sendBoxHTML(inv){
       '<input id="otroCorreo" placeholder="Otro correo para este envío (opcional)" '+
       'style="margin-top:6px" autocomplete="off">'+
     "</div>"+
+    (remitentes.length
+      ? '<div style="margin:0 0 10px">'+
+          '<div class="lbl" style="margin-bottom:6px">Enviar desde</div>'+
+          '<div style="display:flex;gap:6px;flex-wrap:wrap">'+eleccion+'</div>'+
+        '</div>'
+      : "")+
     '<div class="toolbar" style="margin:0">'+
       '<button class="btn primary" data-pdf><span class="step">1</span>Descargar PDF</button>'+
       '<button class="btn" data-mailto><span class="step">2</span>Abrir correo</button>'+
@@ -1203,11 +1295,17 @@ function sendBoxHTML(inv){
       '<button class="btn ghost" data-mail>Copiar texto</button>'+
     "</div>"+
     '<div class="dest">'+
-      "<span>Remitente: <b>"+esc(em.email||em.name||"sin correo en el perfil")+"</b></span>"+
+      "<span>Sale desde: <b>"+esc(ui.remitente==="__mailto__"?"tu programa de correo":ui.remitente)+"</b></span>"+
       "<span>WhatsApp: <b>"+esc(tel?waDisplay(inv):"elegirás el contacto")+"</b></span>"+
     "</div>"+
-    (em.email?'<p class="section-note" style="margin:10px 0 0">Al abrir el correo, comprueba que sales como '+
-      '<strong>'+esc(em.email)+'</strong>: si tu programa tiene varias cuentas, elígela antes de enviar.</p>':"")+
+    (ui.remitente==="__mailto__"
+      ? '<p class="section-note" style="margin:10px 0 0">Se abre tu programa de correo, que manda con la cuenta '+
+        'que tenga puesta. Si quieres que salga a nombre del restaurante, elige arriba su correo, o cámbialo '+
+        'en el campo «De:» antes de enviar.</p>'
+      : '<p class="section-note" style="margin:10px 0 0">Se abre <strong>'+
+        esc(comoSeAbre(ui.remitente)==="gmail"?"Gmail":"Outlook")+'</strong> en el navegador con el mensaje escrito. '+
+        'Comprueba arriba a la derecha que estás dentro de <strong>'+esc(ui.remitente)+'</strong>; si no, cambia de '+
+        'cuenta y vuelve a darle.</p>')+
     "</div>";
 }
 
@@ -1254,7 +1352,7 @@ function waText(inv){
     "Subtotal: "+eur(inv.base),
     "IGI: "+eur(inv.igi),
     "TOTAL: "+eur(inv.total),
-    "Vencimiento: "+dmy(inv.due)];
+    ];
   if(inv.iban) l.push("IBAN: "+inv.iban);
   l.push("", "Te adjunto el PDF." , (st.name||""));
   return l.join("\n");
@@ -1277,12 +1375,13 @@ function openMail(inv){
     return;
   }
   var m=mailText(inv, destinos);
-  /* mailto separa los destinatarios por comas, sin codificarlas */
-  var para=destinos.map(function(d){ return encodeURIComponent(d); }).join(",");
-  openExternal("mailto:"+para+"?subject="+encodeURIComponent(m.subject)+"&body="+encodeURIComponent(m.body),
-    destinos.length>1
-      ? "Se abre un correo para "+destinos.length+" destinatarios. Adjunta el PDF antes de enviar."
-      : "Adjunta el PDF antes de enviar. Si no se abre tu correo, usa «Copiar texto».");
+  var desde=(ui.remitente && ui.remitente!=="__mailto__") ? ui.remitente : "";
+  var cuenta=remitentesDe(inv.issuer).indexOf(desde);
+  openExternal(urlDelCorreo(desde, destinos, m.subject, m.body, cuenta),
+    (desde ? "Se abre con "+desde+". " : "")+
+    (destinos.length>1
+      ? "Van "+destinos.length+" destinatarios. Adjunta el PDF antes de enviar."
+      : "Adjunta el PDF antes de enviar."));
 }
 function openWhatsApp(inv){
   var tel=waNumber(inv);
@@ -1321,7 +1420,7 @@ function invoiceHTML(inv){
       (i.phone?"<div>Tel. "+esc(i.phone)+"</div>":"")+
       (i.email?"<div>"+esc(i.email)+"</div>":"")+
     '</div><div class="inv-box"><div class="ttl">FACTURA</div><div class="no">'+esc(inv.number)+"</div>"+
-      '<div class="dt">Fecha de emisión: '+esc(dmy(inv.date))+"<br>Vencimiento: "+esc(dmy(inv.due))+"</div></div></div>"+
+      '<div class="dt">Fecha de emisión: '+esc(dmy(inv.date))+"</div></div></div>"+
     '<div class="bill-to"><div class="k">Facturar a</div><div class="nm">'+esc(c.name||"—")+"</div>"+
       (c.nrt?"<div>NRT "+esc(c.nrt)+"</div>":"")+
       (c.address?"<div>"+esc(c.address)+(c.city?", "+esc(c.city):"")+"</div>":"")+
@@ -1347,8 +1446,7 @@ function invoiceHTML(inv){
     '<div class="p-foot"><div><div class="k">Forma de pago</div><div>'+esc(inv.terms||"—")+"</div>"+
       (inv.iban?'<div class="k" style="margin-top:8px">IBAN</div><div class="mono">'+esc(inv.iban)+"</div>":"")+
       "</div>"+
-      '<div><div class="k">Vencimiento</div><div>'+esc(dmy(inv.due))+"</div>"+
-      '<div style="margin-top:8px">Factura sujeta a IGI. Conserve este documento como justificante.</div></div></div>'+
+      '<div><div style="margin-top:8px">Factura sujeta a IGI. Conserve este documento como justificante.</div></div></div>'+
   "</div>";
 }
 
@@ -1364,7 +1462,6 @@ function mailText(inv, destinos){
     "Subtotal (base imponible): "+eur(inv.base)+"\n"+
     invTaxes(inv).map(function(tx){ return "IGI "+pct(tx.rate)+": "+eur(tx.amount)+"\n"; }).join("")+
     "TOTAL: "+eur(inv.total)+"\n"+
-    "Vencimiento: "+dmy(inv.due)+"\n"+
     (inv.iban?"IBAN: "+inv.iban+"\n":"")+
     "\n"+(inv.issuer&&inv.issuer.name?inv.issuer.name:"")+(inv.issuer&&inv.issuer.phone?" · "+inv.issuer.phone:"");
   return {to:para.join(","), subject:subject, body:body, lista:para};
@@ -1409,7 +1506,6 @@ function layoutInvoice(inv, opts){
   T("FACTURA", R, yh+1, 21, true, C_ACC, "right"); yh+=22;
   T(inv.number, R, yh, 12, true, C_INK, "right"); yh+=15;
   T("Fecha de emisión: "+dmy(inv.date), R, yh, 8.6, false, C_MUT, "right"); yh+=11;
-  T("Vencimiento: "+dmy(inv.due), R, yh, 8.6, false, C_MUT, "right"); yh+=11;
   if(opts.label){
     var lw=textW(opts.label,7.6,true)+14;
     RC(R-lw, yh-2, lw, 14, C_ACC);
@@ -1498,10 +1594,8 @@ function layoutInvoice(inv, opts){
 
   /* footer */
   LN(L,y,R,y,0.5,C_LINE); y+=14;
-  T("FORMA DE PAGO", L, y, 7.4, true, C_MUT);
-  T("VENCIMIENTO", L+270, y, 7.4, true, C_MUT); y+=12;
-  T(inv.terms||"—", L, y, 9);
-  T(dmy(inv.due), L+270, y, 9); y+=12;
+  T("FORMA DE PAGO", L, y, 7.4, true, C_MUT); y+=12;
+  T(inv.terms||"—", L, y, 9); y+=12;
   if(inv.iban){ T("IBAN", L, y, 7.4, true, C_MUT); y+=11; T(inv.iban, L, y, 9); y+=12; }
   T("Factura sujeta a IGI. Conserve este documento como justificante.", L, y+4, 8, false, C_MUT);
 
