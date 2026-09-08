@@ -156,7 +156,7 @@ function pendienteMedico(v){
      a los papeles para quedar a cero: que lo ponga la CASS o el seguro
      da igual, el dinero es el mismo. Sin lista, lo de siempre: lo que no
      cubre nadie más lo que prometieron y pagaron corto. */
-  if(cobrosDe(v).length){
+  if(llevaRecibos(v)){
     return r2(papelesDeLaVisita(v).reduce(function(t,p){
       return t+Math.max(0, r2(p.pagado-cobradoDelPapel(v, p.clave)));
     }, 0));
@@ -214,12 +214,30 @@ function papelesDeLaVisita(v){
     l.push({clave:"farmacia", etiqueta:"Farmacia"+(v.farmacia?" · "+v.farmacia:""), pagado:r2(+v.medicinas||0)});
   return l;
 }
-function cobradoDelPapel(v, clave){
-  return r2(cobrosDe(v).filter(function(c){ return c.papel===clave; })
-            .reduce(function(t,c){ return t+(+c.imp||0); }, 0));
+/* De una compra en farmacia pueden venir cinco tiques, y lo que llega
+   del banco es un importe suelto: para saber que han pagado se van
+   tachando recibos hasta llegar a esa cifra. Un recibo tachado cuenta
+   como cobrado entero; si de uno te han pagado solo una parte, para eso
+   estan los cobros con su importe. */
+function papelesCobrados(v){
+  return (v && Array.isArray(v.papelesCobrados)) ? v.papelesCobrados : [];
 }
+function papelTachado(v, clave){ return papelesCobrados(v).indexOf(clave)>=0; }
+function cobradoDelPapel(v, clave){
+  var apuntado=r2(cobrosDe(v).filter(function(c){ return c.papel===clave; })
+                  .reduce(function(t,c){ return t+(+c.imp||0); }, 0));
+  if(apuntado>0.004) return apuntado;
+  if(papelTachado(v, clave)){
+    var p=papelesDeLaVisita(v).filter(function(x){ return x.clave===clave; })[0];
+    return p ? p.pagado : 0;
+  }
+  return 0;
+}
+/* Hay cuenta que llevar en cuanto haya un cobro apuntado o un recibo
+   tachado: hasta entonces, la visita va como iba. */
+function llevaRecibos(v){ return cobrosDe(v).length>0 || papelesCobrados(v).length>0; }
 function papelesSinSaldar(v){
-  if(!cobrosDe(v).length) return [];
+  if(!llevaRecibos(v)) return [];
   return papelesDeLaVisita(v).filter(function(p){
     return r2(p.pagado-cobradoDelPapel(v, p.clave))>0.004;
   });
@@ -251,7 +269,7 @@ function cobroDe(v, quien){
    marcados. Si ninguno devuelve nada, no hay nada que esperar. */
 function todoCobrado(v){
   /* Con la lista, cobrado es que no quede ningún papel por saldar. */
-  if(cobrosDe(v).length)
+  if(llevaRecibos(v))
     return papelesDeLaVisita(v).length>0 && papelesSinSaldar(v).length===0;
   var c=cobroDe(v,"cass"), g=cobroDe(v,"seguro");
   var pendientes=0, marcados=0;
@@ -287,7 +305,7 @@ function pieDelCobro(v, quien){
   var pagado=importeCobrado(v, quien), falta=faltaDelCobro(v, quien);
   /* Con todos los papeles a cero, que uno haya puesto medio euro mas y
      el otro medio menos no es un problema de nadie: no se dice. */
-  if(cobrosDe(v).length && !papelesSinSaldar(v).length) falta=0;
+  if(llevaRecibos(v) && !papelesSinSaldar(v).length) falta=0;
   return '<div style="color:var(--ok);font-size:11px;font-weight:400">✓ '+
          (c.fecha?esc(dmy(c.fecha)):"cobrado")+'</div>'+
          (falta>0.004
@@ -1516,7 +1534,7 @@ function verMedico(main){
              cuántos papeles siguen sin quedar a cero. */
           (function(){
             var sin=papelesSinSaldar(v);
-            if(cobrosDe(v).length)
+            if(llevaRecibos(v))
               return '<div style="color:var(--muted);font-size:11px;font-weight:400">'+
                 (sin.length ? sin.length+(sin.length===1?" recibo":" recibos")+" sin saldar"
                             : "todos los recibos saldados")+'</div>';
@@ -1635,13 +1653,16 @@ function editarVisita(id){
     '</div>'+
     '<div class="nota" id="v_cobros" style="margin:6px 0 0"></div>'+
     /* El detalle: cada cobro que va entrando, con su papel. */
-    '<p class="nota" style="margin:16px 0 6px">Los cobros, uno a uno. Ve apuntando lo que te van '+
-    'pagando —de qué papel es, quién lo paga y cuánto— hasta que cuadre con lo que pusiste tú. '+
-    'Mientras haya algo aquí, esta lista manda sobre las casillas de arriba.</p>'+
+    '<p class="nota" style="margin:16px 0 6px">Los recibos, uno a uno. Cuando te ingresen algo, '+
+    've marcando los recibos que entran en ese pago hasta llegar al importe que te han abonado. '+
+    'Si de alguno te pagan sólo una parte, apúntalo abajo con su importe.</p>'+
+    '<div id="v_recibos" style="margin:0 0 4px"></div>'+
+    '<div class="nota" id="v_marcados" style="margin:6px 0 0"></div>'+
+    '<p class="nota" style="margin:16px 0 6px">Y aquí, los cobros sueltos: los que no saldan un '+
+    'recibo entero. Fecha, quién paga, de qué papel es y cuánto.</p>'+
     '<div id="v_listaCobros"></div>'+
     '<button type="button" class="btn suave sm" id="v_masCobro" style="margin-top:8px">'+
     '+ Añadir cobro</button>'+
-    '<div id="v_recibos" style="margin:10px 0 0"></div>'+
     '<div class="nota" id="v_cuadre" style="margin:8px 0 0"></div>'+
     '<label class="marca-check" style="margin-top:14px">'+
       '<input type="checkbox" id="v_cobrado"'+(v.cobrado?" checked":"")+'>'+
@@ -1673,10 +1694,17 @@ function editarVisita(id){
       v.cassPagado=valor("v_cassPagado")===""?"":numero("v_cassPagado");
       v.segPagado =valor("v_segPagado") ===""?"":numero("v_segPagado");
       v.cobros=leerCobros();
+      /* Sólo se guardan los que existen: si borras un tique, su marca se
+         va con él. */
+      var claves=papelesDeLaVisita(v).map(function(p){ return p.clave; });
+      v.papelesCobrados=tachados.filter(function(k){ return claves.indexOf(k)>=0; });
       v.cobrado=document.getElementById("v_cobrado").checked || todoCobrado(v);
       if(!id) libro.medico.push(v);
       guardar(); pintar(); avisar(id?"Visita actualizada":"Visita anotada");
     });
+
+  /* Los recibos que ya te han pagado enteros, marcados a mano. */
+  var tachados=papelesCobrados(v).slice();
 
   /* Las filas de los cobros que van llegando. El desplegable de papeles
      se rehace cada vez, que los tiques se añaden mientras tanto. */
@@ -1865,21 +1893,32 @@ function editarVisita(id){
       var lista2=leerCobros();
       var papeles2=papelesDeLaVisita({consulta:cons, medicinas:farm, recibo:valor("v_recibo"),
                                       farmacia:valor("v_farmacia"), tiques:leerTiques()});
-      if(!lista2.length && !papeles2.length){
-        cajaRecibos.innerHTML="";
+      if(!papeles2.length){
+        cajaRecibos.innerHTML='<p class="nota" style="margin:0">Pon el importe de la consulta o los '+
+          'tiques de la farmacia y aquí podrás ir tachándolos.</p>';
       }else{
         var sueltos=r2(lista2.filter(function(c){ return c.papel==="todo"; })
                              .reduce(function(t,c){ return t+c.imp; },0));
+        var marcadoTotal=0, marcadoCuantos=0;
         var filas=papeles2.map(function(p){
-          var cob=r2(lista2.filter(function(c){ return c.papel===p.clave; })
-                           .reduce(function(t,c){ return t+c.imp; },0));
+          var suelto=r2(lista2.filter(function(c){ return c.papel===p.clave; })
+                              .reduce(function(t,c){ return t+c.imp; },0));
+          var tachado=tachados.indexOf(p.clave)>=0;
+          var cob=suelto>0.004 ? suelto : (tachado ? p.pagado : 0);
+          if(tachado){ marcadoTotal=r2(marcadoTotal+p.pagado); marcadoCuantos++; }
           var queda=r2(p.pagado-cob);
-          return '<div style="display:flex;justify-content:space-between;gap:12px;padding:4px 0;'+
+          return '<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;'+
                  'border-bottom:1px solid var(--linea-suave);font-size:13px">'+
-                 '<span>'+esc(p.etiqueta)+'</span>'+
-                 '<span class="num">'+eur(cob)+' de '+eur(p.pagado)+' · '+
+                 '<label class="marca-check" style="margin:0;gap:7px">'+
+                   '<input type="checkbox" class="p_tacha" data-clave="'+esc(p.clave)+'"'+
+                   (tachado?" checked":"")+'>'+
+                   '<span>'+esc(p.etiqueta)+' <span style="color:var(--muted)">'+eur(p.pagado)+'</span></span>'+
+                 '</label>'+
+                 '<span class="num">'+
                  (queda>0.004
-                   ? '<span style="color:var(--malo)">faltan '+eur(queda)+'</span>'
+                   ? (suelto>0.004
+                       ? eur(cob)+' de '+eur(p.pagado)+' · <span style="color:var(--malo)">faltan '+eur(queda)+'</span>'
+                       : '<span style="color:var(--muted)">sin cobrar</span>')
                    : queda<-0.004
                      ? '<span style="color:var(--aviso)">'+eur(Math.abs(queda))+' de más</span>'
                      : '<span style="color:var(--ok)">saldado ✓</span>')+
@@ -1887,9 +1926,28 @@ function editarVisita(id){
         }).join("");
         cajaRecibos.innerHTML=filas+
           (sueltos>0.004
-            ? '<div class="nota" style="margin:6px 0 0">Y '+eur(sueltos)+' apuntados como «todo junto», '+
-              'sin decir de qué recibo son.</div>'
+            ? '<div class="nota" style="margin:6px 0 0">Y '+eur(sueltos)+' apuntados sin decir de qué '+
+              'recibo son.</div>'
             : "");
+        /* Marcar y desmarcar aquí mismo: es lo que se hace mirando el
+           ingreso del banco. */
+        cajaRecibos.querySelectorAll(".p_tacha").forEach(function(x){
+          x.addEventListener("change", function(){
+            var k=x.getAttribute("data-clave");
+            if(x.checked){ if(tachados.indexOf(k)<0) tachados.push(k); }
+            else tachados=tachados.filter(function(y){ return y!==k; });
+            recalcular();
+          });
+        });
+        var cajaMarcados=document.getElementById("v_marcados");
+        if(cajaMarcados){
+          var totalPapeles=r2(papeles2.reduce(function(t,p){ return t+p.pagado; },0));
+          cajaMarcados.innerHTML = marcadoCuantos
+            ? 'Llevas marcados <strong>'+marcadoCuantos+'</strong> recibo'+(marcadoCuantos===1?"":"s")+
+              ': <strong>'+eur(marcadoTotal)+'</strong> de '+eur(totalPapeles)+'. '+
+              'Ve marcando hasta llegar a lo que te han ingresado.'
+            : 'Marca los recibos que te hayan pagado y aquí verás lo que suman.';
+        }
       }
     }
 
@@ -1912,14 +1970,16 @@ function editarVisita(id){
     }
 
     var total=r2(quedaC+quedaF+faltaPagos);
-    /* Si hay cobros apuntados, manda el saldo de los papeles. */
-    if(leerCobros().length){
+    /* Con recibos tachados o cobros apuntados, manda el saldo de los
+       papeles: lo que falta es lo que les queda para quedar a cero. */
+    if(leerCobros().length || tachados.length){
       var papeles3=papelesDeLaVisita({consulta:cons, medicinas:farm, recibo:valor("v_recibo"),
                                       farmacia:valor("v_farmacia"), tiques:leerTiques()});
       var lista3=leerCobros();
       total=r2(papeles3.reduce(function(t,p){
-        var cob=r2(lista3.filter(function(c){ return c.papel===p.clave; })
-                         .reduce(function(x,c){ return x+c.imp; },0));
+        var suelto=r2(lista3.filter(function(c){ return c.papel===p.clave; })
+                            .reduce(function(x,c){ return x+c.imp; },0));
+        var cob=suelto>0.004 ? suelto : (tachados.indexOf(p.clave)>=0 ? p.pagado : 0);
         return t+Math.max(0, r2(p.pagado-cob));
       }, 0));
       faltaPagos=0;
