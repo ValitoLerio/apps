@@ -961,14 +961,24 @@ function pintarComparador(){
           'color:var(--muted);font-size:10.5px;margin-top:2px">'+esc(s.sitio)+'</div>':"")+
         '</th>';
     }).join("")+
-    '<th class="num">Más barato</th><th></th></tr></thead><tbody>';
+    '<th class="num">Más barato</th></tr></thead><tbody>';
 
   productos.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre,"es"); }).forEach(function(p){
     var valores=supers.map(function(s){ var pr=precioDe(p.id,s.id); return pr?+pr.precio:null; });
     var conPrecio=valores.filter(function(v){ return v!=null; });
     var minimo=conPrecio.length?Math.min.apply(null,conPrecio):null;
-    html+="<tr><td><strong>"+esc(p.nombre)+"</strong>"+
-          (p.marca?' <span style="color:var(--muted);font-size:12px">'+esc(p.marca)+'</span>':"")+
+    /* El nombre abre la ficha y la ✕ lo borra, igual que en la fila de
+       los supermercados. Antes esos dos botones vivían en la última
+       columna, y con dos o tres supermercados se quedaban fuera de la
+       pantalla: había que arrastrar la tabla para encontrarlos. */
+    html+='<tr><td><div style="display:flex;gap:4px;align-items:center">'+
+          '<button class="btn suave sm" data-pedit="'+esc(p.id)+'" '+
+          'style="padding:1px 5px;font-size:inherit;font-weight:700;text-align:left" '+
+          'title="Editar '+esc(p.nombre)+'">'+esc(p.nombre)+' ✎</button>'+
+          '<button class="btn suave sm malo" data-pdel="'+esc(p.id)+'" '+
+          'style="padding:1px 5px" title="Borrar '+esc(p.nombre)+'">✕</button>'+
+          '</div>'+
+          (p.marca?'<span style="color:var(--muted);font-size:12px">'+esc(p.marca)+'</span>':"")+
           (p.formato?'<br><span style="color:var(--muted);font-size:12px">'+esc(p.formato)+'</span>':"")+
           (unidadesDe(p)?' <span style="color:var(--muted);font-size:12px">· '+unidadesDe(p)+' uds</span>':"")+
           "</td>";
@@ -984,10 +994,7 @@ function pintarComparador(){
     });
     var minUd=precioUnidad(p, minimo);
     html+='<td class="num">'+(minimo!=null?'<span class="chapa ok">'+eur(minimo)+'</span>':'<span class="precio-vacio">—</span>')+
-          (minUd!=null?'<div style="font-size:11px;color:var(--muted)">'+esc(eurUnidad(minUd))+'</div>':"")+"</td>"+
-          '<td><div class="acciones-fila">'+
-          '<button class="btn suave sm" data-pedit="'+p.id+'">Editar</button>'+
-          '<button class="btn suave sm malo" data-pdel="'+p.id+'">Borrar</button></div></td></tr>';
+          (minUd!=null?'<div style="font-size:11px;color:var(--muted)">'+esc(eurUnidad(minUd))+'</div>':"")+"</td></tr>";
   });
   html+="</tbody></table>";
   caja.innerHTML=html;
