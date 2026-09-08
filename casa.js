@@ -158,6 +158,52 @@ function pendienteMedico(v){
 function cassTotal(v){ return r2((+v.cassCons||0)+(+v.cassFarm||0)); }
 function seguroTotal(v){ return r2((+v.segCons||0)+(+v.segFarm||0)); }
 
+/* La CASS y el seguro no pagan el mismo dia ni siempre pagan: cada uno
+   lleva su visto y su fecha, que es lo unico que dice de verdad si eso
+   esta cobrado. Sin marcar, lo que te deben sigue contando. */
+function cobroDe(v, quien){
+  var hecho = quien==="cass" ? !!v.cassCobrado : !!v.segCobrado;
+  var fecha = quien==="cass" ? (v.cassFecha||"") : (v.segFecha||"");
+  var importe= quien==="cass" ? cassTotal(v) : seguroTotal(v);
+  return {hecho:hecho, fecha:fecha, importe:importe};
+}
+/* Todo cobrado es: de los dos, los que tenian algo que devolver estan
+   marcados. Si ninguno devuelve nada, no hay nada que esperar. */
+function todoCobrado(v){
+  var c=cobroDe(v,"cass"), g=cobroDe(v,"seguro");
+  var pendientes=0, marcados=0;
+  if(c.importe>0.004){ pendientes++; if(c.hecho) marcados++; }
+  if(g.importe>0.004){ pendientes++; if(g.hecho) marcados++; }
+  return pendientes>0 && pendientes===marcados;
+}
+function faltaPorCobrar(v){
+  var l=[];
+  if(cassTotal(v)>0.004 && !v.cassCobrado) l.push("CASS");
+  if(seguroTotal(v)>0.004 && !v.segCobrado) l.push("seguro");
+  return l;
+}
+/* La consulta y la farmacia no vienen en el mismo papel, y la farmacia
+   muchas veces llega partida en varios tiques. Cada uno con su numero y
+   su importe: la farmacia de la visita es la suma de todos, y asi se
+   puede buscar el tique suelto cuando reclaman uno. */
+function tiquesDe(v){
+  return (v && Array.isArray(v.tiques)) ? v.tiques : [];
+}
+function sumaTiques(v){
+  return r2(tiquesDe(v).reduce(function(t,x){ return t+(+x.imp||0); }, 0));
+}
+
+/* Debajo de un importe: cuando lo pagaron, o que sigue sin pagarse. */
+function pieDelCobro(v, quien){
+  var c=cobroDe(v, quien);
+  if(c.importe<=0.004) return "";
+  if(c.hecho){
+    return '<div style="color:var(--ok);font-size:11px;font-weight:400">✓ '+
+           (c.fecha?esc(dmy(c.fecha)):"cobrado")+'</div>';
+  }
+  return '<div style="color:var(--aviso);font-size:11px;font-weight:400">sin cobrar</div>';
+}
+
 /* Las visitas de antes llevaban un solo importe de CASS y otro de seguro,
    sin decir de qué eran. Para repartirlos no hace falta adivinar: de un
    concepto no te devuelven más de lo que pagaste, así que se llena
@@ -1358,13 +1404,19 @@ function verMedico(main){
         "<td>"+esc(v.motivo||"—")+"</td>"+
         '<td class="mono">'+(v.recibo
           ? esc(v.recibo)
-          : '<span style="color:var(--muted)">—</span>')+"</td>"+
+          : '<span style="color:var(--muted)">—</span>')+
+          (tiquesDe(v).length
+            ? '<div style="color:var(--muted);font-size:11px" title="Tiques de la farmacia">'+
+              esc(tiquesDe(v).map(function(x){ return x.n||"(sin nº)"; }).join(" · "))+'</div>'
+            : "")+"</td>"+
         '<td class="num">'+eur(v.consulta)+"</td>"+
         '<td class="num">'+eur(v.medicinas)+
           (v.farmacia?'<div style="color:var(--muted);font-size:11px;font-weight:400">'+
-            esc(v.farmacia)+'</div>':"")+"</td>"+
-        '<td class="num">'+eur(cassTotal(v))+"</td>"+
-        '<td class="num">'+eur(seguroTotal(v))+"</td>"+
+            esc(v.farmacia)+'</div>':"")+
+          (tiquesDe(v).length>1?'<div style="color:var(--muted);font-size:11px;font-weight:400">'+
+            tiquesDe(v).length+' tiques</div>':"")+"</td>"+
+        '<td class="num">'+eur(cassTotal(v))+pieDelCobro(v,"cass")+"</td>"+
+        '<td class="num">'+eur(seguroTotal(v))+pieDelCobro(v,"seguro")+"</td>"+
         '<td class="num"><strong>'+eur(queda)+"</strong>"+
           /* El desglose sólo cuando hay las dos cosas: si no, estorba */
           ((+v.consulta||0)>0 && (+v.medicinas||0)>0
@@ -1372,10 +1424,13 @@ function verMedico(main){
               eur(pendienteDe(v,"consulta"))+' consulta · '+
               eur(pendienteDe(v,"farmacia"))+' farmacia</div>'
             : "")+"</td>"+
-        "<td>"+(v.cobrado
-                 ? '<span class="chapa ok">Cobrado</span>'
-                 : (queda>0.004 ? '<span class="chapa aviso">Pendiente</span>'
-                                : '<span class="chapa neutra">Al día</span>'))+"</td>"+
+        "<td>"+(function(){
+                 var falta=faltaPorCobrar(v);
+                 if(v.cobrado || todoCobrado(v)) return '<span class="chapa ok">Cobrado</span>';
+                 if(falta.length) return '<span class="chapa aviso">Falta '+esc(falta.join(" y "))+'</span>';
+                 if(queda>0.004) return '<span class="chapa aviso">Pendiente</span>';
+                 return '<span class="chapa neutra">Al día</span>';
+               })()+"</td>"+
         '<td><div class="acciones-fila">'+
           '<button class="btn suave sm" data-medit="'+v.id+'">Editar</button>'+
           '<button class="btn suave sm malo" data-mdel="'+v.id+'">Borrar</button></div></td></tr>';
@@ -1413,12 +1468,13 @@ function editarVisita(id){
       /* El comprobante de la consulta: es lo primero que piden si hay
          cualquier problema, así que va arriba, con los datos de la visita
          y no escondido entre los importes. */
-      '<div class="campo"><label class="lbl" for="v_recibo">Nº de recibo</label>'+
+      '<div class="campo"><label class="lbl" for="v_recibo">Nº de recibo de la consulta</label>'+
         '<input id="v_recibo" class="mono" value="'+esc(v.recibo||"")+'" '+
         'placeholder="A-2026/0134"></div>'+
     '</div>'+
     '<p class="nota" style="margin:8px 0 0">El número del recibo de la consulta es el '+
-    'comprobante de la visita: lo primero que te piden si hay cualquier problema.</p>'+
+    'comprobante de la visita: lo primero que te piden si hay cualquier problema. Los de la '+
+    'farmacia van más abajo, que vienen en otro papel y a veces en varios.</p>'+
     '<p class="nota" style="margin:16px 0 8px">La consulta y lo que te devuelven de ella. '+
     'El <strong style="color:var(--tinta)">seguro complementario</strong> paga lo que no paga la CASS, '+
     'así que ese importe se pone solo: escribe lo que costó y lo que devuelve la CASS.</p>'+
@@ -1446,6 +1502,27 @@ function editarVisita(id){
       '<label class="lbl" for="v_farmacia">Qué farmacia</label>'+
       '<input id="v_farmacia" value="'+esc(v.farmacia||"")+'" placeholder="Farmàcia Pyrénées…"></div>'+
     '<div class="nota" id="v_calcFarm" style="margin:6px 0 0"></div>'+
+    /* Los tiques de la farmacia, uno por linea: cuando la parten en
+       varios, cada uno tiene su numero y su importe. */
+    '<p class="nota" style="margin:14px 0 6px">Tiques de la farmacia. Si te la han partido en '+
+    'varios, apúntalos aquí: el importe de arriba se pone con la suma.</p>'+
+    '<div id="v_tiques"></div>'+
+    '<button type="button" class="btn suave sm" id="v_masTique" style="margin-top:8px">'+
+    '+ Añadir tique</button>'+
+    /* Cada devolución con su visto y su fecha: es lo que contesta a
+       «¿esto ya me lo han pagado, y cuándo?». */
+    '<p class="nota" style="margin:18px 0 8px">Cuándo te lo han devuelto. Marca cada uno cuando '+
+    'lo veas en el banco y ponle la fecha.</p>'+
+    '<div class="rejilla">'+
+      '<div class="campo"><label class="marca-check" style="margin:0 0 6px">'+
+        '<input type="checkbox" id="v_cassCobrado"'+(v.cassCobrado?" checked":"")+'>'+
+        '<span>La CASS ya ha pagado</span></label>'+
+        '<input type="date" id="v_cassFecha" value="'+esc(v.cassFecha||"")+'"></div>'+
+      '<div class="campo"><label class="marca-check" style="margin:0 0 6px">'+
+        '<input type="checkbox" id="v_segCobrado"'+(v.segCobrado?" checked":"")+'>'+
+        '<span>El seguro ya ha pagado</span></label>'+
+        '<input type="date" id="v_segFecha" value="'+esc(v.segFecha||"")+'"></div>'+
+    '</div>'+
     '<label class="marca-check" style="margin-top:14px">'+
       '<input type="checkbox" id="v_cobrado"'+(v.cobrado?" checked":"")+'>'+
       '<span>Ya me lo han devuelto todo</span></label>'+
@@ -1459,12 +1536,68 @@ function editarVisita(id){
       v.medicinas=numero("v_medi");
       v.farmacia=valor("v_farmacia");
       v.recibo=valor("v_recibo");
+      v.tiques=leerTiques();
+      /* Con tiques apuntados, la farmacia es lo que suman: no puede
+         bailar con lo que dicen los papeles. */
+      if(v.tiques.length) v.medicinas=sumaTiques({tiques:v.tiques});
       v.cassCons=numero("v_cassCons"); v.segCons=numero("v_segCons");
       v.cassFarm=numero("v_cassFarm"); v.segFarm=numero("v_segFarm");
-      v.cobrado=document.getElementById("v_cobrado").checked;
+      v.cassCobrado=document.getElementById("v_cassCobrado").checked;
+      v.segCobrado =document.getElementById("v_segCobrado").checked;
+      /* Marcar el visto sin fecha es decir «ya está»: se pone la de hoy,
+         que es cuando lo has visto en el banco. */
+      v.cassFecha=valor("v_cassFecha")||(v.cassCobrado?hoyISO():"");
+      v.segFecha =valor("v_segFecha") ||(v.segCobrado ?hoyISO():"");
+      v.cobrado=document.getElementById("v_cobrado").checked || todoCobrado(v);
       if(!id) libro.medico.push(v);
       guardar(); pintar(); avisar(id?"Visita actualizada":"Visita anotada");
     });
+
+  /* Las filas de tiques de la farmacia. */
+  var cajaTiques=document.getElementById("v_tiques");
+  function filaTique(t){
+    t=t||{n:"", imp:""};
+    var f=document.createElement("div");
+    f.className="tique";
+    f.style.cssText="display:grid;grid-template-columns:minmax(110px,2fr) 110px auto;gap:8px;margin-top:8px;align-items:center";
+    f.innerHTML='<input class="t_n mono" value="'+esc(t.n||"")+'" placeholder="Nº del tique">'+
+                '<input class="t_imp" type="number" min="0" step="0.01" value="'+
+                esc(t.imp!==""&&t.imp!=null?t.imp:"")+'" placeholder="0,00">'+
+                '<button type="button" class="btn suave sm malo" title="Quitar">✕</button>';
+    cajaTiques.appendChild(f);
+    f.querySelector("button").addEventListener("click", function(){ f.remove(); sumarTiques(); });
+    f.querySelector(".t_imp").addEventListener("input", sumarTiques);
+  }
+  function leerTiques(){
+    var l=[];
+    if(!cajaTiques) return l;
+    cajaTiques.querySelectorAll(".tique").forEach(function(f){
+      var n=f.querySelector(".t_n").value.trim();
+      var imp=+f.querySelector(".t_imp").value||0;
+      if(n || imp>0) l.push({n:n, imp:r2(imp)});
+    });
+    return l;
+  }
+  /* Con tiques puestos, el importe de la farmacia lo mandan ellos. */
+  function sumarTiques(){
+    var l=leerTiques();
+    var campo=document.getElementById("v_medi");
+    if(l.length){
+      campo.value=sumaTiques({tiques:l});
+      campo.readOnly=true;
+      campo.style.background="var(--sup2)";
+      campo.title="Es la suma de los tiques";
+    }else{
+      campo.readOnly=false;
+      campo.style.background="";
+      campo.title="";
+    }
+    campo.dispatchEvent(new Event("input"));
+  }
+  tiquesDe(v).forEach(filaTique);
+  var masTique=document.getElementById("v_masTique");
+  if(masTique) masTique.addEventListener("click", function(){ filaTique(); sumarTiques(); });
+  sumarTiques();
 
   /* El seguro complementario paga lo que no paga la CASS, asi que ese
      importe no hay que escribirlo: se rellena solo. Solo se deja de
