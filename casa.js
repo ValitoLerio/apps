@@ -152,8 +152,15 @@ function pendienteDe(v, concepto){
     : r2((+v.consulta ||0)-(+v.cassCons||0)-(+v.segCons||0));
 }
 function pendienteMedico(v){
-  /* Lo que aún no te han devuelto de esa visita: lo que no cubre nadie,
-     más lo que prometieron y pagaron corto. */
+  /* Con los cobros apuntados uno a uno, lo que falta es lo que les queda
+     a los papeles para quedar a cero: que lo ponga la CASS o el seguro
+     da igual, el dinero es el mismo. Sin lista, lo de siempre: lo que no
+     cubre nadie más lo que prometieron y pagaron corto. */
+  if(cobrosDe(v).length){
+    return r2(papelesDeLaVisita(v).reduce(function(t,p){
+      return t+Math.max(0, r2(p.pagado-cobradoDelPapel(v, p.clave)));
+    }, 0));
+  }
   return r2(pendienteDe(v,"consulta")+pendienteDe(v,"farmacia")+
             faltaDelCobro(v,"cass")+faltaDelCobro(v,"seguro"));
 }
@@ -189,6 +196,35 @@ function ultimaFechaCobro(v, quien){
 }
 function pagadoDeLaVisita(v){ return r2((+v.consulta||0)+(+v.medicinas||0)); }
 
+/* Los papeles que hay que ir dejando a cero: el recibo de la consulta y
+   cada tique de la farmacia, cada uno con lo que pagaste por el. Los
+   cobros se apuntan contra uno de ellos, y el papel esta saldado cuando
+   lo cobrado llega a lo pagado. */
+function papelesDeLaVisita(v){
+  var l=[];
+  if((+v.consulta||0)>0.004)
+    l.push({clave:"consulta", etiqueta:"Consulta"+(v.recibo?" · "+v.recibo:""), pagado:r2(+v.consulta||0)});
+  tiquesDe(v).forEach(function(t, i){
+    l.push({clave:t.n||("tique"+(i+1)),
+            etiqueta:"Farmacia · "+(t.n||("tique "+(i+1))),
+            pagado:r2(+t.imp||0)});
+  });
+  /* Farmacia sin tiques apuntados: el importe entero es un papel más. */
+  if(!tiquesDe(v).length && (+v.medicinas||0)>0.004)
+    l.push({clave:"farmacia", etiqueta:"Farmacia"+(v.farmacia?" · "+v.farmacia:""), pagado:r2(+v.medicinas||0)});
+  return l;
+}
+function cobradoDelPapel(v, clave){
+  return r2(cobrosDe(v).filter(function(c){ return c.papel===clave; })
+            .reduce(function(t,c){ return t+(+c.imp||0); }, 0));
+}
+function papelesSinSaldar(v){
+  if(!cobrosDe(v).length) return [];
+  return papelesDeLaVisita(v).filter(function(p){
+    return r2(p.pagado-cobradoDelPapel(v, p.clave))>0.004;
+  });
+}
+
 function importeCobrado(v, quien){
   if(cobrosDe(v, quien).length) return sumaCobros(v, quien);
   var hecho = quien==="cass" ? !!v.cassCobrado : !!v.segCobrado;
@@ -214,6 +250,9 @@ function cobroDe(v, quien){
 /* Todo cobrado es: de los dos, los que tenian algo que devolver estan
    marcados. Si ninguno devuelve nada, no hay nada que esperar. */
 function todoCobrado(v){
+  /* Con la lista, cobrado es que no quede ningún papel por saldar. */
+  if(cobrosDe(v).length)
+    return papelesDeLaVisita(v).length>0 && papelesSinSaldar(v).length===0;
   var c=cobroDe(v,"cass"), g=cobroDe(v,"seguro");
   var pendientes=0, marcados=0;
   if(c.importe>0.004){ pendientes++; if(c.hecho) marcados++; }
@@ -246,6 +285,9 @@ function pieDelCobro(v, quien){
   if(!c.hecho)
     return '<div style="color:var(--aviso);font-size:11px;font-weight:400">sin cobrar</div>';
   var pagado=importeCobrado(v, quien), falta=faltaDelCobro(v, quien);
+  /* Con todos los papeles a cero, que uno haya puesto medio euro mas y
+     el otro medio menos no es un problema de nadie: no se dice. */
+  if(cobrosDe(v).length && !papelesSinSaldar(v).length) falta=0;
   return '<div style="color:var(--ok);font-size:11px;font-weight:400">✓ '+
          (c.fecha?esc(dmy(c.fecha)):"cobrado")+'</div>'+
          (falta>0.004
@@ -1470,12 +1512,21 @@ function verMedico(main){
         '<td class="num">'+eur(cassTotal(v))+pieDelCobro(v,"cass")+"</td>"+
         '<td class="num">'+eur(seguroTotal(v))+pieDelCobro(v,"seguro")+"</td>"+
         '<td class="num"><strong>'+eur(queda)+"</strong>"+
-          /* El desglose sólo cuando hay las dos cosas: si no, estorba */
-          ((+v.consulta||0)>0 && (+v.medicinas||0)>0
-            ? '<div style="color:var(--muted);font-size:11px;font-weight:400">'+
-              eur(pendienteDe(v,"consulta"))+' consulta · '+
-              eur(pendienteDe(v,"farmacia"))+' farmacia</div>'
-            : "")+"</td>"+
+          /* Con los cobros apuntados uno a uno, lo que dice algo es
+             cuántos papeles siguen sin quedar a cero. */
+          (function(){
+            var sin=papelesSinSaldar(v);
+            if(cobrosDe(v).length)
+              return '<div style="color:var(--muted);font-size:11px;font-weight:400">'+
+                (sin.length ? sin.length+(sin.length===1?" recibo":" recibos")+" sin saldar"
+                            : "todos los recibos saldados")+'</div>';
+            /* El desglose sólo cuando hay las dos cosas: si no, estorba */
+            return ((+v.consulta||0)>0 && (+v.medicinas||0)>0
+              ? '<div style="color:var(--muted);font-size:11px;font-weight:400">'+
+                eur(pendienteDe(v,"consulta"))+' consulta · '+
+                eur(pendienteDe(v,"farmacia"))+' farmacia</div>'
+              : "");
+          })()+"</td>"+
         "<td>"+(function(){
                  var falta=faltaPorCobrar(v);
                  if(v.cobrado || todoCobrado(v)) return '<span class="chapa ok">Cobrado</span>';
@@ -1590,7 +1641,8 @@ function editarVisita(id){
     '<div id="v_listaCobros"></div>'+
     '<button type="button" class="btn suave sm" id="v_masCobro" style="margin-top:8px">'+
     '+ Añadir cobro</button>'+
-    '<div class="nota" id="v_cuadre" style="margin:10px 0 0"></div>'+
+    '<div id="v_recibos" style="margin:10px 0 0"></div>'+
+    '<div class="nota" id="v_cuadre" style="margin:8px 0 0"></div>'+
     '<label class="marca-check" style="margin-top:14px">'+
       '<input type="checkbox" id="v_cobrado"'+(v.cobrado?" checked":"")+'>'+
       '<span>Ya me lo han devuelto todo</span></label>'+
@@ -1634,7 +1686,7 @@ function editarVisita(id){
     leerTiques().forEach(function(t, i){
       l.push({v:t.n||("tique"+(i+1)), t:"Farmacia · "+(t.n||("tique "+(i+1)))});
     });
-    l.push({v:"todo", t:"Todo junto"});
+    l.push({v:"todo", t:"Sin decir de cuál"});
     return l;
   }
   function filaCobro(c){
@@ -1806,6 +1858,41 @@ function editarVisita(id){
       cajaCobros.innerHTML=lineas.join("<br>");
     }
 
+    /* Recibo a recibo: lo que pagaste, lo que te han devuelto y lo que
+       le queda a cada uno hasta quedar en cero. */
+    var cajaRecibos=document.getElementById("v_recibos");
+    if(cajaRecibos){
+      var lista2=leerCobros();
+      var papeles2=papelesDeLaVisita({consulta:cons, medicinas:farm, recibo:valor("v_recibo"),
+                                      farmacia:valor("v_farmacia"), tiques:leerTiques()});
+      if(!lista2.length && !papeles2.length){
+        cajaRecibos.innerHTML="";
+      }else{
+        var sueltos=r2(lista2.filter(function(c){ return c.papel==="todo"; })
+                             .reduce(function(t,c){ return t+c.imp; },0));
+        var filas=papeles2.map(function(p){
+          var cob=r2(lista2.filter(function(c){ return c.papel===p.clave; })
+                           .reduce(function(t,c){ return t+c.imp; },0));
+          var queda=r2(p.pagado-cob);
+          return '<div style="display:flex;justify-content:space-between;gap:12px;padding:4px 0;'+
+                 'border-bottom:1px solid var(--linea-suave);font-size:13px">'+
+                 '<span>'+esc(p.etiqueta)+'</span>'+
+                 '<span class="num">'+eur(cob)+' de '+eur(p.pagado)+' · '+
+                 (queda>0.004
+                   ? '<span style="color:var(--malo)">faltan '+eur(queda)+'</span>'
+                   : queda<-0.004
+                     ? '<span style="color:var(--aviso)">'+eur(Math.abs(queda))+' de más</span>'
+                     : '<span style="color:var(--ok)">saldado ✓</span>')+
+                 '</span></div>';
+        }).join("");
+        cajaRecibos.innerHTML=filas+
+          (sueltos>0.004
+            ? '<div class="nota" style="margin:6px 0 0">Y '+eur(sueltos)+' apuntados como «todo junto», '+
+              'sin decir de qué recibo son.</div>'
+            : "");
+      }
+    }
+
     /* Lo que llevas cobrado contra lo que pusiste tu. */
     var cajaCuadre=document.getElementById("v_cuadre");
     if(cajaCuadre){
@@ -1825,6 +1912,18 @@ function editarVisita(id){
     }
 
     var total=r2(quedaC+quedaF+faltaPagos);
+    /* Si hay cobros apuntados, manda el saldo de los papeles. */
+    if(leerCobros().length){
+      var papeles3=papelesDeLaVisita({consulta:cons, medicinas:farm, recibo:valor("v_recibo"),
+                                      farmacia:valor("v_farmacia"), tiques:leerTiques()});
+      var lista3=leerCobros();
+      total=r2(papeles3.reduce(function(t,p){
+        var cob=r2(lista3.filter(function(c){ return c.papel===p.clave; })
+                         .reduce(function(x,c){ return x+c.imp; },0));
+        return t+Math.max(0, r2(p.pagado-cob));
+      }, 0));
+      faltaPagos=0;
+    }
     document.getElementById("v_calculo").innerHTML=
       total>0.004 ? 'En total te deben <strong>'+eur(total)+'</strong>'+
         (cons>0 && farm>0 && r2(quedaC+quedaF)>0.004
