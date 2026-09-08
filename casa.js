@@ -151,21 +151,22 @@ function pendienteDe(v, concepto){
     ? r2((+v.medicinas||0)-(+v.cassFarm||0)-(+v.segFarm||0))
     : r2((+v.consulta ||0)-(+v.cassCons||0)-(+v.segCons||0));
 }
+/* Lo que te ha llegado de verdad: los recibos cobrados si los llevas, y
+   si no, lo que hayas marcado que ha pagado cada uno. Lo que no está
+   marcado no ha llegado, por mucho que en los importes de arriba les
+   toque pagarlo. */
+function llegadoDe(v){
+  if(usaRecibos(v)) return cobradoRecibos(v);
+  return r2((importeCobrado(v,"cass")||0)+(importeCobrado(v,"seguro")||0));
+}
+
 function pendienteMedico(v){
   /* Con los cobros apuntados uno a uno, lo que falta es lo que les queda
      a los papeles para quedar a cero: que lo ponga la CASS o el seguro
      da igual, el dinero es el mismo. Sin lista, lo de siempre: lo que no
      cubre nadie más lo que prometieron y pagaron corto. */
-  /* Con recibos escritos, lo que falta es lo que suman los que aún no
-     te han pagado. */
-  if(usaRecibos(v)) return Math.max(0, faltaRecibos(v));
-  if(llevaRecibos(v)){
-    return r2(papelesDeLaVisita(v).reduce(function(t,p){
-      return t+Math.max(0, r2(p.pagado-cobradoDelPapel(v, p.clave)));
-    }, 0));
-  }
-  return r2(pendienteDe(v,"consulta")+pendienteDe(v,"farmacia")+
-            faltaDelCobro(v,"cass")+faltaDelCobro(v,"seguro"));
+  /* Siempre lo mismo: lo que pusiste menos lo que te ha llegado. */
+  return r2(Math.max(0, pagadoDeLaVisita(v)-llegadoDe(v)));
 }
 function cassTotal(v){ return r2((+v.cassCons||0)+(+v.cassFarm||0)); }
 function seguroTotal(v){ return r2((+v.segCons||0)+(+v.segFarm||0)); }
@@ -271,10 +272,8 @@ function cobroDe(v, quien){
 /* Todo cobrado es: de los dos, los que tenian algo que devolver estan
    marcados. Si ninguno devuelve nada, no hay nada que esperar. */
 function todoCobrado(v){
-  if(usaRecibos(v)) return faltaRecibos(v)<=0.004;
-  /* Con la lista, cobrado es que no quede ningún papel por saldar. */
-  if(llevaRecibos(v))
-    return papelesDeLaVisita(v).length>0 && papelesSinSaldar(v).length===0;
+  /* Cobrado es que te hayan devuelto lo que pusiste. */
+  if(pagadoDeLaVisita(v)>0.004) return pendienteMedico(v)<=0.004;
   var c=cobroDe(v,"cass"), g=cobroDe(v,"seguro");
   var pendientes=0, marcados=0;
   if(c.importe>0.004){ pendientes++; if(c.hecho) marcados++; }
@@ -1548,9 +1547,7 @@ function verMedico(main){
   /* Lo devuelto de verdad: en las visitas que llevan recibos apuntados,
      lo que suman los cobrados; en las demás, lo que dicen la CASS y el
      seguro que devuelven. */
-  var devuelto=r2(delAno.reduce(function(s,v){
-    return s+(usaRecibos(v) ? cobradoRecibos(v) : r2(cassTotal(v)+seguroTotal(v)));
-  },0));
+  var devuelto=r2(delAno.reduce(function(s,v){ return s+llegadoDe(v); },0));
   var sinCerrar=delAno.filter(function(v){ return !v.cobrado; });
   var pendiente=r2(sinCerrar.reduce(function(s,v){ return s+pendienteMedico(v); },0));
   /* Lo pendiente, separado: no es lo mismo reclamar la consulta que la
@@ -1969,20 +1966,23 @@ function editarVisita(id){
   }
 
   /* Cuenta en vivo: cada concepto por su lado y el total abajo */
-  function frase(pagado, devuelto, queda, quien){
+  /* Aquí se dice lo que TIENEN que devolver, no lo que han soltado: eso
+     son los recibos de la pantalla. Antes ponía «recuperado del todo» en
+     cuanto los importes cuadraban, y el seguro aún no había pagado. */
+  function frase(pagado, cubierto, queda, quien){
     if(!pagado) return "";
-    if(queda>0.004)  return 'De los '+eur(pagado)+' te han devuelto '+eur(devuelto)+
-                            ': te deben <strong>'+eur(queda)+'</strong> '+quien+'.';
-    if(queda<-0.004) return 'Te han devuelto <strong>'+eur(Math.abs(queda))+
-                            '</strong> de más '+quien+'.';
-    return 'Recuperado del todo '+quien+'.';
+    if(queda>0.004)  return 'De los '+eur(pagado)+' cubren '+eur(cubierto)+
+                            ': se quedan sin cubrir <strong>'+eur(queda)+'</strong> '+quien+'.';
+    if(queda<-0.004) return 'Entre los dos cubren <strong>'+eur(Math.abs(queda))+
+                            '</strong> más de lo que pagaste '+quien+'.';
+    return 'Entre los dos tienen que devolverte los '+eur(pagado)+' '+quien+'.';
   }
   /* Cuando el seguro pone el resto, el aviso lo dice; cuando no, se
      ofrece el boton para que lo ponga. */
   function aviso(auto, cual, pagado, cass, seguro, queda, quien){
     if(!pagado) return "";
     if(auto) return 'La CASS devuelve '+eur(cass)+' y el seguro complementario pone el resto, '+
-                    '<strong>'+eur(seguro)+'</strong>. No queda nada pendiente '+quien+'.';
+                    '<strong>'+eur(seguro)+'</strong>: eso es lo que tienen que pagarte '+quien+'.';
     return frase(pagado, r2(cass+seguro), queda, quien)+
       (Math.abs(queda)>0.004
         ? ' <button type="button" class="btn suave sm" data-resto="'+cual+'" '+
@@ -2118,6 +2118,14 @@ function editarVisita(id){
       }
     }
 
+    /* Lo que te deben es lo que no te han pagado todavía: los recibos
+       cobrados de la pantalla contra lo que pusiste tú. Que los importes
+       de arriba cuadren sólo dice que a alguien le toca pagarlo. */
+    var cobradoYa=usaRecibos(v) ? cobradoRecibos(v)
+      : r2((document.getElementById("v_cassCobrado").checked
+             ? (valor("v_cassPagado")===""?r2(cassC+cassF):numero("v_cassPagado")) : 0)+
+           (document.getElementById("v_segCobrado").checked
+             ? (valor("v_segPagado")===""?r2(segC+segF):numero("v_segPagado")) : 0));
     var total=r2(quedaC+quedaF+faltaPagos);
     /* Con recibos tachados o cobros apuntados, manda el saldo de los
        papeles: lo que falta es lo que les queda para quedar a cero. */
@@ -2133,6 +2141,23 @@ function editarVisita(id){
       }, 0));
       faltaPagos=0;
     }
+    var puestoTu=r2(cons+farm);
+    if(puestoTu>0.004){
+      var faltaYa=r2(puestoTu-cobradoYa);
+      document.getElementById("v_calculo").innerHTML=
+        faltaYa>0.004
+          ? (cobradoYa>0.004
+              ? 'Te han pagado <strong>'+eur(cobradoYa)+'</strong> de los '+eur(puestoTu)+
+                ' que pusiste: te deben <strong>'+eur(faltaYa)+'</strong>. '
+              : 'Todavía no te han devuelto nada: te deben los <strong>'+eur(puestoTu)+
+                '</strong> que pusiste. ')+
+            '<span style="color:var(--muted)">Los recibos que te vayan pagando se marcan en la '+
+            'pantalla, debajo de la visita.</span>'
+          : 'Te lo han pagado todo: <strong>'+eur(cobradoYa)+'</strong>.';
+      return;
+    }
+    /* Sin recibos apuntados y sin marcar a nadie, no ha pagado nadie:
+       decir «cuadra» ahí era decir que ya estaba cobrado. */
     document.getElementById("v_calculo").innerHTML=
       total>0.004 ? 'En total te deben <strong>'+eur(total)+'</strong>'+
         (cons>0 && farm>0 && r2(quedaC+quedaF)>0.004
