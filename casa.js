@@ -171,7 +171,26 @@ function seguroTotal(v){ return r2((+v.segCons||0)+(+v.segFarm||0)); }
 function previstoDe(v, quien){
   return quien==="cass" ? cassTotal(v) : seguroTotal(v);
 }
+/* No pagan de una vez ni por todo junto: van soltando un recibo hoy y
+   un tique dentro de tres semanas. Cada cobro que entra se apunta con su
+   fecha, quien lo paga y de que papel es, y la cuenta va sola hasta que
+   cuadra con lo que pusiste tu. Si no te apetece tanto detalle, las
+   casillas de arriba siguen valiendo: la lista manda solo cuando tiene
+   algo. */
+function cobrosDe(v, quien){
+  return ((v && v.cobros) || []).filter(function(c){ return !quien || c.quien===quien; });
+}
+function sumaCobros(v, quien){
+  return r2(cobrosDe(v, quien).reduce(function(t,c){ return t+(+c.imp||0); }, 0));
+}
+function ultimaFechaCobro(v, quien){
+  var l=cobrosDe(v, quien).map(function(c){ return c.fecha||""; }).filter(Boolean).sort();
+  return l.length ? l[l.length-1] : "";
+}
+function pagadoDeLaVisita(v){ return r2((+v.consulta||0)+(+v.medicinas||0)); }
+
 function importeCobrado(v, quien){
+  if(cobrosDe(v, quien).length) return sumaCobros(v, quien);
   var hecho = quien==="cass" ? !!v.cassCobrado : !!v.segCobrado;
   if(!hecho) return null;                       /* todavia no ha pagado */
   var puesto = quien==="cass" ? v.cassPagado : v.segPagado;
@@ -185,8 +204,10 @@ function faltaDelCobro(v, quien){
 }
 
 function cobroDe(v, quien){
-  var hecho = quien==="cass" ? !!v.cassCobrado : !!v.segCobrado;
-  var fecha = quien==="cass" ? (v.cassFecha||"") : (v.segFecha||"");
+  var conLista = cobrosDe(v, quien).length>0;
+  var hecho = conLista || (quien==="cass" ? !!v.cassCobrado : !!v.segCobrado);
+  var fecha = conLista ? ultimaFechaCobro(v, quien)
+                       : (quien==="cass" ? (v.cassFecha||"") : (v.segFecha||""));
   var importe= quien==="cass" ? cassTotal(v) : seguroTotal(v);
   return {hecho:hecho, fecha:fecha, importe:importe};
 }
@@ -1562,6 +1583,14 @@ function editarVisita(id){
         'placeholder="Cuánto pagó — vacío: lo que tocaba"></div>'+
     '</div>'+
     '<div class="nota" id="v_cobros" style="margin:6px 0 0"></div>'+
+    /* El detalle: cada cobro que va entrando, con su papel. */
+    '<p class="nota" style="margin:16px 0 6px">Los cobros, uno a uno. Ve apuntando lo que te van '+
+    'pagando —de qué papel es, quién lo paga y cuánto— hasta que cuadre con lo que pusiste tú. '+
+    'Mientras haya algo aquí, esta lista manda sobre las casillas de arriba.</p>'+
+    '<div id="v_listaCobros"></div>'+
+    '<button type="button" class="btn suave sm" id="v_masCobro" style="margin-top:8px">'+
+    '+ Añadir cobro</button>'+
+    '<div class="nota" id="v_cuadre" style="margin:10px 0 0"></div>'+
     '<label class="marca-check" style="margin-top:14px">'+
       '<input type="checkbox" id="v_cobrado"'+(v.cobrado?" checked":"")+'>'+
       '<span>Ya me lo han devuelto todo</span></label>'+
@@ -1591,10 +1620,59 @@ function editarVisita(id){
          congelar una que luego cambie al corregir los importes. */
       v.cassPagado=valor("v_cassPagado")===""?"":numero("v_cassPagado");
       v.segPagado =valor("v_segPagado") ===""?"":numero("v_segPagado");
+      v.cobros=leerCobros();
       v.cobrado=document.getElementById("v_cobrado").checked || todoCobrado(v);
       if(!id) libro.medico.push(v);
       guardar(); pintar(); avisar(id?"Visita actualizada":"Visita anotada");
     });
+
+  /* Las filas de los cobros que van llegando. El desplegable de papeles
+     se rehace cada vez, que los tiques se añaden mientras tanto. */
+  var cajaCobros2=document.getElementById("v_listaCobros");
+  function papelesDisponibles(){
+    var l=[{v:"consulta", t:"Consulta"+(valor("v_recibo")?" · "+valor("v_recibo"):"")}];
+    leerTiques().forEach(function(t, i){
+      l.push({v:t.n||("tique"+(i+1)), t:"Farmacia · "+(t.n||("tique "+(i+1)))});
+    });
+    l.push({v:"todo", t:"Todo junto"});
+    return l;
+  }
+  function filaCobro(c){
+    c=c||{fecha:hoyISO(), quien:"cass", papel:"consulta", imp:""};
+    var f=document.createElement("div");
+    f.className="cobro";
+    f.style.cssText="display:grid;grid-template-columns:130px 110px minmax(120px,1fr) 100px auto;"+
+                    "gap:8px;margin-top:8px;align-items:center";
+    var papeles=papelesDisponibles();
+    if(c.papel && !papeles.some(function(p){ return p.v===c.papel; }))
+      papeles.splice(papeles.length-1, 0, {v:c.papel, t:c.papel});
+    f.innerHTML='<input type="date" class="c_fecha" value="'+esc(c.fecha||"")+'">'+
+      '<select class="c_quien"><option value="cass"'+(c.quien!=="seguro"?" selected":"")+'>CASS</option>'+
+      '<option value="seguro"'+(c.quien==="seguro"?" selected":"")+'>Seguro</option></select>'+
+      '<select class="c_papel">'+papeles.map(function(p){
+        return '<option value="'+esc(p.v)+'"'+(c.papel===p.v?" selected":"")+'>'+esc(p.t)+'</option>';
+      }).join("")+'</select>'+
+      '<input type="number" class="c_imp" min="0" step="0.01" value="'+
+      esc(c.imp!==""&&c.imp!=null?c.imp:"")+'" placeholder="0,00">'+
+      '<button type="button" class="btn suave sm malo" title="Quitar">✕</button>';
+    cajaCobros2.appendChild(f);
+    f.querySelector("button").addEventListener("click", function(){ f.remove(); recalcular(); });
+    f.querySelector(".c_imp").addEventListener("input", recalcular);
+    f.querySelector(".c_quien").addEventListener("change", recalcular);
+  }
+  function leerCobros(){
+    var l=[];
+    if(!cajaCobros2) return l;
+    cajaCobros2.querySelectorAll(".cobro").forEach(function(f){
+      var imp=+f.querySelector(".c_imp").value||0;
+      if(imp<=0) return;
+      l.push({fecha:f.querySelector(".c_fecha").value||"",
+              quien:f.querySelector(".c_quien").value,
+              papel:f.querySelector(".c_papel").value,
+              imp:r2(imp)});
+    });
+    return l;
+  }
 
   /* Las filas de tiques de la farmacia. */
   var cajaTiques=document.getElementById("v_tiques");
@@ -1641,6 +1719,10 @@ function editarVisita(id){
   var masTique=document.getElementById("v_masTique");
   if(masTique) masTique.addEventListener("click", function(){ filaTique(); sumarTiques(); });
   sumarTiques();
+
+  (v.cobros||[]).forEach(filaCobro);
+  var masCobro=document.getElementById("v_masCobro");
+  if(masCobro) masCobro.addEventListener("click", function(){ filaCobro(); recalcular(); });
 
   /* El seguro complementario paga lo que no paga la CASS, asi que ese
      importe no hay que escribirlo: se rellena solo. Solo se deja de
@@ -1706,10 +1788,15 @@ function editarVisita(id){
       [["cass","La CASS", r2(cassC+cassF), "v_cassCobrado","v_cassPagado"],
        ["seg","El seguro", r2(segC+segF), "v_segCobrado","v_segPagado"]].forEach(function(q){
         if(q[2]<=0.004) return;
-        var marcado=document.getElementById(q[3]).checked;
+        /* Si hay cobros apuntados de ese pagador, mandan ellos: es lo
+           que de verdad ha entrado, papel a papel. */
+        var suyos=leerCobros().filter(function(c){ return c.quien===(q[0]==="cass"?"cass":"seguro"); });
+        var marcado=suyos.length>0 || document.getElementById(q[3]).checked;
         if(!marcado){ lineas.push(q[1]+' tendría que devolver <strong>'+eur(q[2])+'</strong>, sin cobrar.'); return; }
         var escrito=valor(q[4]);
-        var pagado=escrito===""?q[2]:numero(q[4]);
+        var pagado=suyos.length
+          ? r2(suyos.reduce(function(t,c){ return t+c.imp; },0))
+          : (escrito===""?q[2]:numero(q[4]));
         var falta=r2(q[2]-pagado);
         faltaPagos=r2(faltaPagos+Math.max(0,falta));
         lineas.push(q[1]+' te ha pagado <strong>'+eur(pagado)+'</strong> de '+eur(q[2])+
@@ -1717,6 +1804,24 @@ function editarVisita(id){
           : falta<-0.004 ? ' — '+eur(Math.abs(falta))+' de más' : ' — cuadra')+'.');
       });
       cajaCobros.innerHTML=lineas.join("<br>");
+    }
+
+    /* Lo que llevas cobrado contra lo que pusiste tu. */
+    var cajaCuadre=document.getElementById("v_cuadre");
+    if(cajaCuadre){
+      var lista=leerCobros();
+      if(!lista.length){
+        cajaCuadre.innerHTML="";
+      }else{
+        var pagaste=r2(cons+farm);
+        var cobrado=r2(lista.reduce(function(t,c){ return t+c.imp; },0));
+        var falta=r2(pagaste-cobrado);
+        cajaCuadre.innerHTML='Pusiste <strong>'+eur(pagaste)+'</strong> y llevas cobrados '+
+          '<strong>'+eur(cobrado)+'</strong> en '+lista.length+(lista.length===1?" cobro":" cobros")+': '+
+          (falta>0.004 ? '<span style="color:var(--malo)">faltan '+eur(falta)+'</span>.'
+          : falta<-0.004 ? 'te han devuelto '+eur(Math.abs(falta))+' de más.'
+          : '<span style="color:var(--ok)">cuadra</span>.');
+      }
     }
 
     var total=r2(quedaC+quedaF+faltaPagos);
