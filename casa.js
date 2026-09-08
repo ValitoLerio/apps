@@ -152,8 +152,10 @@ function pendienteDe(v, concepto){
     : r2((+v.consulta ||0)-(+v.cassCons||0)-(+v.segCons||0));
 }
 function pendienteMedico(v){
-  /* Lo que aún no te han devuelto de esa visita, las dos cosas juntas */
-  return r2(pendienteDe(v,"consulta")+pendienteDe(v,"farmacia"));
+  /* Lo que aún no te han devuelto de esa visita: lo que no cubre nadie,
+     más lo que prometieron y pagaron corto. */
+  return r2(pendienteDe(v,"consulta")+pendienteDe(v,"farmacia")+
+            faltaDelCobro(v,"cass")+faltaDelCobro(v,"seguro"));
 }
 function cassTotal(v){ return r2((+v.cassCons||0)+(+v.cassFarm||0)); }
 function seguroTotal(v){ return r2((+v.segCons||0)+(+v.segFarm||0)); }
@@ -161,6 +163,27 @@ function seguroTotal(v){ return r2((+v.segCons||0)+(+v.segFarm||0)); }
 /* La CASS y el seguro no pagan el mismo dia ni siempre pagan: cada uno
    lleva su visto y su fecha, que es lo unico que dice de verdad si eso
    esta cobrado. Sin marcar, lo que te deben sigue contando. */
+/* Lo que un pagador ha soltado de verdad. Las casillas de arriba dicen
+   lo que TENDRIA que devolver cada uno —la del seguro se rellena sola
+   con lo que no cubre la CASS—, y eso no es lo mismo que lo que acaba
+   entrando en el banco. Vacio significa «lo que tocaba»; si te pagan
+   menos, se escribe y la diferencia vuelve a lo que te deben. */
+function previstoDe(v, quien){
+  return quien==="cass" ? cassTotal(v) : seguroTotal(v);
+}
+function importeCobrado(v, quien){
+  var hecho = quien==="cass" ? !!v.cassCobrado : !!v.segCobrado;
+  if(!hecho) return null;                       /* todavia no ha pagado */
+  var puesto = quien==="cass" ? v.cassPagado : v.segPagado;
+  return (puesto===""||puesto==null) ? previstoDe(v, quien) : r2(+puesto||0);
+}
+/* Lo prometido menos lo que llego: si pagan de menos, sigue debiendose. */
+function faltaDelCobro(v, quien){
+  var c=importeCobrado(v, quien);
+  if(c==null) return 0;
+  return r2(Math.max(0, previstoDe(v, quien)-c));
+}
+
 function cobroDe(v, quien){
   var hecho = quien==="cass" ? !!v.cassCobrado : !!v.segCobrado;
   var fecha = quien==="cass" ? (v.cassFecha||"") : (v.segFecha||"");
@@ -174,7 +197,9 @@ function todoCobrado(v){
   var pendientes=0, marcados=0;
   if(c.importe>0.004){ pendientes++; if(c.hecho) marcados++; }
   if(g.importe>0.004){ pendientes++; if(g.hecho) marcados++; }
-  return pendientes>0 && pendientes===marcados;
+  /* Marcado no basta: si uno pago de menos, eso no esta cobrado. */
+  return pendientes>0 && pendientes===marcados &&
+         faltaDelCobro(v,"cass")<=0.004 && faltaDelCobro(v,"seguro")<=0.004;
 }
 function faltaPorCobrar(v){
   var l=[];
@@ -197,11 +222,15 @@ function sumaTiques(v){
 function pieDelCobro(v, quien){
   var c=cobroDe(v, quien);
   if(c.importe<=0.004) return "";
-  if(c.hecho){
-    return '<div style="color:var(--ok);font-size:11px;font-weight:400">✓ '+
-           (c.fecha?esc(dmy(c.fecha)):"cobrado")+'</div>';
-  }
-  return '<div style="color:var(--aviso);font-size:11px;font-weight:400">sin cobrar</div>';
+  if(!c.hecho)
+    return '<div style="color:var(--aviso);font-size:11px;font-weight:400">sin cobrar</div>';
+  var pagado=importeCobrado(v, quien), falta=faltaDelCobro(v, quien);
+  return '<div style="color:var(--ok);font-size:11px;font-weight:400">✓ '+
+         (c.fecha?esc(dmy(c.fecha)):"cobrado")+'</div>'+
+         (falta>0.004
+           ? '<div style="color:var(--malo);font-size:11px;font-weight:400">pagó '+
+             esc(eur(pagado))+', faltan '+esc(eur(falta))+'</div>'
+           : "");
 }
 
 /* Las visitas de antes llevaban un solo importe de CASS y otro de seguro,
@@ -1513,18 +1542,26 @@ function editarVisita(id){
     '+ Añadir tique</button>'+
     /* Cada devolución con su visto y su fecha: es lo que contesta a
        «¿esto ya me lo han pagado, y cuándo?». */
-    '<p class="nota" style="margin:18px 0 8px">Cuándo te lo han devuelto. Marca cada uno cuando '+
-    'lo veas en el banco y ponle la fecha.</p>'+
+    '<p class="nota" style="margin:18px 0 8px">Cuándo te lo han devuelto, y cuánto. Marca cada uno '+
+    'cuando lo veas en el banco. <strong style="color:var(--tinta)">Lo de arriba es lo que tendrían '+
+    'que devolverte</strong>; si te pagan menos, escríbelo aquí y la diferencia vuelve a «te deben».</p>'+
     '<div class="rejilla">'+
       '<div class="campo"><label class="marca-check" style="margin:0 0 6px">'+
         '<input type="checkbox" id="v_cassCobrado"'+(v.cassCobrado?" checked":"")+'>'+
         '<span>La CASS ya ha pagado</span></label>'+
-        '<input type="date" id="v_cassFecha" value="'+esc(v.cassFecha||"")+'"></div>'+
+        '<input type="date" id="v_cassFecha" value="'+esc(v.cassFecha||"")+'">'+
+        '<input type="number" id="v_cassPagado" min="0" step="0.01" style="margin-top:6px" '+
+        'value="'+esc(v.cassPagado!=null&&v.cassPagado!==""?v.cassPagado:"")+'" '+
+        'placeholder="Cuánto pagó — vacío: lo que tocaba"></div>'+
       '<div class="campo"><label class="marca-check" style="margin:0 0 6px">'+
         '<input type="checkbox" id="v_segCobrado"'+(v.segCobrado?" checked":"")+'>'+
         '<span>El seguro ya ha pagado</span></label>'+
-        '<input type="date" id="v_segFecha" value="'+esc(v.segFecha||"")+'"></div>'+
+        '<input type="date" id="v_segFecha" value="'+esc(v.segFecha||"")+'">'+
+        '<input type="number" id="v_segPagado" min="0" step="0.01" style="margin-top:6px" '+
+        'value="'+esc(v.segPagado!=null&&v.segPagado!==""?v.segPagado:"")+'" '+
+        'placeholder="Cuánto pagó — vacío: lo que tocaba"></div>'+
     '</div>'+
+    '<div class="nota" id="v_cobros" style="margin:6px 0 0"></div>'+
     '<label class="marca-check" style="margin-top:14px">'+
       '<input type="checkbox" id="v_cobrado"'+(v.cobrado?" checked":"")+'>'+
       '<span>Ya me lo han devuelto todo</span></label>'+
@@ -1550,6 +1587,10 @@ function editarVisita(id){
          que es cuando lo has visto en el banco. */
       v.cassFecha=valor("v_cassFecha")||(v.cassCobrado?hoyISO():"");
       v.segFecha =valor("v_segFecha") ||(v.segCobrado ?hoyISO():"");
+      /* Vacío es «me pagaron lo que tocaba»: no se guarda cifra para no
+         congelar una que luego cambie al corregir los importes. */
+      v.cassPagado=valor("v_cassPagado")===""?"":numero("v_cassPagado");
+      v.segPagado =valor("v_segPagado") ===""?"":numero("v_segPagado");
       v.cobrado=document.getElementById("v_cobrado").checked || todoCobrado(v);
       if(!id) libro.medico.push(v);
       guardar(); pintar(); avisar(id?"Visita actualizada":"Visita anotada");
@@ -1657,17 +1698,44 @@ function editarVisita(id){
       });
     });
 
-    var total=r2(quedaC+quedaF);
+    /* Lo que tendria que devolver cada uno contra lo que ha soltado. */
+    var cajaCobros=document.getElementById("v_cobros");
+    var faltaPagos=0;
+    if(cajaCobros){
+      var lineas=[];
+      [["cass","La CASS", r2(cassC+cassF), "v_cassCobrado","v_cassPagado"],
+       ["seg","El seguro", r2(segC+segF), "v_segCobrado","v_segPagado"]].forEach(function(q){
+        if(q[2]<=0.004) return;
+        var marcado=document.getElementById(q[3]).checked;
+        if(!marcado){ lineas.push(q[1]+' tendría que devolver <strong>'+eur(q[2])+'</strong>, sin cobrar.'); return; }
+        var escrito=valor(q[4]);
+        var pagado=escrito===""?q[2]:numero(q[4]);
+        var falta=r2(q[2]-pagado);
+        faltaPagos=r2(faltaPagos+Math.max(0,falta));
+        lineas.push(q[1]+' te ha pagado <strong>'+eur(pagado)+'</strong> de '+eur(q[2])+
+          (falta>0.004 ? ' — <span style="color:var(--malo)">faltan '+eur(falta)+'</span>'
+          : falta<-0.004 ? ' — '+eur(Math.abs(falta))+' de más' : ' — cuadra')+'.');
+      });
+      cajaCobros.innerHTML=lineas.join("<br>");
+    }
+
+    var total=r2(quedaC+quedaF+faltaPagos);
     document.getElementById("v_calculo").innerHTML=
       total>0.004 ? 'En total te deben <strong>'+eur(total)+'</strong>'+
-        (cons>0 && farm>0 ? ' ('+eur(quedaC)+' de la consulta y '+eur(quedaF)+' de la farmacia)' : "")+'.'
+        (cons>0 && farm>0 && r2(quedaC+quedaF)>0.004
+          ? ' ('+eur(quedaC)+' de la consulta y '+eur(quedaF)+' de la farmacia)' : "")+
+        (faltaPagos>0.004 ? ', contando '+eur(faltaPagos)+' que prometieron y no llegaron' : "")+'.'
     : total<-0.004 ? 'Te han devuelto <strong>'+eur(Math.abs(total))+'</strong> de más.'
     : 'Cuadra: no queda nada pendiente.';
   }
   document.getElementById("v_segCons").addEventListener("input", function(){ autoCons=false; });
   document.getElementById("v_segFarm").addEventListener("input", function(){ autoFarm=false; });
-  ["v_cons","v_medi","v_cassCons","v_segCons","v_cassFarm","v_segFarm"].forEach(function(id2){
+  ["v_cons","v_medi","v_cassCons","v_segCons","v_cassFarm","v_segFarm",
+   "v_cassPagado","v_segPagado"].forEach(function(id2){
     document.getElementById(id2).addEventListener("input", recalcular);
+  });
+  ["v_cassCobrado","v_segCobrado"].forEach(function(id2){
+    document.getElementById(id2).addEventListener("change", recalcular);
   });
   recalcular();
 }
