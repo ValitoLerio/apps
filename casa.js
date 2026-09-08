@@ -1593,12 +1593,8 @@ function editarVisita(id){
         '<input id="v_recibo" class="mono" value="'+esc(v.recibo||"")+'" '+
         'placeholder="A-2026/0134"></div>'+
     '</div>'+
-    '<p class="nota" style="margin:8px 0 0">El número del recibo de la consulta es el '+
-    'comprobante de la visita: lo primero que te piden si hay cualquier problema. Los de la '+
-    'farmacia van más abajo, que vienen en otro papel y a veces en varios.</p>'+
-    '<p class="nota" style="margin:16px 0 8px">La consulta y lo que te devuelven de ella. '+
-    'El <strong style="color:var(--tinta)">seguro complementario</strong> paga lo que no paga la CASS, '+
-    'así que ese importe se pone solo: escribe lo que costó y lo que devuelve la CASS.</p>'+
+    '<p class="nota" style="margin:16px 0 8px">La consulta y lo que devuelven. El del '+
+    '<strong style="color:var(--tinta)">seguro</strong> se pone solo: es lo que no paga la CASS.</p>'+
     '<div class="rejilla3">'+
       '<div class="campo"><label class="lbl" for="v_cons">Consulta (€)</label>'+
         '<input type="number" id="v_cons" min="0" step="0.01" value="'+esc(v.consulta||"")+'"></div>'+
@@ -1609,8 +1605,7 @@ function editarVisita(id){
     '</div>'+
     '<div class="nota" id="v_calcCons" style="margin:6px 0 0"></div>'+
 
-    '<p class="nota" style="margin:18px 0 8px">La farmacia y lo que te devuelven de ella. '+
-    'Igual que arriba: el resto de lo que no paga la CASS lo pone el seguro.</p>'+
+    '<p class="nota" style="margin:18px 0 8px">La farmacia y lo que devuelven, igual que arriba.</p>'+
     '<div class="rejilla3">'+
       '<div class="campo"><label class="lbl" for="v_medi">Farmacia (€)</label>'+
         '<input type="number" id="v_medi" min="0" step="0.01" value="'+esc(v.medicinas||"")+'"></div>'+
@@ -1625,16 +1620,20 @@ function editarVisita(id){
     '<div class="nota" id="v_calcFarm" style="margin:6px 0 0"></div>'+
     /* Los tiques de la farmacia, uno por linea: cuando la parten en
        varios, cada uno tiene su numero y su importe. */
-    '<p class="nota" style="margin:14px 0 6px">Tiques de la farmacia. Si te la han partido en '+
-    'varios, apúntalos aquí: el importe de arriba se pone con la suma.</p>'+
+    '<p class="nota" style="margin:14px 0 6px">Si te la han partido en varios tiques, apúntalos '+
+    'aquí y el importe de arriba se pone con la suma.</p>'+
     '<div id="v_tiques"></div>'+
     '<button type="button" class="btn suave sm" id="v_masTique" style="margin-top:8px">'+
     '+ Añadir tique</button>'+
     /* Cada devolución con su visto y su fecha: es lo que contesta a
        «¿esto ya me lo han pagado, y cuándo?». */
-    '<p class="nota" style="margin:18px 0 8px">Cuándo te lo han devuelto, y cuánto. Marca cada uno '+
-    'cuando lo veas en el banco. <strong style="color:var(--tinta)">Lo de arriba es lo que tendrían '+
-    'que devolverte</strong>; si te pagan menos, escríbelo aquí y la diferencia vuelve a «te deben».</p>'+
+    /* Lo de la CASS y el seguro por separado interesa para reclamar,
+       pero no para el dia a dia: va plegado. */
+    '<details style="margin:18px 0 0"'+((v.cassCobrado||v.segCobrado)?" open":"")+'>'+
+    '<summary style="cursor:pointer;font-size:12.5px;color:var(--muted)">Qué ha pagado cada uno '+
+    '(CASS y seguro)</summary>'+
+    '<p class="nota" style="margin:8px 0 8px">Lo de arriba es lo que tendrían que devolverte; si te '+
+    'pagan menos, escríbelo aquí.</p>'+
     '<div class="rejilla">'+
       '<div class="campo"><label class="marca-check" style="margin:0 0 6px">'+
         '<input type="checkbox" id="v_cassCobrado"'+(v.cassCobrado?" checked":"")+'>'+
@@ -1652,18 +1651,20 @@ function editarVisita(id){
         'placeholder="Cuánto pagó — vacío: lo que tocaba"></div>'+
     '</div>'+
     '<div class="nota" id="v_cobros" style="margin:6px 0 0"></div>'+
+    '</details>'+
     /* El detalle: cada cobro que va entrando, con su papel. */
-    '<p class="nota" style="margin:16px 0 6px">Los recibos, uno a uno. Cuando te ingresen algo, '+
-    've marcando los recibos que entran en ese pago hasta llegar al importe que te han abonado. '+
-    'Si de alguno te pagan sólo una parte, apúntalo abajo con su importe.</p>'+
+    '<p class="nota" style="margin:18px 0 6px"><strong style="color:var(--tinta)">Cuando te '+
+    'ingresen algo</strong>, marca los recibos que entran en ese pago hasta llegar al importe.</p>'+
     '<div id="v_recibos" style="margin:0 0 4px"></div>'+
     '<div class="nota" id="v_marcados" style="margin:6px 0 0"></div>'+
-    '<p class="nota" style="margin:16px 0 6px">Y aquí, los cobros sueltos: los que no saldan un '+
-    'recibo entero. Fecha, quién paga, de qué papel es y cuánto.</p>'+
+    '<details style="margin:10px 0 0"'+((v.cobros&&v.cobros.length)?" open":"")+'>'+
+    '<summary style="cursor:pointer;font-size:12.5px;color:var(--muted)">Cobros sueltos, cuando de '+
+    'un recibo sólo te pagan una parte</summary>'+
     '<div id="v_listaCobros"></div>'+
     '<button type="button" class="btn suave sm" id="v_masCobro" style="margin-top:8px">'+
     '+ Añadir cobro</button>'+
     '<div class="nota" id="v_cuadre" style="margin:8px 0 0"></div>'+
+    '</details>'+
     '<label class="marca-check" style="margin-top:14px">'+
       '<input type="checkbox" id="v_cobrado"'+(v.cobrado?" checked":"")+'>'+
       '<span>Ya me lo han devuelto todo</span></label>'+
