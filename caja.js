@@ -814,11 +814,17 @@ function textoDia(fecha, opciones){
   var d=diaDe(fecha);
   if(!d) return "";
   var c=cuentasDia(d);
+  /* El efectivo que va en el parte es el del cajon, contado. El otro
+     campo lo rellena la app sola con el resto del porcentaje de las
+     visas, y eso es una referencia para mirar de un vistazo, no el
+     dinero que hay: mandarlo era mandar una cuenta en vez de un
+     recuento. Las noches que no se conto va la unica cifra que hay, y
+     se dice al lado para que nadie la tome por contada. */
   var lineas=[
     ["Visas",       c.visa],
-    ["Efectivo",    c.efectivo],
-    ["Pagos",       c.gastos],
+    ["Efectivo",    c.hayReal?c.efectivoReal:c.efectivo, c.hayReal?"":"sin contar"],
     ["C. amarilla", c.amarilla],
+    ["Pagos",       c.gastos],
     ["Fondo caja",  c.fondo]
   ];
   /* Como en la hoja: la casilla del sobrante se queda en blanco mientras
@@ -839,13 +845,14 @@ function textoDia(fecha, opciones){
   l.push("");
   if(alineado) l.push("```");
   lineas.forEach(function(x){
+    var apunte=x[2]?"  ("+x[2]+")":"";
     if(alineado){
       var etiqueta=x[0]+" ".repeat(anchoTexto-x[0].length);
       var importe=eur(x[1]);
       importe=" ".repeat(anchoImporte-importe.length)+importe;
-      l.push(etiqueta+"  "+importe);
+      l.push(etiqueta+"  "+importe+apunte);
     } else {
-      l.push(x[0]+": "+eur(x[1]));
+      l.push(x[0]+": "+eur(x[1])+apunte);
     }
   });
   if(alineado) l.push("```");
