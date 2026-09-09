@@ -9,6 +9,7 @@
      Pagos         lo que se paga de la caja
      C. amarilla   lo que hay dentro de la amarilla esa noche
      Fondo caja    lo que se deja de cambio para mañana
+     Se saca       lo que se lleva quien cierra
      Sobra am.     lo que pasa del objetivo de la amarilla
 
    Al lado del efectivo hay sitio para el que se cuenta de verdad al
@@ -27,6 +28,19 @@
    cuadre.
    Y una columna de control, «Debería haber», enseña esa misma cifra
    y al lado lo que baila.
+
+   Pero el efectivo también se puede CUADRAR, y entonces no hay que
+   suponer nada. Todo lo que se cobra en metálico acaba en uno de cuatro
+   sitios: dentro de la amarilla, dentro de la registradora, pagado a
+   alguien, o fuera de la caja porque alguien se lo llevó. Así que
+
+     efectivo del día = lo que suben las dos cajas + pagos + lo que se saca
+
+   Eso no es una estimación, es una identidad: con los cuatro apuntados,
+   la cifra es la que es. Por eso «Se saca» tiene casilla propia — era el
+   único de los cuatro que no se apuntaba, y sin él la cuenta no cierra.
+   El día enseña las tres cifras del mismo dinero (el %, el recuento del
+   cajón y esta) y lo que baila entre ellas.
 
    Y un apartado, «Sin retirar», para las temporadas en que el dinero se
    queda dentro porque no hay quien lo saque: esos días quedan agrupados
@@ -58,7 +72,8 @@ function libroVacio(){
     v:1, actualizado:new Date().toISOString(),
     ajustes:{ nombre:"", objetivoAmarilla:1500, fondoHabitual:0, pctVisa:80,
               gente:[] },      /* {id, nombre, telefono} — a quien va el parte */
-    dias:[],          /* {id, fecha, visa, efectivo, gastos, detalle:[…], aAmarilla, fondoCaja, nota} */
+    dias:[],          /* {id, fecha, visa, efectivo, efectivoReal, gastos, detalle:[…],
+                         aAmarilla, fondoCaja, retirado, nota} */
     aportaciones:[],  /* {id, fecha, importe, motivo} — dinero que entra sin ser de la caja */
     retiradas:[],     /* {id, fecha, importe, motivo} — dinero que sale de la amarilla */
     tramos:[]         /* {id, desde, hasta, motivo, entregado, fechaEntrega} — dias sin retirar */
@@ -184,6 +199,7 @@ function cuentasDia(d){
   if(!d) return {visa:0, efectivo:0, gastos:0, ventas:0, neto:0, fondoTotal:0,
                  efectivoPrevisto:0, difEfectivo:0,
                  efectivoReal:0, hayReal:false, difReal:0,
+                 retirado:0, hayRetirado:false,
                  amarilla:0, fondo:0, sobrante:0, sobranteCuenta:0, descuadre:0};
   var visa=+d.visa||0, efectivo=+d.efectivo||0;
   var gastos=totalGastos(d), amarilla=+d.aAmarilla||0;
@@ -206,6 +222,10 @@ function cuentasDia(d){
      contado» del «he contado cero»: sin nada escrito, no hay cifra y no
      se compara con nada. */
   var real=(d.efectivoReal!=null && d.efectivoReal!=="") ? r2(+d.efectivoReal||0) : null;
+  /* Lo que se lleva quien cierra. Vacío es «no lo he apuntado», que no es
+     lo mismo que «no saqué nada»: sin ese dato la caja no cuadra, y más
+     vale que se vea el hueco que dar un cero por bueno. */
+  var llevado=(d.retirado!=null && d.retirado!=="") ? r2(+d.retirado||0) : null;
   return {
     /* El fondo de caja son los dos sitios juntos: lo que se aparta a la
        amarilla y lo que se deja en la registradora para el cambio. */
@@ -218,6 +238,8 @@ function cuentasDia(d){
     efectivoReal:(real==null?0:real),   /* lo contado en el cajon */
     hayReal:(real!=null),
     difReal:(real==null?0:r2(real-efectivo)),
+    retirado:(llevado==null?0:llevado),  /* lo que salio de la caja al cerrar */
+    hayRetirado:(llevado!=null),
     amarilla:amarilla,
     fondo:fondo,                  /* lo que se deja de cambio */
     sobrante:(anotado!=null?anotado:cuenta),
@@ -378,6 +400,138 @@ function sobraAmarilla(d){
   return r2(Math.max(0, am-objetivo));
 }
 
+
+/* ── Cuadrar la caja ─────────────────────────────────────────
+   El efectivo del día sacado del dinero que hay, no de un porcentaje.
+   Todo lo que se cobra en metálico acaba en uno de cuatro sitios: dentro
+   de la amarilla, dentro de la registradora, pagado a alguien, o fuera
+   de la caja porque alguien se lo llevó. De ahí:
+
+     efectivo = lo que suben las dos cajas + pagos + lo que se saca
+
+   Es una identidad, no una estimación. Lo único que puede faltar es el
+   último sumando, y por eso ahora tiene casilla. */
+function efectivoPorCajas(v){
+  /* Si a alguno de los dos días le falta el cambio de la registradora, se
+     da por que no se movió. Ponerle un cero diría que la registradora
+     amaneció vacía, y esa diferencia saldría como venta del día. */
+  var subeFondo=(v.fondoHoy==null || v.fondoAyer==null) ? 0 : r2(v.fondoHoy-v.fondoAyer);
+  return r2(r2(v.amHoy-v.amAyer) + subeFondo + v.pagos + v.retirado
+            + v.sacadoFuera - v.aportadoFuera);
+}
+function fondoDe(d){
+  return (d && d.fondoCaja!=null && d.fondoCaja!=="") ? r2(+d.fondoCaja||0) : null;
+}
+/* Las aportaciones y las retiradas mueven la amarilla sin ser dinero
+   cobrado ni pagado ese día. En el cuadre hay que descontarlas, o el
+   subidón —o el bajón— de la caja se leería como venta. */
+function deFueraEn(fecha){
+  var suma=function(lista){
+    return r2((lista||[]).filter(function(x){ return (x.fecha||"")===fecha; })
+                         .reduce(function(t,x){ return t+(+x.importe||0); },0));
+  };
+  return { aportado:suma(libro.aportaciones), sacado:suma(libro.retiradas) };
+}
+/* El cuadre de un día. Devuelve siempre algo: cuando no se puede hacer la
+   cuenta, dice qué falta, que es más útil que un hueco. */
+function cuadreDia(fecha){
+  var d=diaDe(fecha);
+  if(!d) return null;
+  var c=cuentasDia(d);
+  var previo=recuentoAntesDe(fecha);
+  /* En un tramo sin retirar no sale nada por definición, así que ahí el
+     cero no hace falta apuntarlo. */
+  var enTramo=!!tramoDe(fecha);
+  var fuera=deFueraEn(fecha);
+  var q={ hay:false, falta:"", previo:previo?previo.fecha:null, enTramo:enTramo,
+          pagos:c.gastos, retirado:c.retirado, hayRetirado:(c.hayRetirado||enTramo),
+          subeAmarilla:0, subeFondo:0, fondoSupuesto:false, cambioAnoche:null,
+          aportado:fuera.aportado, sacadoFuera:fuera.sacado, efectivo:0 };
+  if(d.aAmarilla==null || d.aAmarilla===""){ q.falta="el recuento de la amarilla de esta noche"; return q; }
+  if(!previo){ q.falta="un cierre anterior con el que comparar; éste es el primero que hay"; return q; }
+  if(!q.hayRetirado){ q.falta="apuntar lo que se saca al cerrar"; return q; }
+
+  var fondoHoy=fondoDe(d), fondoAyer=fondoDe(previo);
+  q.subeAmarilla=r2((+d.aAmarilla||0)-(+previo.aAmarilla||0));
+  q.subeFondo=(fondoHoy==null||fondoAyer==null) ? 0 : r2(fondoHoy-fondoAyer);
+  q.fondoSupuesto=(fondoHoy==null||fondoAyer==null);
+  q.cambioAnoche=fondoAyer;
+  q.efectivo=efectivoPorCajas({
+    amHoy:r2(+d.aAmarilla||0), amAyer:r2(+previo.aAmarilla||0),
+    fondoHoy:fondoHoy, fondoAyer:fondoAyer,
+    pagos:q.pagos, retirado:q.retirado,
+    sacadoFuera:q.sacadoFuera, aportadoFuera:q.aportado
+  });
+  q.hay=true;
+  return q;
+}
+
+/* ── El % de visa, medido en vez de supuesto ──────────────────────
+   En los días sin retirar no sale un euro de la caja, así que el efectivo
+   de ese trecho sale entero de lo que han subido las dos cajas más lo
+   pagado: sin ninguna incógnita. Y las visas son las del datáfono,
+   exactas. De las dos juntas sale la proporción de verdad.
+
+   Ojo con qué número se guarda en Ajustes: la app no calcula el efectivo
+   como un trozo de la venta, sino como un tanto por ciento DE LAS VISAS
+   —con el 80 puesto, el 20 % de las visas—. Así que el que hay que
+   guardar es 100 menos lo que entra en metálico por cada 100 € de visa.
+   La proporción de verdad sobre la venta va aparte, para mirarla. */
+function medidoEntre(previo, ultimo){
+  if(!previo || !ultimo || (previo.fecha||"")>=(ultimo.fecha||"")) return null;
+  var dias=(libro.dias||[]).filter(function(d){
+    return (d.fecha||"")>previo.fecha && (d.fecha||"")<=ultimo.fecha;
+  });
+  if(!dias.length) return null;
+  var visas=0, pagos=0, sacado=0, aportadoF=0, sacadoF=0, sinApuntar=0;
+  dias.forEach(function(d){
+    var c=cuentasDia(d), f=deFueraEn(d.fecha);
+    visas=r2(visas+c.visa); pagos=r2(pagos+c.gastos); sacado=r2(sacado+c.retirado);
+    aportadoF=r2(aportadoF+f.aportado); sacadoF=r2(sacadoF+f.sacado);
+    if(!c.hayRetirado && !tramoDe(d.fecha)) sinApuntar++;
+  });
+  var efectivo=efectivoPorCajas({
+    amHoy:r2(+ultimo.aAmarilla||0), amAyer:r2(+previo.aAmarilla||0),
+    fondoHoy:fondoDe(ultimo), fondoAyer:fondoDe(previo),
+    pagos:pagos, retirado:sacado, sacadoFuera:sacadoF, aportadoFuera:aportadoF
+  });
+  var ventas=r2(visas+efectivo);
+  var vale=(visas>0 && efectivo>=0 && ventas>0 && sinApuntar===0);
+  return {
+    desde:previo.fecha, hasta:ultimo.fecha, nDias:dias.length, sinApuntar:sinApuntar,
+    visas:visas, efectivo:efectivo, ventas:ventas, pagos:pagos, vale:vale,
+    /* metálico que entra por cada 100 € de visa */
+    porVisa:vale ? r2(efectivo/visas*100) : null,
+    /* lo que hay que guardar en Ajustes para que la cuenta de la app salga */
+    ajuste:vale ? r2(100-efectivo/visas*100) : null,
+    /* y lo que de verdad va en visa, sobre el total de la venta */
+    enVisa:vale ? r2(visas/ventas*100) : null
+  };
+}
+function ultimoConRecuento(dias){
+  var con=(dias||[]).filter(function(d){ return d.aAmarilla!=null && d.aAmarilla!==""; })
+                    .sort(function(a,b){ return a.fecha.localeCompare(b.fecha); });
+  return con.length ? con[con.length-1] : null;
+}
+function medidoTramo(t){
+  if(!t) return null;
+  return medidoEntre(recuentoAntesDe(t.desde||""), ultimoConRecuento(diasDelTramo(t)));
+}
+/* Todos los tramos juntos: cuantos más días, mejor la media. */
+function medidoEnTramos(){
+  var visas=0, efectivo=0, nDias=0, tramos=0;
+  (libro.tramos||[]).forEach(function(t){
+    var m=medidoTramo(t);
+    if(!m || !m.vale) return;
+    visas=r2(visas+m.visas); efectivo=r2(efectivo+m.efectivo);
+    nDias+=m.nDias; tramos++;
+  });
+  var ventas=r2(visas+efectivo);
+  if(!tramos || visas<=0 || ventas<=0) return null;
+  return { visas:visas, efectivo:efectivo, ventas:ventas, nDias:nDias, tramos:tramos,
+           vale:true, porVisa:r2(efectivo/visas*100),
+           ajuste:r2(100-efectivo/visas*100), enVisa:r2(visas/ventas*100) };
+}
 /* ══════════════════════════════════════════════════════════════
    ARMAZÓN
    ══════════════════════════════════════════════════════════════ */
@@ -517,6 +671,8 @@ function verDia(main){
           : "")+
       '</div></div>'+
 
+    tarjetaCuadre(ui.dia)+
+
     '<div class="tarjeta" style="margin-bottom:16px">'+
       '<div class="tarjeta-cab"><h2>La caja amarilla</h2>'+
         '<span class="pista">Objetivo: '+eur(objetivoAmarilla())+'</span></div>'+
@@ -559,6 +715,10 @@ function pintarFormularioDia(d){
   /* Si el día cae dentro de un tramo sin retirar, más vale decirlo aquí:
      ese día el dinero se queda dentro y la amarilla va a ir subiendo. */
   var elTramo=tramoDe(ui.dia);
+  /* En un tramo sin retirar no sale nada, así que la casilla arranca en
+     cero: es la respuesta, no un hueco por rellenar. */
+  var sacaPuesto=(actual.retirado!=null && actual.retirado!=="") ? actual.retirado
+                                                                : (elTramo ? 0 : "");
   caja.innerHTML=
     (elTramo
       ? '<div class="aviso-caja" style="margin-bottom:14px">Este día entra en un tramo '+
@@ -591,6 +751,11 @@ function pintarFormularioDia(d){
       '<div class="campo"><label class="lbl" for="f_fondo">Caja registradora (€)</label>'+
         '<input type="number" class="grande" id="f_fondo" min="0" step="0.01" value="'+
         esc(actual.fondoCaja!=null&&actual.fondoCaja!==""?actual.fondoCaja:(libro.ajustes.fondoHabitual||""))+'"></div>'+
+      '<div class="campo"><label class="lbl" for="f_saca">Se saca (€)</label>'+
+      '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo que te llevas al cerrar</div>'+
+        '<input type="number" class="grande" id="f_saca" min="0" step="0.01" value="'+
+        esc(sacaPuesto)+'" placeholder="sin apuntar">'+
+        '<div class="nota" style="margin:4px 0 0" id="f_sacaNota"></div></div>'+
       '<div class="campo"><label class="lbl" for="f_sobra">Sobra c. amarilla (€)</label>'+
         '<input type="number" class="grande" id="f_sobra" step="0.01" value="'+
         esc(actual.sobrante!=null&&actual.sobrante!==""?actual.sobrante:"")+'" '+
@@ -705,6 +870,32 @@ function pintarFormularioDia(d){
                       num(p,0)+"% en visa. Escribe encima si un día no cuadra.";
       }
     }
+    /* La casilla nueva es la que cierra la cuenta, así que en cuanto hay
+       cifra se enseña aquí mismo el efectivo que sale por las cajas: es
+       el momento en que se ve para qué sirve apuntarlo. */
+    var sn=document.getElementById("f_sacaNota");
+    if(sn){
+      var campoSaca=document.getElementById("f_saca");
+      var saca=(campoSaca && campoSaca.value!=="") ? r2(+campoSaca.value||0) : null;
+      var previo=recuentoAntesDe(ui.dia);
+      if(saca==null){
+        sn.innerHTML = elTramo
+          ? "Este día entra en un tramo sin retirar, así que va un 0."
+          : "Sin esto la caja no se puede cuadrar. Si no sacaste nada, escribe un 0.";
+      } else if(!previo){
+        sn.innerHTML="Éste es el primer cierre que hay, así que todavía no hay con qué compararlo.";
+      } else {
+        var fuera=deFueraEn(ui.dia);
+        var porCajas=efectivoPorCajas({
+          amHoy:am, amAyer:r2(+previo.aAmarilla||0),
+          fondoHoy:fondo, fondoAyer:fondoDe(previo),
+          pagos:g, retirado:saca,
+          sacadoFuera:fuera.sacado, aportadoFuera:fuera.aportado
+        });
+        sn.innerHTML="Por las cajas, el efectivo del día sale <strong>"+eur(porCajas)+"</strong> "+
+                     "(desde el cierre del "+esc(dmy(previo.fecha))+").";
+      }
+    }
     var rn=document.getElementById("f_realNota");
     if(rn){
       var campoReal=document.getElementById("f_efecReal");
@@ -758,7 +949,7 @@ function pintarFormularioDia(d){
   document.getElementById("f_efec").addEventListener("input", function(){
     efecAMano=true;
   });
-  ["f_visa","f_efec","f_efecReal","f_pct","f_amar","f_fondo","f_sobra"].forEach(function(id){
+  ["f_visa","f_efec","f_efecReal","f_pct","f_amar","f_fondo","f_saca","f_sobra"].forEach(function(id){
     document.getElementById(id).addEventListener("input", refrescar);
   });
   /* Un día ya guardado se abre a mano solo si su efectivo no es el que
@@ -789,6 +980,10 @@ function pintarFormularioDia(d){
     var sob=document.getElementById("f_sobra");
     registro.sobrante = (sob && sob.value!=="") ? r2(+sob.value||0) : null;
     registro.fondoCaja=numero("f_fondo");
+    /* Igual que el recuento del cajón: vacío es «no lo he apuntado», y un
+       0 escrito es «no saqué nada». No son lo mismo para el cuadre. */
+    var cx=document.getElementById("f_saca");
+    registro.retirado=(cx && cx.value!=="") ? r2(+cx.value||0) : null;
     registro.nota=valor("f_nota");
     if(!d) libro.dias.push(registro);
     guardar(); pintar();
@@ -804,6 +999,107 @@ function pintarFormularioDia(d){
         guardar(); pintar(); avisar("Día borrado");
       }, {aceptar:"Borrar", malo:true});
   });
+}
+
+
+/* ── La tarjeta del cuadre ──────────────────────────────────────────
+   Las tres cifras del mismo dinero, una al lado de otra: la del %, la
+   del recuento del cajón y la que sale de las cajas. Sólo la última está
+   hecha de dinero contado de punta a punta; las otras dos están para
+   contrastarla. Cuando no se puede hacer, la tarjeta dice qué falta, que
+   es más útil que un hueco. */
+function tarjetaCuadre(fecha){
+  var d=diaDe(fecha);
+  if(!d) return "";
+  var c=cuentasDia(d);
+  var q=cuadreDia(fecha);
+  if(!q) return "";
+
+  function trozo(k,v,n,color){
+    return '<div class="cifra"><div class="k">'+k+'</div>'+
+           '<div class="v"'+(color?' style="color:'+color+'"':"")+'>'+v+'</div>'+
+           '<div class="n">'+n+'</div></div>';
+  }
+  var difReal=(q.hay && c.hayReal) ? r2(c.efectivoReal-q.efectivo) : null;
+
+  var cifras='<div class="cifras">'+
+    trozo("Por el %", eur(c.efectivo),
+          pctVisa() ? "el "+num(100-pctVisa(),0)+"% de las visas" : "escrito a mano")+
+    trozo("Contado en el cajón", c.hayReal?eur(c.efectivoReal):"—",
+          c.hayReal?"lo que contaste":"sin contar")+
+    trozo("Por las cajas", q.hay?eur(q.efectivo):"—",
+          q.hay?"lo que suben + pagos + lo que sacas":"todavía no sale",
+          q.hay?"var(--acento)":null)+
+  '</div>';
+
+  /* La cuenta escrita tal cual se hace. Decir sólo el resultado no
+     explica de dónde sale, y aquí lo que hay que ver es de dónde sale. */
+  var suma = q.hay
+    ? '<p class="nota" style="margin:0 0 10px">Desde el cierre del '+esc(dmy(q.previo))+
+      ': la amarilla '+(Math.abs(q.subeAmarilla)<0.005
+        ? 'se queda igual'
+        : (q.subeAmarilla>0?"sube ":"baja ")+'<strong>'+eur(Math.abs(q.subeAmarilla))+'</strong>')+
+      (Math.abs(q.subeFondo)>=0.005
+        ? ', la registradora '+(q.subeFondo>0?"sube ":"baja ")+
+          '<strong>'+eur(Math.abs(q.subeFondo))+'</strong>'
+        : '')+
+      ', pagaste <strong>'+eur(q.pagos)+'</strong> y sacaste <strong>'+eur(q.retirado)+'</strong>'+
+      (q.sacadoFuera>0 ? ', más '+eur(q.sacadoFuera)+' que salieron de la amarilla' : '')+
+      (q.aportado>0 ? ', menos '+eur(q.aportado)+' que metiste de fuera' : '')+
+      '.</p>'
+    : "";
+
+  var veredicto;
+  if(!q.hay){
+    veredicto='<div class="nota" style="margin:0">Para cuadrar el día falta '+esc(q.falta)+'.</div>';
+  } else if(!c.hayReal){
+    veredicto='<div class="nota" style="margin:0">Por las cajas el efectivo del día es <strong>'+
+      eur(q.efectivo)+'</strong>. Cuenta el cajón y escríbelo arriba: son dos caminos distintos '+
+      'al mismo dinero, y si dan lo mismo la cifra es buena.</div>';
+  } else if(Math.abs(difReal)<0.005){
+    veredicto='<div class="nota" style="margin:0;color:var(--ok)"><strong>Cuadra.</strong> '+
+      'El recuento del cajón y las cajas dicen lo mismo, así que el efectivo del día es bueno.</div>';
+  } else {
+    /* Si lo que baila es justo el cambio de la noche anterior, no falta
+       dinero: es que el cajón se está contando con el cambio dentro. Vale
+       la pena decirlo, o se busca un descuadre que no existe. */
+    var comoCambio=(q.cambioAnoche!=null && q.cambioAnoche>0 &&
+                    Math.abs(Math.abs(difReal)-q.cambioAnoche)<1);
+    veredicto='<div class="aviso-caja" style="margin:0">Bailan <strong>'+eur(Math.abs(difReal))+
+      '</strong>: contaste '+eur(c.efectivoReal)+' en el cajón y por las cajas salen '+
+      eur(q.efectivo)+'. '+
+      (comoCambio
+        ? 'Y es casi justo el cambio que dejaste la noche anterior ('+eur(q.cambioAnoche)+'), '+
+          'así que lo más probable es que estés contando el cajón con el cambio de la mañana '+
+          'dentro. Si es eso, cuenta sólo lo cobrado y no hay descuadre.'
+        : (difReal<0
+            ? 'Hay menos en el cajón de lo que sale de la cuenta: o falta dinero, o falta un '+
+              'apunte — un pago que no anotaste, o algo que sacaste y no pusiste.'
+            : 'Hay más en el cajón de lo que sale de la cuenta: mira si te falta apuntar algo '+
+              'que metiste, o si contaste de más.'))+
+      '</div>';
+  }
+
+  /* Y lo que esto le hace al %: es el único sitio donde se ve si el 20 %
+     de las visas se parece a lo que entra de verdad. */
+  var contraPct="";
+  if(q.hay && pctVisa() && c.visa>0){
+    var dp=r2(q.efectivo-c.efectivo);
+    contraPct='<p class="nota" style="margin:10px 0 0">Por el '+num(100-pctVisa(),0)+
+      '% de las visas salían '+eur(c.efectivo)+'. '+
+      (Math.abs(dp)<0.005
+        ? 'Justo lo mismo.'
+        : 'Con lo de hoy, por cada 100 € de visa entraron <strong>'+
+          num(q.efectivo/c.visa*100,1)+' €</strong> en metálico.')+
+      ' Un día suelto no dice nada; la media buena está en <strong>Sin retirar</strong>.</p>';
+  }
+
+  return '<div class="tarjeta" style="margin-bottom:16px">'+
+    '<div class="tarjeta-cab"><h2>El cuadre del efectivo</h2>'+
+      '<span class="pista">Tres cuentas del mismo dinero</span></div>'+
+    cifras+
+    '<div class="tarjeta-cuerpo">'+suma+veredicto+contraPct+'</div>'+
+  '</div>';
 }
 
 /* ── El parte diario para WhatsApp ─────────────────────────────── */
@@ -1610,6 +1906,10 @@ function sacarDeAmarilla(){
 function verTramos(main){
   var lista=tramosOrdenados(), abierto=tramoAbierto(), objetivo=objetivoAmarilla();
   var cAbierto=abierto?cuentasTramo(abierto):null;
+  /* Aquí es donde el % deja de ser una suposición: en estos días el
+     efectivo sale de dinero contado, no de una regla de tres. */
+  var medido=medidoEnTramos();
+  var puesto=pctVisa();
 
   main.innerHTML=
     (objetivo<=0
@@ -1641,9 +1941,38 @@ function verTramos(main){
         '<div class="n">'+plural(lista.filter(function(t){return !!t.hasta;}).length,"cerrado","cerrados")+'</div></div>'+
       '<div class="cifra"><div class="k">Ya entregado</div><div class="v">'+eur(entregadoEnTramos())+'</div>'+
         '<div class="n">de los tramos cerrados</div></div>'+
+      '<div class="cifra"><div class="k">Metálico por 100 € de visa</div>'+
+        '<div class="v"'+(medido?' style="color:var(--acento)"':"")+'>'+
+        (medido?num(medido.porVisa,1)+" €":"—")+'</div>'+
+        '<div class="n">'+(medido
+          ? "medido en "+plural(medido.nDias,"día","días")+" · tienes puesto "+
+            num(100-puesto,0)+" €"
+          : "hace falta un tramo con recuentos a los dos lados")+'</div></div>'+
     '</div>'+
 
+    (medido && medido.ajuste>0 && medido.ajuste<100 && Math.abs(medido.ajuste-puesto)>=0.5
+      ? '<div class="aviso-caja">En estos días no salió un euro de la caja, así que el efectivo '+
+        'no hay que suponerlo: sale de lo que subieron las dos cajas más lo pagado. '+
+        '<strong>'+eur(medido.efectivo)+'</strong> de metálico contra <strong>'+
+        eur(medido.visas)+'</strong> de visas, en '+plural(medido.nDias,"día","días")+'. '+
+        'O sea que por cada 100 € de visa entran '+num(medido.porVisa,1)+' € en metálico, '+
+        'y tú tienes puesto '+num(100-puesto,0)+'. En la casilla de Ajustes eso es un <strong>'+
+        num(medido.ajuste,0)+' %</strong>. '+
+        '<button class="btn sm" id="tr_usarPct" style="margin-left:4px">Usar el '+
+        num(medido.ajuste,0)+' %</button>'+
+        '<div style="margin-top:6px;font-size:12px">De la venta entera, en visa va el '+
+        num(medido.enVisa,0)+' %.</div></div>'
+      : "")+
+
     '<div id="listaTramos"></div>';
+
+  var bPct=document.getElementById("tr_usarPct");
+  if(bPct) bPct.addEventListener("click", function(){
+    var nuevo=Math.round(medido.ajuste);
+    if(!(nuevo>0 && nuevo<100)){ avisar("Esa cifra no vale para la casilla del %.", true); return; }
+    libro.ajustes.pctVisa=nuevo; guardar(); pintar();
+    avisar("Guardado: el efectivo saldrá del "+num(100-nuevo,0)+"% de las visas");
+  });
 
   var bNuevo=document.getElementById("tr_nuevo");
   if(bNuevo) bNuevo.addEventListener("click", empezarTramo);
@@ -1681,6 +2010,7 @@ function verTramos(main){
 
 function tarjetaTramo(t){
   var c=cuentasTramo(t);
+  var m=medidoTramo(t);
   var abierto=!t.hasta;
   var titulo=dmy(t.desde)+(t.hasta ? " – "+dmy(t.hasta) : " – sigue abierto");
 
@@ -1732,6 +2062,17 @@ function tarjetaTramo(t){
       '<p class="nota" style="margin:0 0 12px">Ventas del tramo: <strong>'+eur(c.ventas)+'</strong>. '+
       'Lo de la amarilla es el recuento de cada noche, así que no se suma: la cifra buena es la '+
       'última, y lo que hay que entregar es lo que pasa del fondo.</p>'+
+      /* Y aquí el efectivo sin suponer nada. Las ventas de ahí arriba
+         llevan el metálico calculado con el %; éste sale del dinero. */
+      (m && m.vale
+        ? '<p class="nota" style="margin:0 0 12px">Y como aquí no salió un euro de la caja, el '+
+          'efectivo de estos días sale contado, no del %: <strong>'+eur(m.efectivo)+'</strong> '+
+          'de metálico contra <strong>'+eur(m.visas)+'</strong> de visas, o sea <strong>'+
+          num(m.porVisa,1)+' € de metálico por cada 100 € de visa</strong>. Con el % que tienes '+
+          'puesto serían '+num(100-pctVisa(),0)+' €.</p>'
+        : '<p class="nota" style="margin:0 0 12px">Para sacar el efectivo contado de este tramo '+
+          'hacen falta recuentos de la amarilla a los dos lados: el de la noche de antes de '+
+          'empezar y el de la última noche.</p>')+
       '<div class="tabla-caja">'+
         (filas
           ? '<table><thead><tr><th>Fecha</th><th class="num">Ventas</th>'+
@@ -1883,6 +2224,17 @@ function verAjustes(main){
       num(100-(pctVisa()||80),0)+'% de lo cobrado con tarjeta. Las visas no se tocan; el metálico es '+
       'ese porcentaje de ellas. Es una referencia de la media, no una cuenta exacta: hay días que se '+
       'salen. Ponlo a 0 y la columna desaparece.</p>'+
+      /* El número medido, para que el de la casilla deje de ser un
+         supuesto heredado. La cuenta entera está en «Sin retirar». */
+      (function(){
+        var m=medidoEnTramos();
+        if(!m || !(m.ajuste>0 && m.ajuste<100)) return "";
+        return '<p class="nota" style="margin:8px 0 0">Medido en los días sin retirar ('+
+          plural(m.nDias,"día","días")+'): por cada 100 € de visa entran <strong>'+
+          num(m.porVisa,1)+' €</strong> en metálico, que en esta casilla es un <strong>'+
+          num(m.ajuste,0)+' %</strong>. Ahora tienes '+num(pctVisa(),0)+'. '+
+          'La cuenta, en <strong style="color:var(--tinta)">Sin retirar</strong>.</p>';
+      })()+
 
       '<p class="nota" style="margin:18px 0 8px"><strong style="color:var(--tinta)">A quién se manda el parte</strong> '+
       '— pon a toda la gente que quieras; al enviar eliges a cuál de ellos.</p>'+
