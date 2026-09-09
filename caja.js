@@ -1110,24 +1110,25 @@ function textoDia(fecha, opciones){
   var d=diaDe(fecha);
   if(!d) return "";
   var c=cuentasDia(d);
-  /* El efectivo que va en el parte es el del cajon, contado. El otro
-     campo lo rellena la app sola con el resto del porcentaje de las
-     visas, y eso es una referencia para mirar de un vistazo, no el
-     dinero que hay: mandarlo era mandar una cuenta en vez de un
-     recuento. Las noches que no se conto va la unica cifra que hay, y
-     se dice al lado para que nadie la tome por contada. */
+  /* En el parte no entra ni un numero supuesto. El campo "Efectivo" lo
+     rellena la app sola con el resto del porcentaje de las visas: sirve
+     para mirar de un vistazo si falta dinero, pero no es dinero que
+     nadie haya contado, y en el parte de la noche pareceria que si. Asi
+     que va el del cajon, contado, y las noches que no se cuenta el
+     renglon dice "sin contar" y se queda sin cifra. Mejor un hueco
+     honrado que una cuenta con pinta de recuento. */
   var lineas=[
-    ["Visas",       c.visa],
-    ["Efectivo",    c.hayReal?c.efectivoReal:c.efectivo, c.hayReal?"":"sin contar"],
-    ["C. amarilla", c.amarilla],
-    ["Pagos",       c.gastos],
-    ["Fondo caja",  c.fondo]
+    ["Visas",       eur(c.visa)],
+    ["Efectivo",    c.hayReal ? eur(c.efectivoReal) : "sin contar"],
+    ["C. amarilla", eur(c.amarilla)],
+    ["Pagos",       eur(c.gastos)],
+    ["Fondo caja",  eur(c.fondo)]
   ];
   /* Como en la hoja: la casilla del sobrante se queda en blanco mientras
      la amarilla no pase del objetivo. Sólo aparece cuando hay de más. */
-  if(c.sobrante>0.004) lineas.push(["Sobra c. am.", c.sobrante]);
+  if(c.sobrante>0.004) lineas.push(["Sobra c. am.", eur(c.sobrante)]);
   var anchoTexto=Math.max.apply(null, lineas.map(function(x){ return x[0].length; }));
-  var anchoImporte=Math.max.apply(null, lineas.map(function(x){ return eur(x[1]).length; }));
+  var anchoImporte=Math.max.apply(null, lineas.map(function(x){ return x[1].length; }));
 
   /* Dos versiones del mismo parte:
        - alineada, con letra de maquina, para copiar y pegar
@@ -1141,14 +1142,12 @@ function textoDia(fecha, opciones){
   l.push("");
   if(alineado) l.push("```");
   lineas.forEach(function(x){
-    var apunte=x[2]?"  ("+x[2]+")":"";
     if(alineado){
       var etiqueta=x[0]+" ".repeat(anchoTexto-x[0].length);
-      var importe=eur(x[1]);
-      importe=" ".repeat(anchoImporte-importe.length)+importe;
-      l.push(etiqueta+"  "+importe+apunte);
+      var importe=" ".repeat(anchoImporte-x[1].length)+x[1];
+      l.push(etiqueta+"  "+importe);
     } else {
-      l.push(x[0]+": "+eur(x[1])+apunte);
+      l.push(x[0]+": "+x[1]);
     }
   });
   if(alineado) l.push("```");
