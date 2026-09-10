@@ -26,8 +26,9 @@
    20 % de lo cobrado con tarjeta. Las visas no se tocan ni se amplían,
    que son las del datáfono. Se puede escribir encima cuando un día no
    cuadre.
-   Y una columna de control, «Debería haber», enseña esa misma cifra
-   y al lado lo que baila.
+   Esa cifra no es dinero y en ningún sitio se enseña como si lo fuera:
+   va apagada y con su procedencia escrita al lado. La que va en negrita
+   es siempre la del recuento, que es la única que ha contado alguien.
 
    Pero el efectivo también se puede CUADRAR, y entonces no hay que
    suponer nada. Todo lo que se cobra en metálico acaba en uno de cuatro
@@ -603,14 +604,15 @@ function verDia(main){
 
     '<div class="cifras">'+
       '<div class="cifra"><div class="k">Ventas del día</div><div class="v acento">'+eur(c.ventas)+'</div>'+
-        '<div class="n">visa + efectivo</div></div>'+
+        '<div class="n">visa + '+(pctVisa() && !difPct ? "el efectivo calculado" : "efectivo")+'</div></div>'+
       '<div class="cifra"><div class="k">Visa</div><div class="v">'+eur(c.visa)+'</div>'+
         '<div class="n">'+(c.ventas>0?num(c.visa/c.ventas*100,0)+"% del total":"—")+'</div></div>'+
       /* Aquí al lado había otra casilla, «Debería haber», con esta misma
          cuenta. Desde que el campo se rellena solo con el %, era la misma
          cifra escrita dos veces: sobraba. Se dice en ésta, y sólo hay algo
          que decir cuando la cifra puesta a mano no es la que salía. */
-      '<div class="cifra"><div class="k">Efectivo</div><div class="v">'+eur(c.efectivo)+'</div>'+
+      '<div class="cifra"><div class="k">Efectivo</div>'+
+        '<div class="v" style="color:var(--muted)">'+eur(c.efectivo)+'</div>'+
         '<div class="n"'+(difPct?' style="color:'+colorDiferencia(c.difEfectivo)+'"':"")+'>'+
         (!pctVisa()
           ? (c.ventas>0?num(c.efectivo/c.ventas*100,0)+"% del total":"—")
@@ -619,10 +621,15 @@ function verDia(main){
             : "el "+num(100-pctVisa(),0)+"% de las visas")+'</div></div>'+
       /* Lo contado en el cajón. Sin contar no se enseña un cero, que
          sería decir que el cajón estaba vacío. */
-      '<div class="cifra"><div class="k">Efectivo real</div><div class="v">'+
+      /* Ésta sí es dinero, así que es la que va con el color de la casa;
+         la de al lado, la calculada, va apagada. */
+      '<div class="cifra"><div class="k">Efectivo real</div>'+
+        '<div class="v'+(c.hayReal?' acento':'')+'">'+
         (c.hayReal?eur(c.efectivoReal):"—")+'</div>'+
         '<div class="n"'+(c.hayReal?' style="color:'+colorDiferencia(c.difReal)+'"':"")+'>'+
-        (c.hayReal?esc(textoDiferencia(c.difReal))+" contra el efectivo":"sin contar")+
+        (c.hayReal
+          ? esc(textoDiferencia(c.difReal))+(pctVisa()?" contra lo que da el %":" contra lo escrito")
+          : "sin contar")+
         '</div></div>'+
       '<div class="cifra"><div class="k">Pagos</div><div class="v malo">'+eur(c.gastos)+'</div>'+
         '<div class="n">'+((d&&(d.detalle||[]).length)?d.detalle.length+" apuntes":"pagados de caja")+'</div></div>'+
@@ -1450,9 +1457,19 @@ function verMes(main){
       'Ve a «Día» y anota el primer cierre.</div>';
     return;
   }
-  caja.innerHTML='<table><thead><tr><th>Día</th><th class="num">Visas</th><th class="num">Efectivo</th>'+
-    '<th class="num">Efec. real</th>'+
-    '<th class="num">Debería haber</th><th class="num">Pagos</th><th class="num">C. amarilla</th><th class="num">Fondo caja</th>'+
+  /* Aquí había dos columnas con la misma invención: «Efectivo», que es
+     la cifra guardada, y «Debería haber», que era esa misma cuenta
+     rehecha con el % de hoy. Como el % se ha tocado por el camino, la
+     segunda marcaba en rojo un desfase todos los días —«faltan 57,60»,
+     «faltan 64,20»— que no era dinero que faltara, sino dos cálculos
+     hechos con porcentajes distintos. Queda una sola, apagada y con su
+     nombre: la cuenta de la app. La de verdad es la del recuento. */
+  caja.innerHTML='<table><thead><tr><th>Día</th><th class="num">Visas</th>'+
+    '<th class="num">Efectivo<div style="font-weight:400;color:var(--muted);font-size:11px">'+
+      (pctVisa()?'el '+num(100-pctVisa(),0)+' % de las visas':'escrito a mano')+'</div></th>'+
+    '<th class="num">Efec. real<div style="font-weight:400;color:var(--muted);font-size:11px">'+
+      'contado en el cajón</div></th>'+
+    '<th class="num">Pagos</th><th class="num">C. amarilla</th><th class="num">Fondo caja</th>'+
     '<th class="num">Sobra am.</th><th class="num">Ventas</th><th>Nota</th></tr></thead><tbody>'+
     dias.map(function(d){
       var c=cuentasDia(d);
@@ -1461,21 +1478,22 @@ function verMes(main){
         "<td><strong>"+d.fecha.slice(8)+"</strong> "+
           '<span style="color:var(--muted);font-size:12px">'+diaSemana(d.fecha).slice(0,3)+"</span></td>"+
         '<td class="num">'+eur(c.visa)+"</td>"+
-        '<td class="num">'+eur(c.efectivo)+"</td>"+
-        /* Lo contado esa noche, y debajo lo que baila contra el efectivo. */
+        /* Apagada: no es dinero, es la cuenta. Y si no es la que saldría
+           con el % de ahora, se dice, que es lo único que aportaba la
+           columna que había al lado. */
+        '<td class="num" style="color:var(--muted)">'+eur(c.efectivo)+
+          /* La guardada puede no ser la que saldría hoy: o se escribió a
+             mano, o ese día el % era otro. Sin saber cuál de las dos, se
+             dice lo único cierto: lo que daría el % de ahora. */
+          (pctVisa() && c.visa>0 && Math.abs(c.difEfectivo)>=0.005
+            ? '<div style="font-size:11px">por el % de hoy: '+eur(c.efectivoPrevisto)+'</div>'
+            : "")+"</td>"+
+        /* Lo contado esa noche: el único dinero de esta tabla que ha
+           tocado alguien. Antes iba en rojo lo que le faltaba contra la
+           cifra de al lado, pero eso es medirse contra una suposición. */
         '<td class="num">'+(c.hayReal
-          ? eur(c.efectivoReal)+
-            (Math.abs(c.difReal)>=0.005
-              ? '<div style="font-size:11px;color:'+colorDiferencia(c.difReal)+'">'+
-                esc(textoDiferencia(c.difReal))+'</div>'
-              : "")
-          : "—")+"</td>"+
-        /* Lo que tocaría en metálico con el % de visa, y debajo lo que baila. */
-        '<td class="num" style="color:var(--muted)">'+(pctVisa()
-          ? eur(c.efectivoPrevisto)+
-            '<div style="font-size:11px;color:'+colorDiferencia(c.difEfectivo)+'">'+
-            esc(textoDiferencia(c.difEfectivo))+'</div>'
-          : "—")+"</td>"+
+          ? "<strong>"+eur(c.efectivoReal)+"</strong>"
+          : '<span style="color:var(--muted)">sin contar</span>')+"</td>"+
         '<td class="num"'+(c.gastos>0?' style="color:var(--malo)"':"")+">"+(c.gastos>0?eur(c.gastos):"—")+"</td>"+
         '<td class="num"'+(c.amarilla>0?' style="color:var(--amarilla);font-weight:600"':"")+">"+
           (c.amarilla>0?eur(c.amarilla):"—")+"</td>"+
@@ -1485,9 +1503,9 @@ function verMes(main){
         '<td style="font-size:12.5px;color:var(--muted)">'+esc(d.nota||"")+"</td></tr>";
     }).join("")+
     '</tbody><tfoot><tr><td>'+t.dias+' días</td>'+
-      '<td class="num">'+eur(t.visa)+'</td><td class="num">'+eur(t.efectivo)+'</td>'+
-      '<td class="num">'+(t.efectivoReal>0.004?eur(t.efectivoReal):"—")+'</td>'+
-      '<td class="num" style="color:var(--muted)">'+(pctVisa()?eur(t.efectivoPrevisto):"—")+'</td>'+
+      '<td class="num">'+eur(t.visa)+'</td>'+
+      '<td class="num" style="color:var(--muted)">'+eur(t.efectivo)+'</td>'+
+      '<td class="num">'+(t.efectivoReal>0.004?"<strong>"+eur(t.efectivoReal)+"</strong>":"—")+'</td>'+
       /* La amarilla y el fondo son recuentos: sumar los de todos los días
          daría una cifra que no existe en ninguna parte. */
       '<td class="num">'+eur(t.gastos)+'</td>'+
@@ -2245,11 +2263,12 @@ function verAjustes(main){
       '</div>'+
       '<p class="nota" style="margin:12px 0 0">El fondo habitual es el cambio que sueles dejar en la caja. '+
       'Viene puesto en cada día nuevo y lo cambias si un día dejas otra cantidad.</p>'+
-      '<p class="nota" style="margin:8px 0 0">Con el <strong>% de visa</strong> la app calcula la columna '+
-      '<strong style="color:var(--tinta)">Debería haber</strong>: el '+
+      '<p class="nota" style="margin:8px 0 0">Con el <strong>% de visa</strong> la app rellena sola la '+
+      'casilla del <strong style="color:var(--tinta)">efectivo</strong>: el '+
       num(100-(pctVisa()||80),0)+'% de lo cobrado con tarjeta. Las visas no se tocan; el metálico es '+
       'ese porcentaje de ellas. Es una referencia de la media, no una cuenta exacta: hay días que se '+
-      'salen. Ponlo a 0 y la columna desaparece.</p>'+
+      'salen, y por eso esa cifra sale siempre apagada y nunca en el parte de la noche. La buena es '+
+      'la del recuento del cajón.</p>'+
       /* El número medido, para que el de la casilla deje de ser un
          supuesto heredado. La cuenta entera está en «Sin retirar». */
       (function(){
@@ -2287,10 +2306,12 @@ function verAjustes(main){
         'que se va guardando hasta el objetivo, y la '+
         '<strong style="color:var(--tinta)">caja registradora</strong>, el cambio para el día siguiente. '+
         'Los dos los pones tú; no son un resultado.</p>'+
-        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Ventas</strong> = visas + efectivo.</p>'+
-        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Debería haber</strong> = el '+
-        num(100-(pctVisa()||80),0)+'% de las visas del día. Es el metálico que saldría si ese día se '+
-        'cumpliera la media; debajo se ve lo que falta o lo que sobra.</p>'+
+        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Ventas</strong> = visas + efectivo, '+
+        'y ese efectivo es el que pone la app, así que las ventas llevan dentro esa suposición.</p>'+
+        '<p style="margin:0 0 8px"><strong style="color:var(--tinta)">Efectivo</strong> = el '+
+        num(100-(pctVisa()||80),0)+'% de las visas del día. No es dinero contado: es lo que saldría si '+
+        'ese día se cumpliera la media. <strong style="color:var(--tinta)">Efec. real</strong> es el '+
+        'recuento del cajón, y ése sí es dinero.</p>'+
         '<p style="margin:0"><strong style="color:var(--tinta)">Caja amarilla</strong> = el recuento de '+
         'la última noche que la contaste. No se van sumando los días: se anota lo que hay dentro y '+
         'eso es el saldo. En el mes y en el año se enseña el recuento con el que se cerró.</p>'+
