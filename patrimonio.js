@@ -24,6 +24,17 @@
    El valor de un piso es una opinión, así que se escribe a mano y con
    fecha. La app no inventa ninguna cifra: lo que no has apuntado, no
    sale.
+
+   Un piso se compra una vez. Una cuenta o una cartera, no: se va
+   metiendo y sacando dinero mes a mes. Por eso los bienes que no son
+   ladrillo llevan MOVIMIENTOS —cada ingreso y cada retirada con su
+   fecha—, y «lo que llevo metido» es la suma de todos, no una cifra
+   que haya que corregir a mano cada vez.
+
+   Y de ahí sale el beneficio, que es la pregunta de verdad en una
+   cartera: lo que vale hoy menos lo que he metido. Si metes 1.000 más
+   y la cuenta sube 1.000, no has ganado nada, y esa es justo la trampa
+   que se cuela cuando el dinero que entra no está apuntado.
    ══════════════════════════════════════════════════════════════════ */
 (function(){
 
@@ -190,7 +201,26 @@ function colorDe(b){
   return i>=0 && i<SERIES.length ? SERIES[i] : GRIS;
 }
 
-function coste(b){ return r2((+b.compra||0)+(+b.gastos||0)+(+b.mejoras||0)); }
+/* Ingresos y retiradas de una cuenta o una cartera, en orden. El
+   importe va con signo: positivo lo que entra, negativo lo que sale. */
+function movimientos(b){
+  return ((b && b.movimientos)||[]).slice().sort(function(a,c){
+    return String(a.f||"").localeCompare(String(c.f||""));
+  });
+}
+function metidoEnMovimientos(b, hasta){
+  return r2(movimientos(b).reduce(function(t,m){
+    if(hasta && String(m.f||"")>hasta) return t;
+    return t+(+m.imp||0);
+  },0));
+}
+/* Lo puesto de mi bolsillo. En un piso es la compra con sus gastos y
+   sus reformas; en una cuenta, todo lo que he ido ingresando menos lo
+   que he sacado. Las dos cosas son lo mismo para la cuenta del
+   beneficio, así que van en el mismo sitio. */
+function coste(b){
+  return r2((+b.compra||0)+(+b.gastos||0)+(+b.mejoras||0)+metidoEnMovimientos(b));
+}
 
 function valoresOrdenados(b){
   return (b.valores||[]).slice().sort(function(a,c){
@@ -215,6 +245,12 @@ function valorEn(b, f){
   var v=valoresOrdenados(b), ult=null;
   for(var i=0;i<v.length;i++){ if(String(v[i].f)<=f) ult=v[i]; }
   if(ult) return r2(ult.v);
+  /* Sin valoración anterior a esa fecha, una cuenta valía lo que se
+     hubiera metido hasta entonces, no lo que hay hoy: si no, la línea
+     del tiempo enseña el saldo de ahora desde el primer día. */
+  if(movimientos(b).length){
+    return r2((+b.compra||0)+(+b.gastos||0)+(+b.mejoras||0)+metidoEnMovimientos(b, f));
+  }
   return v.length && !b.fecha ? 0 : coste(b);
 }
 
@@ -730,25 +766,48 @@ function ficha(id){
   var p=plusvalia(b), pp=plusPct(b), g=cagr(b), d=deuda(b);
   var vs=valoresOrdenados(b).slice(-6).reverse();
   var u=usoDe(b);
+  var movs=movimientos(b);
+  var entradas=r2(movs.reduce(function(t,m){ return t+Math.max(0,+m.imp||0); },0));
+  var salidas =r2(movs.reduce(function(t,m){ return t+Math.max(0,-(+m.imp||0)); },0));
   var sub=[tipo.nombre, u?USOS[u].corto:"", b.lugar].filter(Boolean).join(" · ");
 
   var cuerpo=
     '<p class="nota" style="margin:0 0 14px">'+esc(sub)+'</p>'+
     '<div class="bloque" style="border-top:0;margin-top:0;padding-top:0">'+
-      '<h4>Lo que me costó</h4>'+
-      renglon(esLadrillo(b)?"Precio de compra":"Lo que llevo metido", eur(b.compra))+
+      '<h4>'+(esLadrillo(b)?"Lo que me costó":"Lo que llevo metido")+'</h4>'+
+      renglon(esLadrillo(b)?"Precio de compra":"Con lo que empecé", eur(b.compra))+
       (esLadrillo(b)?renglon("Gastos de la compra", eur(b.gastos)):"")+
       (esLadrillo(b)?renglon("Reformas y mejoras", eur(b.mejoras)):"")+
+      (!esLadrillo(b) && movs.length
+        ? renglon("He ingresado", eur(entradas), "sube")+
+          renglon("He sacado", eur(salidas), salidas?"baja":"")
+        : "")+
       renglon("Total", eur(coste(b)))+
-      (b.fecha?renglon("Comprado el", fechaCorta(b.fecha)):"")+
+      (b.fecha?renglon(esLadrillo(b)?"Comprado el":"Abierto el", fechaCorta(b.fecha)):"")+
       (anios(b)>=1?renglon("Lo llevo teniendo", num(anios(b),1)+" años"):"")+
     '</div>'+
+
+    /* El movimiento es el dato que faltaba: sin él, meter 1.000 € en la
+       cuenta se leía como haber ganado 1.000 €. */
+    (!esLadrillo(b)?
+    '<div class="bloque"><h4>Movimientos</h4>'+
+      (movs.length
+        ? movs.slice(-8).reverse().map(function(m){
+            return renglon(fechaCorta(m.f)+(m.que?" · "+esc(m.que):""),
+                           eurFirma(+m.imp||0), (+m.imp||0)>0?"sube":"baja");
+          }).join("")+
+          (movs.length>8?'<p class="nota" style="margin:8px 0 0">Y '+(movs.length-8)+
+            ' más antes de éstos.</p>':"")
+        : '<p class="nota" style="margin:0">Todavía no has apuntado ninguno. Cada vez que '+
+          'metas o saques dinero, apúntalo aquí y el beneficio seguirá saliendo bien.</p>')+
+    '</div>':'')+
 
     '<div class="bloque"><h4>Lo que vale</h4>'+
       renglon("Valor de hoy", eur(valorHoy(b)))+
       renglon("Valorado el", fechaCorta(fechaValor(b)))+
-      renglon("Plusvalía", eurFirma(p), p>0?"sube":p<0?"baja":"")+
-      renglon("Sobre lo que costó", pp==null?"—":pctFirma(pp), p>0?"sube":p<0?"baja":"")+
+      renglon(esLadrillo(b)?"Plusvalía":"Beneficio", eurFirma(p), p>0?"sube":p<0?"baja":"")+
+      renglon(esLadrillo(b)?"Sobre lo que costó":"Sobre lo que he metido",
+              pp==null?"—":pctFirma(pp), p>0?"sube":p<0?"baja":"")+
       (g==null?"":renglon("Al año, compuesto", pctFirma(g), g>0?"sube":"baja"))+
     '</div>'+
 
@@ -795,7 +854,14 @@ function ficha(id){
     setTimeout(function(){ formulario(b); }, 0);
   }, {aceptar:"Editar",
       extra:'<button class="btn malo" data-borrar>Borrar</button>'+
+            (esLadrillo(b)?"":'<button class="btn" data-mov>Meter o sacar</button>')+
             '<button class="btn" data-valor>Apuntar valor</button>'});
+
+  var bm=d2.querySelector("[data-mov]");
+  if(bm) bm.addEventListener("click", function(){
+    d2.close(); d2.remove();
+    setTimeout(function(){ ventanaMovimiento(b); }, 0);
+  });
 
   d2.querySelector("[data-borrar]").addEventListener("click", function(){
     d2.close(); d2.remove();
@@ -959,6 +1025,54 @@ function apuntarValor(b, v, f){
   if(!b.valores) b.valores=[];
   var ya=b.valores.filter(function(x){ return x.f===f; })[0];
   if(ya) ya.v=r2(v); else b.valores.push({f:f, v:r2(v)});
+}
+
+/* Meter o sacar. El signo lo pone el botón que se elija, que pedir un
+   número negativo es pedir que alguien se equivoque.
+
+   Aquí sólo entra el dinero que cruza la puerta: lo que llega de fuera y
+   lo que se saca para fuera. Lo que la cuenta gana sola —intereses, un
+   dividendo que se queda dentro— NO es dinero metido, es beneficio, y
+   apuntarlo aquí lo borraría: la cuenta subiría 500 y «lo metido»
+   subiría 500 con ella, así que el beneficio saldría plano. */
+function ventanaMovimiento(b){
+  var d=abrirVentana("Meter o sacar · "+b.nombre,
+    '<p class="nota">Dinero que entra <strong>de fuera</strong> o que sacas <strong>para '+
+    'fuera</strong>: un traspaso desde el banco, una retirada. Cambia lo que llevas metido, '+
+    'que es contra lo que se mide el beneficio.</p>'+
+    '<p class="nota">Lo que la cuenta gana sola no va aquí: los intereses o un dividendo que '+
+    'se queda dentro son beneficio, no dinero tuyo metido. Eso sale solo cuando apuntes el '+
+    'valor nuevo.</p>'+
+    '<div class="rejilla">'+
+      campo("m_fecha","Fecha","date",hoyISO())+
+      campo("m_imp","Importe (€)","number","",' step="0.01" min="0"')+
+    '</div>'+
+    '<div style="margin-top:12px">'+
+      campo("m_que","Concepto","text","",' placeholder="Traspaso desde el banco, retirada…"')+
+    '</div>'+
+    '<p class="nota" style="margin:12px 0 0" id="m_pista"></p>',
+    function(){
+      var f=valor("m_fecha"), imp=numero("m_imp");
+      if(!f){ avisar("Pon una fecha.", true); return true; }
+      if(!imp){ avisar("Pon un importe.", true); return true; }
+      if(!b.movimientos) b.movimientos=[];
+      b.movimientos.push({id:uid(), f:f, imp:(sacar? -r2(imp) : r2(imp)), que:valor("m_que")});
+      guardar(); pintar();
+      avisar((sacar?"Sacados ":"Metidos ")+eur(imp)+" de "+b.nombre);
+    }, {aceptar:"Apuntar",
+        extra:'<button class="btn" id="m_lado">Cambiar a sacar</button>'});
+
+  var sacar=false;
+  var boton=document.getElementById("m_lado");
+  var pista=document.getElementById("m_pista");
+  function refrescar(){
+    boton.textContent = sacar ? "Cambiar a meter" : "Cambiar a sacar";
+    pista.innerHTML = sacar
+      ? 'Ahora mismo esto <strong>saca</strong> dinero de '+esc(b.nombre)+'.'
+      : 'Ahora mismo esto <strong>mete</strong> dinero en '+esc(b.nombre)+'.';
+  }
+  boton.addEventListener("click", function(e){ e.preventDefault(); sacar=!sacar; refrescar(); });
+  refrescar();
 }
 
 function ventanaValor(b){
