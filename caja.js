@@ -633,18 +633,35 @@ function verDia(main){
         '<span class="pista">Los recuentos los pones tú; la app no los inventa</span></div>'+
       '<div class="tarjeta-cuerpo">'+
         '<table style="max-width:520px"><tbody>'+
-          '<tr><td>Efectivo</td><td class="num">'+eur(c.efectivo)+'</td></tr>'+
+          /* Esta fila no es un recuento y el cartel de arriba dice que aquí
+             no se inventa nada, así que va apagada y con su procedencia
+             puesta: es la cuenta de la app, no dinero que haya contado
+             nadie. Le habían preguntado qué eran 301 € de efectivo un día
+             en que el cajón estaba vacío, y la pregunta era justa. */
+          '<tr><td style="color:var(--muted)">Efectivo '+
+            '<span style="font-size:12px">'+
+            (pctVisa() && !difPct
+              ? '(lo pone la app: el '+num(100-pctVisa(),0)+' % de las visas)'
+              : '(escrito a mano)')+'</span></td>'+
+            '<td class="num" style="color:var(--muted)">'+eur(c.efectivo)+'</td></tr>'+
           (c.hayReal
-            ? '<tr><td>Efectivo real <span style="color:var(--muted);font-size:12px">'+
-              '(contado en el cajón)</span></td><td class="num">'+eur(c.efectivoReal)+
+            ? '<tr><td><strong>Efectivo real</strong> <span style="color:var(--muted);font-size:12px">'+
+              '(contado en el cajón)</span></td><td class="num"><strong>'+eur(c.efectivoReal)+'</strong>'+
               (Math.abs(c.difReal)>=0.005
                 ? ' <span style="font-size:12px;color:'+colorDiferencia(c.difReal)+'">'+
                   esc(textoDiferencia(c.difReal))+'</span>'
                 : '')+'</td></tr>'
-            : "")+
+            /* Sin recuento, antes la fila desaparecía y sólo quedaba la
+               cifra inventada, que es como se lee por dinero. */
+            : '<tr><td>Efectivo real <span style="color:var(--muted);font-size:12px">'+
+              '(contado en el cajón)</span></td>'+
+              '<td class="num" style="color:var(--muted)">sin contar</td></tr>')+
           '<tr><td>− Pagos</td><td class="num" style="color:var(--malo)">'+eur(c.gastos)+'</td></tr>'+
-          '<tr style="border-top:1px solid var(--linea)"><td><strong>Queda tras los pagos</strong></td>'+
-            '<td class="num"><strong>'+eur(c.neto)+'</strong></td></tr>'+
+          '<tr style="border-top:1px solid var(--linea)"><td><strong>Queda tras los pagos</strong>'+
+            '<span style="color:var(--muted);font-size:12px"> '+
+            (c.hayReal?'(del contado)':'(de la cifra de la app)')+'</span></td>'+
+            '<td class="num"><strong>'+
+            eur(c.hayReal ? r2(c.efectivoReal-c.gastos) : c.neto)+'</strong></td></tr>'+
           '<tr><td>Caja amarilla <span style="color:var(--muted);font-size:12px">(lo que hay dentro)</span></td>'+
             '<td class="num" style="color:var(--amarilla)"><strong>'+eur(c.amarilla)+'</strong></td></tr>'+
           '<tr><td>Caja registradora <span style="color:var(--muted);font-size:12px">(el cambio que dejas)</span></td>'+
@@ -664,6 +681,16 @@ function verDia(main){
               ? '<strong style="font-size:16px">'+eur(c.sobrante)+'</strong>'
               : '<span style="color:var(--muted)">—</span>')+'</td></tr>'+
         '</tbody></table>'+
+        /* Cuando se paga más de lo que había en el cajón, el dinero salió
+           de otro sitio. Decirlo evita quedarse mirando un negativo. */
+        (c.hayReal && c.gastos>c.efectivoReal+0.004
+          ? '<div class="aviso-caja" style="margin:14px 0 0">Pagaste <strong>'+eur(c.gastos)+
+            '</strong> y en el cajón '+
+            (c.efectivoReal<0.005 ? 'no había nada' : 'sólo había '+eur(c.efectivoReal))+
+            ', así que <strong>'+eur(r2(c.gastos-c.efectivoReal))+'</strong> salieron de otro sitio: '+
+            'de la amarilla, del cambio de la registradora o de tu bolsillo. Mientras no se sepa de '+
+            'dónde, el día no puede cuadrar.</div>'
+          : "")+
         (c.amarilla>0 && objetivoAmarilla()>0 && c.amarilla<objetivoAmarilla()
           ? '<div class="nota" style="margin:14px 0 0">A la amarilla le faltan '+
             eur(r2(objetivoAmarilla()-c.amarilla))+' para llegar a '+eur(objetivoAmarilla())+
