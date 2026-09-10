@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="es" data-app="pedidos">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pedidos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --fondo:#eceeeb; --sup:#fbfcfb; --sup2:#f0f3f0;
+  --linea:#d3dad6; --linea-suave:#e2e7e4;
+  --tinta:#0f1618; --tinta2:#3d4a48; --muted:#5c6b68;
+  --acento:#4f6321; --acento-tinta:#fff; --acento-suave:#e8eed7; --acento-linea:#cfdcae;
+  --ok:#0c5a44; --ok-suave:#dcece5;
+  --aviso:#7d5714; --aviso-suave:#f4e7d5;
+  --malo:#96331f; --malo-suave:#f7e2de;
+  --titulo:'Fraunces',Georgia,serif;
+  --texto:'Archivo','Helvetica Neue',Arial,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  --sombra:0 1px 2px rgba(15,22,24,.04), 0 8px 24px -14px rgba(15,22,24,.18);
+  --radio:12px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-tema="claro"]){
+    --fondo:#101617; --sup:#171f21; --sup2:#1e282a;
+    --linea:#263335; --linea-suave:#1e282a;
+    --tinta:#eef2f0; --tinta2:#c3cecb; --muted:#93a5a1;
+    --acento:#b0c96b; --acento-tinta:#1a2010; --acento-suave:#242b14; --acento-linea:#3a4520;
+    --ok:#5fd3ac; --ok-suave:#14322a;
+    --aviso:#e0b168; --aviso-suave:#2f2617;
+    --malo:#ef8a76; --malo-suave:#33201c;
+    --sombra:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -16px rgba(0,0,0,.7);
+  }
+}
+:root[data-tema="oscuro"]{
+  --fondo:#101617; --sup:#171f21; --sup2:#1e282a;
+  --linea:#263335; --linea-suave:#1e282a;
+  --tinta:#eef2f0; --tinta2:#c3cecb; --muted:#93a5a1;
+  --acento:#b0c96b; --acento-tinta:#1a2010; --acento-suave:#242b14; --acento-linea:#3a4520;
+  --ok:#5fd3ac; --ok-suave:#14322a;
+  --aviso:#e0b168; --aviso-suave:#2f2617;
+  --malo:#ef8a76; --malo-suave:#33201c;
+  --sombra:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -16px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--fondo);color:var(--tinta);font-family:var(--texto);
+     font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--titulo);font-weight:600;margin:0;letter-spacing:-.015em;text-wrap:balance}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--acento);outline-offset:2px;border-radius:4px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.app{display:grid;grid-template-columns:210px minmax(0,1fr);min-height:100vh}
+.rail{background:var(--sup);border-right:1px solid var(--linea);display:flex;flex-direction:column;
+      gap:2px;padding:18px 11px;position:sticky;top:0;height:100vh}
+.marca{padding:4px 10px 16px}
+.marca .nom{font-family:var(--titulo);font-size:23px;display:block;line-height:1.15}
+.marca .sub{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.12em;
+            text-transform:uppercase;margin-top:3px;display:block}
+.nav{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;
+     padding:9px 11px;border:0;background:transparent;border-radius:8px;cursor:pointer;
+     color:var(--tinta2);text-align:left;font-size:14px;font-weight:500}
+.nav:hover{background:var(--sup2);color:var(--tinta)}
+.nav[aria-current="true"]{background:var(--acento-suave);color:var(--acento);font-weight:600}
+.nav .cuenta{font-family:var(--mono);font-size:11px;background:var(--acento);color:var(--acento-tinta);
+             border-radius:20px;padding:1px 7px;font-weight:600}
+.pie-rail{margin-top:auto;padding:10px;border-top:1px solid var(--linea-suave);
+          display:flex;flex-direction:column;gap:7px}
+.pie-rail a{font-size:12px;color:var(--muted);text-decoration:none}
+.pie-rail a:hover{color:var(--tinta)}
+main{padding:22px 24px 120px;max-width:1180px;min-width:0}
+
+.cabecera{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;
+          flex-wrap:wrap;margin-bottom:16px}
+.cabecera h1{font-size:28px}
+.cabecera p{margin:4px 0 0;color:var(--muted);font-size:13.5px;max-width:66ch}
+
+/* ── El buscador: lo primero y lo más grande ─────────────────── */
+.buscar{position:sticky;top:0;z-index:12;background:var(--fondo);
+        padding:10px 0 12px;margin:-4px 0 4px}
+.buscar-caja{position:relative}
+.buscar-caja .lupa{position:absolute;left:16px;top:50%;transform:translateY(-50%);
+                   font-size:19px;opacity:.5;pointer-events:none}
+#q{width:100%;font-size:19px;font-weight:500;padding:15px 46px 15px 46px;border-radius:14px;
+   border:1.5px solid var(--linea);background:var(--sup);box-shadow:var(--sombra)}
+#q::placeholder{color:var(--muted);font-weight:400}
+#q:focus{border-color:var(--acento);box-shadow:0 0 0 4px var(--acento-suave)}
+.limpiar{position:absolute;right:9px;top:50%;transform:translateY(-50%);border:0;background:var(--sup2);
+         color:var(--muted);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:15px;
+         display:none;align-items:center;justify-content:center}
+.limpiar.hay{display:flex}
+.limpiar:hover{background:var(--linea);color:var(--tinta)}
+
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.chip{border:1px solid var(--linea);background:var(--sup);color:var(--tinta2);border-radius:20px;
+      padding:6px 14px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
+.chip:hover{border-color:var(--muted)}
+.chip[aria-pressed="true"]{background:var(--acento);border-color:var(--acento);
+                           color:var(--acento-tinta);font-weight:600}
+.chip .n{font-family:var(--mono);font-size:11px;opacity:.65;margin-left:4px}
+
+.recuento{font-size:12.5px;color:var(--muted);margin:12px 2px 12px}
+
+/* ── La reja de productos ────────────────────────────────────── */
+.reja{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:13px}
+.prod{background:var(--sup);border:1px solid var(--linea);border-radius:var(--radio);
+      box-shadow:var(--sombra);overflow:hidden;display:flex;flex-direction:column}
+.prod.pedido{border-color:var(--acento);box-shadow:0 0 0 1px var(--acento),var(--sombra)}
+.prod-cab{padding:12px 14px 10px;border-bottom:1px solid var(--linea-suave);
+          display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.prod-cab h3{font-size:16.5px;line-height:1.25}
+.prod-cab .sec{font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;
+               color:var(--muted);white-space:nowrap;padding-top:4px}
+
+.oferta{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;
+        padding:11px 14px;border-bottom:1px solid var(--linea-suave)}
+.oferta:last-child{border-bottom:0}
+.oferta.mejor{background:var(--ok-suave)}
+.oferta.encargada{background:var(--acento-suave)}
+.of-quien{min-width:0}
+.of-prov{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.of-precio{font-size:21px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em;
+           line-height:1.15;margin-top:1px}
+.of-precio.mejor{color:var(--ok)}
+.of-precio.sin{color:var(--muted);font-size:15px;font-weight:500}
+.of-info{font-size:11.5px;color:var(--muted);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap}
+.of-info .viejo{color:var(--aviso);font-weight:600}
+.of-acciones{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+
+.contador{display:flex;align-items:center;gap:2px;background:var(--sup2);border:1px solid var(--linea);
+          border-radius:24px;padding:2px}
+.contador button{width:34px;height:34px;border:0;background:transparent;color:var(--tinta);
+                 border-radius:50%;cursor:pointer;font-size:19px;line-height:1;font-weight:600}
+.contador button:hover{background:var(--linea)}
+.contador input{width:46px;border:0;background:transparent;text-align:center;font-size:16px;
+                font-weight:700;font-variant-numeric:tabular-nums;padding:0;box-shadow:none!important}
+.contador input:focus{outline:none}
+/* Sin el cero apagado, la casilla vacia parece una cantidad puesta a 0. */
+.contador input::placeholder{color:var(--muted);font-weight:400;opacity:.5}
+.contador .ud{font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.08em;
+              text-transform:uppercase;padding:0 8px 0 2px}
+.contador.activo{background:var(--acento);border-color:var(--acento)}
+.contador.activo button,.contador.activo input,.contador.activo .ud{color:var(--acento-tinta)}
+.contador.activo button:hover{background:rgba(255,255,255,.18)}
+
+.linea-total{padding:9px 14px;background:var(--sup2);font-size:13px;display:flex;
+             justify-content:space-between;gap:10px;border-top:1px solid var(--linea-suave)}
+.linea-total b{font-variant-numeric:tabular-nums}
+
+/* ── La barra del pedido, siempre a la vista ─────────────────── */
+.barra-pedido{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--acento);
+              color:var(--acento-tinta);padding:12px 20px;display:flex;align-items:center;
+              justify-content:space-between;gap:16px;flex-wrap:wrap;
+              box-shadow:0 -8px 30px -12px rgba(0,0,0,.4)}
+.barra-pedido .resumen{font-size:14px;font-weight:500}
+.barra-pedido .gordo{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;
+                     letter-spacing:-.02em;margin-right:4px}
+.barra-pedido .btn{background:var(--acento-tinta);border-color:var(--acento-tinta);color:var(--acento);
+                   font-weight:600}
+.barra-pedido .btn.hueco{background:transparent;color:var(--acento-tinta);
+                         border-color:rgba(255,255,255,.45)}
+
+.tarjeta{background:var(--sup);border:1px solid var(--linea);border-radius:var(--radio);box-shadow:var(--sombra)}
+.tarjeta-cab{padding:13px 16px;border-bottom:1px solid var(--linea-suave);display:flex;
+             align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.tarjeta-cab h2{font-size:17px}
+.tarjeta-cab .pista{font-size:12.5px;color:var(--muted)}
+.tarjeta-cuerpo{padding:16px}
+
+.cifras{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1px;
+        background:var(--linea-suave);border:1px solid var(--linea);border-radius:var(--radio);
+        overflow:hidden;margin-bottom:18px}
+.cifra{background:var(--sup);padding:14px 16px}
+.cifra .k{font-family:var(--mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.cifra .v{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:3px;letter-spacing:-.02em}
+.cifra .v.acento{color:var(--acento)}
+.cifra .v.malo{color:var(--malo)}
+.cifra .n{font-size:11.5px;color:var(--muted);margin-top:1px}
+
+.campo{display:flex;flex-direction:column;gap:5px;min-width:0}
+.lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+     color:var(--muted);font-weight:500}
+input,select,textarea{background:var(--sup);border:1px solid var(--linea);border-radius:8px;
+                      padding:8px 10px;font-size:14px;width:100%;min-width:0}
+input:focus,select:focus,textarea:focus{border-color:var(--acento);outline:none;
+                                        box-shadow:0 0 0 3px var(--acento-suave)}
+input[type=number]{font-variant-numeric:tabular-nums}
+input.grande{font-size:17px;padding:10px 11px;font-weight:600}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;
+     border:1px solid var(--linea);background:var(--sup);color:var(--tinta);padding:9px 15px;
+     border-radius:8px;font-size:14px;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.fuerte{background:var(--acento);border-color:var(--acento);color:var(--acento-tinta);font-weight:600}
+.btn.fuerte:hover{filter:brightness(1.1)}
+.btn.wa{background:#25D366;border-color:#25D366;color:#0b3d24;font-weight:600}
+.btn.wa:hover{filter:brightness(1.06)}
+.btn.suave{border-color:transparent;background:transparent;color:var(--muted);padding:6px 9px}
+.btn.suave:hover{background:var(--sup2);color:var(--tinta)}
+.btn.malo{color:var(--malo)}
+.btn.sm{padding:5px 10px;font-size:13px}
+
+.rejilla{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.nota{font-size:13px;color:var(--muted);margin:0 0 12px;max-width:74ch}
+
+.tabla-caja{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;
+   color:var(--muted);font-weight:500;padding:9px 10px;border-bottom:1px solid var(--linea);
+   white-space:nowrap;background:var(--sup);position:sticky;top:0;z-index:1}
+td{padding:9px 10px;border-bottom:1px solid var(--linea-suave);vertical-align:middle}
+tbody tr:hover td{background:var(--sup2)}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mono{font-family:var(--mono);font-size:12.5px}
+tfoot td{border-top:1px solid var(--linea);border-bottom:0;font-weight:600;background:var(--sup2)}
+.vacio{padding:40px 16px;text-align:center;color:var(--muted);font-size:14px}
+.vacio strong{display:block;color:var(--tinta);font-family:var(--titulo);font-size:18px;
+              font-weight:600;margin-bottom:6px}
+
+.chapa{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;
+       font-size:11.5px;font-weight:600;white-space:nowrap}
+.chapa.ok{background:var(--ok-suave);color:var(--ok)}
+.chapa.aviso{background:var(--aviso-suave);color:var(--aviso)}
+.chapa.malo{background:var(--malo-suave);color:var(--malo)}
+.chapa.neutra{background:var(--sup2);color:var(--muted);border:1px solid var(--linea)}
+
+.aviso-caja{background:var(--aviso-suave);border:1px solid var(--aviso);color:var(--aviso);
+            padding:11px 15px;border-radius:8px;font-size:13.5px;margin-bottom:14px}
+
+dialog{border:1px solid var(--linea);border-radius:var(--radio);background:var(--sup);color:var(--tinta);
+       padding:0;max-width:580px;width:calc(100% - 32px);box-shadow:0 24px 60px -20px rgba(0,0,0,.45)}
+dialog::backdrop{background:rgba(10,16,18,.5)}
+.dlg-cab{padding:15px 18px;border-bottom:1px solid var(--linea-suave);display:flex;
+         justify-content:space-between;align-items:center}
+.dlg-cab h3{font-size:18px}
+.dlg-cuerpo{padding:18px;max-height:66vh;overflow:auto}
+.dlg-pie{padding:13px 18px;border-top:1px solid var(--linea-suave);display:flex;gap:9px;justify-content:flex-end}
+
+.aviso-flotante{position:fixed;left:50%;bottom:88px;transform:translateX(-50%);background:var(--tinta);
+                color:var(--fondo);padding:11px 20px;border-radius:22px;font-size:14px;font-weight:500;
+                box-shadow:0 10px 30px -8px rgba(0,0,0,.5);z-index:60;max-width:88vw;text-align:center}
+.aviso-flotante.malo{background:var(--malo);color:#fff}
+
+.parte{background:var(--sup2);border:1px solid var(--linea);border-radius:8px;padding:14px 16px;
+       font-family:var(--mono);font-size:12.5px;line-height:1.9;white-space:pre;overflow-x:auto}
+
+#cargando{position:fixed;inset:0;background:var(--fondo);display:flex;align-items:center;
+          justify-content:center;flex-direction:column;gap:14px;z-index:99;padding:24px;text-align:center}
+#cargando .msg{font-family:var(--titulo);font-size:19px}
+#cargando .sub{font-size:13px;color:var(--muted);max-width:34ch;line-height:1.5}
+
+@media (max-width:900px){
+  .app{grid-template-columns:1fr}
+  .rail{position:sticky;top:0;z-index:20;height:auto;flex-direction:row;flex-wrap:wrap;
+        align-items:center;padding:11px;gap:6px;border-right:0;border-bottom:1px solid var(--linea)}
+  .marca{padding:0 10px 0 4px;flex:1 0 100%}
+  .marca .sub{display:none}
+  .nav{width:auto}
+  .pie-rail{margin:0 0 0 auto;border:0;padding:0;flex-direction:row;gap:12px;align-items:center}
+  main{padding:14px 12px 130px}
+  .buscar{top:52px}
+  .reja{grid-template-columns:1fr}
+  .cabecera h1{font-size:24px}
+}
+</style>
+</head>
+<body>
+
+<div id="cargando">
+  <div class="msg">Cargando los pedidos…</div>
+  <div class="sub" id="cargando-sub">Descargando tus datos del repositorio privado.</div>
+</div>
+
+<div id="root" class="app"></div>
+
+<script src="sync.js?v=202609101210"></script>
+<script>
+(function(){
+  var capa = document.getElementById('cargando');
+  var sub  = document.getElementById('cargando-sub');
+
+  Sync.iniciar('pedidos').then(function(){
+    var s = document.createElement('script');
+    s.src = 'pedidos.js?v=202609101210';
+    s.onload = function(){ capa.remove(); };
+    s.onerror = function(){ sub.textContent = 'No se pudo cargar pedidos.js. Recarga la pagina.'; };
+    document.body.appendChild(s);
+  }).catch(function(err){
+    if (err.message === 'sin-credenciales') { location.href = 'index.html?volver=pedidos.html'; return; }
+    capa.querySelector('.msg').textContent = 'No he podido cargar tus datos';
+    sub.innerHTML = err.message + '<br><br><a href="index.html">Volver al escritorio</a>';
+  });
+})();
+</script>
+</body>
+</html>

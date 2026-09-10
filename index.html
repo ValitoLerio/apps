@@ -18,6 +18,7 @@
     --caja:#a99ae0; --caja-tenue:#221f3a99;
     --coleccion:#e0b464; --coleccion-tenue:#2f251599;
     --patrimonio:#63c9c0; --patrimonio-tenue:#12302d99;
+    --pedidos:#b0c96b; --pedidos-tenue:#242b1499;
     --alerta:#ef8a76; --alerta-tenue:#331a16;
     --display:'Fraunces',Georgia,serif;
     --texto:'Archivo','Helvetica Neue',sans-serif;
@@ -37,6 +38,7 @@
     --coleccion:#7c5518; --coleccion-tenue:#f3e8d5;
     --patrimonio:#12655e; --patrimonio-tenue:#dcecea;
     --patrimonio:#12655e; --patrimonio-tenue:#dcecea;
+    --pedidos:#4f6321; --pedidos-tenue:#e8eed7;
       --alerta:#96331f; --alerta-tenue:#f7e2de;
       --sombra:0 16px 34px -26px rgba(15,22,24,.5);
     }
@@ -160,6 +162,7 @@
   .p-caja{--tono:var(--caja)}
   .p-coleccion{--tono:var(--coleccion)}
   .p-patrimonio{--tono:var(--patrimonio)}
+  .p-pedidos{--tono:var(--pedidos)}
 
   /* ── Conexión ──────────────────────────────────────────────────── */
   .conexion{background:var(--sup);border:1px solid var(--linea);border-radius:16px;
@@ -421,6 +424,22 @@
         <div class="entrar">Abrir <span class="flecha">→</span></div>
       </a>
 
+      <a class="puerta p-pedidos" href="pedidos.html">
+        <span class="rotulo">Restaurante</span>
+        <h2>Pedidos</h2>
+        <p class="que">La lista de precios de los proveedores, con el más barato de cada cosa, y el pedido del día.</p>
+        <div class="cifra">
+          <span class="n" id="d-ped-productos">—</span>
+          <span class="u">productos en la lista</span>
+        </div>
+        <div class="tira">
+          <div class="celda"><span class="k">Pedido</span><span class="v" id="d-ped-pedido">—</span></div>
+          <div class="celda"><span class="k">Proveedores</span><span class="v" id="d-ped-prov">—</span></div>
+          <div class="celda"><span class="k">Por repasar</span><span class="v" id="d-ped-viejos">—</span></div>
+        </div>
+        <div class="entrar">Abrir <span class="flecha">&rarr;</span></div>
+      </a>
+
       <a class="puerta p-coleccion" href="coleccion.html">
         <span class="rotulo">Colección</span>
         <h2>Monedas y billetes</h2>
@@ -648,10 +667,10 @@
   // ── Candados ───────────────────────────────────────────
   var TARJETAS = {piso:'.p-piso', horario:'.p-resto', comanda:'.p-comanda',
                   casa:'.p-casa', caja:'.p-caja', coleccion:'.p-coleccion',
-                  patrimonio:'.p-patrimonio'};
+                  patrimonio:'.p-patrimonio', pedidos:'.p-pedidos'};
   var NOMBRES  = {piso:'Piso Soldeu', horario:'Horario Restaurante',
                   comanda:'Comanda', casa:'Casa', caja:'Caja',
-                  coleccion:'Colección', patrimonio:'Patrimonio'};
+                  coleccion:'Colección', patrimonio:'Patrimonio', pedidos:'Pedidos'};
   var seguridad = {};
 
   function pintarCandados(){
@@ -683,7 +702,8 @@
       casa:    ['d-casa-mes','d-casa-fijos','d-casa-compra','d-casa-avisos'],
       caja:    ['d-caja-mes','d-caja-amarilla','d-caja-dias','d-caja-hoy'],
       coleccion: ['d-col-piezas','d-col-monedas','d-col-billetes','d-col-faltan'],
-      patrimonio: ['d-pat-neto','d-pat-valor','d-pat-deuda','d-pat-plus']
+      patrimonio: ['d-pat-neto','d-pat-valor','d-pat-deuda','d-pat-plus'],
+      pedidos: ['d-ped-productos','d-ped-pedido','d-ped-prov','d-ped-viejos']
     }[sec] || [];
     ids.forEach(function(id){ pon(id, '···'); });
   }
@@ -899,6 +919,39 @@
     pon('d-col-faltan',   String(piezas.length - tengo.length) );
   }
 
+  /* Del escritorio interesa lo que hay pendiente de pedir y cuantos
+     precios llevan mas de un ano sin tocarse, que es lo que se pudre. */
+  function resumenPedidos(seccion){
+    var libro = leer(seccion['pedidos.libro.v1'], {});
+    var prods = libro.productos || [];
+    var pedido = libro.pedido || {};
+    var meses = +(libro.ajustes && libro.ajustes.mesesViejo) || 12;
+
+    function conIgi(p){ return (+p.precio||0) * (1 + (+p.igi||0)/100); }
+    function viejo(p){
+      if (!p.fecha) return true;
+      var d = new Date(p.fecha + 'T12:00:00');
+      if (isNaN(d)) return true;
+      return (Date.now() - d.getTime()) / (1000*60*60*24*30.44) >= meses;
+    }
+
+    var total = 0, provsPedido = {};
+    prods.forEach(function(p){
+      var l = pedido[p.id]; if (!l) return;
+      var uds = +l.uds || 0, cajas = +l.cajas || 0;
+      if (!uds && !cajas) return;
+      total += uds * conIgi(p) + cajas * conIgi(p) * (+p.udsCaja || 0);
+      if (p.proveedor) provsPedido[p.proveedor] = 1;
+    });
+    var provs = {};
+    prods.forEach(function(p){ if (p.proveedor) provs[p.proveedor] = 1; });
+
+    pon('d-ped-productos', String(prods.length));
+    pon('d-ped-pedido',    total > 0 ? euros(total) : '—');
+    pon('d-ped-prov',      String(Object.keys(provs).length));
+    pon('d-ped-viejos',    String(prods.filter(viejo).length));
+  }
+
   function resumenPatrimonio(seccion){
     var libro = leer(seccion['patrimonio.libro.v1'], {});
     var bienes = libro.bienes || [];
@@ -939,6 +992,7 @@
       resumenCaja(datos.caja || {});
       resumenColeccion(datos.coleccion || {});
       resumenPatrimonio(datos.patrimonio || {});
+      resumenPedidos(datos.pedidos || {});
       Object.keys(seguridad).forEach(function(sec){ if (seguridad[sec]) ocultarCifras(sec); });
       pintarCandados();
       pon('ultimo-guardado', haceCuanto(datos.actualizado));
