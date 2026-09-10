@@ -164,6 +164,27 @@
   .p-patrimonio{--tono:var(--patrimonio)}
   .p-pedidos{--tono:var(--pedidos)}
 
+  /* ── Colocar: mover las tarjetas a donde te parezca ───────────── */
+  .colocando .puerta{cursor:default}
+  .colocando .puerta .entrar{opacity:.35}
+  .mover{display:none;gap:.4rem;align-items:center;margin-top:1rem;
+         padding-top:.9rem;border-top:1px dashed var(--linea)}
+  .colocando .mover{display:flex}
+  .mover button{border:1px solid var(--linea);background:var(--sup);color:var(--tinta);
+                width:44px;height:40px;border-radius:9px;cursor:pointer;font-size:1.1rem;
+                line-height:1;display:flex;align-items:center;justify-content:center}
+  .mover button:hover:not(:disabled){border-color:var(--tono);color:var(--tono)}
+  .mover button:disabled{opacity:.3;cursor:default}
+  .mover .sitio{font-family:var(--mono);font-size:.72rem;color:var(--tinta2);
+                letter-spacing:.08em;margin-left:auto}
+  .aviso-colocar{background:var(--sup);border:1px solid var(--tono,var(--linea));
+                 border-left:4px solid var(--piso);border-radius:12px;
+                 padding:1rem 1.2rem;margin-bottom:1.2rem;display:none;
+                 align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+  .colocando .aviso-colocar{display:flex}
+  .aviso-colocar p{margin:0;font-size:.92rem;color:var(--tinta2);max-width:60ch}
+  .aviso-colocar strong{color:var(--tinta)}
+
   /* ── Conexión ──────────────────────────────────────────────────── */
   .conexion{background:var(--sup);border:1px solid var(--linea);border-radius:16px;
             padding:clamp(1.4rem,4vw,2.2rem);max-width:540px}
@@ -282,6 +303,7 @@
       <h1>Escritorio de Valeriano</h1>
     </div>
     <div class="acciones">
+      <button class="icono" id="btn-colocar" type="button" title="Colocar las tarjetas a tu gusto" aria-label="Colocar">⇄</button>
       <button class="icono" id="btn-candados" type="button" title="Contraseñas de las apps" aria-label="Contraseñas">🔒</button>
       <button class="icono" id="btn-tema" type="button" title="Cambiar entre claro y oscuro" aria-label="Cambiar tema">◐</button>
     </div>
@@ -342,9 +364,19 @@
       <button type="button" class="apagar" id="btn-desconectar">desconectar</button>
     </div>
 
+    <div class="aviso-colocar">
+      <p><strong>Estás colocando el escritorio.</strong> Mueve cada tarjeta con las flechas
+         hasta dejarlas como quieras. Se guarda en tu repositorio, así que el orden lo tendrás
+         también en el móvil.</p>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+        <button type="button" class="icono" id="btn-orden-original" title="Volver al orden de siempre">Deshacer</button>
+        <button type="button" class="icono" id="btn-colocar-fin">Ya está</button>
+      </div>
+    </div>
+
     <div class="puertas">
 
-      <a class="puerta p-piso" href="piso.html">
+      <a class="puerta p-piso" data-app="piso" href="piso.html">
         <span class="rotulo">Alquiler</span>
         <h2>Piso Soldeu</h2>
         <p class="que">Recibos, suministros y cuánto llevas recuperado de la compra.</p>
@@ -360,7 +392,7 @@
         <div class="entrar">Abrir <span class="flecha">→</span></div>
       </a>
 
-      <a class="puerta p-resto" href="horario.html">
+      <a class="puerta p-resto" data-app="horario" href="horario.html">
         <span class="rotulo">Personal</span>
         <h2>Horario Restaurante</h2>
         <p class="que">Quién entra, a qué hora y cuántas horas lleva cada uno.</p>
@@ -376,7 +408,7 @@
         <div class="entrar">Abrir <span class="flecha">→</span></div>
       </a>
 
-      <a class="puerta p-comanda" href="comanda.html">
+      <a class="puerta p-comanda" data-app="comanda" href="comanda.html">
         <span class="rotulo">Facturación</span>
         <h2>Comanda</h2>
         <p class="que">Comidas de empresa: albaranes del día y factura mensual con IGI.</p>
@@ -392,7 +424,7 @@
         <div class="entrar">Abrir <span class="flecha">→</span></div>
       </a>
 
-      <a class="puerta p-casa" href="casa.html">
+      <a class="puerta p-casa" data-app="casa" href="casa.html">
         <span class="rotulo">Familia</span>
         <h2>Casa</h2>
         <p class="que">Las cuentas de casa: compra, médico, coche, recibos y viajes.</p>
@@ -408,7 +440,7 @@
         <div class="entrar">Abrir <span class="flecha">→</span></div>
       </a>
 
-      <a class="puerta p-caja" href="caja.html">
+      <a class="puerta p-caja" data-app="caja" href="caja.html">
         <span class="rotulo">Restaurante</span>
         <h2>Caja</h2>
         <p class="que">El cierre de cada día: visa, efectivo, gastos y la caja amarilla.</p>
@@ -424,7 +456,7 @@
         <div class="entrar">Abrir <span class="flecha">→</span></div>
       </a>
 
-      <a class="puerta p-pedidos" href="pedidos.html">
+      <a class="puerta p-pedidos" data-app="pedidos" href="pedidos.html">
         <span class="rotulo">Restaurante</span>
         <h2>Pedidos</h2>
         <p class="que">La lista de precios de los proveedores, con el más barato de cada cosa, y el pedido del día.</p>
@@ -440,7 +472,7 @@
         <div class="entrar">Abrir <span class="flecha">&rarr;</span></div>
       </a>
 
-      <a class="puerta p-coleccion" href="coleccion.html">
+      <a class="puerta p-coleccion" data-app="coleccion" href="coleccion.html">
         <span class="rotulo">Colección</span>
         <h2>Monedas y billetes</h2>
         <p class="que">El álbum: lo de España, los euros y el resto del mundo.</p>
@@ -456,7 +488,7 @@
         <div class="entrar">Abrir <span class="flecha">→</span></div>
       </a>
 
-      <a class="puerta p-patrimonio" href="patrimonio.html">
+      <a class="puerta p-patrimonio" data-app="patrimonio" href="patrimonio.html">
         <span class="rotulo">Patrimonio</span>
         <h2>Lo que tengo</h2>
         <p class="que">Los pisos, el parking, la inversión y el ahorro: lo que costaron y lo que valen hoy.</p>
@@ -496,7 +528,7 @@
 
 </div>
 
-<script src="sync.js?v=202609072000"></script>
+<script src="sync.js?v=202609101830"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
@@ -663,6 +695,143 @@
     pon('d-servicios', String(servicios.length));
     pon('d-facturas',  String((libro.invoices || []).length));
   }
+
+  // ── Colocar el escritorio ──────────────────────────────
+  /* El orden de las tarjetas es cosa de quien lo mira, no mía. Se guarda
+     en la sección "escritorio" del repositorio privado —no en este
+     aparato— para que el orden que pongas aquí lo tengas también en el
+     móvil, que es donde de verdad molesta buscar una tarjeta.
+
+     Se mueve con flechas y no arrastrando: arrastrar en un móvil, con el
+     dedo y con la página haciendo scroll a la vez, es una pelea. Dos
+     botones grandes no fallan en ningún sitio. */
+  var ORDEN_KEY = 'escritorio.orden';
+
+  function cajaPuertas(){ return document.querySelector('.puertas'); }
+  function puertas(){
+    return [].slice.call(document.querySelectorAll('.puerta[data-app]'));
+  }
+  function ordenActual(){
+    return puertas().map(function(p){ return p.getAttribute('data-app'); });
+  }
+  /* Las que no estén en la lista guardada se quedan al final y en su
+     orden de siempre: así una app nueva aparece sin que haya que tocar
+     nada, y no desaparece por no estar apuntada. */
+  function aplicarOrden(orden){
+    if (!orden || !orden.length) return;
+    var caja = cajaPuertas(); if (!caja) return;
+    var porNombre = {};
+    puertas().forEach(function(p){ porNombre[p.getAttribute('data-app')] = p; });
+    orden.forEach(function(nombre){
+      var p = porNombre[nombre];
+      if (p) { caja.appendChild(p); delete porNombre[nombre]; }
+    });
+    pintarSitios();
+  }
+  function guardarOrden(){
+    var orden = ordenActual();
+    try { localStorage.setItem(ORDEN_KEY, JSON.stringify(orden)); } catch (e) {}
+    if (!Sync.conectado()) return;
+    Sync.guardarEscritorio({orden: orden}).catch(function(err){
+      avisarColocar('No he podido guardar el orden: ' + err.message);
+    });
+  }
+  function avisarColocar(texto){
+    var p = document.querySelector('.aviso-colocar p');
+    if (p) p.innerHTML = '<strong>' + texto + '</strong>';
+  }
+
+  /* Cada tarjeta lleva sus dos flechas y su número de sitio. Se montan
+     una vez y se quedan ahí, escondidas hasta que se entra en el modo. */
+  function montarFlechas(){
+    puertas().forEach(function(p){
+      if (p.querySelector('.mover')) return;
+      var barra = document.createElement('div');
+      barra.className = 'mover';
+      barra.innerHTML =
+        '<button type="button" data-mover="antes" title="Moverla antes" aria-label="Moverla antes">←</button>' +
+        '<button type="button" data-mover="despues" title="Moverla después" aria-label="Moverla después">→</button>' +
+        '<span class="sitio"></span>';
+      p.appendChild(barra);
+      barra.addEventListener('click', function(ev){
+        var b = ev.target.closest('[data-mover]');
+        if (!b) return;
+        ev.preventDefault(); ev.stopPropagation();
+        mover(p, b.getAttribute('data-mover') === 'antes' ? -1 : 1);
+      });
+    });
+  }
+  function mover(tarjeta, paso){
+    var lista = puertas();
+    var i = lista.indexOf(tarjeta);
+    var j = i + paso;
+    if (j < 0 || j >= lista.length) return;
+    var caja = cajaPuertas();
+    if (paso < 0) caja.insertBefore(tarjeta, lista[j]);
+    else caja.insertBefore(lista[j], tarjeta);
+    pintarSitios();
+    guardarOrden();
+  }
+  function pintarSitios(){
+    var lista = puertas();
+    lista.forEach(function(p, i){
+      var s = p.querySelector('.sitio');
+      if (s) s.textContent = (i + 1) + ' de ' + lista.length;
+      var antes = p.querySelector('[data-mover="antes"]');
+      var desp  = p.querySelector('[data-mover="despues"]');
+      if (antes) antes.disabled = (i === 0);
+      if (desp)  desp.disabled  = (i === lista.length - 1);
+    });
+  }
+  /* Colocando, una tarjeta no es un enlace: si no, la primera flecha que
+     se pulsa un poco torcida te saca del escritorio. */
+  function colocando(){ return document.body.classList.contains('colocando'); }
+  function pararEnlace(ev){ if (colocando()) ev.preventDefault(); }
+
+  function iniciarColocar(){
+    montarFlechas();
+    pintarSitios();
+    document.body.classList.add('colocando');
+    avisarColocar('Estás colocando el escritorio.');
+    var p = document.querySelector('.aviso-colocar p');
+    if (p) p.innerHTML = '<strong>Estás colocando el escritorio.</strong> Mueve cada tarjeta con ' +
+      'las flechas hasta dejarlas como quieras. Se guarda en tu repositorio, así que el orden ' +
+      'lo tendrás también en el móvil.';
+    var caja = cajaPuertas();
+    if (caja) caja.scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
+  function terminarColocar(){ document.body.classList.remove('colocando'); }
+
+  /* El orden de siempre, el que trae el HTML, para poder volver a él. Se
+     coge antes de aplicar nada guardado. */
+  var ORDEN_ORIGINAL = null;
+
+  document.addEventListener('DOMContentLoaded', function(){
+    var caja = cajaPuertas();
+    if (caja) caja.addEventListener('click', pararEnlace, true);
+    ORDEN_ORIGINAL = ordenActual();
+
+    // El orden que hubiera en este aparato, para que no baile mientras
+    // llegan los datos de GitHub.
+    try {
+      var g = localStorage.getItem(ORDEN_KEY);
+      if (g) aplicarOrden(JSON.parse(g));
+    } catch (e) {}
+
+    var bc = document.getElementById('btn-colocar');
+    if (bc) bc.addEventListener('click', function(){
+      if (colocando()) terminarColocar(); else iniciarColocar();
+    });
+    var bf = document.getElementById('btn-colocar-fin');
+    if (bf) bf.addEventListener('click', terminarColocar);
+    var bo = document.getElementById('btn-orden-original');
+    if (bo) bo.addEventListener('click', function(){
+      aplicarOrden(ORDEN_ORIGINAL);
+      pintarSitios();
+      guardarOrden();
+      avisarColocar('Vuelto al orden de siempre.');
+    });
+  });
 
   // ── Candados ───────────────────────────────────────────
   var TARJETAS = {piso:'.p-piso', horario:'.p-resto', comanda:'.p-comanda',
@@ -984,7 +1153,8 @@
       var seg = datos.seguridad || {};
       seguridad = {piso: !!seg.piso, horario: !!seg.horario,
                    comanda: !!seg.comanda, casa: !!seg.casa, caja: !!seg.caja,
-                   coleccion: !!seg.coleccion, patrimonio: !!seg.patrimonio};
+                   coleccion: !!seg.coleccion, patrimonio: !!seg.patrimonio,
+                   pedidos: !!seg.pedidos};
       resumenPiso(datos.piso || {});
       resumenHorario(datos.horario || {});
       resumenComanda(datos.comanda || {});
@@ -995,6 +1165,7 @@
       resumenPedidos(datos.pedidos || {});
       Object.keys(seguridad).forEach(function(sec){ if (seguridad[sec]) ocultarCifras(sec); });
       pintarCandados();
+      aplicarOrden((datos.escritorio || {}).orden);
       pon('ultimo-guardado', haceCuanto(datos.actualizado));
     }, function(err){
       pon('ultimo-guardado', 'no he podido leer los datos: ' + err.message);
