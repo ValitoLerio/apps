@@ -19,6 +19,7 @@
     --coleccion:#e0b464; --coleccion-tenue:#2f251599;
     --patrimonio:#63c9c0; --patrimonio-tenue:#12302d99;
     --pedidos:#b0c96b; --pedidos-tenue:#242b1499;
+    --vacaciones:#e59ad0; --vacaciones-tenue:#2e162699;
     --alerta:#ef8a76; --alerta-tenue:#331a16;
     --display:'Fraunces',Georgia,serif;
     --texto:'Archivo','Helvetica Neue',sans-serif;
@@ -39,6 +40,7 @@
     --patrimonio:#12655e; --patrimonio-tenue:#dcecea;
     --patrimonio:#12655e; --patrimonio-tenue:#dcecea;
     --pedidos:#4f6321; --pedidos-tenue:#e8eed7;
+    --vacaciones:#8e3070; --vacaciones-tenue:#f6e6f1;
       --alerta:#96331f; --alerta-tenue:#f7e2de;
       --sombra:0 16px 34px -26px rgba(15,22,24,.5);
     }
@@ -167,6 +169,7 @@
   .p-coleccion{--tono:var(--coleccion)}
   .p-patrimonio{--tono:var(--patrimonio)}
   .p-pedidos{--tono:var(--pedidos)}
+  .p-vacaciones{--tono:var(--vacaciones)}
 
   /* ── Colocar: mover las tarjetas a donde te parezca ───────────── */
   .colocando .puerta{cursor:default}
@@ -476,6 +479,22 @@
         <div class="entrar">Abrir <span class="flecha">&rarr;</span></div>
       </a>
 
+      <a class="puerta p-vacaciones" data-app="vacaciones" href="vacaciones.html">
+        <span class="rotulo">Personal</span>
+        <h2>Vacaciones</h2>
+        <p class="que">Quién va pagando qué en cada viaje, y cómo se cuadra al volver.</p>
+        <div class="cifra">
+          <span class="n" id="d-vac-total">&mdash;</span>
+          <span class="u">gastado en el viaje</span>
+        </div>
+        <div class="tira">
+          <div class="celda"><span class="k">Gente</span><span class="v" id="d-vac-gente">—</span></div>
+          <div class="celda"><span class="k">Gastos</span><span class="v" id="d-vac-gastos">—</span></div>
+          <div class="celda"><span class="k">Cuadre</span><span class="v" id="d-vac-cuadre">—</span></div>
+        </div>
+        <div class="entrar">Abrir <span class="flecha">&rarr;</span></div>
+      </a>
+
       <a class="puerta p-coleccion" data-app="coleccion" href="coleccion.html">
         <span class="rotulo">Colección</span>
         <h2>Monedas y billetes</h2>
@@ -532,7 +551,7 @@
 
 </div>
 
-<script src="sync.js?v=202609111239"></script>
+<script src="sync.js?v=202609111249"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
@@ -840,10 +859,12 @@
   // ── Candados ───────────────────────────────────────────
   var TARJETAS = {piso:'.p-piso', horario:'.p-resto', comanda:'.p-comanda',
                   casa:'.p-casa', caja:'.p-caja', coleccion:'.p-coleccion',
-                  patrimonio:'.p-patrimonio', pedidos:'.p-pedidos'};
+                  patrimonio:'.p-patrimonio', pedidos:'.p-pedidos',
+                  vacaciones:'.p-vacaciones'};
   var NOMBRES  = {piso:'Piso Soldeu', horario:'Horario Restaurante',
                   comanda:'Comanda', casa:'Casa', caja:'Caja',
-                  coleccion:'Colección', patrimonio:'Patrimonio', pedidos:'Pedidos'};
+                  coleccion:'Colección', patrimonio:'Patrimonio', pedidos:'Pedidos',
+                  vacaciones:'Vacaciones'};
   var seguridad = {};
 
   function pintarCandados(){
@@ -876,7 +897,8 @@
       caja:    ['d-caja-mes','d-caja-amarilla','d-caja-dias','d-caja-hoy'],
       coleccion: ['d-col-piezas','d-col-monedas','d-col-billetes','d-col-faltan'],
       patrimonio: ['d-pat-neto','d-pat-valor','d-pat-deuda','d-pat-plus'],
-      pedidos: ['d-ped-productos','d-ped-pedido','d-ped-prov','d-ped-viejos']
+      pedidos: ['d-ped-productos','d-ped-pedido','d-ped-prov','d-ped-viejos'],
+      vacaciones: ['d-vac-total','d-vac-gente','d-vac-gastos','d-vac-cuadre']
     }[sec] || [];
     ids.forEach(function(id){ pon(id, '···'); });
   }
@@ -1094,6 +1116,43 @@
 
   /* Del escritorio interesa lo que hay pendiente de pedir y cuantos
      precios llevan mas de un ano sin tocarse, que es lo que se pudre. */
+  /* Del escritorio interesa el viaje abierto: lo gastado y si queda
+     algo por devolverse entre ellos. */
+  function resumenVacaciones(seccion){
+    var libro = leer(seccion['vacaciones.libro.v1'], {});
+    var viajes = libro.viajes || [];
+    var id = (libro.ajustes || {}).viajeAbierto;
+    var v = viajes.filter(function(x){ return x.id === id; })[0] || viajes[viajes.length - 1];
+    if (!v) {
+      pon('d-vac-total', '—'); pon('d-vac-gente', '—');
+      pon('d-vac-gastos', '—'); pon('d-vac-cuadre', '—');
+      return;
+    }
+    var gastos = v.gastos || [], gente = v.gente || [], pagos = v.pagos || [];
+    var total = gastos.reduce(function(t, g){ return t + (+g.importe || 0); }, 0);
+
+    // El mismo saldo que hace la app: puesto - lo que le tocaba, con los
+    // pagos que ya se hayan devuelto entre ellos.
+    var saldos = {};
+    gente.forEach(function(p){ saldos[p.id] = 0; });
+    gastos.forEach(function(g){
+      var para = (g.para || []).filter(function(x){ return saldos[x] != null; });
+      if (!para.length) para = gente.map(function(p){ return p.id; });
+      if (saldos[g.paga] != null) saldos[g.paga] += (+g.importe || 0);
+      para.forEach(function(x){ saldos[x] -= (+g.importe || 0) / para.length; });
+    });
+    pagos.forEach(function(p){
+      if (saldos[p.de] != null) saldos[p.de] += (+p.importe || 0);
+      if (saldos[p.a]  != null) saldos[p.a]  -= (+p.importe || 0);
+    });
+    var deben = Object.keys(saldos).filter(function(k){ return saldos[k] < -0.005; }).length;
+
+    pon('d-vac-total',  euros(total));
+    pon('d-vac-gente',  String(gente.length));
+    pon('d-vac-gastos', String(gastos.length));
+    pon('d-vac-cuadre', deben ? String(deben) + (deben === 1 ? ' debe' : ' deben') : 'al día');
+  }
+
   function resumenPedidos(seccion){
     var libro = leer(seccion['pedidos.libro.v1'], {});
     var prods = libro.productos || [];
@@ -1167,6 +1226,7 @@
       resumenColeccion(datos.coleccion || {});
       resumenPatrimonio(datos.patrimonio || {});
       resumenPedidos(datos.pedidos || {});
+      resumenVacaciones(datos.vacaciones || {});
       Object.keys(seguridad).forEach(function(sec){ if (seguridad[sec]) ocultarCifras(sec); });
       pintarCandados();
       aplicarOrden((datos.escritorio || {}).orden);
