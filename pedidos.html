@@ -105,24 +105,29 @@ main{padding:22px 24px 120px;max-width:1180px;min-width:0}
 .recuento{font-size:12.5px;color:var(--muted);margin:12px 2px 12px}
 
 /* ── La reja de productos ────────────────────────────────────── */
-.reja{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:13px}
+/* Antes 330px de ancho mínimo y una ficha por proveedor: en un portátil
+   entraban cuatro productos. Ahora caben el doble y cada uno ocupa una
+   sola línea mientras no lo abras. */
+.reja{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:10px}
 .prod{background:var(--sup);border:1px solid var(--linea);border-radius:var(--radio);
       box-shadow:var(--sombra);overflow:hidden;display:flex;flex-direction:column}
 .prod.pedido{border-color:var(--acento);box-shadow:0 0 0 1px var(--acento),var(--sombra)}
-.prod-cab{padding:12px 14px 10px;border-bottom:1px solid var(--linea-suave);
+.prod-cab{padding:9px 13px 7px;border-bottom:1px solid var(--linea-suave);
           display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
-.prod-cab h3{font-size:16.5px;line-height:1.25}
+.prod-cab h3{font-size:15.5px;line-height:1.2}
 .prod-cab .sec{font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;
                color:var(--muted);white-space:nowrap;padding-top:4px}
 
 .oferta{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;
-        padding:11px 14px;border-bottom:1px solid var(--linea-suave)}
+        padding:8px 13px;border-bottom:1px solid var(--linea-suave)}
 .oferta:last-child{border-bottom:0}
 .oferta.mejor{background:var(--ok-suave)}
 .oferta.encargada{background:var(--acento-suave)}
 .of-quien{min-width:0}
-.of-prov{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.of-precio{font-size:21px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em;
+/* Que el nombre doble de línea antes que salir cortado: «INTERPE…» no
+   le dice a nadie de quién es ese precio. */
+.of-prov{font-weight:600;font-size:14px;line-height:1.25;overflow-wrap:anywhere}
+.of-precio{font-size:19px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em;
            line-height:1.15;margin-top:1px}
 .of-precio.mejor{color:var(--ok)}
 .of-precio.sin{color:var(--muted);font-size:15px;font-weight:500}
@@ -146,7 +151,13 @@ main{padding:22px 24px 120px;max-width:1180px;min-width:0}
 .contador.activo button,.contador.activo input,.contador.activo .ud{color:var(--acento-tinta)}
 .contador.activo button:hover{background:rgba(255,255,255,.18)}
 
-.linea-total{padding:9px 14px;background:var(--sup2);font-size:13px;display:flex;
+/* La línea de «+2 proveedores más»: discreta, del ancho de la ficha y
+   con sitio de sobra para el dedo. */
+.mas-prov{width:100%;border:0;border-top:1px solid var(--linea-suave);background:transparent;
+          color:var(--muted);font-size:12.5px;font-weight:600;padding:9px 13px;cursor:pointer;
+          text-align:left;font-family:var(--texto)}
+.mas-prov:hover{background:var(--sup2);color:var(--tinta)}
+.linea-total{padding:8px 13px;background:var(--sup2);font-size:13px;display:flex;
              justify-content:space-between;gap:10px;border-top:1px solid var(--linea-suave)}
 .linea-total b{font-variant-numeric:tabular-nums}
 
@@ -305,7 +316,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609111141"></script>
+<script src="sync.js?v=202609111153"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -313,7 +324,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('pedidos').then(function(){
     var s = document.createElement('script');
-    s.src = 'pedidos.js?v=202609111141';
+    s.src = 'pedidos.js?v=202609111153';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar pedidos.js. Recarga la pagina.'; };
     document.body.appendChild(s);
