@@ -63,8 +63,7 @@ function libroVacio(){
 }
 
 var libro = libroVacio();
-var ui = { vista:"precios", q:"", seccion:"", soloPedido:false, soloBaratos:false,
-           abiertas:{} };
+var ui = { vista:"precios", q:"", seccion:"", soloPedido:false, soloBaratos:false };
 
 /* ── Dinero, fechas y texto ───────────────────────────────────── */
 function r2(n){ return Math.round(((+n||0)+Number.EPSILON)*100)/100; }
@@ -507,48 +506,19 @@ function pintarResultado(){
   engancharFichas(caja);
 }
 
-/* Antes se enseñaban todos los proveedores de cada producto, siempre. Con
-   tres proveedores, una ficha ocupaba lo que tres, y en una pantalla
-   cabían cuatro productos: para encontrar algo había que hacer scroll
-   aunque el buscador ya hubiera dejado diez.
-
-   Ahora sale uno solo —el más barato, que es el que se va a pedir— y los
-   demás quedan detrás de una línea que dice cuántos son y desde cuánto.
-   Se abren de un toque y siguen ahí para comparar; lo que no hacen es
-   ocupar sitio mientras no hagan falta. Los que están en el pedido se
-   quedan siempre a la vista, que ésos sí importan. */
+/* Todos los proveedores de cada producto, siempre a la vista y ordenados
+   del más barato al más caro. Hubo un rato en que sólo salía el más
+   barato y los demás quedaban detrás de un desplegable, para que cupiera
+   más en pantalla; se quitó, porque comparar precios es justo para lo
+   que se abre esta pantalla y esconderlos era esconder el trabajo. Si
+   hace falta ver más productos de golpe, para eso está el buscador. */
 function fichaProducto(g){
   var enPedido=g.ofertas.some(function(o){ var l=delPedido(o.id); return l.uds||l.cajas; });
   var total=r2(g.ofertas.reduce(function(s,o){ return s+importeLinea(o); },0));
-  /* La llave para acordarse de cuáles están abiertas es el id del primer
-     precio, no el nombre: un id es un token limpio que va y vuelve de un
-     atributo del HTML sin que le pase nada. */
-  var marca=g.ofertas.length ? g.ofertas[0].id : g.llave;
-  var abierta=!!ui.abiertas[marca];
-
-  /* Siempre a la vista: el primero de la lista (el más barato) y todo lo
-     que ya esté pedido. Lo demás, detrás del desplegable. */
-  var fuera=[], dentro=[];
-  g.ofertas.forEach(function(o, i){
-    var l=delPedido(o.id);
-    if(i===0 || l.uds || l.cajas || abierta) fuera.push(o); else dentro.push(o);
-  });
-  var masBarato=dentro.length
-    ? Math.min.apply(null, dentro.map(conIgi).filter(function(x){ return x>0; }).concat([Infinity]))
-    : Infinity;
-
   return '<article class="prod'+(enPedido?" pedido":"")+'">'+
     '<div class="prod-cab"><h3>'+esc(g.nombre)+'</h3>'+
       '<span class="sec">'+esc((g.seccion||"").toLowerCase())+'</span></div>'+
-    fuera.map(function(o){ return lineaOferta(o, g); }).join("")+
-    (dentro.length
-      ? '<button type="button" class="mas-prov" data-abrir="'+esc(marca)+'">'+
-        '+ '+plural(dentro.length,"proveedor más","proveedores más")+
-        (isFinite(masBarato)?' · desde '+eur(masBarato):"")+'</button>'
-      : "")+
-    (abierta && g.ofertas.length>1
-      ? '<button type="button" class="mas-prov" data-abrir="'+esc(marca)+'">− Dejar sólo el mejor</button>'
-      : "")+
+    g.ofertas.map(function(o){ return lineaOferta(o, g); }).join("")+
     (total>0
       ? '<div class="linea-total"><span>En el pedido</span><b>'+eur(total)+'</b></div>'
       : "")+
@@ -622,13 +592,6 @@ function engancharFichas(caja){
       });
     });
     input.addEventListener("input", function(){ aplicar(input.value); });
-  });
-  caja.querySelectorAll("[data-abrir]").forEach(function(b){
-    b.addEventListener("click", function(){
-      var k=b.getAttribute("data-abrir");
-      if(ui.abiertas[k]) delete ui.abiertas[k]; else ui.abiertas[k]=1;
-      pintarResultado();
-    });
   });
   caja.querySelectorAll("[data-editar]").forEach(function(b){
     b.addEventListener("click", function(e){
