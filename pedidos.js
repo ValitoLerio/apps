@@ -259,7 +259,7 @@ function guardarPlantilla(){
     else if(p.semanal) delete p.semanal;
   });
   guardar(); pintar();
-  avisar("Guardado lo de siempre: "+plural(n,"cosa","cosas"));
+  avisar("Stock semanal guardado: "+plural(n,"cosa","cosas"));
 }
 function textoSemanal(p){
   var s=semanalDe(p);
@@ -645,7 +645,10 @@ function verStock(main){
       "Lo que quieres tener cada semana de cada cosa. Se pone una vez y "+
       "luego el pedido entero sale de aquí con un botón.",
       '<button class="btn fuerte" id="st_poner"'+(conNivel.length?"":" disabled")+'>'+
-        '↺ Poner el pedido de la semana</button>')+
+        '↺ Poner el pedido de la semana</button>'+
+      (lineasPedido()
+        ? '<button class="btn" id="st_coger">Cogerlo del pedido de ahora</button>' : "")+
+      (conNivel.length ? '<button class="btn malo" id="st_vaciar">Vaciar el stock</button>' : ""))+
 
     '<div class="cifras">'+
       '<div class="cifra"><div class="k">Con stock puesto</div>'+
@@ -706,9 +709,70 @@ function verStock(main){
   if(bp && !bp.disabled) bp.addEventListener("click", function(){
     ponerPlantilla(); ui.vista="pedido"; pintar(); window.scrollTo(0,0);
   });
+  var bv=document.getElementById("st_vaciar");
+  if(bv) bv.addEventListener("click", vaciarStock);
+  /* Al revés: el pedido que tengas montado ahora pasa a ser el stock. Es
+     la forma más rápida de llenar esta hoja la primera vez, porque el
+     trabajo ya está hecho en El pedido. */
+  var bc=document.getElementById("st_coger");
+  if(bc) bc.addEventListener("click", function(){
+    confirmar("Coger el stock del pedido de ahora",
+      '<p style="margin:0 0 10px">'+(lineasPedido()===1
+        ? "La cosa que tienes apuntada ahora en el pedido, con su cantidad, pasa"
+        : "Las "+lineasPedido()+" cosas que tienes apuntadas ahora en el pedido, con sus "+
+          "cantidades, pasan")+' a ser tu stock semanal.</p>'+
+      (hayPlantilla()
+        ? '<p class="nota" style="margin:0">Se sustituye el que ya tenías ('+
+          plural(conSemanal().length,"producto","productos")+'): lo que no esté en el pedido '+
+          'de ahora se queda sin stock.</p>'
+        : '<p class="nota" style="margin:0">El pedido no se toca; sólo se copia.</p>'),
+      guardarPlantilla, {aceptar:"Cogerlo"});
+  });
 
   pintarStock();
   if(!("ontouchstart" in window)) campo.focus();
+}
+
+/* Quitarle el stock a todo de una vez, que ponerle un cero a ciento y
+   pico productos uno por uno no lo hace nadie. Si estás mirando una
+   sección, se puede vaciar sólo ésa: es lo que se querrá casi siempre
+   —cambia el proveedor de la verdura y hay que rehacer esa parte— y
+   vaciarlo todo por no tener la opción sería perder el resto. */
+function vaciarStock(){
+  var todos=conSemanal();
+  if(!todos.length) return;
+  var seccion=(ui.secStock && ui.secStock!=="__puestos") ? ui.secStock : null;
+  var deLaSeccion=seccion
+    ? todos.filter(function(p){ return p.seccion===seccion; }) : [];
+
+  function limpiar(lista, dicho){
+    lista.forEach(function(p){ delete p.semanal; });
+    guardar(); pintar();
+    avisar(dicho);
+  }
+
+  confirmar("Vaciar el stock semanal",
+    '<p style="margin:0 0 10px">Se le quita el stock a '+
+      plural(todos.length,"producto","productos")+'. Los productos y sus precios no se tocan: '+
+      'lo único que se borra es cuánto querías tener de cada cosa.</p>'+
+    (seccion && deLaSeccion.length && deLaSeccion.length<todos.length
+      ? '<p class="nota" style="margin:0">Estás mirando <strong>'+esc(seccion.toLowerCase())+
+        '</strong>, que tiene '+plural(deLaSeccion.length,"producto","productos")+
+        ' con stock. Con el otro botón vacías sólo ésos.</p>'
+      : "")+
+    '<p class="nota" style="margin:10px 0 0">El pedido que tengas apuntado ahora mismo se '+
+    'queda como está; esto es sólo la plantilla.</p>',
+    function(){ limpiar(todos, "Stock vaciado"); },
+    {aceptar:"Vaciarlo todo", malo:true,
+     extra:(seccion && deLaSeccion.length && deLaSeccion.length<todos.length
+       ? '<button class="btn" data-solo-sec>Sólo '+esc(seccion.toLowerCase())+'</button>' : ""),
+     alAbrir:function(){
+       var b=document.querySelector("#dlg [data-solo-sec]");
+       if(b) b.addEventListener("click", function(){
+         cerrarVentana();
+         limpiar(deLaSeccion, "Vaciado el stock de "+seccion.toLowerCase());
+       });
+     }});
 }
 
 function costeSemanal(){
@@ -923,8 +987,10 @@ function verPedido(main){
   var bg=document.getElementById("pd_guardarSiempre");
   if(bg) bg.addEventListener("click", function(){
     confirmar("Guardar como stock semanal",
-      '<p style="margin:0 0 10px">Las '+plural(lineasPedido(),"cosa","cosas")+' que hay ahora en el '+
-      'pedido, con sus cantidades, pasan a ser tu <strong>stock semanal</strong>.</p>'+
+      '<p style="margin:0 0 10px">'+(lineasPedido()===1
+        ? "La cosa que hay ahora en el pedido, con su cantidad, pasa"
+        : "Las "+lineasPedido()+" cosas que hay ahora en el pedido, con sus cantidades, pasan")+
+        ' a ser tu <strong>stock semanal</strong>.</p>'+
       (hayPlantilla()
         ? '<p class="nota" style="margin:0">Ya tenías uno con '+
           plural(conSemanal().length,"cosa","cosas")+'. Se sustituye entero: lo que no esté en el '+
