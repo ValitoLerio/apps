@@ -21,12 +21,12 @@
    El buscador es la puerta de entrada: se escribe media palabra y
    quedan cuatro fichas en pantalla. Sin él, esto es un listín.
 
-   Y aparte va lo de CADA DÍA: la verdura y la carne. Esas no tienen
-   precio en ninguna hoja —se piden al día, y el precio es el que sea—,
-   así que no se comparan: se piden por cantidad y ya está. Como se hace
-   todas las mañanas y siempre con la misma lista, tienen pantalla
-   propia: la lista entera a la vista, un número al lado de cada cosa, y
-   a mandar. Buscarlas una por una cada mañana sería trabajo inventado.
+   La verdura y la carne llegaron a tener pantalla propia, «Cada día»,
+   con la lista entera a la vista. Se quitó: con el buscador y la chapa
+   «Del día» de aquí se llega igual, y una pantalla menos es una pantalla
+   menos que mantener. Los productos siguen todos, marcados como del día
+   y con su unidad —kilos, cajas—, que eso es del producto y no de la
+   pantalla que se borró.
 
    Y LO DE SIEMPRE. Un pedido de la semana se parece mucho al de la
    semana pasada: las mismas cosas y casi las mismas cantidades. Escribir
@@ -63,8 +63,8 @@ function libroVacio(){
 }
 
 var libro = libroVacio();
-var ui = { vista:"diario", q:"", seccion:"", soloPedido:false, soloBaratos:false,
-           qDia:"", secDia:"", abiertas:{} };
+var ui = { vista:"precios", q:"", seccion:"", soloPedido:false, soloBaratos:false,
+           abiertas:{} };
 
 /* ── Dinero, fechas y texto ───────────────────────────────────── */
 function r2(n){ return Math.round(((+n||0)+Number.EPSILON)*100)/100; }
@@ -214,25 +214,6 @@ function cantidadConUnidad(n, u){
   if(u==="cajas") return n+(n===1?" caja":" cajas");
   return n+" "+u;
 }
-function seccionesDiario(){
-  var vistas=[], hay={};
-  libro.productos.forEach(function(p){
-    if(!esDiario(p)) return;
-    var s=p.seccion||"Sin sección";
-    if(!hay[s]){ hay[s]=[]; vistas.push(s); }
-    hay[s].push(p);
-  });
-  return vistas.map(function(s){ return {nombre:s, productos:hay[s]}; });
-}
-function hayDiario(){ return libro.productos.some(esDiario); }
-/* El proveedor de la lista del día es el de sus productos: si todos
-   coinciden, ése; si no, no hay uno solo y más vale decirlo. */
-function proveedorDeLista(prods){
-  var provs={};
-  prods.forEach(function(p){ provs[p.proveedor||""]=1; });
-  var k=Object.keys(provs);
-  return k.length===1 ? k[0] : null;
-}
 function productoPorId(id){
   return libro.productos.filter(function(p){ return p.id===id; })[0] || null;
 }
@@ -334,19 +315,11 @@ function lineasPedido(){
    ARMAZÓN
    ══════════════════════════════════════════════════════════════ */
 var APARTADOS=[
-  {id:"diario",      nombre:"Cada día", cuenta:function(){ return lineasDiario(); }},
   {id:"precios",     nombre:"Precios"},
   {id:"pedido",      nombre:"El pedido", cuenta:function(){ return lineasPedido(); }},
   {id:"proveedores", nombre:"Proveedores"},
   {id:"ajustes",     nombre:"Ajustes"}
 ];
-function lineasDiario(){
-  return libro.productos.filter(function(p){
-    if(!esDiario(p)) return false;
-    var l=delPedido(p.id); return l.uds||l.cajas;
-  }).length;
-}
-
 function pintar(){
   var root=document.getElementById("root");
   root.innerHTML=
@@ -370,7 +343,7 @@ function pintar(){
   });
   if(window.Sync && Sync.mostrarEstadoEn) Sync.mostrarEstadoEn(document.getElementById("sync-estado"));
 
-  ({diario:verDiario, precios:verPrecios, pedido:verPedido, proveedores:verProveedores,
+  ({precios:verPrecios, pedido:verPedido, proveedores:verProveedores,
     ajustes:verAjustes})[ui.vista](document.getElementById("main"));
 
   pintarBarra();
@@ -415,300 +388,6 @@ function pintarBarra(){
     if(!c){ c=document.createElement("span"); c.className="cuenta"; nav.appendChild(c); }
     c.textContent=n;
   }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   CADA DÍA — la verdura y la carne
-   ══════════════════════════════════════════════════════════════
-   La lista entera a la vista y un número al lado de cada cosa. Sin
-   precios y sin fichas: esto se hace de pie, en la cámara, con el móvil
-   en una mano, y lo que hace falta es ver los sesenta nombres de golpe
-   y poner cuatro números. */
-function verDiario(main){
-  var listas=seccionesDiario();
-
-  if(!listas.length){
-    main.innerHTML=cabecera("Cada día",
-      "Aquí va lo que se pide todas las mañanas: la verdura, la carne.")+
-      '<div class="tarjeta"><div class="vacio"><strong>Todavía no hay lista del día</strong>'+
-      'En <b>Precios</b>, abre un producto con «cambiar» y márcalo como «lo pido cada día». '+
-      'Los que marques salen aquí.</div></div>';
-    return;
-  }
-
-  /* Son cincuenta y tantas cosas en dos listas: sin un filtro arriba hay
-     que bajar media pantalla para llegar a la carne, y para repasar lo
-     que llevas apuntado hay que ir mirando fila por fila cuáles están
-     encendidas. Con esta barra, cada lista cabe de una vez, el buscador
-     te lleva a lo que sea con tres letras, y «Apuntado» te enseña sólo lo
-     que has puesto, que es el repaso de antes de mandar. */
-  main.innerHTML=
-    cabecera("Cada día",
-      "Pon la cantidad de lo que te falte y mándalo. Lo que dejes en blanco no va.",
-      (hayPlantilla() ? '<button class="btn fuerte" id="di_siempre">↺ Poner lo de siempre</button>' : "")+
-      (lineasDiario() ? '<button class="btn" id="di_limpiar">Quitar las cantidades</button>' : ""))+
-
-    '<div class="buscar">'+
-      '<div class="buscar-caja">'+
-        '<span class="lupa">⌕</span>'+
-        '<input id="qd" type="search" autocomplete="off" spellcheck="false" '+
-        'placeholder="Busca en la lista del día…" value="'+esc(ui.qDia)+'">'+
-        '<button class="limpiar'+(ui.qDia?" hay":"")+'" id="qd_limpiar" title="Limpiar">✕</button>'+
-      '</div>'+
-      '<div class="chips">'+
-        '<button class="chip" data-secdia="" aria-pressed="'+(!ui.secDia)+'">Todo'+
-          '<span class="n">'+libro.productos.filter(esDiario).length+'</span></button>'+
-        listas.map(function(l){
-          return '<button class="chip" data-secdia="'+esc(l.nombre)+'" aria-pressed="'+
-            (ui.secDia===l.nombre)+'">'+esc(l.nombre.charAt(0)+l.nombre.slice(1).toLowerCase())+
-            '<span class="n">'+l.productos.length+'</span></button>';
-        }).join("")+
-        '<button class="chip" data-secdia="__puestos" aria-pressed="'+(ui.secDia==="__puestos")+'">'+
-          'Apuntado<span class="n">'+lineasDiario()+'</span></button>'+
-      '</div>'+
-    '</div>'+
-    '<div id="listasDia"></div>';
-
-  var campo=document.getElementById("qd");
-  campo.addEventListener("input", function(){
-    ui.qDia=this.value;
-    document.getElementById("qd_limpiar").classList.toggle("hay", !!this.value);
-    pintarListasDia();
-  });
-  campo.addEventListener("keydown", function(e){
-    if(e.key==="Escape" && this.value){ e.preventDefault(); this.value=""; ui.qDia="";
-      document.getElementById("qd_limpiar").classList.remove("hay"); pintarListasDia(); }
-  });
-  document.getElementById("qd_limpiar").addEventListener("click", function(){
-    ui.qDia=""; campo.value=""; this.classList.remove("hay"); pintarListasDia(); campo.focus();
-  });
-  main.querySelectorAll("[data-secdia]").forEach(function(b){
-    b.addEventListener("click", function(){
-      ui.secDia=b.getAttribute("data-secdia");
-      main.querySelectorAll("[data-secdia]").forEach(function(x){
-        x.setAttribute("aria-pressed", x===b);
-      });
-      /* Cambiar de lista limpia lo escrito: elegir «Carne» es ir a la
-         carne, no buscar dentro de ella lo que buscabas antes. */
-      if(ui.qDia){ ui.qDia=""; campo.value="";
-                   document.getElementById("qd_limpiar").classList.remove("hay"); }
-      pintarListasDia();
-    });
-  });
-
-  pintarListasDia();
-
-  var bs=document.getElementById("di_siempre");
-  if(bs) bs.addEventListener("click", ponerPlantilla);
-  var bl=document.getElementById("di_limpiar");
-  if(bl) bl.addEventListener("click", function(){
-    libro.productos.forEach(function(p){ if(esDiario(p)) delete libro.pedido[p.id]; });
-    guardar(); pintar(); avisar("Cantidades quitadas");
-  });
-
-}
-
-/* Las listas se vuelven a pintar cada vez que se escribe en el buscador,
-   así que sus botones se enganchan aparte y no de una vez al entrar. */
-function engancharDia(caja){
-  caja.querySelectorAll("[data-prov-lista]").forEach(function(b){
-    b.addEventListener("click", function(){ proveedorDeSeccion(b.getAttribute("data-prov-lista")); });
-  });
-  caja.querySelectorAll("[data-quita-dia]").forEach(function(b){
-    b.addEventListener("click", function(){ quitarDelDia(productoPorId(b.getAttribute("data-quita-dia"))); });
-  });
-  caja.querySelectorAll("[data-anadir-dia]").forEach(function(b){
-    b.addEventListener("click", function(){ anadirAlDia(b.getAttribute("data-anadir-dia")); });
-  });
-  /* Pulsar la unidad la va cambiando: kg, cajas, un y nada. Se queda
-     puesta en el producto, así que mañana ya sale bien. */
-  caja.querySelectorAll("[data-ud]").forEach(function(b){
-    b.addEventListener("click", function(){
-      var prod=productoPorId(b.getAttribute("data-ud")); if(!prod) return;
-      prod.ud=siguienteUnidad(unidadDe(prod));
-      guardar();
-      b.textContent=etiquetaUnidad(prod.ud);
-      b.classList.toggle("puesta", !!prod.ud);
-    });
-  });
-  caja.querySelectorAll("[data-mandar]").forEach(function(b){
-    b.addEventListener("click", function(){ mandarPedido(b.getAttribute("data-mandar")); });
-  });
-  engancharFichas(caja);
-}
-
-/* Sólo se repinta la caja de las listas: si se repintara la vista entera
-   el buscador perdería el foco a cada letra. */
-function pintarListasDia(){
-  var caja=document.getElementById("listasDia"); if(!caja) return;
-  var q=norm(ui.qDia), trozos=q?q.split(" "):[];
-  var listas=seccionesDiario().map(function(l){
-    return {nombre:l.nombre, productos:l.productos.filter(function(p){
-      if(ui.secDia==="__puestos"){ var x=delPedido(p.id); if(!x.uds && !x.cajas) return false; }
-      else if(ui.secDia && l.nombre!==ui.secDia) return false;
-      if(!trozos.length) return true;
-      var heno=norm(p.nombre)+" "+norm(p.proveedor);
-      return trozos.every(function(t){ return heno.indexOf(t)>=0; });
-    })};
-  }).filter(function(l){ return l.productos.length; });
-
-  if(!listas.length){
-    var donde=ui.secDia && ui.secDia!=="__puestos" ? " en "+ui.secDia.toLowerCase() : "";
-    caja.innerHTML='<div class="tarjeta"><div class="vacio"><strong>'+
-      (ui.qDia
-        ? 'Nada con «'+esc(ui.qDia)+'»'+esc(donde)
-        : ui.secDia==="__puestos" ? 'Todavía no has apuntado nada' : 'Aquí no hay nada')+'</strong>'+
-      (ui.qDia
-        ? 'Prueba con menos letras'+(donde?', o mira en <b>Todo</b>.':'.')
-        : ui.secDia==="__puestos"
-          ? 'Pon cantidades en <b>Todo</b> y aquí te queda el repaso de lo que vas a mandar.'
-          : 'Con el botón <b>+ Añadir</b> le metes lo que quieras.')+'</div></div>';
-    return;
-  }
-  caja.innerHTML=listas.map(tarjetaDiario).join("");
-  engancharDia(caja);
-}
-
-function tarjetaDiario(lista){
-  var prov=proveedorDeLista(lista.productos);
-  var puestos=lista.productos.filter(function(p){
-    var l=delPedido(p.id); return l.uds||l.cajas; }).length;
-  var datos=(prov && libro.proveedores[prov])||{};
-
-  return '<div class="tarjeta" style="margin-bottom:16px">'+
-    '<div class="tarjeta-cab">'+
-      '<h2>'+esc(lista.nombre.charAt(0)+lista.nombre.slice(1).toLowerCase())+'</h2>'+
-      '<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">'+
-        '<span class="pista">'+(puestos?plural(puestos,"cosa apuntada","cosas apuntadas")
-                                       :"nada apuntado todavía")+'</span>'+
-        '<button class="btn sm" data-prov-lista="'+esc(lista.nombre)+'">'+
-          (prov?esc(prov):"Ponle proveedor")+'</button>'+
-        '<button class="btn sm" data-anadir-dia="'+esc(lista.nombre)+'">+ Añadir</button>'+
-        (prov && puestos
-          ? '<button class="btn wa" data-mandar="'+esc(prov)+'">📱 Mandar</button>' : "")+
-      '</div>'+
-    '</div>'+
-    (prov ? "" :
-      '<div class="tarjeta-cuerpo" style="padding-bottom:0"><div class="aviso-caja">'+
-      'Esta lista no tiene proveedor, así que no se puede mandar. Pulsa «Ponle proveedor» '+
-      'y elige a quién se la pides.</div></div>')+
-    '<div class="tarjeta-cuerpo" style="padding-top:12px">'+
-      '<div class="lista-dia">'+
-      lista.productos.map(function(p){
-        var l=delPedido(p.id);
-        var u=unidadDe(p), sem=textoSemanal(p);
-        return '<div class="dia-fila'+(l.uds?" puesta":"")+'" data-of="'+esc(p.id)+'">'+
-          '<span class="dia-nom">'+esc(p.nombre)+
-            (sem?'<span class="de-siempre">de siempre, '+esc(sem)+'</span>':"")+'</span>'+
-          '<div class="dia-pide">'+
-            contador(p.id, "uds", l.uds, "")+
-            '<button type="button" class="ud-btn'+(u?" puesta":"")+'" data-ud="'+esc(p.id)+'" '+
-            'title="Kilos, cajas o unidades">'+esc(etiquetaUnidad(u))+'</button>'+
-            '<button type="button" class="quita-dia" data-quita-dia="'+esc(p.id)+'" '+
-            'title="Quitarlo de la lista" aria-label="Quitar '+esc(p.nombre)+'">✕</button>'+
-          '</div>'+
-        '</div>';
-      }).join("")+
-      '</div>'+
-    '</div>'+
-  '</div>';
-}
-
-/* Quitar algo de la lista del día. Son dos cosas distintas y por eso se
-   pregunta: la verdura y la carne no tienen precio ni sirven para nada
-   más, así que quitarlas de aquí es borrarlas; pero si es un producto
-   con precio, sacarlo del día no es borrarlo — sigue en Precios. */
-function quitarDelDia(p){
-  if(!p) return;
-  var tienePrecio=!!p.precio;
-  var enPedido=(function(){ var l=delPedido(p.id); return l.uds||l.cajas; })();
-
-  function fuera(){
-    delete libro.pedido[p.id];
-    libro.productos=libro.productos.filter(function(x){ return x.id!==p.id; });
-    guardar(); pintar(); avisar(p.nombre+" borrado");
-  }
-  function soloDelDia(){
-    p.diario=false;
-    delete libro.pedido[p.id];
-    guardar(); pintar(); avisar(p.nombre+" sale de la lista del día");
-  }
-
-  if(!tienePrecio){
-    confirmar("Quitar "+p.nombre,
-      '<p style="margin:0 0 10px">Sólo está en la lista del día: no tiene precio ni nada más, '+
-      'así que se borra del todo.</p>'+
-      (enPedido?'<p class="nota" style="margin:0">Lo tenías puesto en el pedido de hoy; también sale.</p>':"")+
-      (semanalDe(p)?'<p class="nota" style="margin:6px 0 0">Y deja de ir en «lo de siempre».</p>':""),
-      fuera, {aceptar:"Borrarlo", malo:true,
-              extra:'<button class="btn" data-solo-dia>Dejarlo en Precios</button>',
-              alAbrir:function(){
-                var b=document.querySelector("#dlg [data-solo-dia]");
-                if(b) b.addEventListener("click", function(){ cerrarVentana(); soloDelDia(); });
-              }});
-    return;
-  }
-  confirmar("Quitar "+p.nombre+" de la lista del día",
-    '<p style="margin:0 0 10px">Sale de <strong>Cada día</strong>, pero se queda en '+
-    '<strong>Precios</strong> con su precio de '+esc(p.proveedor||"su proveedor")+'.</p>'+
-    (enPedido?'<p class="nota" style="margin:0">Lo tenías puesto en el pedido de hoy; también sale.</p>':""),
-    soloDelDia, {aceptar:"Quitarlo del día",
-                 extra:'<button class="btn malo" data-borrar-todo>Borrarlo del todo</button>',
-                 alAbrir:function(){
-                   var b=document.querySelector("#dlg [data-borrar-todo]");
-                   if(b) b.addEventListener("click", function(){ cerrarVentana(); fuera(); });
-                 }});
-}
-
-/* Añadir a la lista del día sin pasar por Precios: aquí sólo hace falta
-   el nombre, que estas cosas no llevan precio. */
-function anadirAlDia(seccion){
-  var prods=libro.productos.filter(function(p){ return esDiario(p) && (p.seccion||"Sin sección")===seccion; });
-  var prov=proveedorDeLista(prods)||"";
-  abrirVentana("Añadir a "+seccion.toLowerCase(),
-    '<p class="nota">Con el nombre basta. El proveedor lo coge de la lista, y la unidad —kilos, '+
-    'cajas— se la pones luego pulsando su botón.</p>'+
-    '<div class="campo"><label class="lbl" for="ad_nom">Qué es</label>'+
-      '<input id="ad_nom" class="grande" placeholder="Calabaza"></div>'+
-    '<div class="rejilla" style="margin-top:12px">'+
-      '<div class="campo"><label class="lbl" for="ad_ud">Cómo se pide</label>'+
-        '<select id="ad_ud">'+
-        [["","a números, sin unidad"],["kg","en kilos"],["cajas","en cajas"],["un","en unidades"]]
-          .map(function(o){ return '<option value="'+o[0]+'">'+o[1]+'</option>'; }).join("")+
-        '</select></div>'+
-      '<div class="campo"><label class="lbl" for="ad_prov">Proveedor</label>'+
-        '<input id="ad_prov" value="'+esc(prov)+'"></div>'+
-    '</div>',
-    function(){
-      var nom=valor("ad_nom");
-      if(!nom){ avisar("Ponle un nombre.", true); return true; }
-      libro.productos.push({ id:uid(), seccion:seccion, nombre:nom, proveedor:valor("ad_prov"),
-        precio:null, fecha:"", igi:1, udsCaja:null, diario:true, ud:valor("ad_ud") });
-      guardar(); pintar(); avisar(nom+" añadido a "+seccion.toLowerCase());
-    }, {aceptar:"Añadirlo"});
-}
-
-/* Estas listas se le piden siempre al mismo, así que el proveedor se
-   pone de una vez para toda la lista y no producto a producto. */
-function proveedorDeSeccion(seccion){
-  var prods=libro.productos.filter(function(p){ return esDiario(p) && (p.seccion||"Sin sección")===seccion; });
-  var actual=proveedorDeLista(prods)||"";
-  var provs=listaProveedores().map(function(x){ return x.nombre; });
-  abrirVentana("¿A quién le pides "+seccion.toLowerCase()+"?",
-    '<p class="nota">Se le pone a las '+plural(prods.length,"cosa","cosas")+' de esta lista '+
-    'a la vez. Puedes escribir un nombre nuevo si no está.</p>'+
-    '<div class="campo"><label class="lbl" for="ps_prov">Proveedor</label>'+
-      '<input id="ps_prov" class="grande" list="lista_ps" value="'+esc(actual)+'" '+
-      'placeholder="FRUTAS MOLINA"><datalist id="lista_ps">'+
-      provs.map(function(x){ return '<option value="'+esc(x)+'">'; }).join("")+'</datalist></div>'+
-    '<p class="nota" style="margin:12px 0 0">Luego, en <strong>Proveedores</strong>, ponle el '+
-    'teléfono y ya se manda de una.</p>',
-    function(){
-      var nuevo=valor("ps_prov");
-      if(!nuevo){ avisar("Escribe un proveedor.", true); return true; }
-      prods.forEach(function(p){ p.proveedor=nuevo; });
-      guardar(); pintar(); avisar(seccion.toLowerCase()+" se le pide a "+nuevo);
-    }, {aceptar:"Ponérselo"});
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -757,7 +436,7 @@ function verPrecios(main){
                  (ui.seccion===s.nombre)+'">'+esc(s.nombre.charAt(0)+s.nombre.slice(1).toLowerCase())+
                  '<span class="n">'+s.n+'</span></button>';
         }).join("")+
-        (hayDiario()
+        (libro.productos.some(esDiario)
           ? '<button class="chip" id="ch_diario" aria-pressed="'+(ui.seccion==="__diario")+'">Del día'+
             '<span class="n">'+libro.productos.filter(esDiario).length+'</span></button>'
           : "")+
@@ -967,10 +646,7 @@ function refrescarFicha(id){
   var l=delPedido(id);
   linea.classList.toggle("encargada", !!(l.uds||l.cajas));
   linea.classList.toggle("puesta", !!(l.uds||l.cajas));
-  /* En la pantalla de cada día no hay ficha ni pie que actualizar, pero
-     sí la cuenta del carril y el botón de mandar. */
-  var ficha=linea.closest(".prod");
-  if(!ficha){ refrescarCabeceraDia(linea); return; }
+  var ficha=linea.closest(".prod"); if(!ficha) return;
   var ids=[].slice.call(ficha.querySelectorAll("[data-of]"))
              .map(function(x){ return x.getAttribute("data-of"); });
   var total=r2(ids.reduce(function(s,x){
@@ -982,36 +658,6 @@ function refrescarFicha(id){
     if(!pie){ pie=document.createElement("div"); pie.className="linea-total"; ficha.appendChild(pie); }
     pie.innerHTML='<span>En el pedido</span><b>'+eur(total)+'</b>';
   } else if(pie) pie.remove();
-}
-
-/* La cabecera de una lista del día: cuántas cosas llevas apuntadas y si
-   ya se puede mandar. Se toca a mano para no repintar la lista entera y
-   perder el sitio donde estabas. */
-function refrescarCabeceraDia(fila){
-  var chapa=document.querySelector('[data-secdia="__puestos"] .n');
-  if(chapa) chapa.textContent=lineasDiario();
-  var tarjeta=fila.closest(".tarjeta"); if(!tarjeta) return;
-  var ids=[].slice.call(tarjeta.querySelectorAll("[data-of]"))
-             .map(function(x){ return x.getAttribute("data-of"); });
-  var puestos=ids.filter(function(x){ var l=delPedido(x); return l.uds||l.cajas; }).length;
-  var pista=tarjeta.querySelector(".pista");
-  if(pista) pista.textContent = puestos
-    ? plural(puestos,"cosa apuntada","cosas apuntadas") : "nada apuntado todavía";
-  /* El botón de mandar aparece y desaparece con el contenido, así que
-     hay que volver a pintar la cabecera cuando cruza el cero. */
-  var prods=ids.map(productoPorId).filter(Boolean);
-  var prov=proveedorDeLista(prods);
-  var boton=tarjeta.querySelector("[data-mandar]");
-  if(prov && puestos && !boton){
-    var caja=tarjeta.querySelector(".tarjeta-cab > div");
-    if(caja){
-      var b=document.createElement("button");
-      b.className="btn wa"; b.setAttribute("data-mandar", prov);
-      b.textContent="📱 Mandar";
-      b.addEventListener("click", function(){ mandarPedido(prov); });
-      caja.appendChild(b);
-    }
-  } else if((!puestos || !prov) && boton) boton.remove();
 }
 
 /* ══════════════════════════════════════════════════════════════
