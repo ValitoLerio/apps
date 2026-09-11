@@ -175,6 +175,28 @@ main{padding:22px 24px 120px;max-width:1180px;min-width:0}
 .st-ud{font-family:var(--mono);font-size:10px;color:var(--muted);
        letter-spacing:.06em;text-transform:uppercase}
 
+/* ── Apuntar sobre la marcha, dentro de El pedido ────────────── */
+.apuntar{position:sticky;top:0;z-index:12;background:var(--fondo);
+         padding:4px 0 14px;margin:-4px 0 6px}
+.apuntar #qa{width:100%;font-size:17px;font-weight:500;padding:14px 46px;border-radius:13px;
+             border:1.5px solid var(--acento-linea);background:var(--sup);box-shadow:var(--sombra)}
+.apuntar #qa::placeholder{color:var(--muted);font-weight:400}
+.apuntar #qa:focus{border-color:var(--acento);box-shadow:0 0 0 4px var(--acento-suave)}
+#sugerencias{display:grid;gap:1px;background:var(--linea-suave);margin-top:8px;
+             border-radius:10px;overflow:hidden}
+#sugerencias:empty{display:none}
+.sug{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;
+     width:100%;border:0;background:var(--sup);padding:10px 14px;cursor:pointer;
+     text-align:left;font:inherit;color:inherit}
+.sug:hover{background:var(--acento-suave)}
+.sug-nom{font-size:15px;font-weight:600;grid-column:1;line-height:1.25}
+.sug-info{grid-column:1;font-size:11.5px;color:var(--muted);margin-top:1px}
+.sug-mas{grid-column:2;grid-row:1/3;font-family:var(--mono);font-size:12px;font-weight:600;
+         color:var(--acento);background:var(--acento-suave);border-radius:20px;padding:5px 11px;
+         white-space:nowrap}
+.sug.ya .sug-mas{background:var(--sup2);color:var(--muted)}
+.sug-vacio{background:var(--sup);padding:14px;color:var(--muted);font-size:13.5px;text-align:center}
+
 /* ── La barra del pedido, siempre a la vista ─────────────────── */
 .barra-pedido{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--acento);
               color:var(--acento-tinta);padding:12px 20px;display:flex;align-items:center;
@@ -305,7 +327,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609111227"></script>
+<script src="sync.js?v=202609111232"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -313,7 +335,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('pedidos').then(function(){
     var s = document.createElement('script');
-    s.src = 'pedidos.js?v=202609111227';
+    s.src = 'pedidos.js?v=202609111232';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar pedidos.js. Recarga la pagina.'; };
     document.body.appendChild(s);

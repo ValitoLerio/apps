@@ -64,7 +64,7 @@ function libroVacio(){
 
 var libro = libroVacio();
 var ui = { vista:"precios", q:"", seccion:"", soloPedido:false, soloBaratos:false,
-           qStock:"", secStock:"" };
+           qStock:"", secStock:"", qApunte:"" };
 
 /* ── Dinero, fechas y texto ───────────────────────────────────── */
 function r2(n){ return Math.round(((+n||0)+Number.EPSILON)*100)/100; }
@@ -867,13 +867,25 @@ function verPedido(main){
   main.innerHTML=
     cabecera("El pedido",
       grupos.length
-        ? "Cada proveedor lleva el suyo. Se manda uno, se vuelve y se manda el siguiente."
-        : "Todavía no has pedido nada.",
+        ? "Lo que vas apuntando se queda aquí hasta que lo mandes. El día del pedido, "+
+          "cada proveedor lleva el suyo: se manda uno, se vuelve y se manda el siguiente."
+        : "Ve apuntando aquí lo que haga falta según lo veas. El día del pedido, "+
+          "sale repartido por proveedor.",
       (grupos.length
         ? '<button class="btn" id="pd_guardarSiempre">Guardar como stock semanal</button>'+
           '<button class="btn malo" id="pd_vaciar">Vaciar el pedido</button>'
         : (hayPlantilla()
             ? '<button class="btn fuerte" id="pd_siempre">↺ Poner el stock semanal</button>' : "")))+
+
+    '<div class="apuntar">'+
+      '<div class="buscar-caja">'+
+        '<span class="lupa">⌕</span>'+
+        '<input id="qa" type="search" autocomplete="off" spellcheck="false" '+
+        'placeholder="Apunta lo que haga falta: escribe tres letras…" value="'+esc(ui.qApunte)+'">'+
+        '<button class="limpiar'+(ui.qApunte?" hay":"")+'" id="qa_limpiar" title="Limpiar">✕</button>'+
+      '</div>'+
+      '<div id="sugerencias"></div>'+
+    '</div>'+
 
     (grupos.length
       ? '<div class="cifras">'+
@@ -902,6 +914,8 @@ function verPedido(main){
 
     (libro.enviados.length ? historialEnviados() : "");
 
+  engancharApuntar();
+
   var bv=document.getElementById("pd_vaciar");
   if(bv) bv.addEventListener("click", vaciarPedido);
   var bp=document.getElementById("pd_siempre");
@@ -922,6 +936,17 @@ function verPedido(main){
 
   main.querySelectorAll("[data-mandar]").forEach(function(b){
     b.addEventListener("click", function(){ mandarPedido(b.getAttribute("data-mandar")); });
+  });
+  main.querySelectorAll("input[data-cpd]").forEach(function(input){
+    var partes=input.getAttribute("data-cpd").split("|");
+    var id=partes[0], campo=partes[1];
+    input.addEventListener("input", function(){
+      ponerEnPedido(id, campo, input.value);
+      /* Si se queda a cero, la línea desaparece: hay que repintar, pero
+         sólo entonces, para no perder el cursor mientras se escribe. */
+      var l=delPedido(id);
+      if(!l.uds && !l.cajas) pintar(); else refrescarTotales();
+    });
   });
   main.querySelectorAll("[data-quitar]").forEach(function(b){
     b.addEventListener("click", function(){
@@ -961,11 +986,14 @@ function tarjetaProveedorPedido(g){
       return '<tr>'+
         '<td><strong>'+esc(l.p.nombre)+'</strong>'+
           '<div style="font-size:11.5px;color:var(--muted)">'+esc((l.p.seccion||"").toLowerCase())+'</div></td>'+
-        '<td class="num">'+(l.uds
-          ? (esDiario(l.p) ? esc(cantidadConUnidad(l.uds, unidadDe(l.p))) : l.uds)
-          : "—")+'</td>'+
-        '<td class="num">'+(l.cajas ? l.cajas+' <span style="color:var(--muted);font-size:11.5px">de '+
-            num(+l.p.udsCaja||0, (+l.p.udsCaja||0)%1?1:0)+'</span>' : "—")+'</td>'+
+        /* Editables aquí mismo: esto es la lista que se va llenando
+           durante la semana, así que hay que poder subir una cantidad
+           sin ir a buscar el producto a otra pantalla. */
+        '<td class="num">'+casillaPedido(l.p.id, "uds", l.uds, unidadDe(l.p)||"")+'</td>'+
+        '<td class="num">'+((+l.p.udsCaja||0)>0
+          ? casillaPedido(l.p.id, "cajas", l.cajas,
+                          "de "+num(+l.p.udsCaja||0, (+l.p.udsCaja||0)%1?1:0))
+          : '<span style="color:var(--muted)">—</span>')+'</td>'+
         '<td class="num">'+(conIgi(l.p)?eur(conIgi(l.p)):
           '<span style="color:var(--muted)">sin precio</span>')+'</td>'+
         '<td class="num">'+(l.importe?"<strong>"+eur(l.importe)+"</strong>":
@@ -975,8 +1003,99 @@ function tarjetaProveedorPedido(g){
       '</tr>';
     }).join("")+
     '</tbody><tfoot><tr><td colspan="4">Total</td>'+
-      '<td class="num">'+(g.total?eur(g.total):"—")+'</td><td></td></tr></tfoot></table></div>'+
+      '<td class="num" data-total-prov="'+esc(g.proveedor)+'">'+
+        (g.total?eur(g.total):"—")+'</td><td></td></tr></tfoot></table></div>'+
   '</div>';
+}
+
+function casillaPedido(id, campo, valor, etiqueta){
+  return '<span class="st-casilla">'+
+    '<input type="number" min="0" step="1" value="'+(valor||"")+'" placeholder="—" '+
+      'inputmode="numeric" data-cpd="'+esc(id)+'|'+campo+'" aria-label="Cantidad">'+
+    (etiqueta?'<span class="st-ud">'+esc(etiqueta)+'</span>':"")+
+  '</span>';
+}
+
+/* ── Apuntar sobre la marcha ──────────────────────────────────────
+   «Durante el día vamos viendo productos que nos van a hacer falta.» Esa
+   es la frase, y esto es el sitio: se escriben tres letras, sale lo que
+   hay, se toca y queda apuntado. Sin cambiar de pantalla, sin perder lo
+   que llevabas, y volviendo a dejar el cursor listo para lo siguiente,
+   que rara vez te acuerdas de una sola cosa. */
+function engancharApuntar(){
+  var campo=document.getElementById("qa"); if(!campo) return;
+  var caja=document.getElementById("sugerencias");
+
+  function pintarSugerencias(){
+    var q=norm(ui.qApunte);
+    if(q.length<2){ caja.innerHTML=""; return; }
+    var trozos=q.split(" ");
+    var hallados=libro.productos.filter(function(p){
+      var heno=norm(p.nombre)+" "+norm(p.proveedor)+" "+norm(p.seccion);
+      return trozos.every(function(t){ return heno.indexOf(t)>=0; });
+    });
+    /* De cada producto, el proveedor más barato primero: apuntando
+       deprisa, lo que quieres es el mejor precio sin pensarlo. */
+    var grupos=agrupar(hallados).slice(0,9);
+    if(!grupos.length){
+      caja.innerHTML='<div class="sug-vacio">Nada con «'+esc(ui.qApunte)+'»</div>';
+      return;
+    }
+    caja.innerHTML=grupos.map(function(g){
+      var o=g.ofertas[0];
+      var l=delPedido(o.id);
+      var caj=+o.udsCaja||0;
+      return '<button type="button" class="sug'+((l.uds||l.cajas)?" ya":"")+'" '+
+        'data-apunta="'+esc(o.id)+'">'+
+        '<span class="sug-nom">'+esc(g.nombre)+
+          ((l.uds||l.cajas)?' <span class="chapa ok" style="font-size:10.5px">ya apuntado</span>':"")+
+        '</span>'+
+        '<span class="sug-info">'+esc(o.proveedor||"sin proveedor")+
+          (conIgi(o)?' · '+eur(conIgi(o)):' · sin precio')+
+          (g.ofertas.length>1?' · '+plural(g.ofertas.length,"proveedor","proveedores"):"")+
+          (caj>0?' · caja de '+num(caj, caj%1?1:0):"")+'</span>'+
+        '<span class="sug-mas">+ '+(caj>0?"1 caja":"1")+'</span>'+
+      '</button>';
+    }).join("");
+    caja.querySelectorAll("[data-apunta]").forEach(function(b){
+      b.addEventListener("click", function(){ apuntar(b.getAttribute("data-apunta")); });
+    });
+  }
+
+  function apuntar(id){
+    var p=productoPorId(id); if(!p) return;
+    var l=delPedido(id);
+    /* Si viene en caja, se pide por cajas; si no, por unidades. Es lo
+       que se haría a mano, y así no hay que corregirlo después. */
+    var campoN=(+p.udsCaja||0)>0 ? "cajas" : "uds";
+    var cuantas=(l[campoN]||0)+1;
+    ponerEnPedido(id, campoN, cuantas);
+    avisar("Apuntado: "+p.nombre+" · "+
+           (campoN==="cajas" ? plural(cuantas,"caja","cajas") : String(cuantas)));
+    ui.qApunte=""; pintar();
+    var nuevo=document.getElementById("qa");
+    if(nuevo && !("ontouchstart" in window)) nuevo.focus();
+  }
+
+  campo.addEventListener("input", function(){
+    ui.qApunte=this.value;
+    document.getElementById("qa_limpiar").classList.toggle("hay", !!this.value);
+    pintarSugerencias();
+  });
+  campo.addEventListener("keydown", function(e){
+    if(e.key==="Escape" && this.value){ e.preventDefault(); this.value=""; ui.qApunte="";
+      document.getElementById("qa_limpiar").classList.remove("hay"); pintarSugerencias(); }
+    /* Enter apunta lo primero de la lista: escribir y darle, sin buscar
+       con el dedo cuál era. */
+    if(e.key==="Enter"){
+      var primero=caja.querySelector("[data-apunta]");
+      if(primero){ e.preventDefault(); primero.click(); }
+    }
+  });
+  document.getElementById("qa_limpiar").addEventListener("click", function(){
+    ui.qApunte=""; campo.value=""; this.classList.remove("hay"); pintarSugerencias(); campo.focus();
+  });
+  pintarSugerencias();
 }
 
 function historialEnviados() {
@@ -993,6 +1112,17 @@ function historialEnviados() {
         '<td class="num"><button class="btn suave sm malo" data-borrar-env="'+esc(e.id)+'">✕</button></td></tr>';
     }).join("")+
     '</tbody></table></div></div>';
+}
+
+/* Los totales se tocan a mano al cambiar una cantidad, que repintar la
+   pantalla entera se llevaría el cursor de la casilla. */
+function refrescarTotales(){
+  var grupos=pedidoPorProveedor();
+  document.querySelectorAll("[data-total-prov]").forEach(function(el){
+    var g=grupos.filter(function(x){ return x.proveedor===el.getAttribute("data-total-prov"); })[0];
+    el.textContent=g && g.total ? eur(g.total) : "—";
+  });
+  pintarBarra();
 }
 
 function vaciarPedido(){
