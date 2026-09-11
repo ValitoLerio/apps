@@ -749,8 +749,16 @@ function pintarStock(){
     return;
   }
 
-  caja.innerHTML='<div class="tarjeta"><div class="tarjeta-cuerpo" style="padding:12px">'+
-    '<div class="lista-stock">'+lista.map(filaStock).join("")+'</div>'+
+  /* Una hoja de pedido, no una fila de botones por producto: los
+     nombres uno debajo de otro y una casilla al lado donde se escribe el
+     número. Se lee de un vistazo, como el papel de siempre, y se rellena
+     con el teclado sin ir dando toques de uno en uno. */
+  caja.innerHTML='<div class="tarjeta"><div class="tabla-caja">'+
+    '<table class="hoja"><thead><tr>'+
+      '<th>Producto</th>'+
+      '<th class="num">Unidades</th>'+
+      '<th class="num">Cajas</th>'+
+    '</tr></thead><tbody>'+lista.map(filaStock).join("")+'</tbody></table>'+
   '</div></div>';
   engancharStock(caja);
 }
@@ -759,54 +767,63 @@ function filaStock(p){
   var s=semanalDe(p) || {uds:0, cajas:0};
   var caja=+p.udsCaja||0;
   var precio=conIgi(p);
-  return '<div class="st-fila'+((s.uds||s.cajas)?" puesta":"")+'" data-st="'+esc(p.id)+'">'+
-    '<div class="st-que">'+
-      '<div class="st-nom">'+esc(p.nombre)+'</div>'+
+  var ud=unidadDe(p);
+  return '<tr class="st-fila'+((s.uds||s.cajas)?" puesta":"")+'" data-st="'+esc(p.id)+'">'+
+    '<td><div class="st-nom">'+esc(p.nombre)+'</div>'+
       '<div class="st-info">'+esc(p.proveedor||"sin proveedor")+
-        (precio?' · '+eur(precio)+(unidadDe(p)?"/"+esc(unidadDe(p)):""):' · sin precio')+
-        (caja>0?' · caja de '+num(caja, caja%1?1:0):"")+'</div>'+
-    '</div>'+
-    '<div class="st-pone">'+
-      contadorStock(p.id, "uds", s.uds, unidadDe(p)||"un")+
-      (caja>0 ? contadorStock(p.id, "cajas", s.cajas, "caj") : "")+
-    '</div>'+
-  '</div>';
+        (precio?' · '+eur(precio):' · sin precio')+
+        (caja>0?' · caja de '+num(caja, caja%1?1:0):"")+'</div></td>'+
+    '<td class="num">'+casillaStock(p.id, "uds", s.uds, ud||"")+'</td>'+
+    '<td class="num">'+(caja>0 ? casillaStock(p.id, "cajas", s.cajas, "")
+                               : '<span style="color:var(--muted)">—</span>')+'</td>'+
+  '</tr>';
 }
 
-function contadorStock(id, campo, valor, etiqueta){
-  return '<div class="contador'+(valor?" activo":"")+'" data-cst="'+esc(id)+'|'+campo+'">'+
-    '<button type="button" data-paso="-1" aria-label="Uno menos">−</button>'+
-    '<input type="number" min="0" step="1" value="'+(valor||"")+'" placeholder="0" '+
-      'inputmode="numeric" aria-label="Cuánto quiero cada semana">'+
-    '<button type="button" data-paso="1" aria-label="Uno más">+</button>'+
-    '<span class="ud">'+esc(etiqueta)+'</span>'+
-  '</div>';
+/* Una casilla y ya: se escribe el número como en el papel. */
+function casillaStock(id, campo, valor, etiqueta){
+  return '<span class="st-casilla">'+
+    '<input type="number" min="0" step="1" value="'+(valor||"")+'" placeholder="—" '+
+      'inputmode="numeric" data-cst="'+esc(id)+'|'+campo+'" '+
+      'aria-label="Cuánto quiero cada semana">'+
+    (etiqueta?'<span class="st-ud">'+esc(etiqueta)+'</span>':"")+
+  '</span>';
 }
 
 /* Igual que en el pedido: se toca lo justo y no se repinta la lista, que
    si no el buscador pierde el foco a cada número. */
 function engancharStock(caja){
-  caja.querySelectorAll("[data-cst]").forEach(function(c){
-    var partes=c.getAttribute("data-cst").split("|");
+  var filas=[].slice.call(caja.querySelectorAll(".st-fila"));
+  var casillas=[].slice.call(caja.querySelectorAll("input[data-cst]"));
+  casillas.forEach(function(input, i){
+    var partes=input.getAttribute("data-cst").split("|");
     var id=partes[0], campo=partes[1];
-    var input=c.querySelector("input");
-    function aplicar(n){
-      n=Math.max(0, Math.round(+n||0));
+    input.addEventListener("input", function(){
+      var n=Math.max(0, Math.round(+input.value||0));
       var p=productoPorId(id); if(!p) return;
       var s=(p.semanal && {uds:+p.semanal.uds||0, cajas:+p.semanal.cajas||0}) || {uds:0, cajas:0};
       s[campo]=n;
       if(!s.uds && !s.cajas) delete p.semanal; else p.semanal=s;
       guardar();
-      input.value=n||"";
-      c.classList.toggle("activo", !!n);
-      var fila=c.closest(".st-fila");
+      var fila=input.closest(".st-fila");
       if(fila) fila.classList.toggle("puesta", !!(s.uds||s.cajas));
       refrescarCuentaStock();
-    }
-    c.querySelectorAll("[data-paso]").forEach(function(b){
-      b.addEventListener("click", function(){ aplicar((+input.value||0)+(+b.getAttribute("data-paso"))); });
     });
-    input.addEventListener("input", function(){ aplicar(input.value); });
+    /* Enter y las flechas bajan a la casilla de la fila siguiente, en la
+       misma columna: la hoja se rellena de arriba abajo sin soltar el
+       teclado. Se va por filas y no contando casillas, porque no todas
+       tienen las mismas: el producto que no viene en caja sólo tiene una,
+       y contando de dos en dos se saltaba una fila. */
+    input.addEventListener("keydown", function(e){
+      var salto=(e.key==="Enter"||e.key==="ArrowDown") ? 1
+              : (e.key==="ArrowUp") ? -1 : 0;
+      if(!salto) return;
+      var fila=input.closest(".st-fila");
+      var destino=filas[filas.indexOf(fila)+salto];
+      if(!destino) return;
+      var meta=destino.querySelector('input[data-cst$="|'+campo+'"]')
+            || destino.querySelector("input[data-cst]");
+      if(meta){ e.preventDefault(); meta.focus(); meta.select(); }
+    });
   });
 }
 function refrescarCuentaStock(){
