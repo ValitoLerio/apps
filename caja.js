@@ -587,7 +587,19 @@ function verDia(main){
   /* Si el efectivo escrito es el que salía por el %, no hay nada
      que contar: la cifra ya lo dice todo. */
   var difPct = !!pctVisa() && c.visa>0 && Math.abs(c.difEfectivo)>=0.005;
-  var guardado=amarillaGuardado(), falta=faltaAmarilla();
+  /* Aquí se enseñaba SIEMPRE el último recuento de todos, sin fecha:
+     abrías cualquier día —el 2, el 6, el de hace un mes— y salía el
+     mismo número, uno que a lo mejor se contó una semana después. De ahí
+     la pregunta: «me sale cada día 400 y no sé de qué son».
+
+     Ahora sale lo que había en la amarilla ESE día: el último recuento
+     de ese día o de antes, y con su fecha puesta, que es lo que faltaba
+     para que la cifra se explique sola. */
+  var regAmarilla=recuentoHasta(ui.dia);
+  var guardado=regAmarilla ? r2(+regAmarilla.aAmarilla||0) : 0;
+  var fechaGuardado=regAmarilla ? regAmarilla.fecha : null;
+  var esDeHoy=(fechaGuardado===ui.dia);
+  var falta=objetivoAmarilla()>0 ? r2(Math.max(0, objetivoAmarilla()-guardado)) : 0;
 
   main.innerHTML=
     (objetivoAmarilla()<=0
@@ -709,20 +721,31 @@ function verDia(main){
 
     '<div class="tarjeta" style="margin-bottom:16px">'+
       '<div class="tarjeta-cab"><h2>La caja amarilla</h2>'+
-        '<span class="pista">Objetivo: '+eur(objetivoAmarilla())+'</span></div>'+
+        '<span class="pista">'+(objetivoAmarilla()>0
+          ? "Objetivo: "+eur(objetivoAmarilla())
+          : "sin objetivo puesto")+'</span></div>'+
       '<div class="tarjeta-cuerpo">'+
         '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px">'+
-          '<div><div class="lbl">Guardado</div>'+
+          '<div><div class="lbl">'+(regAmarilla?"Lo que había dentro":"Sin ningún recuento")+'</div>'+
             '<div style="font-size:26px;font-weight:600;color:var(--amarilla);font-variant-numeric:tabular-nums">'+
-            eur(guardado)+'</div></div>'+
+            (regAmarilla?eur(guardado):"—")+'</div>'+
+            '<div class="nota" style="margin:2px 0 0">'+
+            (regAmarilla
+              ? (esDeHoy
+                  ? "lo contaste este mismo día"
+                  : "contado el "+esc(dmy(fechaGuardado))+", que es el último antes de éste")
+              : "nadie ha contado la amarilla antes de este día")+'</div></div>'+
           '<div style="text-align:right">'+
-            (falta>0
-              ? '<div class="lbl">Falta</div><div style="font-size:18px;font-weight:600">'+eur(falta)+'</div>'
-              : '<span class="chapa ok">Fondo completo</span>')+
+            (objetivoAmarilla()<=0 ? ""
+              : falta>0
+                ? '<div class="lbl">Falta</div><div style="font-size:18px;font-weight:600">'+eur(falta)+'</div>'
+                : '<span class="chapa ok">Fondo completo</span>')+
           '</div>'+
         '</div>'+
-        '<div class="barra-fondo"><i style="width:'+
-          (objetivoAmarilla()>0?Math.min(100, guardado/objetivoAmarilla()*100).toFixed(1):0)+'%"></i></div>'+
+        (objetivoAmarilla()>0
+          ? '<div class="barra-fondo"><i style="width:'+
+            Math.min(100, guardado/objetivoAmarilla()*100).toFixed(1)+'%"></i></div>'
+          : "")+
       '</div></div>'+
 
     '<div class="tarjeta"><div class="tarjeta-cab"><h2>'+(d?"Editar el día":"Anotar el día")+'</h2></div>'+
