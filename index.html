@@ -86,6 +86,10 @@
     width:34px;height:34px;border-radius:9px;cursor:pointer;display:grid;place-items:center;
     font-size:.9rem;transition:color .15s,border-color .15s;flex-shrink:0;
   }
+  /* Con palabra, no con simbolo: el ⇄ que habia aqui no decia nada.
+     Un icono se adivina; una palabra se lee. */
+  .icono.conletra{width:auto;padding:0 .8rem;gap:.4rem;grid-auto-flow:column;
+                  font-size:.82rem;font-weight:600;letter-spacing:.01em}
   .icono:hover{color:var(--tinta);border-color:var(--tinta2)}
   .icono:focus-visible{outline:2px solid var(--piso);outline-offset:2px}
 
@@ -303,7 +307,7 @@
       <h1>Escritorio de Valeriano</h1>
     </div>
     <div class="acciones">
-      <button class="icono" id="btn-colocar" type="button" title="Colocar las tarjetas a tu gusto" aria-label="Colocar">⇄</button>
+      <button class="icono conletra" id="btn-colocar" type="button" title="Mover las tarjetas a donde quieras">↔ Colocar</button>
       <button class="icono" id="btn-candados" type="button" title="Contraseñas de las apps" aria-label="Contraseñas">🔒</button>
       <button class="icono" id="btn-tema" type="button" title="Cambiar entre claro y oscuro" aria-label="Cambiar tema">◐</button>
     </div>
@@ -369,8 +373,8 @@
          hasta dejarlas como quieras. Se guarda en tu repositorio, así que el orden lo tendrás
          también en el móvil.</p>
       <div style="display:flex;gap:.6rem;flex-wrap:wrap">
-        <button type="button" class="icono" id="btn-orden-original" title="Volver al orden de siempre">Deshacer</button>
-        <button type="button" class="icono" id="btn-colocar-fin">Ya está</button>
+        <button type="button" class="icono conletra" id="btn-orden-original" title="Volver al orden de siempre">Deshacer</button>
+        <button type="button" class="icono conletra" id="btn-colocar-fin">Ya está</button>
       </div>
     </div>
 
@@ -528,7 +532,7 @@
 
 </div>
 
-<script src="sync.js?v=202609101830"></script>
+<script src="sync.js?v=202609111140"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
