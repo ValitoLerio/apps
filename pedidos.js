@@ -64,7 +64,7 @@ function libroVacio(){
 
 var libro = libroVacio();
 var ui = { vista:"precios", q:"", seccion:"", soloPedido:false, soloBaratos:false,
-           qStock:"", secStock:"", qApunte:"" };
+           qStock:"", secStock:"", qApunte:"", prov:null };
 
 /* ── Dinero, fechas y texto ───────────────────────────────────── */
 function r2(n){ return Math.round(((+n||0)+Number.EPSILON)*100)/100; }
@@ -329,7 +329,8 @@ function pintar(){
         '<span class="sub">'+esc(libro.ajustes.nombre||"Restaurante")+'</span></div>'+
       APARTADOS.map(function(a){
         var c=a.cuenta?a.cuenta():0;
-        return '<button class="nav" data-ir="'+a.id+'" aria-current="'+(ui.vista===a.id)+'">'+
+        var puesto=(ui.vista===a.id) || (a.id==="proveedores" && ui.vista==="proveedor");
+        return '<button class="nav" data-ir="'+a.id+'" aria-current="'+puesto+'">'+
                '<span>'+a.nombre+'</span>'+(c?'<span class="cuenta">'+c+'</span>':"")+'</button>';
       }).join("")+
       '<div class="pie-rail">'+
@@ -345,7 +346,7 @@ function pintar(){
   if(window.Sync && Sync.mostrarEstadoEn) Sync.mostrarEstadoEn(document.getElementById("sync-estado"));
 
   ({precios:verPrecios, stock:verStock, pedido:verPedido, proveedores:verProveedores,
-    ajustes:verAjustes})[ui.vista](document.getElementById("main"));
+    proveedor:verProveedor, ajustes:verAjustes})[ui.vista](document.getElementById("main"));
 
   pintarBarra();
 }
@@ -1339,8 +1340,11 @@ function verProveedores(main){
       var d=libro.proveedores[p.nombre]||{};
       var viejos=libro.productos.filter(function(x){ return x.proveedor===p.nombre && esViejo(x); }).length;
       var tel=soloNumero(d.telefono);
-      return '<tr><td><strong>'+esc(p.nombre)+'</strong>'+
-          (p.n?"":' <span class="chapa neutra" style="font-size:10.5px">sólo la ficha</span>')+'</td>'+
+      return '<tr><td>'+
+          (p.n ? '<button class="enlace-prov" data-abrir-prov="'+esc(p.nombre)+'">'+
+                 esc(p.nombre)+'</button>'
+               : '<strong>'+esc(p.nombre)+'</strong>'+
+                 ' <span class="chapa neutra" style="font-size:10.5px">sólo la ficha</span>')+'</td>'+
         '<td class="num">'+(p.n||"—")+'</td>'+
         '<td class="num"'+(viejos?' style="color:var(--aviso)"':"")+'>'+(viejos||"—")+'</td>'+
         '<td class="mono">'+(tel?"+"+esc(tel):'<span style="color:var(--muted)">—</span>')+'</td>'+
@@ -1360,6 +1364,162 @@ function verProveedores(main){
   main.querySelectorAll("[data-borrar-prov]").forEach(function(b){
     b.addEventListener("click", function(){ quitarProveedor(b.getAttribute("data-borrar-prov")); });
   });
+  main.querySelectorAll("[data-abrir-prov]").forEach(function(b){
+    b.addEventListener("click", function(){
+      ui.prov=b.getAttribute("data-abrir-prov"); ui.vista="proveedor"; pintar(); window.scrollTo(0,0);
+    });
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LO QUE LE COMPRO A UNO
+   ══════════════════════════════════════════════════════════════
+   Pulsas SUMALISA y sale lo que le compras a SUMALISA, con su precio y
+   su casilla para pedir. Es la pantalla que hace falta cuando el que
+   llama es él, o cuando toca hacerle el pedido: en Precios están todos
+   mezclados y buscarlos de uno en uno para un solo proveedor es
+   trabajo inventado.
+
+   Y de paso, lo que no se ve en ningún otro sitio: de esas cosas,
+   cuáles le compras más caras que a otro. Es el único sitio donde esa
+   pregunta tiene respuesta corta. */
+function verProveedor(main){
+  var nombre=ui.prov;
+  var suyos=libro.productos.filter(function(p){ return p.proveedor===nombre; });
+  if(!nombre || !suyos.length){ ui.vista="proveedores"; pintar(); return; }
+
+  var datos=libro.proveedores[nombre]||{};
+  var tel=soloNumero(datos.telefono);
+  var enPedido=suyos.filter(function(p){ var l=delPedido(p.id); return l.uds||l.cajas; });
+  var total=r2(enPedido.reduce(function(t,p){ return t+importeLinea(p); },0));
+  var viejos=suyos.filter(esViejo).length;
+
+  /* Para cada cosa suya, si hay otro que la tenga más barata. */
+  var caros=[];
+  suyos.forEach(function(p){
+    if(!conIgi(p)) return;
+    var mismos=libro.productos.filter(function(o){
+      return o!==p && llaveDe(o)===llaveDe(p) && conIgi(o)>0; });
+    if(!mismos.length) return;
+    var mejor=mismos.sort(function(a,b){ return conIgi(a)-conIgi(b); })[0];
+    if(conIgi(mejor) < conIgi(p)-0.004) caros.push({p:p, mejor:mejor});
+  });
+
+  main.innerHTML=
+    '<p class="nota" style="margin:0 0 10px">'+
+      '<button class="btn suave sm" id="pv_volver">← Proveedores</button></p>'+
+    cabecera(nombre,
+      (datos.contacto?esc(datos.contacto)+". ":"")+
+      "Lo que le compras a este proveedor. Pon las cantidades aquí mismo y mándaselo.",
+      (enPedido.length && tel
+        ? '<button class="btn wa" id="pv_mandar">📱 Mandar el pedido</button>' : "")+
+      '<button class="btn" id="pv_ficha">Teléfono y contacto</button>')+
+
+    (tel ? "" :
+      '<div class="aviso-caja">No tiene teléfono guardado, así que no se le puede mandar el '+
+      'pedido de una. Pónselo con <strong>Teléfono y contacto</strong>.</div>')+
+
+    '<div class="cifras">'+
+      '<div class="cifra"><div class="k">Le compras</div><div class="v">'+suyos.length+'</div>'+
+        '<div class="n">'+plural(suyos.length,"producto","productos")+' a su nombre</div></div>'+
+      '<div class="cifra"><div class="k">En el pedido</div>'+
+        '<div class="v'+(total?" acento":"")+'">'+(total?eur(total):"—")+'</div>'+
+        '<div class="n">'+(enPedido.length
+          ? plural(enPedido.length,"cosa apuntada","cosas apuntadas") : "nada apuntado")+'</div></div>'+
+      '<div class="cifra"><div class="k">Más caro que otro</div>'+
+        '<div class="v'+(caros.length?" malo":"")+'">'+(caros.length||"—")+'</div>'+
+        '<div class="n">'+(caros.length
+          ? "los tiene más baratos otro" : "nadie se lo mejora")+'</div></div>'+
+      '<div class="cifra"><div class="k">Precios viejos</div>'+
+        '<div class="v'+(viejos?" malo":"")+'">'+(viejos||"—")+'</div>'+
+        '<div class="n">sin tocar desde hace tiempo</div></div>'+
+    '</div>'+
+
+    '<div class="tarjeta"><div class="tarjeta-cab">'+
+      '<h2>Su lista</h2><span class="pista">escribe la cantidad y ya queda apuntado</span></div>'+
+      '<div class="tabla-caja"><table class="hoja"><thead><tr>'+
+        '<th>Producto</th><th class="num">Precio</th>'+
+        '<th class="num">Unidades</th><th class="num">Cajas</th>'+
+      '</tr></thead><tbody>'+
+      suyos.sort(function(a,b){
+        return (a.seccion||"").localeCompare(b.seccion||"") ||
+               norm(a.nombre).localeCompare(norm(b.nombre));
+      }).map(function(p){
+        var l=delPedido(p.id), caja=+p.udsCaja||0;
+        var caro=caros.filter(function(c){ return c.p===p; })[0];
+        return '<tr class="st-fila'+((l.uds||l.cajas)?" puesta":"")+'" data-of="'+esc(p.id)+'">'+
+          '<td><div class="st-nom">'+esc(p.nombre)+'</div>'+
+            '<div class="st-info">'+esc((p.seccion||"").toLowerCase())+
+              (p.fecha?' · '+esc(dmy(p.fecha)):' · sin fecha')+
+              (caja>0?' · caja de '+num(caja, caja%1?1:0):"")+
+              (caro?' · <span style="color:var(--malo);font-weight:600">'+
+                    esc(caro.mejor.proveedor)+' lo tiene a '+eur(conIgi(caro.mejor))+'</span>':"")+
+            '</div></td>'+
+          '<td class="num">'+(conIgi(p)
+            ? '<strong>'+eur(conIgi(p))+'</strong>'
+            : '<span style="color:var(--muted)">sin precio</span>')+
+            (caja>0&&conIgi(p)?'<div style="font-size:11px;color:var(--muted)">caja '+
+              eur(precioCaja(p))+'</div>':"")+'</td>'+
+          '<td class="num">'+casillaProv(p.id,"uds",l.uds,unidadDe(p)||"")+'</td>'+
+          '<td class="num">'+(caja>0 ? casillaProv(p.id,"cajas",l.cajas,"")
+                                     : '<span style="color:var(--muted)">—</span>')+'</td>'+
+        '</tr>';
+      }).join("")+
+      '</tbody></table></div></div>';
+
+  document.getElementById("pv_volver").addEventListener("click", function(){
+    ui.vista="proveedores"; pintar();
+  });
+  document.getElementById("pv_ficha").addEventListener("click", function(){ editarProveedor(nombre); });
+  var bm=document.getElementById("pv_mandar");
+  if(bm) bm.addEventListener("click", function(){ mandarPedido(nombre); });
+
+  main.querySelectorAll("input[data-cpv]").forEach(function(input){
+    var partes=input.getAttribute("data-cpv").split("|");
+    var id=partes[0], campo=partes[1];
+    input.addEventListener("input", function(){
+      ponerEnPedido(id, campo, input.value);
+      var l=delPedido(id);
+      var fila=input.closest(".st-fila");
+      if(fila) fila.classList.toggle("puesta", !!(l.uds||l.cajas));
+      refrescarCabeceraProv(nombre, tel);
+      pintarBarra();
+    });
+  });
+}
+
+/* Lo de arriba se toca a mano al escribir una cantidad: repintar la
+   pantalla entera se llevaría el cursor de la casilla, y el botón de
+   mandar tiene que aparecer en cuanto haya algo que mandar. */
+function refrescarCabeceraProv(nombre, tel){
+  var suyos=libro.productos.filter(function(p){ return p.proveedor===nombre; });
+  var enPedido=suyos.filter(function(p){ var l=delPedido(p.id); return l.uds||l.cajas; });
+  var total=r2(enPedido.reduce(function(t,p){ return t+importeLinea(p); },0));
+
+  var cifras=document.querySelectorAll(".cifra");
+  if(cifras[1]){
+    var v=cifras[1].querySelector(".v"), n=cifras[1].querySelector(".n");
+    v.textContent=total?eur(total):"—";
+    v.className="v"+(total?" acento":"");
+    n.textContent=enPedido.length
+      ? plural(enPedido.length,"cosa apuntada","cosas apuntadas") : "nada apuntado";
+  }
+  var cab=document.querySelector(".cabecera > div:last-child");
+  var boton=document.getElementById("pv_mandar");
+  if(enPedido.length && tel && !boton && cab){
+    boton=document.createElement("button");
+    boton.className="btn wa"; boton.id="pv_mandar"; boton.textContent="📱 Mandar el pedido";
+    boton.addEventListener("click", function(){ mandarPedido(nombre); });
+    cab.insertBefore(boton, cab.firstChild);
+  } else if((!enPedido.length || !tel) && boton) boton.remove();
+}
+
+function casillaProv(id, campo, valor, etiqueta){
+  return '<span class="st-casilla">'+
+    '<input type="number" min="0" step="1" value="'+(valor||"")+'" placeholder="—" '+
+      'inputmode="numeric" data-cpv="'+esc(id)+'|'+campo+'" aria-label="Cantidad">'+
+    (etiqueta?'<span class="st-ud">'+esc(etiqueta)+'</span>':"")+
+  '</span>';
 }
 
 /* ── Quitar un proveedor ──────────────────────────────────────────
