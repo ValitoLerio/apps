@@ -261,6 +261,14 @@ input.grande{font-size:17px;padding:10px 11px;font-weight:600}
 .nota{font-size:13px;color:var(--muted);margin:0 0 12px;max-width:74ch}
 
 .tabla-caja{overflow-x:auto}
+/* Cabecera quieta. «Unidades» y «Cajas» son dos casillas iguales una al
+   lado de la otra: si al bajar por la lista se van los títulos, ya no se
+   sabe cuál es cuál. Para que la cabecera se quede pegada, el que tiene
+   que scrollear es esta caja y no la página —`sticky` mira al primer
+   antepasado que scrollee, y ése es éste por el overflow—, así que las
+   listas largas llevan `pegada` y su propia altura. */
+.tabla-caja.pegada{max-height:calc(100vh - 200px);overflow:auto;overscroll-behavior:contain}
+.tabla-caja.pegada th{box-shadow:0 1px 0 var(--linea)}
 table{border-collapse:collapse;width:100%;font-size:14px}
 th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;
    color:var(--muted);font-weight:500;padding:9px 10px;border-bottom:1px solid var(--linea);
@@ -317,6 +325,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
   .pie-rail{margin:0 0 0 auto;border:0;padding:0;flex-direction:row;gap:12px;align-items:center}
   main{padding:14px 12px 130px}
   .buscar{top:52px}
+  .tabla-caja.pegada{max-height:calc(100vh - 240px)}
   .reja{grid-template-columns:1fr}
   .cabecera h1{font-size:24px}
 }
@@ -331,7 +340,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609121211"></script>
+<script src="sync.js?v=202609121220"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -339,7 +348,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('pedidos').then(function(){
     var s = document.createElement('script');
-    s.src = 'pedidos.js?v=202609121211';
+    s.src = 'pedidos.js?v=202609121220';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar pedidos.js. Recarga la pagina.'; };
     document.body.appendChild(s);

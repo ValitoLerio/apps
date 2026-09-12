@@ -25,8 +25,8 @@
    con la lista entera a la vista. Se quitó: con el buscador y la chapa
    «Del día» de aquí se llega igual, y una pantalla menos es una pantalla
    menos que mantener. Los productos siguen todos, marcados como del día
-   y con su unidad —kilos, cajas—, que eso es del producto y no de la
-   pantalla que se borró.
+   y con su unidad —kilos, litros, unidades—, que eso es del producto y
+   no de la pantalla que se borró.
 
    Hubo un «stock semanal» —lo que quieres tener de cada cosa, y un
    botón que lo volcaba entero en el pedido—. Se quitó. Lo que sí se
@@ -97,6 +97,17 @@ function cargar(){
   if(libro.ajustes.mesesViejo==null) libro.ajustes.mesesViejo=24;
   /* Un producto sin id no se puede pedir ni editar. */
   libro.productos.forEach(function(p){ if(!p.id) p.id=uid(); });
+  /* «Cajas» estaba a la vez como unidad del producto y como columna
+     propia: escribías 3 en Unidades y el pedido salía «3 cajas». Se
+     quita de las unidades —las cajas ya tienen su casilla— y al que
+     estuviera puesto así se le deja su caja para que no pierda nada. */
+  var tocado=false;
+  libro.productos.forEach(function(p){
+    if(p.ud==="cajas"){ if(!(+p.udsCaja>0)) p.udsCaja=1; p.ud=""; tocado=true; }
+    /* Y «un» sobraba: sin unidad ya son unidades. */
+    if(p.ud==="un"){ p.ud=""; tocado=true; }
+  });
+  if(tocado) guardar();
 }
 
 var elAviso=null;
@@ -188,11 +199,15 @@ function listaProveedores(){
    entrar el pescado o el pan sin tocar nada. */
 function esDiario(p){ return !!(p && p.diario); }
 
-/* La verdura no se pide toda igual: el tomate en kilos, la lechuga en
-   cajas y los huevos a unidades. La unidad se guarda EN EL PRODUCTO, no
+/* Cada cosa se pide como se pide: el tomate en kilos, la leche en
+   litros y los huevos a unidades. La unidad se guarda EN EL PRODUCTO, no
    en el pedido de hoy: cada cosa se pide siempre igual, y así no hay que
-   volver a decirlo todas las mañanas. */
-var UNIDADES=["kg","cajas","un",""];
+   volver a decirlo todas las mañanas.
+
+   Cajas NO está aquí a propósito. Las cajas tienen su propia casilla, la
+   de al lado, y tenerlas también como unidad era lo que liaba el pedido:
+   ponías 3 en Unidades y salía «3 cajas». */
+var UNIDADES=["kg","L",""];
 function unidadDe(p){
   var u=(p&&p.ud)||"";
   return UNIDADES.indexOf(u)>=0 ? u : "";
@@ -202,11 +217,15 @@ function siguienteUnidad(u){
   return UNIDADES[(i<0?UNIDADES.length-1:i+1)%UNIDADES.length];
 }
 function etiquetaUnidad(u){ return u || "—"; }
-/* "3 kg", "2 cajas", "4 un" o "4" a secas. En singular, una caja. */
+/* "3 kg", "2 L", "4 un" o, si no tiene unidad, "4 unidades". */
 function cantidadConUnidad(n, u){
-  if(!u) return String(n);
-  if(u==="cajas") return n+(n===1?" caja":" cajas");
+  if(!u) return n+(n===1?" unidad":" unidades");
   return n+" "+u;
+}
+/* "caja de 12". Una caja de una unidad no es una caja de nada: se calla. */
+function deCaja(p){
+  var c=+(p&&p.udsCaja)||0;
+  return c>1 ? "caja de "+num(c, c%1?1:0) : (c>0 ? "caja" : "");
 }
 function productoPorId(id){
   return libro.productos.filter(function(p){ return p.id===id; })[0] || null;
@@ -479,7 +498,7 @@ function lineaOferta(o, g){
                         '</span>');
   else info.push('<span class="viejo">sin fecha</span>');
   if(neto) info.push('<span>'+num(o.igi,1)+' % IGI</span>');
-  if(caja>0) info.push('<span>caja de '+num(caja, caja%1?1:0)+' · '+eur(precioCaja(o))+'</span>');
+  if(caja>0) info.push('<span>'+esc(deCaja(o))+' · '+eur(precioCaja(o))+'</span>');
 
   return '<div class="oferta'+(esMejor?" mejor":"")+(pedida?" encargada":"")+'" data-of="'+esc(o.id)+'">'+
     '<div class="of-quien">'+
@@ -492,7 +511,7 @@ function lineaOferta(o, g){
         'style="padding:0 4px;font-size:11.5px;text-decoration:underline">cambiar</button></div>'+
     '</div>'+
     '<div class="of-acciones">'+
-      contador(o.id, "uds", l.uds, "un")+
+      contador(o.id, "uds", l.uds, unidadDe(o)||"un")+
       (caja>0 ? contador(o.id, "cajas", l.cajas, "caj") : "")+
     '</div>'+
   '</div>';
@@ -658,7 +677,7 @@ function tarjetaProveedorPedido(g){
       '<div class="tarjeta-cuerpo" style="padding-bottom:0">'+
       '<div class="aviso-caja">A '+esc(g.proveedor)+' no le has puesto teléfono. '+
       'Ponlo en <strong>Proveedores</strong> y el pedido se manda de una.</div></div>')+
-    '<div class="tabla-caja"><table><thead><tr>'+
+    '<div class="tabla-caja pegada"><table><thead><tr>'+
       '<th>Producto</th><th class="num">Unidades</th><th class="num">Cajas</th>'+
       '<th class="num">Precio</th><th class="num">Importe</th><th></th>'+
     '</tr></thead><tbody>'+
@@ -669,10 +688,10 @@ function tarjetaProveedorPedido(g){
         /* Editables aquí mismo: esto es la lista que se va llenando
            durante la semana, así que hay que poder subir una cantidad
            sin ir a buscar el producto a otra pantalla. */
-        '<td class="num">'+casillaPedido(l.p.id, "uds", l.uds, unidadDe(l.p)||"")+'</td>'+
+        '<td class="num">'+casillaPedido(l.p.id, "uds", l.uds, unidadDe(l.p)||"un")+'</td>'+
         '<td class="num">'+((+l.p.udsCaja||0)>0
           ? casillaPedido(l.p.id, "cajas", l.cajas,
-                          "de "+num(+l.p.udsCaja||0, (+l.p.udsCaja||0)%1?1:0))
+                          (+l.p.udsCaja||0)>1 ? "de "+num(+l.p.udsCaja, (+l.p.udsCaja)%1?1:0) : "cajas")
           : '<span style="color:var(--muted)">—</span>')+'</td>'+
         '<td class="num">'+(conIgi(l.p)?eur(conIgi(l.p)):
           '<span style="color:var(--muted)">sin precio</span>')+'</td>'+
@@ -724,7 +743,7 @@ function engancharApuntar(){
     caja.innerHTML=grupos.map(function(g){
       var o=g.ofertas[0];
       var l=delPedido(o.id);
-      var caj=+o.udsCaja||0;
+      var caj=+o.udsCaja||0, udp=unidadDe(o);
       return '<button type="button" class="sug'+((l.uds||l.cajas)?" ya":"")+'" '+
         'data-apunta="'+esc(o.id)+'">'+
         '<span class="sug-nom">'+esc(g.nombre)+
@@ -733,8 +752,8 @@ function engancharApuntar(){
         '<span class="sug-info">'+esc(o.proveedor||"sin proveedor")+
           (conIgi(o)?' · '+eur(conIgi(o)):' · sin precio')+
           (g.ofertas.length>1?' · '+plural(g.ofertas.length,"proveedor","proveedores"):"")+
-          (caj>0?' · caja de '+num(caj, caj%1?1:0):"")+'</span>'+
-        '<span class="sug-mas">+ '+(caj>0?"1 caja":"1")+'</span>'+
+          (caj>0?' · '+esc(deCaja(o)):"")+'</span>'+
+        '<span class="sug-mas">+ '+(caj>0?"1 caja":cantidadConUnidad(1,udp))+'</span>'+
       '</button>';
     }).join("");
     caja.querySelectorAll("[data-apunta]").forEach(function(b){
@@ -751,7 +770,8 @@ function engancharApuntar(){
     var cuantas=(l[campoN]||0)+1;
     ponerEnPedido(id, campoN, cuantas);
     avisar("Apuntado: "+p.nombre+" · "+
-           (campoN==="cajas" ? plural(cuantas,"caja","cajas") : String(cuantas)));
+           (campoN==="cajas" ? plural(cuantas,"caja","cajas")
+                             : cantidadConUnidad(cuantas, unidadDe(p))));
     ui.qApunte=""; pintar();
     var nuevo=document.getElementById("qa");
     if(nuevo && !("ontouchstart" in window)) nuevo.focus();
@@ -829,12 +849,11 @@ function textoPedido(prov){
   g.lineas.forEach(function(x){
     var trozos=[];
     if(x.cajas) trozos.push(x.cajas+(x.cajas===1?" caja":" cajas")+
-      ((+x.p.udsCaja||0)>0 ? " de "+num(+x.p.udsCaja, (+x.p.udsCaja)%1?1:0) : ""));
-    /* La verdura y la carne van con la unidad que tenga cada una —«3 kg»,
-       «2 cajas»— o con el número a secas si no se le ha puesto ninguna,
-       que es como se piden de siempre. */
-    if(x.uds) trozos.push(esDiario(x.p) ? cantidadConUnidad(x.uds, unidadDe(x.p))
-                                        : x.uds+(x.uds===1?" unidad":" unidades"));
+      ((+x.p.udsCaja||0)>1 ? " de "+num(+x.p.udsCaja, (+x.p.udsCaja)%1?1:0) : ""));
+    /* Cada cosa con su unidad —«3 kg», «2 L», «4 un»— y, si no se le ha
+       puesto ninguna, unidades a secas. Las cajas van aparte, arriba:
+       son la otra casilla y no se mezclan con ésta. */
+    if(x.uds) trozos.push(cantidadConUnidad(x.uds, unidadDe(x.p)));
     l.push("- "+x.p.nombre+": "+trozos.join(" + ")+
            (libro.ajustes.conImportes && x.importe ? "  ("+eur(x.importe)+")" : ""));
   });
@@ -1050,7 +1069,7 @@ function verProveedor(main){
 
     '<div class="tarjeta"><div class="tarjeta-cab">'+
       '<h2>Su lista</h2><span class="pista">escribe la cantidad y ya queda apuntado</span></div>'+
-      '<div class="tabla-caja"><table class="hoja"><thead><tr>'+
+      '<div class="tabla-caja pegada"><table class="hoja"><thead><tr>'+
         '<th>Producto</th><th class="num">Precio</th>'+
         '<th class="num">Unidades</th><th class="num">Cajas</th>'+
       '</tr></thead><tbody>'+
@@ -1064,7 +1083,7 @@ function verProveedor(main){
           '<td><div class="st-nom">'+esc(p.nombre)+'</div>'+
             '<div class="st-info">'+esc((p.seccion||"").toLowerCase())+
               (p.fecha?' · '+esc(dmy(p.fecha)):' · sin fecha')+
-              (caja>0?' · caja de '+num(caja, caja%1?1:0):"")+
+              (caja>0?' · '+esc(deCaja(p)):"")+
               (caro?' · <span style="color:var(--malo);font-weight:600">'+
                     esc(caro.mejor.proveedor)+' lo tiene a '+eur(conIgi(caro.mejor))+'</span>':"")+
             '</div></td>'+
@@ -1073,7 +1092,7 @@ function verProveedor(main){
             : '<span style="color:var(--muted)">sin precio</span>')+
             (caja>0&&conIgi(p)?'<div style="font-size:11px;color:var(--muted)">caja '+
               eur(precioCaja(p))+'</div>':"")+'</td>'+
-          '<td class="num">'+casillaProv(p.id,"uds",l.uds,unidadDe(p)||"")+'</td>'+
+          '<td class="num">'+casillaProv(p.id,"uds",l.uds,unidadDe(p)||"un")+'</td>'+
           '<td class="num">'+(caja>0 ? casillaProv(p.id,"cajas",l.cajas,"")
                                      : '<span style="color:var(--muted)">—</span>')+'</td>'+
         '</tr>';
@@ -1291,7 +1310,7 @@ function editarProducto(p){
         'value="'+(p.udsCaja!=null?esc(p.udsCaja):"")+'" placeholder="sueltas"></div>'+
       '<div class="campo"><label class="lbl" for="ep_ud">Cómo se pide</label>'+
         '<select id="ep_ud">'+
-        [["","a números, sin unidad"],["kg","en kilos"],["cajas","en cajas"],["un","en unidades"]]
+        [["","en unidades"],["kg","en kilos"],["L","en litros"]]
           .map(function(o){
             return '<option value="'+o[0]+'"'+(unidadDe(p)===o[0]?" selected":"")+'>'+o[1]+'</option>';
           }).join("")+'</select></div>'+
