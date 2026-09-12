@@ -28,16 +28,10 @@
    y con su unidad —kilos, cajas—, que eso es del producto y no de la
    pantalla que se borró.
 
-   Y LO DE SIEMPRE. Un pedido de la semana se parece mucho al de la
-   semana pasada: las mismas cosas y casi las mismas cantidades. Escribir
-   eso entero cada vez es copiarse a uno mismo. Así que cada producto
-   puede llevar apuntado lo que quieres tener cada semana, y un botón lo
-   pone todo de golpe; luego se baja lo que aún te quede y se manda.
-
-   Lo de siempre no se teclea aparte: se hace un pedido bueno de la
-   manera normal y se pulsa «Guardar como lo de siempre». La plantilla
-   sale del trabajo ya hecho, que es la única forma de que alguien la
-   mantenga al día.
+   Hubo un «stock semanal» —lo que quieres tener de cada cosa, y un
+   botón que lo volcaba entero en el pedido—. Se quitó. Lo que sí se
+   quedó es lo que ya tuviera apuntado cada producto: está en el dato,
+   dormido, por si algún día vuelve.
 
    Los datos los guarda sync.js en el repositorio privado, que los
    precios de los proveedores no son cosa de nadie más.
@@ -64,7 +58,7 @@ function libroVacio(){
 
 var libro = libroVacio();
 var ui = { vista:"precios", q:"", seccion:"", soloPedido:false, soloBaratos:false,
-           qStock:"", secStock:"", qApunte:"", prov:null };
+           qApunte:"", prov:null };
 
 /* ── Dinero, fechas y texto ───────────────────────────────────── */
 function r2(n){ return Math.round(((+n||0)+Number.EPSILON)*100)/100; }
@@ -218,59 +212,6 @@ function productoPorId(id){
   return libro.productos.filter(function(p){ return p.id===id; })[0] || null;
 }
 
-/* ── Lo de siempre: el pedido de la semana ────────────────────────
-   Lo que quieres que haya cada semana, apuntado en el producto. Se
-   guarda tal y como se pidió —unidades o cajas—, que no es lo mismo
-   pedir 2 cajas de alitas que 2 alitas. */
-function semanalDe(p){
-  var s=(p && p.semanal) || null;
-  if(!s) return null;
-  var uds=+s.uds||0, cajas=+s.cajas||0;
-  return (uds||cajas) ? {uds:uds, cajas:cajas} : null;
-}
-function conSemanal(){ return libro.productos.filter(semanalDe); }
-function hayPlantilla(){ return libro.productos.some(semanalDe); }
-/* Lo de siempre, puesto en el pedido. No borra lo que ya hubiera
-   escrito a mano: si hoy ya habías apuntado algo de una cosa, manda lo
-   tuyo — lo de siempre es un punto de partida, no una orden. */
-function ponerPlantilla(){
-  var puestos=0, respetados=0;
-  conSemanal().forEach(function(p){
-    var l=delPedido(p.id);
-    if(l.uds || l.cajas){ respetados++; return; }
-    var s=semanalDe(p);
-    libro.pedido[p.id]={uds:s.uds, cajas:s.cajas};
-    puestos++;
-  });
-  guardar(); pintar();
-  avisar(puestos
-    ? "Puesto lo de siempre: "+plural(puestos,"cosa","cosas")+
-      (respetados?" ("+plural(respetados,"ya la tenías puesta","ya las tenías puestas")+")":"")
-    : "Ya lo tenías todo puesto");
-}
-/* Al revés: lo que hay escrito hoy pasa a ser lo de siempre. Lo que no
-   está en el pedido deja de estarlo, porque «lo de siempre» es este
-   pedido, no éste más lo que hubiera antes. */
-function guardarPlantilla(){
-  var n=0;
-  libro.productos.forEach(function(p){
-    var l=delPedido(p.id);
-    if(l.uds || l.cajas){ p.semanal={uds:l.uds, cajas:l.cajas}; n++; }
-    else if(p.semanal) delete p.semanal;
-  });
-  guardar(); pintar();
-  avisar("Stock semanal guardado: "+plural(n,"cosa","cosas"));
-}
-function textoSemanal(p){
-  var s=semanalDe(p);
-  if(!s) return "";
-  var t=[];
-  if(s.cajas) t.push(s.cajas+(s.cajas===1?" caja":" cajas"));
-  if(s.uds) t.push(esDiario(p) ? cantidadConUnidad(s.uds, unidadDe(p))
-                               : s.uds+(s.uds===1?" unidad":" unidades"));
-  return t.join(" + ");
-}
-
 /* ── El pedido ────────────────────────────────────────────────── */
 function delPedido(id){
   var l=libro.pedido[id];
@@ -316,7 +257,6 @@ function lineasPedido(){
    ══════════════════════════════════════════════════════════════ */
 var APARTADOS=[
   {id:"precios",     nombre:"Precios"},
-  {id:"stock",       nombre:"Stock semanal", cuenta:function(){ return conSemanal().length; }},
   {id:"pedido",      nombre:"El pedido", cuenta:function(){ return lineasPedido(); }},
   {id:"proveedores", nombre:"Proveedores"},
   {id:"ajustes",     nombre:"Ajustes"}
@@ -345,7 +285,7 @@ function pintar(){
   });
   if(window.Sync && Sync.mostrarEstadoEn) Sync.mostrarEstadoEn(document.getElementById("sync-estado"));
 
-  ({precios:verPrecios, stock:verStock, pedido:verPedido, proveedores:verProveedores,
+  ({precios:verPrecios, pedido:verPedido, proveedores:verProveedores,
     proveedor:verProveedor, ajustes:verAjustes})[ui.vista](document.getElementById("main"));
 
   pintarBarra();
@@ -420,7 +360,6 @@ function verPrecios(main){
       hay ? "Escribe media palabra y quedan las fichas que buscas. Dentro de cada una, "+
             "los proveedores que la traen, del más barato al más caro."
           : "Todavía no hay ningún producto.",
-      (hayPlantilla() ? '<button class="btn" id="pr_siempre">↺ Poner el stock semanal</button>' : "")+
       '<button class="btn" id="pr_nuevo">+ Producto</button>')+
 
     '<div class="buscar">'+
@@ -475,8 +414,6 @@ function verPrecios(main){
   document.getElementById("ch_pedido").addEventListener("click", function(){
     ui.soloPedido=!ui.soloPedido; if(ui.soloPedido) ui.seccion=""; pintar();
   });
-  var bs2=document.getElementById("pr_siempre");
-  if(bs2) bs2.addEventListener("click", ponerPlantilla);
   var bn=document.getElementById("pr_nuevo");
   if(bn) bn.addEventListener("click", function(){ editarProducto(null); });
 
@@ -543,8 +480,6 @@ function lineaOferta(o, g){
   else info.push('<span class="viejo">sin fecha</span>');
   if(neto) info.push('<span>'+num(o.igi,1)+' % IGI</span>');
   if(caja>0) info.push('<span>caja de '+num(caja, caja%1?1:0)+' · '+eur(precioCaja(o))+'</span>');
-  var sem=textoSemanal(o);
-  if(sem) info.push('<span style="color:var(--acento);font-weight:600">cada semana, '+esc(sem)+'</span>');
 
   return '<div class="oferta'+(esMejor?" mejor":"")+(pedida?" encargada":"")+'" data-of="'+esc(o.id)+'">'+
     '<div class="of-quien">'+
@@ -627,303 +562,6 @@ function refrescarFicha(id){
 }
 
 /* ══════════════════════════════════════════════════════════════
-   STOCK SEMANAL
-   ══════════════════════════════════════════════════════════════
-   Lo que quieres que haya cada semana, producto por producto. Es una
-   lista que se escribe una vez y luego se usa todas las semanas: el
-   botón de arriba pone ese stock entero en el pedido, y desde ahí se
-   baja lo que aún te quede y se manda.
-
-   El botón que había antes sólo salía si ya tenías un stock guardado, y
-   guardarlo era pulsar otro botón escondido en El pedido. O sea que
-   quien no lo tenía no podía verlo: no se podía llegar a usar. Ahora es
-   un apartado, está siempre, y vacío te dice para qué es. */
-function verStock(main){
-  var conNivel=conSemanal();
-
-  main.innerHTML=
-    cabecera("Stock semanal",
-      "Lo que quieres tener cada semana de cada cosa. Se pone una vez y "+
-      "luego el pedido entero sale de aquí con un botón.",
-      '<button class="btn fuerte" id="st_poner"'+(conNivel.length?"":" disabled")+'>'+
-        '↺ Poner el pedido de la semana</button>'+
-      (lineasPedido()
-        ? '<button class="btn" id="st_coger">Cogerlo del pedido de ahora</button>' : "")+
-      (conNivel.length ? '<button class="btn malo" id="st_vaciar">Vaciar el stock</button>' : ""))+
-
-    '<div class="cifras">'+
-      '<div class="cifra"><div class="k">Con stock puesto</div>'+
-        '<div class="v'+(conNivel.length?" acento":"")+'">'+conNivel.length+'</div>'+
-        '<div class="n">de '+libro.productos.length+' productos</div></div>'+
-      '<div class="cifra"><div class="k">Lo que costaría</div>'+
-        '<div class="v">'+(costeSemanal()>0?eur(costeSemanal()):"—")+'</div>'+
-        '<div class="n">'+(costeSemanal()>0?"a los precios de hoy":"nada con precio todavía")+'</div></div>'+
-      '<div class="cifra"><div class="k">Proveedores</div>'+
-        '<div class="v">'+proveedoresSemanal().length+'</div>'+
-        '<div class="n">a los que les pedirías</div></div>'+
-    '</div>'+
-
-    '<div class="buscar">'+
-      '<div class="buscar-caja">'+
-        '<span class="lupa">⌕</span>'+
-        '<input id="qs" type="search" autocomplete="off" spellcheck="false" '+
-        'placeholder="Busca el producto al que ponerle stock…" value="'+esc(ui.qStock)+'">'+
-        '<button class="limpiar'+(ui.qStock?" hay":"")+'" id="qs_limpiar" title="Limpiar">✕</button>'+
-      '</div>'+
-      '<div class="chips">'+
-        '<button class="chip" data-secst="__puestos" aria-pressed="'+(ui.secStock==="__puestos")+'">'+
-          'Con stock<span class="n">'+conNivel.length+'</span></button>'+
-        '<button class="chip" data-secst="" aria-pressed="'+(!ui.secStock)+'">Todo'+
-          '<span class="n">'+libro.productos.length+'</span></button>'+
-        secciones().map(function(x){
-          return '<button class="chip" data-secst="'+esc(x.nombre)+'" aria-pressed="'+
-            (ui.secStock===x.nombre)+'">'+esc(x.nombre.charAt(0)+x.nombre.slice(1).toLowerCase())+
-            '<span class="n">'+x.n+'</span></button>';
-        }).join("")+
-      '</div>'+
-    '</div>'+
-    '<div id="listaStock"></div>';
-
-  var campo=document.getElementById("qs");
-  campo.addEventListener("input", function(){
-    ui.qStock=this.value;
-    document.getElementById("qs_limpiar").classList.toggle("hay", !!this.value);
-    pintarStock();
-  });
-  campo.addEventListener("keydown", function(e){
-    if(e.key==="Escape" && this.value){ e.preventDefault(); this.value=""; ui.qStock="";
-      document.getElementById("qs_limpiar").classList.remove("hay"); pintarStock(); }
-  });
-  document.getElementById("qs_limpiar").addEventListener("click", function(){
-    ui.qStock=""; campo.value=""; this.classList.remove("hay"); pintarStock(); campo.focus();
-  });
-  main.querySelectorAll("[data-secst]").forEach(function(b){
-    b.addEventListener("click", function(){
-      ui.secStock=b.getAttribute("data-secst");
-      if(ui.qStock){ ui.qStock=""; campo.value="";
-                     document.getElementById("qs_limpiar").classList.remove("hay"); }
-      main.querySelectorAll("[data-secst]").forEach(function(x){ x.setAttribute("aria-pressed", x===b); });
-      pintarStock();
-    });
-  });
-  var bp=document.getElementById("st_poner");
-  if(bp && !bp.disabled) bp.addEventListener("click", function(){
-    ponerPlantilla(); ui.vista="pedido"; pintar(); window.scrollTo(0,0);
-  });
-  var bv=document.getElementById("st_vaciar");
-  if(bv) bv.addEventListener("click", vaciarStock);
-  /* Al revés: el pedido que tengas montado ahora pasa a ser el stock. Es
-     la forma más rápida de llenar esta hoja la primera vez, porque el
-     trabajo ya está hecho en El pedido. */
-  var bc=document.getElementById("st_coger");
-  if(bc) bc.addEventListener("click", function(){
-    confirmar("Coger el stock del pedido de ahora",
-      '<p style="margin:0 0 10px">'+(lineasPedido()===1
-        ? "La cosa que tienes apuntada ahora en el pedido, con su cantidad, pasa"
-        : "Las "+lineasPedido()+" cosas que tienes apuntadas ahora en el pedido, con sus "+
-          "cantidades, pasan")+' a ser tu stock semanal.</p>'+
-      (hayPlantilla()
-        ? '<p class="nota" style="margin:0">Se sustituye el que ya tenías ('+
-          plural(conSemanal().length,"producto","productos")+'): lo que no esté en el pedido '+
-          'de ahora se queda sin stock.</p>'
-        : '<p class="nota" style="margin:0">El pedido no se toca; sólo se copia.</p>'),
-      guardarPlantilla, {aceptar:"Cogerlo"});
-  });
-
-  pintarStock();
-  if(!("ontouchstart" in window)) campo.focus();
-}
-
-/* Quitarle el stock a todo de una vez, que ponerle un cero a ciento y
-   pico productos uno por uno no lo hace nadie. Si estás mirando una
-   sección, se puede vaciar sólo ésa: es lo que se querrá casi siempre
-   —cambia el proveedor de la verdura y hay que rehacer esa parte— y
-   vaciarlo todo por no tener la opción sería perder el resto. */
-function vaciarStock(){
-  var todos=conSemanal();
-  if(!todos.length) return;
-  var seccion=(ui.secStock && ui.secStock!=="__puestos") ? ui.secStock : null;
-  var deLaSeccion=seccion
-    ? todos.filter(function(p){ return p.seccion===seccion; }) : [];
-
-  function limpiar(lista, dicho){
-    lista.forEach(function(p){ delete p.semanal; });
-    guardar(); pintar();
-    avisar(dicho);
-  }
-
-  confirmar("Vaciar el stock semanal",
-    '<p style="margin:0 0 10px">Se le quita el stock a '+
-      plural(todos.length,"producto","productos")+'. Los productos y sus precios no se tocan: '+
-      'lo único que se borra es cuánto querías tener de cada cosa.</p>'+
-    (seccion && deLaSeccion.length && deLaSeccion.length<todos.length
-      ? '<p class="nota" style="margin:0">Estás mirando <strong>'+esc(seccion.toLowerCase())+
-        '</strong>, que tiene '+plural(deLaSeccion.length,"producto","productos")+
-        ' con stock. Con el otro botón vacías sólo ésos.</p>'
-      : "")+
-    '<p class="nota" style="margin:10px 0 0">El pedido que tengas apuntado ahora mismo se '+
-    'queda como está; esto es sólo la plantilla.</p>',
-    function(){ limpiar(todos, "Stock vaciado"); },
-    {aceptar:"Vaciarlo todo", malo:true,
-     extra:(seccion && deLaSeccion.length && deLaSeccion.length<todos.length
-       ? '<button class="btn" data-solo-sec>Sólo '+esc(seccion.toLowerCase())+'</button>' : ""),
-     alAbrir:function(){
-       var b=document.querySelector("#dlg [data-solo-sec]");
-       if(b) b.addEventListener("click", function(){
-         cerrarVentana();
-         limpiar(deLaSeccion, "Vaciado el stock de "+seccion.toLowerCase());
-       });
-     }});
-}
-
-function costeSemanal(){
-  return r2(conSemanal().reduce(function(t,p){
-    var s=semanalDe(p);
-    return t + s.uds*conIgi(p) + s.cajas*precioCaja(p);
-  },0));
-}
-function proveedoresSemanal(){
-  var hay={};
-  conSemanal().forEach(function(p){ hay[p.proveedor||"Sin proveedor"]=1; });
-  return Object.keys(hay);
-}
-
-function pintarStock(){
-  var caja=document.getElementById("listaStock"); if(!caja) return;
-  var q=norm(ui.qStock), trozos=q?q.split(" "):[];
-  var lista=libro.productos.filter(function(p){
-    if(ui.secStock==="__puestos"){ if(!semanalDe(p)) return false; }
-    else if(ui.secStock && p.seccion!==ui.secStock) return false;
-    if(!trozos.length) return true;
-    var heno=norm(p.nombre)+" "+norm(p.proveedor)+" "+norm(p.seccion);
-    return trozos.every(function(t){ return heno.indexOf(t)>=0; });
-  }).sort(function(a,b){
-    return norm(a.nombre).localeCompare(norm(b.nombre)) ||
-           String(a.proveedor).localeCompare(String(b.proveedor));
-  });
-
-  if(!lista.length){
-    caja.innerHTML='<div class="tarjeta"><div class="vacio"><strong>'+
-      (ui.qStock ? 'Nada con «'+esc(ui.qStock)+'»'
-                 : ui.secStock==="__puestos" ? 'Todavía no le has puesto stock a nada'
-                                             : 'Aquí no hay nada')+'</strong>'+
-      (ui.secStock==="__puestos" && !ui.qStock
-        ? 'Ve a <b>Todo</b>, busca lo que pidas cada semana y ponle cuánto quieres tener. '+
-          'Con eso, el pedido de la semana te sale con un botón.'
-        : 'Prueba con menos letras.')+'</div></div>';
-    return;
-  }
-
-  /* Una hoja de pedido, no una fila de botones por producto: los
-     nombres uno debajo de otro y una casilla al lado donde se escribe el
-     número. Se lee de un vistazo, como el papel de siempre, y se rellena
-     con el teclado sin ir dando toques de uno en uno. */
-  caja.innerHTML='<div class="tarjeta"><div class="tabla-caja">'+
-    '<table class="hoja"><thead><tr>'+
-      '<th>Producto</th>'+
-      '<th class="num">Unidades</th>'+
-      '<th class="num">Cajas</th>'+
-    '</tr></thead><tbody>'+lista.map(filaStock).join("")+'</tbody></table>'+
-  '</div></div>';
-  engancharStock(caja);
-}
-
-function filaStock(p){
-  var s=semanalDe(p) || {uds:0, cajas:0};
-  var caja=+p.udsCaja||0;
-  var precio=conIgi(p);
-  var ud=unidadDe(p);
-  return '<tr class="st-fila'+((s.uds||s.cajas)?" puesta":"")+'" data-st="'+esc(p.id)+'">'+
-    '<td><div class="st-nom">'+esc(p.nombre)+'</div>'+
-      '<div class="st-info">'+esc(p.proveedor||"sin proveedor")+
-        (precio?' · '+eur(precio):' · sin precio')+
-        (caja>0?' · caja de '+num(caja, caja%1?1:0):"")+'</div></td>'+
-    '<td class="num">'+casillaStock(p.id, "uds", s.uds, ud||"")+'</td>'+
-    '<td class="num">'+(caja>0 ? casillaStock(p.id, "cajas", s.cajas, "")
-                               : '<span style="color:var(--muted)">—</span>')+'</td>'+
-  '</tr>';
-}
-
-/* Una casilla y ya: se escribe el número como en el papel. */
-function casillaStock(id, campo, valor, etiqueta){
-  return '<span class="st-casilla">'+
-    '<input type="number" min="0" step="1" value="'+(valor||"")+'" placeholder="—" '+
-      'inputmode="numeric" data-cst="'+esc(id)+'|'+campo+'" '+
-      'aria-label="Cuánto quiero cada semana">'+
-    (etiqueta?'<span class="st-ud">'+esc(etiqueta)+'</span>':"")+
-  '</span>';
-}
-
-/* Igual que en el pedido: se toca lo justo y no se repinta la lista, que
-   si no el buscador pierde el foco a cada número. */
-function engancharStock(caja){
-  var filas=[].slice.call(caja.querySelectorAll(".st-fila"));
-  var casillas=[].slice.call(caja.querySelectorAll("input[data-cst]"));
-  casillas.forEach(function(input, i){
-    var partes=input.getAttribute("data-cst").split("|");
-    var id=partes[0], campo=partes[1];
-    input.addEventListener("input", function(){
-      var n=Math.max(0, Math.round(+input.value||0));
-      var p=productoPorId(id); if(!p) return;
-      var s=(p.semanal && {uds:+p.semanal.uds||0, cajas:+p.semanal.cajas||0}) || {uds:0, cajas:0};
-      s[campo]=n;
-      if(!s.uds && !s.cajas) delete p.semanal; else p.semanal=s;
-      guardar();
-      var fila=input.closest(".st-fila");
-      if(fila) fila.classList.toggle("puesta", !!(s.uds||s.cajas));
-      refrescarCuentaStock();
-    });
-    /* Enter y las flechas bajan a la casilla de la fila siguiente, en la
-       misma columna: la hoja se rellena de arriba abajo sin soltar el
-       teclado. Se va por filas y no contando casillas, porque no todas
-       tienen las mismas: el producto que no viene en caja sólo tiene una,
-       y contando de dos en dos se saltaba una fila. */
-    input.addEventListener("keydown", function(e){
-      var salto=(e.key==="Enter"||e.key==="ArrowDown") ? 1
-              : (e.key==="ArrowUp") ? -1 : 0;
-      if(!salto) return;
-      var fila=input.closest(".st-fila");
-      var destino=filas[filas.indexOf(fila)+salto];
-      if(!destino) return;
-      var meta=destino.querySelector('input[data-cst$="|'+campo+'"]')
-            || destino.querySelector("input[data-cst]");
-      if(meta){ e.preventDefault(); meta.focus(); meta.select(); }
-    });
-  });
-}
-function refrescarCuentaStock(){
-  var n=conSemanal().length, coste=costeSemanal();
-  var chapa=document.querySelector('[data-secst="__puestos"] .n');
-  if(chapa) chapa.textContent=n;
-  /* El número del carril no existe hasta que hay algo que contar, así que
-     la primera vez hay que crearlo o no aparece hasta el siguiente
-     repintado entero. */
-  var boton2=document.querySelector('[data-ir="stock"]');
-  if(boton2){
-    var cuenta=boton2.querySelector(".cuenta");
-    if(n && !cuenta){ cuenta=document.createElement("span"); cuenta.className="cuenta";
-                      boton2.appendChild(cuenta); }
-    if(cuenta){ if(n) cuenta.textContent=n; else cuenta.remove(); }
-  }
-  var cifras=document.querySelectorAll(".cifra");
-  if(cifras[0]){
-    cifras[0].querySelector(".v").textContent=n;
-    cifras[0].querySelector(".v").className="v"+(n?" acento":"");
-  }
-  if(cifras[1]){
-    cifras[1].querySelector(".v").textContent=coste>0?eur(coste):"—";
-    cifras[1].querySelector(".n").textContent=coste>0
-      ? "a los precios de hoy" : "nada con precio todavía";
-  }
-  if(cifras[2]) cifras[2].querySelector(".v").textContent=proveedoresSemanal().length;
-  var boton=document.getElementById("st_poner");
-  if(boton && n && boton.disabled){ boton.disabled=false;
-    boton.addEventListener("click", function(){
-      ponerPlantilla(); ui.vista="pedido"; pintar(); window.scrollTo(0,0); }); }
-  if(boton && !n) boton.disabled=true;
-}
-
-/* ══════════════════════════════════════════════════════════════
    EL PEDIDO
    ══════════════════════════════════════════════════════════════ */
 function verPedido(main){
@@ -936,11 +574,7 @@ function verPedido(main){
           "cada proveedor lleva el suyo: se manda uno, se vuelve y se manda el siguiente."
         : "Ve apuntando aquí lo que haga falta según lo veas. El día del pedido, "+
           "sale repartido por proveedor.",
-      (grupos.length
-        ? '<button class="btn" id="pd_guardarSiempre">Guardar como stock semanal</button>'+
-          '<button class="btn malo" id="pd_vaciar">Vaciar el pedido</button>'
-        : (hayPlantilla()
-            ? '<button class="btn fuerte" id="pd_siempre">↺ Poner el stock semanal</button>' : "")))+
+      (grupos.length ? '<button class="btn malo" id="pd_vaciar">Vaciar el pedido</button>' : ""))+
 
     '<div class="apuntar">'+
       '<div class="buscar-caja">'+
@@ -970,12 +604,8 @@ function verPedido(main){
         '</div>'+
         grupos.map(tarjetaProveedorPedido).join("")
       : '<div class="tarjeta"><div class="vacio"><strong>El pedido está vacío</strong>'+
-        (hayPlantilla()
-          ? 'Pulsa <b>↺ Poner el stock semanal</b> ahí arriba y te salen las '+
-            plural(conSemanal().length,"cosa","cosas")+' de cada semana con sus cantidades. '+
-            'Luego bajas lo que te quede y lo mandas.'
-          : 'Ve a <b>Stock semanal</b> y ponle a cada cosa cuánto quieres tener. A partir de '+
-            'ahí, el pedido entero te sale con un botón.')+'</div></div>')+
+        'Escribe arriba tres letras de lo que haga falta y queda apuntado. El día del pedido, '+
+        'sale repartido por proveedor.</div></div>')+
 
     (libro.enviados.length ? historialEnviados() : "");
 
@@ -983,23 +613,6 @@ function verPedido(main){
 
   var bv=document.getElementById("pd_vaciar");
   if(bv) bv.addEventListener("click", vaciarPedido);
-  var bp=document.getElementById("pd_siempre");
-  if(bp) bp.addEventListener("click", ponerPlantilla);
-  var bg=document.getElementById("pd_guardarSiempre");
-  if(bg) bg.addEventListener("click", function(){
-    confirmar("Guardar como stock semanal",
-      '<p style="margin:0 0 10px">'+(lineasPedido()===1
-        ? "La cosa que hay ahora en el pedido, con su cantidad, pasa"
-        : "Las "+lineasPedido()+" cosas que hay ahora en el pedido, con sus cantidades, pasan")+
-        ' a ser tu <strong>stock semanal</strong>.</p>'+
-      (hayPlantilla()
-        ? '<p class="nota" style="margin:0">Ya tenías uno con '+
-          plural(conSemanal().length,"cosa","cosas")+'. Se sustituye entero: lo que no esté en el '+
-          'pedido de ahora se queda sin stock semanal.</p>'
-        : '<p class="nota" style="margin:0">Luego, desde <strong>Stock semanal</strong>, '+
-          'te vuelve todo puesto de una vez y sólo tienes que bajar lo que te quede.</p>'),
-      guardarPlantilla, {aceptar:"Guardarlo"});
-  });
 
   main.querySelectorAll("[data-mandar]").forEach(function(b){
     b.addEventListener("click", function(){ mandarPedido(b.getAttribute("data-mandar")); });
@@ -1779,35 +1392,6 @@ function verAjustes(main){
         '<div style="margin-top:16px"><button class="btn fuerte" id="aj_guardar">Guardar</button></div>'+
       '</div></div>'+
 
-    /* Lo de siempre, para verlo entero y poder quitarlo. Se hace desde
-       el pedido, pero mirarlo hay que poder mirarlo en algún sitio. */
-    '<div class="tarjeta" style="margin-bottom:16px">'+
-      '<div class="tarjeta-cab"><h2>Lo de siempre</h2>'+
-        '<span class="pista">'+(hayPlantilla()
-          ? plural(conSemanal().length,"cosa","cosas")+' en el pedido de la semana'
-          : "todavía no has guardado ninguno")+'</span></div>'+
-      (hayPlantilla()
-        ? '<div class="tabla-caja"><table><thead><tr><th>Producto</th><th>Proveedor</th>'+
-          '<th class="num">Cada semana</th><th></th></tr></thead><tbody>'+
-          conSemanal().sort(function(a,b){
-            return (a.seccion||"").localeCompare(b.seccion||"") ||
-                   norm(a.nombre).localeCompare(norm(b.nombre)); }).map(function(p){
-            return '<tr><td><strong>'+esc(p.nombre)+'</strong>'+
-              '<div style="font-size:11.5px;color:var(--muted)">'+esc((p.seccion||"").toLowerCase())+'</div></td>'+
-              '<td>'+esc(p.proveedor||"—")+'</td>'+
-              '<td class="num"><strong>'+esc(textoSemanal(p))+'</strong></td>'+
-              '<td class="num"><button class="btn suave sm malo" data-quitar-sem="'+esc(p.id)+'" '+
-                'title="Quitarlo de lo de siempre">✕</button></td></tr>';
-          }).join("")+
-          '</tbody></table></div>'+
-          '<div class="tarjeta-cuerpo"><p class="nota" style="margin:0">Esto se hace desde '+
-          '<strong>El pedido</strong>: montas uno bueno y pulsas «Guardar como lo de siempre». '+
-          'Para volver a ponerlo, el botón <strong>↺ Poner lo de siempre</strong>.</p></div>'
-        : '<div class="vacio"><strong>Sin pedido de la semana</strong>'+
-          'Monta un pedido de los de siempre en <b>El pedido</b> y pulsa «Guardar como lo de '+
-          'siempre». A partir de ahí te sale entero con un botón.</div>')+
-    '</div>'+
-
     '<div class="tarjeta" style="margin-bottom:16px">'+
       '<div class="tarjeta-cab"><h2>Precios que hay que repasar</h2>'+
         '<span class="pista">'+plural(viejos.length,"precio","precios")+' de más de '+
@@ -1853,13 +1437,6 @@ function verAjustes(main){
   });
   main.querySelectorAll("[data-editar2]").forEach(function(b){
     b.addEventListener("click", function(){ editarProducto(productoPorId(b.getAttribute("data-editar2"))); });
-  });
-  main.querySelectorAll("[data-quitar-sem]").forEach(function(b){
-    b.addEventListener("click", function(){
-      var prod=productoPorId(b.getAttribute("data-quitar-sem")); if(!prod) return;
-      delete prod.semanal; guardar(); pintar();
-      avisar(prod.nombre+" ya no va en lo de siempre");
-    });
   });
 }
 

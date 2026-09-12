@@ -155,11 +155,9 @@ main{padding:22px 24px 120px;max-width:1180px;min-width:0}
              justify-content:space-between;gap:10px;border-top:1px solid var(--linea-suave)}
 .linea-total b{font-variant-numeric:tabular-nums}
 
-/* ── Stock semanal: una hoja de pedido ───────────────────────── */
-/* Como el papel de siempre: los nombres uno debajo de otro, apretados,
-   y una casilla al lado donde se escribe el número. Nada de un par de
-   botones por producto, que con 635 productos era una pantalla de
-   teclas. */
+/* ── La hoja: nombres apretados y una casilla al lado ────────── */
+/* Como el papel de siempre. La estrenó el stock semanal, que ya no
+   está, y ahora la usa la ficha de cada proveedor. */
 .hoja td{padding:5px 10px}
 .hoja tbody tr{border-bottom:1px solid var(--linea-suave)}
 .st-fila.puesta td{background:var(--acento-suave)}
@@ -333,7 +331,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609121206"></script>
+<script src="sync.js?v=202609121211"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -341,7 +339,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('pedidos').then(function(){
     var s = document.createElement('script');
-    s.src = 'pedidos.js?v=202609121206';
+    s.src = 'pedidos.js?v=202609121211';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar pedidos.js. Recarga la pagina.'; };
     document.body.appendChild(s);
