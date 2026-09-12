@@ -540,6 +540,7 @@ var APARTADOS=[
   {id:"dia",      nombre:"Día"},
   {id:"mes",      nombre:"Mes"},
   {id:"anio",     nombre:"Año"},
+  {id:"comparar", nombre:"Comparar"},
   {id:"amarilla", nombre:"Caja amarilla"},
   {id:"tramos",   nombre:"Sin retirar"},
   {id:"ajustes",  nombre:"Ajustes"}
@@ -568,7 +569,7 @@ function pintar(){
   if(window.Sync && Sync.mostrarEstadoEn) Sync.mostrarEstadoEn(document.getElementById("sync-estado"));
 
   var main=document.getElementById("main");
-  ({dia:verDia, mes:verMes, anio:verAnio, amarilla:verAmarilla,
+  ({dia:verDia, mes:verMes, anio:verAnio, comparar:verComparar, amarilla:verAmarilla,
     tramos:verTramos, ajustes:verAjustes})[ui.vista](main);
 }
 
@@ -1542,6 +1543,380 @@ function verMes(main){
       ui.dia=tr.getAttribute("data-dia"); ui.vista="dia"; pintar();
     });
   });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   COMPARAR
+   ══════════════════════════════════════════════════════════════
+   Un mes suelto no dice nada: 100.000 € de ventas es mucho o poco según
+   lo que hicieras el año pasado por estas fechas. Y en un sitio de
+   temporada, comparar agosto con septiembre tampoco vale: hay que
+   comparar agosto con AGOSTO.
+
+   Así que aquí van las dos comparaciones que sirven: cada mes contra el
+   mes anterior, y cada mes contra el mismo mes del año pasado. Escritas
+   y dibujadas, que una cosa se ve en la tabla y la otra en el dibujo.
+
+   Los dibujos son SVG a pelo, sin librerías: son cuatro barras y una
+   línea, y traerse media web para eso sería tirar de un cañón. */
+
+function mesesConDatos(){
+  var hay={};
+  (libro.dias||[]).forEach(function(d){ var m=(d.fecha||"").slice(0,7); if(m) hay[m]=1; });
+  return Object.keys(hay).sort();
+}
+function aniosConDatos(){
+  var hay={};
+  (libro.dias||[]).forEach(function(d){ var a=(d.fecha||"").slice(0,4); if(a) hay[a]=1; });
+  return Object.keys(hay).sort();
+}
+function nombreMes(ym){
+  var a=ym.split("-");
+  return MESES[+a[1]-1]+" "+a[0];
+}
+function nombreMesCorto(ym){
+  var a=ym.split("-");
+  return MESES[+a[1]-1].slice(0,3)+" "+a[0].slice(2);
+}
+/* El porcentaje de verdad: qué parte de la venta se cobró con tarjeta.
+   No es el % de Ajustes —ése se aplica a las visas— sino el de verdad. */
+function pctVisaDe(t){ return t.ventas>0 ? r2(t.visa/t.ventas*100) : null; }
+function pctPagosDe(t){ return t.ventas>0 ? r2(t.gastos/t.ventas*100) : null; }
+
+/* Cuánto ha cambiado una cifra respecto a otra, en tanto por ciento.
+   Sin cifra de antes no hay variación: no es un 0 %, es que no hay con
+   qué comparar, y pintarlo como 0 sería decir que no cambió nada. */
+function variacion(ahora, antes){
+  if(antes==null || antes===0) return null;
+  return r2((ahora-antes)/antes*100);
+}
+function pintaVariacion(v, alReves){
+  if(v==null) return '<span style="color:var(--muted)">—</span>';
+  var sube=v>0.05, baja=v<-0.05;
+  var col=(!sube&&!baja) ? "var(--muted)"
+        : (alReves ? (sube?"var(--malo)":"var(--ok)") : (sube?"var(--ok)":"var(--malo)"));
+  return '<span style="color:'+col+';font-weight:600">'+
+         (sube?"+":baja?"−":"")+num(Math.abs(v),1)+' %</span>';
+}
+
+/* ── Los dibujos ──────────────────────────────────────────────── */
+/* Barras apiladas: la visa abajo y el efectivo encima, para que se vea
+   de un golpe el tamaño del mes y de qué está hecho. */
+function grafBarras(filas, opciones){
+  opciones=opciones||{};
+  var W=Math.max(340, filas.length*62+40), H=210, base=H-34, techo=16;
+  var tope=Math.max.apply(null, filas.map(function(f){
+    return f.partes.reduce(function(t,p){ return t+p.valor; },0); }).concat([1]));
+  var esc2=function(v){ return (base-techo)*v/tope; };
+  var ancho=Math.min(42, (W-40)/filas.length-12);
+
+  var barras=filas.map(function(f, i){
+    var x=20+i*((W-40)/filas.length)+((W-40)/filas.length-ancho)/2;
+    var y=base, trozos="";
+    f.partes.forEach(function(p){
+      var h=esc2(p.valor);
+      if(h>0.4){ y-=h; trozos+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+ancho.toFixed(1)+
+        '" height="'+h.toFixed(1)+'" fill="'+p.color+'"><title>'+esc(f.etiqueta+" · "+p.nombre+": "+eur(p.valor))+
+        '</title></rect>'; }
+    });
+    var total=f.partes.reduce(function(t,p){ return t+p.valor; },0);
+    return trozos+
+      '<text x="'+(x+ancho/2).toFixed(1)+'" y="'+(y-5).toFixed(1)+'" text-anchor="middle" '+
+        'font-size="10" font-family="var(--mono)" fill="var(--muted)">'+
+        (total>=1000?num(total/1000,1)+"k":num(total,0))+'</text>'+
+      '<text x="'+(x+ancho/2).toFixed(1)+'" y="'+(base+14)+'" text-anchor="middle" '+
+        'font-size="10" font-family="var(--mono)" fill="var(--muted)">'+esc(f.etiqueta)+'</text>';
+  }).join("");
+
+  return '<div class="grafico"><svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" '+
+    'role="img" aria-label="'+esc(opciones.titulo||"Gráfico")+'">'+
+    '<line x1="14" y1="'+base+'" x2="'+(W-14)+'" y2="'+base+'" stroke="var(--linea)" stroke-width="1"/>'+
+    barras+'</svg></div>';
+}
+
+/* Una línea para el porcentaje: lo que importa aquí no es el tamaño
+   sino si sube o baja, y eso una línea lo dice mejor que una barra. */
+function grafLinea(filas, opciones){
+  opciones=opciones||{};
+  var W=Math.max(340, filas.length*62+40), H=170, base=H-34, techo=18;
+  var vals=filas.map(function(f){ return f.valor; }).filter(function(v){ return v!=null; });
+  if(!vals.length) return "";
+  var min=Math.min.apply(null, vals), max=Math.max.apply(null, vals);
+  if(max-min<1){ max=max+1; min=min-1; }
+  var y=function(v){ return base-(base-techo)*(v-min)/(max-min); };
+  var x=function(i){ return 24+i*((W-48)/Math.max(1,filas.length-1)); };
+
+  var puntos=filas.map(function(f,i){ return f.valor==null?null:[x(i), y(f.valor)]; });
+  var camino=puntos.filter(Boolean).map(function(p,i){
+    return (i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1); }).join(" ");
+
+  return '<div class="grafico"><svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" '+
+    'role="img" aria-label="'+esc(opciones.titulo||"Gráfico")+'">'+
+    '<line x1="14" y1="'+base+'" x2="'+(W-14)+'" y2="'+base+'" stroke="var(--linea)" stroke-width="1"/>'+
+    '<path d="'+camino+'" fill="none" stroke="var(--acento)" stroke-width="2.5" '+
+      'stroke-linejoin="round" stroke-linecap="round"/>'+
+    filas.map(function(f,i){
+      if(f.valor==null) return "";
+      return '<circle cx="'+x(i).toFixed(1)+'" cy="'+y(f.valor).toFixed(1)+'" r="4" '+
+        'fill="var(--sup)" stroke="var(--acento)" stroke-width="2.5"><title>'+
+        esc(f.etiqueta+": "+num(f.valor,1)+" %")+'</title></circle>'+
+        '<text x="'+x(i).toFixed(1)+'" y="'+(y(f.valor)-10).toFixed(1)+'" text-anchor="middle" '+
+        'font-size="10" font-family="var(--mono)" fill="var(--muted)">'+num(f.valor,0)+'%</text>'+
+        '<text x="'+x(i).toFixed(1)+'" y="'+(base+14)+'" text-anchor="middle" '+
+        'font-size="10" font-family="var(--mono)" fill="var(--muted)">'+esc(f.etiqueta)+'</text>';
+    }).join("")+
+    '</svg></div>';
+}
+
+function leyenda(cosas){
+  return '<div class="leyenda">'+cosas.map(function(c){
+    return '<span><i style="background:'+c.color+'"></i>'+esc(c.nombre)+'</span>';
+  }).join("")+'</div>';
+}
+
+/* La variación entre dos meses, en total si son comparables y por día
+   si no. Devuelve el HTML ya pintado. */
+function variacionMes(d, otro){
+  if(!otro || !otro.t.dias || !d.t.dias) return '<span style="color:var(--muted)">—</span>';
+  var descuadre=Math.abs(d.t.dias-otro.t.dias)/Math.max(d.t.dias, otro.t.dias);
+  if(descuadre>0.2){
+    var v=variacion(d.porDia, otro.porDia);
+    if(v==null) return '<span style="color:var(--muted)">—</span>';
+    return pintaVariacion(v)+'<div style="font-size:10px;color:var(--muted)">al día</div>';
+  }
+  return pintaVariacion(variacion(d.t.ventas, otro.t.ventas));
+}
+
+function verComparar(main){
+  var meses=mesesConDatos();
+  if(!meses.length){
+    main.innerHTML=cabecera("Comparar","Cómo va cada mes contra el anterior y contra el año pasado.")+
+      '<div class="tarjeta"><div class="vacio"><strong>Todavía no hay meses que comparar</strong>'+
+      'Anota unos cuantos días y aquí empezarán a salir las comparaciones.</div></div>';
+    return;
+  }
+  var datos=meses.map(function(ym){
+    var t=sumaCuentas(diasDe(ym));
+    return {ym:ym, t:t, pct:pctVisaDe(t), pctPagos:pctPagosDe(t),
+            porDia:t.dias>0?r2(t.ventas/t.dias):0};
+  });
+  var porYm={}; datos.forEach(function(d){ porYm[d.ym]=d; });
+  function haceUnAnio(ym){
+    var a=ym.split("-");
+    return porYm[(+a[0]-1)+"-"+a[1]] || null;
+  }
+
+  var anios=aniosConDatos().map(function(a){
+    var t=sumaCuentas(diasDe(a));
+    return {a:a, t:t, pct:pctVisaDe(t), pctPagos:pctPagosDe(t),
+            porDia:t.dias>0?r2(t.ventas/t.dias):0};
+  });
+
+  main.innerHTML=
+    cabecera("Comparar",
+      "Un mes suelto no dice nada. Aquí va contra el mes anterior y, lo que de verdad "+
+      "importa en un sitio de temporada, contra el mismo mes del año pasado.")+
+
+    tarjetaSospechas(datos)+
+    tarjetaEnCristiano(datos, anios, haceUnAnio)+
+
+    '<div class="tarjeta" style="margin-bottom:16px">'+
+      '<div class="tarjeta-cab"><h2>Ventas de cada mes</h2>'+
+        '<span class="pista">visa abajo, efectivo encima</span></div>'+
+      '<div class="tarjeta-cuerpo">'+
+        grafBarras(datos.map(function(d){
+          return {etiqueta:nombreMesCorto(d.ym), partes:[
+            {nombre:"Visa", valor:d.t.visa, color:"var(--acento)"},
+            {nombre:"Efectivo", valor:d.t.efectivo, color:"var(--amarilla)"}]};
+        }), {titulo:"Ventas de cada mes"})+
+        leyenda([{nombre:"Visa", color:"var(--acento)"},
+                 {nombre:"Efectivo", color:"var(--amarilla)"}])+
+      '</div></div>'+
+
+    '<div class="tarjeta" style="margin-bottom:16px">'+
+      '<div class="tarjeta-cab"><h2>Qué parte se cobra con tarjeta</h2>'+
+        '<span class="pista">de la venta de cada mes</span></div>'+
+      '<div class="tarjeta-cuerpo">'+
+        grafLinea(datos.map(function(d){
+          return {etiqueta:nombreMesCorto(d.ym), valor:d.pct}; }),
+          {titulo:"Porcentaje de visa"})+
+        '<p class="nota" style="margin:10px 0 0">Éste es el de verdad: las visas partido por la '+
+        'venta. El de <strong>Ajustes</strong> es otra cosa —se aplica a las visas para calcular '+
+        'el efectivo—, y por eso no dan el mismo número.</p>'+
+      '</div></div>'+
+
+    '<div class="tarjeta" style="margin-bottom:16px">'+
+      '<div class="tarjeta-cab"><h2>Pagos de cada mes</h2>'+
+        '<span class="pista">lo que sale de la caja</span></div>'+
+      '<div class="tarjeta-cuerpo">'+
+        grafBarras(datos.map(function(d){
+          return {etiqueta:nombreMesCorto(d.ym), partes:[
+            {nombre:"Pagos", valor:d.t.gastos, color:"var(--malo)"}]};
+        }), {titulo:"Pagos de cada mes"})+
+      '</div></div>'+
+
+    '<div class="tarjeta" style="margin-bottom:16px">'+
+      '<div class="tarjeta-cab"><h2>Mes a mes</h2>'+
+        '<span class="pista">contra el mes anterior y contra el año pasado</span></div>'+
+      '<div class="tabla-caja"><table><thead><tr>'+
+        '<th>Mes</th><th class="num">Días</th><th class="num">Visa</th><th class="num">Efectivo</th>'+
+        '<th class="num">% visa</th><th class="num">Ventas</th><th class="num">Al día</th>'+
+        '<th class="num">Pagos</th><th class="num">% pagos</th>'+
+        '<th class="num">vs mes ant.</th><th class="num">vs año pas.</th>'+
+      '</tr></thead><tbody>'+
+      datos.map(function(d, i){
+        var ant=i>0?datos[i-1]:null;
+        var pas=haceUnAnio(d.ym);
+        return '<tr style="cursor:pointer" data-mes="'+esc(d.ym)+'">'+
+          '<td><strong>'+esc(nombreMes(d.ym))+'</strong></td>'+
+          '<td class="num">'+d.t.dias+'</td>'+
+          '<td class="num">'+eur(d.t.visa)+'</td>'+
+          '<td class="num">'+eur(d.t.efectivo)+'</td>'+
+          '<td class="num">'+(d.pct==null?"—":num(d.pct,0)+" %")+'</td>'+
+          '<td class="num"><strong>'+eur(d.t.ventas)+'</strong></td>'+
+          '<td class="num">'+eur(d.porDia)+'</td>'+
+          '<td class="num" style="color:var(--malo)">'+eur(d.t.gastos)+'</td>'+
+          '<td class="num">'+(d.pctPagos==null?"—":num(d.pctPagos,0)+" %")+'</td>'+
+          /* Comparando meses con muy distintos días anotados, el total
+             miente —«+3.338 %» contra un mes de un solo día—, así que
+             ahí se compara lo del día, y se dice con el signo «/día». */
+          '<td class="num">'+variacionMes(d, ant)+'</td>'+
+          '<td class="num">'+variacionMes(d, pas)+'</td>'+
+        '</tr>';
+      }).join("")+
+      '</tbody></table></div></div>'+
+
+    '<div class="tarjeta"><div class="tarjeta-cab"><h2>Año contra año</h2>'+
+      '<span class="pista">con los días que hay anotados de cada uno</span></div>'+
+      '<div class="tabla-caja"><table><thead><tr>'+
+        '<th>Año</th><th class="num">Días</th><th class="num">Visa</th><th class="num">Efectivo</th>'+
+        '<th class="num">% visa</th><th class="num">Ventas</th><th class="num">Al día</th>'+
+        '<th class="num">Pagos</th><th class="num">% pagos</th><th class="num">vs anterior</th>'+
+      '</tr></thead><tbody>'+
+      anios.map(function(x, i){
+        var ant=i>0?anios[i-1]:null;
+        return '<tr>'+
+          '<td><strong>'+esc(x.a)+'</strong></td>'+
+          '<td class="num">'+x.t.dias+'</td>'+
+          '<td class="num">'+eur(x.t.visa)+'</td>'+
+          '<td class="num">'+eur(x.t.efectivo)+'</td>'+
+          '<td class="num">'+(x.pct==null?"—":num(x.pct,0)+" %")+'</td>'+
+          '<td class="num"><strong>'+eur(x.t.ventas)+'</strong></td>'+
+          '<td class="num">'+eur(x.porDia)+'</td>'+
+          '<td class="num" style="color:var(--malo)">'+eur(x.t.gastos)+'</td>'+
+          '<td class="num">'+(x.pctPagos==null?"—":num(x.pctPagos,0)+" %")+'</td>'+
+          '<td class="num">'+pintaVariacion(ant?variacion(x.t.ventas, ant.t.ventas):null)+'</td>'+
+        '</tr>';
+      }).join("")+
+      '</tbody></table></div>'+
+      '<div class="tarjeta-cuerpo"><p class="nota" style="margin:0">Ojo al comparar años: cada uno '+
+      'tiene los días que tenga anotados. Si de uno faltan meses, su total no es el del año, es el '+
+      'de lo apuntado. La columna de días lo dice.</p></div>'+
+    '</div>';
+
+  main.querySelectorAll("[data-mes]").forEach(function(tr){
+    tr.addEventListener("click", function(){
+      ui.mes=tr.getAttribute("data-mes"); ui.dia=ui.mes+"-01"; ui.vista="mes"; pintar();
+    });
+  });
+}
+
+/* Antes de comparar nada, mirar si hay algún número imposible. Un mes
+   que paga más de lo que vende no es un mal mes: es un dedazo, y basta
+   uno para que todas las comparaciones de ese año salgan torcidas.
+   Pasó de verdad: 772.350 € de pagos un 5 de agosto, que se comieron el
+   mes entero. Más vale que salte aquí que estar mirando gráficos que no
+   significan nada. */
+function tarjetaSospechas(datos){
+  var malos=datos.filter(function(d){ return d.t.gastos > d.t.ventas && d.t.ventas>0; });
+  if(!malos.length) return "";
+  return malos.map(function(d){
+    /* El día que se lleva la culpa: el de más pagos de ese mes. */
+    var peor=diasDe(d.ym).slice().sort(function(a,b){
+      return totalGastos(b)-totalGastos(a); })[0];
+    return '<div class="aviso-caja"><strong>'+esc(nombreMes(d.ym))+' tiene algo mal.</strong> '+
+      'Los pagos suman '+eur(d.t.gastos)+' y las ventas '+eur(d.t.ventas)+': se pagó '+
+      num(d.t.gastos/d.t.ventas,0)+' veces lo que se vendió, y eso no puede ser.'+
+      (peor && totalGastos(peor)>d.t.ventas
+        ? ' Casi todo está en un solo día, el <strong>'+esc(dmy(peor.fecha))+'</strong>, con '+
+          eur(totalGastos(peor))+' de pagos. Míralo, que con un cero de más se tuerce el año entero.'
+        : "")+
+      ' Mientras esté así, las comparaciones de ese mes no valen.</div>';
+  }).join("");
+}
+
+/* Lo mismo, en cristiano. La tabla la mira quien quiere el número; esto
+   lo lee cualquiera de pasada. */
+function tarjetaEnCristiano(datos, anios, haceUnAnio){
+  var frases=[];
+  var ult=datos[datos.length-1];
+
+  if(datos.length>1){
+    var ant=datos[datos.length-2];
+    var v=variacion(ult.t.ventas, ant.t.ventas);
+    if(v!=null) frases.push("<strong>"+esc(nombreMes(ult.ym))+"</strong> lleva "+
+      eur(ult.t.ventas)+" en "+plural(ult.t.dias,"día","días")+", "+
+      (Math.abs(v)<0.05 ? "lo mismo que" : (v>0?"un "+num(Math.abs(v),1)+" % más que":
+       "un "+num(Math.abs(v),1)+" % menos que"))+" "+esc(nombreMes(ant.ym))+".");
+  }
+
+  /* La comparación que de verdad sirve en un sitio de temporada. */
+  datos.forEach(function(d){
+    var pas=haceUnAnio(d.ym);
+    if(!pas || !pas.t.dias || !d.t.dias) return;
+
+    /* Con muy distintos días anotados, comparar los totales miente: un
+       mes con un día apuntado sale «un 97 % menos» y no es que fuera
+       mal, es que no está entero. En ese caso se compara por día, que
+       es lo único que se puede comparar. */
+    var descuadre=Math.abs(d.t.dias-pas.t.dias)/Math.max(d.t.dias,pas.t.dias);
+    var porDia=(descuadre>0.2);
+    var v=porDia ? variacion(d.porDia, pas.porDia) : variacion(d.t.ventas, pas.t.ventas);
+    if(v==null) return;
+
+    var t="<strong>"+esc(nombreMes(d.ym))+"</strong> contra "+esc(nombreMes(pas.ym))+": ";
+    if(porDia){
+      t+=eur(d.porDia)+" al día contra "+eur(pas.porDia)+", "+
+        (Math.abs(v)<0.05?"prácticamente igual":
+         (v>0?"un "+num(Math.abs(v),1)+" % más":"un "+num(Math.abs(v),1)+" % menos"))+
+        " (van por día porque de uno hay "+plural(d.t.dias,"día","días")+
+        " y del otro "+plural(pas.t.dias,"día","días")+")";
+    } else {
+      t+=eur(d.t.ventas)+" contra "+eur(pas.t.ventas)+", "+
+        (Math.abs(v)<0.05?"prácticamente igual":
+         (v>0?"un "+num(Math.abs(v),1)+" % más":"un "+num(Math.abs(v),1)+" % menos"));
+      var vg=variacion(d.t.gastos, pas.t.gastos);
+      /* Si uno de los dos meses tiene los pagos disparados, callarse:
+         la comparación de pagos no diría nada cierto. */
+      var fiable=(d.t.gastos<=d.t.ventas && pas.t.gastos<=pas.t.ventas);
+      if(fiable && vg!=null && Math.abs(vg)>=1)
+        t+=". Los pagos, un "+num(Math.abs(vg),1)+" % "+(vg>0?"más":"menos")+
+           (vg>v+1 ? ", que suben más que las ventas" : "");
+    }
+    frases.push(t+".");
+  });
+
+  /* Dónde está el dinero: si el efectivo cae, no es lo mismo vender lo
+     mismo. */
+  if(datos.length>1){
+    var pr=datos[0], ul=datos[datos.length-1];
+    if(pr.pct!=null && ul.pct!=null && Math.abs(ul.pct-pr.pct)>=1){
+      frases.push("Con tarjeta se cobra cada vez "+(ul.pct>pr.pct?"más":"menos")+": del "+
+        num(pr.pct,0)+" % en "+esc(nombreMes(pr.ym))+" al "+num(ul.pct,0)+" % en "+
+        esc(nombreMes(ul.ym))+".");
+    }
+  }
+  var mejor=datos.slice().sort(function(a,b){ return b.porDia-a.porDia; })[0];
+  if(mejor && mejor.porDia>0)
+    frases.push("El mes que más ha dado por día es <strong>"+esc(nombreMes(mejor.ym))+
+      "</strong>, con "+eur(mejor.porDia)+" de media.");
+
+  if(!frases.length) return "";
+  return '<div class="tarjeta" style="margin-bottom:16px">'+
+    '<div class="tarjeta-cab"><h2>Lo que dicen los números</h2></div>'+
+    '<div class="tarjeta-cuerpo"><ul class="en-cristiano">'+
+      frases.map(function(f){ return "<li>"+f+"</li>"; }).join("")+
+    '</ul></div></div>';
 }
 
 /* ══════════════════════════════════════════════════════════════
