@@ -262,7 +262,7 @@ dialog::backdrop{background:rgba(8,12,12,.55)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609121117"></script>
+<script src="sync.js?v=202609121124"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -270,7 +270,7 @@ dialog::backdrop{background:rgba(8,12,12,.55)}
 
   Sync.iniciar('patrimonio').then(function(){
     var s = document.createElement('script');
-    s.src = 'patrimonio.js?v=202609121117';
+    s.src = 'patrimonio.js?v=202609121124';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar patrimonio.js. Recarga la pagina.'; };
     document.body.appendChild(s);

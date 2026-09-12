@@ -1828,6 +1828,50 @@ function verComparar(main){
    mes entero. Más vale que salte aquí que estar mirando gráficos que no
    significan nada. */
 function tarjetaSospechas(datos){
+  return avisoPagosImposibles(datos) + avisoEfectivoRaro(datos);
+}
+
+/* El efectivo que se sale de lo normal. Es el aviso que pidió: al meter
+   una hoja vieja, lo que más fácil se queda a medias es la columna del
+   efectivo, y no se nota mirando los totales —las ventas siguen
+   pareciendo buenas— pero sí en la proporción de tarjeta.
+
+   Se compara cada mes con la mediana de los demás, no con la media: un
+   mes disparatado arrastra la media y entonces el raro parece normal y
+   los normales raros. Y sólo entran los meses con una semana o más:
+   con dos días, cualquier proporción es casualidad.
+
+   No dice que esté mal, dice que lo mires. Puede que ese mes se cobrara
+   de verdad casi todo con tarjeta. */
+function avisoEfectivoRaro(datos){
+  var buenos=datos.filter(function(d){ return d.t.dias>=7 && d.pct!=null; });
+  if(buenos.length<3) return "";
+  function mediana(v){
+    var x=v.slice().sort(function(a,b){ return a-b; });
+    var m=Math.floor(x.length/2);
+    return x.length%2 ? x[m] : r2((x[m-1]+x[m])/2);
+  }
+  /* Contra la mediana de TODOS, no contra la de los demás: quitando uno
+     cada vez, con pocos meses la mediana se mueve tanto que acababa
+     marcando cuatro de cinco, y un aviso que salta siempre no lo lee
+     nadie. Y diez puntos de margen, que entre invierno y verano la
+     proporción cambia sola sin que nada esté mal. */
+  var normal=mediana(buenos.map(function(d){ return d.pct; }));
+  var raros=buenos.filter(function(d){ return Math.abs(d.pct-normal)>=10; });
+  if(!raros.length) return "";
+  return '<div class="aviso-caja">'+
+    '<strong>El efectivo de '+(raros.length===1?"un mes se sale":"unos meses se sale")+
+    ' de lo normal.</strong> En el resto, con tarjeta se cobra alrededor del '+
+    num(normal,0)+' %. Aquí no: '+
+    raros.map(function(d){
+      return esc(nombreMes(d.ym))+' va al '+num(d.pct,0)+' % ('+eur(d.t.efectivo)+
+             ' de efectivo sobre '+eur(d.t.ventas)+')';
+    }).join("; ")+
+    '. Puede que fuera así de verdad, pero es justo lo que pasa cuando la columna del '+
+    'efectivo se queda a medias al pasar una hoja. Mira esos meses.</div>';
+}
+
+function avisoPagosImposibles(datos){
   var malos=datos.filter(function(d){ return d.t.gastos > d.t.ventas && d.t.ventas>0; });
   if(!malos.length) return "";
   return malos.map(function(d){
