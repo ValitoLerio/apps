@@ -715,6 +715,31 @@ function casillaPedido(id, campo, valor, etiqueta){
   '</span>';
 }
 
+/* Una línea de la búsqueda de apuntar: un proveedor concreto de una
+   cosa concreta. Dice lo que cuesta y, si no es el más barato, cuánto
+   más caro es, que es lo que hay que saber para pagarlo a sabiendas. */
+function filaSugerencia(o, barato){
+  var l=delPedido(o.id);
+  var caj=+o.udsCaja||0, udp=unidadDe(o), p=conIgi(o);
+  var esBarato=(barato && barato.id===o.id);
+  var demas=(barato && !esBarato && p>0) ? r2(p-conIgi(barato)) : 0;
+  var detalle=[];
+  if(caj>0) detalle.push(deCaja(o)+(p?" · "+eur(precioCaja(o)):""));
+  if(o.fecha) detalle.push(dmy(o.fecha));
+  return '<button type="button" class="sug'+((l.uds||l.cajas)?" ya":"")+'" '+
+    'data-apunta="'+esc(o.id)+'">'+
+    '<span class="sug-nom">'+esc(o.proveedor||"sin proveedor")+
+      (esBarato?' <span class="chapa ok" style="font-size:10px">más barato</span>':"")+
+      ((l.uds||l.cajas)?' <span class="chapa" style="font-size:10px">ya apuntado</span>':"")+
+    '</span>'+
+    '<span class="sug-precio'+(p?"":" sin")+'">'+(p?eur(p):"sin precio")+
+      (demas>0?'<span class="sug-demas">+'+eur(demas)+'</span>':"")+
+    '</span>'+
+    (detalle.length?'<span class="sug-info">'+esc(detalle.join(" · "))+'</span>':"")+
+    '<span class="sug-mas">+ '+(caj>0?"1 caja":cantidadConUnidad(1,udp))+'</span>'+
+  '</button>';
+}
+
 /* ── Apuntar sobre la marcha ──────────────────────────────────────
    «Durante el día vamos viendo productos que nos van a hacer falta.» Esa
    es la frase, y esto es el sitio: se escriben tres letras, sale lo que
@@ -733,28 +758,27 @@ function engancharApuntar(){
       var heno=norm(p.nombre)+" "+norm(p.proveedor)+" "+norm(p.seccion);
       return trozos.every(function(t){ return heno.indexOf(t)>=0; });
     });
-    /* De cada producto, el proveedor más barato primero: apuntando
-       deprisa, lo que quieres es el mejor precio sin pensarlo. */
-    var grupos=agrupar(hallados).slice(0,9);
+    /* Los proveedores salen TODOS, del más barato al más caro, y cada
+       uno con su botón. El más barato va arriba porque casi siempre es
+       el que se quiere, pero el caro tiene que estar a la vista: «aunque
+       sea más caro quiero comprar el mejor». Esconderlo detrás de un
+       despliegue es decidir por él. */
+    var grupos=agrupar(hallados).slice(0,6);
     if(!grupos.length){
       caja.innerHTML='<div class="sug-vacio">Nada con «'+esc(ui.qApunte)+'»</div>';
       return;
     }
     caja.innerHTML=grupos.map(function(g){
-      var o=g.ofertas[0];
-      var l=delPedido(o.id);
-      var caj=+o.udsCaja||0, udp=unidadDe(o);
-      return '<button type="button" class="sug'+((l.uds||l.cajas)?" ya":"")+'" '+
-        'data-apunta="'+esc(o.id)+'">'+
-        '<span class="sug-nom">'+esc(g.nombre)+
-          ((l.uds||l.cajas)?' <span class="chapa ok" style="font-size:10.5px">ya apuntado</span>':"")+
-        '</span>'+
-        '<span class="sug-info">'+esc(o.proveedor||"sin proveedor")+
-          (conIgi(o)?' · '+eur(conIgi(o)):' · sin precio')+
-          (g.ofertas.length>1?' · '+plural(g.ofertas.length,"proveedor","proveedores"):"")+
-          (caj>0?' · '+esc(deCaja(o)):"")+'</span>'+
-        '<span class="sug-mas">+ '+(caj>0?"1 caja":cantidadConUnidad(1,udp))+'</span>'+
-      '</button>';
+      var barato=conIgi(g.ofertas[0])>0 ? g.ofertas[0] : null;
+      return '<div class="sug-grupo">'+
+        '<div class="sug-cab"><span class="sug-tit">'+esc(g.nombre)+'</span>'+
+          '<span class="sug-sec">'+esc((g.seccion||"").toLowerCase())+'</span>'+
+          (g.ofertas.length>1
+            ? '<span class="sug-cuantos">'+plural(g.ofertas.length,"proveedor","proveedores")+'</span>'
+            : "")+
+        '</div>'+
+        g.ofertas.map(function(o){ return filaSugerencia(o, barato); }).join("")+
+      '</div>';
     }).join("");
     caja.querySelectorAll("[data-apunta]").forEach(function(b){
       b.addEventListener("click", function(){ apuntar(b.getAttribute("data-apunta")); });

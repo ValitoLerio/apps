@@ -186,20 +186,37 @@ main{padding:22px 24px 120px;max-width:1180px;min-width:0}
              border:1.5px solid var(--acento-linea);background:var(--sup);box-shadow:var(--sombra)}
 .apuntar #qa::placeholder{color:var(--muted);font-weight:400}
 .apuntar #qa:focus{border-color:var(--acento);box-shadow:0 0 0 4px var(--acento-suave)}
-#sugerencias{display:grid;gap:1px;background:var(--linea-suave);margin-top:8px;
-             border-radius:10px;overflow:hidden}
+#sugerencias{display:grid;gap:8px;margin-top:8px}
 #sugerencias:empty{display:none}
-.sug{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;
-     width:100%;border:0;background:var(--sup);padding:10px 14px;cursor:pointer;
+/* Una cosa, y debajo todos los que la traen: el barato arriba y el caro
+   también a la vista, que a veces se paga de más a propósito. */
+.sug-grupo{display:grid;gap:1px;background:var(--linea-suave);
+           border-radius:10px;overflow:hidden;border:1px solid var(--linea)}
+.sug-cab{background:var(--sup2);padding:8px 14px 6px;display:flex;gap:9px;
+         align-items:baseline;flex-wrap:wrap}
+.sug-tit{font-family:var(--titulo);font-size:15px;font-weight:600;line-height:1.2}
+.sug-sec,.sug-cuantos{font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+                      text-transform:uppercase;color:var(--muted)}
+.sug-cuantos{margin-left:auto}
+.sug{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;
+     gap:4px 12px;width:100%;border:0;background:var(--sup);padding:9px 14px;cursor:pointer;
      text-align:left;font:inherit;color:inherit}
 .sug:hover{background:var(--acento-suave)}
-.sug-nom{font-size:15px;font-weight:600;grid-column:1;line-height:1.25}
-.sug-info{grid-column:1;font-size:11.5px;color:var(--muted);margin-top:1px}
-.sug-mas{grid-column:2;grid-row:1/3;font-family:var(--mono);font-size:12px;font-weight:600;
+.sug-nom{font-size:14px;font-weight:600;grid-column:1;line-height:1.25}
+.sug-info{grid-column:1;font-size:11px;color:var(--muted);margin-top:1px}
+.sug-precio{grid-column:2;grid-row:1/3;text-align:right;font-size:15px;font-weight:700;
+            font-variant-numeric:tabular-nums;white-space:nowrap;line-height:1.15}
+.sug-precio.sin{font-size:12px;font-weight:400;color:var(--muted)}
+/* Cuánto más caro es que el barato. En rojo no: no es un error, es una
+   decisión suya. */
+.sug-demas{display:block;font-family:var(--mono);font-size:10.5px;font-weight:500;
+           color:var(--muted);letter-spacing:.02em}
+.sug-mas{grid-column:3;grid-row:1/3;font-family:var(--mono);font-size:12px;font-weight:600;
          color:var(--acento);background:var(--acento-suave);border-radius:20px;padding:5px 11px;
          white-space:nowrap}
 .sug.ya .sug-mas{background:var(--sup2);color:var(--muted)}
-.sug-vacio{background:var(--sup);padding:14px;color:var(--muted);font-size:13.5px;text-align:center}
+.sug-vacio{background:var(--sup);padding:14px;color:var(--muted);font-size:13.5px;
+           text-align:center;border:1px solid var(--linea);border-radius:10px}
 
 /* ── La barra del pedido, siempre a la vista ─────────────────── */
 .barra-pedido{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--acento);
@@ -340,7 +357,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609121220"></script>
+<script src="sync.js?v=202609121224"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -348,7 +365,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('pedidos').then(function(){
     var s = document.createElement('script');
-    s.src = 'pedidos.js?v=202609121220';
+    s.src = 'pedidos.js?v=202609121224';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar pedidos.js. Recarga la pagina.'; };
     document.body.appendChild(s);
