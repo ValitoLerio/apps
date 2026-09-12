@@ -82,7 +82,8 @@ function libroVacio(){
 }
 
 var libro = libroVacio();
-var ui = { vista:"dia", dia:hoyISO(), mes:hoyISO().slice(0,7), anio:hoyISO().slice(0,4) };
+var ui = { vista:"dia", dia:hoyISO(), mes:hoyISO().slice(0,7), anio:hoyISO().slice(0,4),
+           compMide:"ventas" };
 
 /* ── Dinero y fechas ──────────────────────────────────────────── */
 function r2(n){ return Math.round((n+Number.EPSILON)*100)/100; }
@@ -1668,6 +1669,97 @@ function grafLinea(filas, opciones){
     '</svg></div>';
 }
 
+/* Enero contra enero, agosto contra agosto. En un sitio de temporada
+   ésta es LA comparación: los doce meses en el eje y, dentro de cada
+   uno, un palo por año. Así se ve de un golpe si este agosto ha ido
+   mejor o peor que los anteriores, que mirando una fila de meses
+   seguidos no se ve —lo único que se ve ahí es que en agosto se vende
+   más que en octubre, y eso ya se sabe.
+
+   Los meses sin datos se quedan sin palo, a propósito: el hueco dice
+   que falta esa hoja, y rellenarlo con un cero diría que ese mes no se
+   vendió nada. */
+var COLORES_ANIO=["var(--acento)","var(--amarilla)","var(--ok)","var(--malo)","var(--aviso)"];
+
+function grafMesesPorAnio(datos, mide){
+  var anios=[]; var valor={};
+  datos.forEach(function(d){
+    var a=d.ym.slice(0,4), m=+d.ym.slice(5,7);
+    if(anios.indexOf(a)<0) anios.push(a);
+    valor[a+"-"+m]=medidaDe(d, mide);
+  });
+  anios.sort();
+  if(!anios.length) return "";
+
+  var grupo=Math.max(46, anios.length*17+14);
+  var W=Math.max(420, 12*grupo+46), H=232, base=H-38, techo=20;
+  var vals=[];
+  Object.keys(valor).forEach(function(k){ if(valor[k]!=null) vals.push(valor[k]); });
+  var tope=Math.max.apply(null, vals.concat([1]));
+
+  /* Con euros, la barra sale de cero: media barra es media caja y eso
+     hay que poder verlo. Con porcentajes no: entre el 77 % y el 96 %
+     hay un mundo, pero saliendo de cero los palos quedan todos igual de
+     altos y el dibujo no dice nada. Ahí el suelo se pone un poco por
+     debajo del más bajo, y al lado se avisa de dónde empieza. */
+  var suelo=0;
+  if(mide==="pct" && vals.length){
+    var min=Math.min.apply(null, vals);
+    suelo=Math.max(0, Math.floor((min-4)/5)*5);
+  }
+  var alto=function(v){
+    if(tope<=suelo) return base-techo;
+    return (base-techo)*(v-suelo)/(tope-suelo);
+  };
+  var ancho=Math.min(15, (grupo-10)/anios.length-2);
+
+  var dibujo="";
+  for(var m=1;m<=12;m++){
+    var x0=30+(m-1)*grupo;
+    anios.forEach(function(a, i){
+      var v=valor[a+"-"+m];
+      if(v==null) return;
+      var h=alto(v), x=x0+(grupo-(anios.length*(ancho+2)))/2+i*(ancho+2);
+      dibujo+='<rect x="'+x.toFixed(1)+'" y="'+(base-h).toFixed(1)+'" width="'+ancho.toFixed(1)+
+        '" height="'+Math.max(0.6,h).toFixed(1)+'" fill="'+COLORES_ANIO[i%COLORES_ANIO.length]+
+        '" rx="1.5"><title>'+esc(MESES[m-1]+" "+a+": "+textoMedida(v, mide))+'</title></rect>';
+    });
+    dibujo+='<text x="'+(x0+grupo/2).toFixed(1)+'" y="'+(base+15)+'" text-anchor="middle" '+
+      'font-size="10" font-family="var(--mono)" fill="var(--muted)">'+MESES[m-1].slice(0,3)+'</text>';
+  }
+  return '<div class="grafico"><svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" '+
+    'role="img" aria-label="Cada mes, un palo por año">'+
+    '<line x1="22" y1="'+base+'" x2="'+(W-14)+'" y2="'+base+'" stroke="var(--linea)" stroke-width="1"/>'+
+    (suelo>0
+      ? '<text x="22" y="'+(base+15)+'" font-size="9.5" font-family="var(--mono)" '+
+        'fill="var(--muted)">'+suelo+'%</text>'
+      : "")+
+    dibujo+'</svg></div>'+
+    leyenda(anios.map(function(a,i){ return {nombre:a, color:COLORES_ANIO[i%COLORES_ANIO.length]}; }))+
+    (suelo>0 ? '<p class="nota" style="margin:8px 0 0">Los palos salen desde el '+suelo+
+      ' %, no desde cero: si no, del 77 al 96 % se verían todos iguales.</p>' : "");
+}
+
+/* Qué se está midiendo. Lo pidió con las cuatro cosas de la hoja, y la
+   proporción de tarjeta de propina, que es la que enseña la temporada. */
+var MEDIDAS=[
+  {id:"ventas",   nombre:"Ventas"},
+  {id:"visa",     nombre:"Visa"},
+  {id:"efectivo", nombre:"Efectivo"},
+  {id:"gastos",   nombre:"Pagos"},
+  {id:"porDia",   nombre:"Ventas al día"},
+  {id:"pct",      nombre:"% con tarjeta"}
+];
+function medidaDe(d, mide){
+  if(mide==="pct") return d.pct;
+  if(mide==="porDia") return d.porDia;
+  return d.t[mide];
+}
+function textoMedida(v, mide){
+  if(v==null) return "—";
+  return mide==="pct" ? num(v,0)+" %" : eur(v);
+}
+
 function leyenda(cosas){
   return '<div class="leyenda">'+cosas.map(function(c){
     return '<span><i style="background:'+c.color+'"></i>'+esc(c.nombre)+'</span>';
@@ -1721,7 +1813,22 @@ function verComparar(main){
     tarjetaEnCristiano(datos, anios, haceUnAnio)+
 
     '<div class="tarjeta" style="margin-bottom:16px">'+
-      '<div class="tarjeta-cab"><h2>Ventas de cada mes</h2>'+
+      '<div class="tarjeta-cab"><h2>Cada mes, año contra año</h2>'+
+        '<span class="pista">enero contra enero, agosto contra agosto</span></div>'+
+      '<div class="tarjeta-cuerpo">'+
+        '<div class="chips" style="margin:0 0 14px">'+
+          MEDIDAS.map(function(x){
+            return '<button class="chip" data-mide="'+x.id+'" aria-pressed="'+
+                   (ui.compMide===x.id)+'">'+esc(x.nombre)+'</button>';
+          }).join("")+
+        '</div>'+
+        grafMesesPorAnio(datos, ui.compMide)+
+        '<p class="nota" style="margin:12px 0 0">Los meses sin palo son los que no tienen hoja '+
+        'puesta todavía. Pasando por encima de cada palo sale la cifra.</p>'+
+      '</div></div>'+
+
+    '<div class="tarjeta" style="margin-bottom:16px">'+
+      '<div class="tarjeta-cab"><h2>Ventas mes a mes, en fila</h2>'+
         '<span class="pista">visa abajo, efectivo encima</span></div>'+
       '<div class="tarjeta-cuerpo">'+
         grafBarras(datos.map(function(d){
@@ -1814,6 +1921,11 @@ function verComparar(main){
       'de lo apuntado. La columna de días lo dice.</p></div>'+
     '</div>';
 
+  main.querySelectorAll("[data-mide]").forEach(function(b){
+    b.addEventListener("click", function(){
+      ui.compMide=b.getAttribute("data-mide"); pintar();
+    });
+  });
   main.querySelectorAll("[data-mes]").forEach(function(tr){
     tr.addEventListener("click", function(){
       ui.mes=tr.getAttribute("data-mes"); ui.dia=ui.mes+"-01"; ui.vista="mes"; pintar();

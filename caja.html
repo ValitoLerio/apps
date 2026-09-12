@@ -152,6 +152,14 @@ tfoot td{border-top:1px solid var(--linea);border-bottom:0;font-weight:600;backg
 .barra-fondo i{display:block;height:100%;background:var(--amarilla);border-radius:6px}
 
 /* ── Comparar: dibujos y frases ──────────────────────────────── */
+/* Las chapas de elegir qué se mide. Estaban en Pedidos y aquí no, así
+   que la elegida se veía igual que las demás. */
+.chips{display:flex;gap:7px;flex-wrap:wrap}
+.chip{border:1px solid var(--linea);background:var(--sup);color:var(--tinta2);border-radius:20px;
+      padding:6px 14px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
+.chip:hover{border-color:var(--muted)}
+.chip[aria-pressed="true"]{background:var(--acento);border-color:var(--acento);
+                           color:var(--acento-tinta);font-weight:600}
 .grafico{width:100%;overflow-x:auto}
 .grafico svg{width:100%;min-width:340px;height:auto;display:block}
 .leyenda{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:12.5px;color:var(--muted)}
@@ -208,7 +216,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609121124"></script>
+<script src="sync.js?v=202609121152"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -216,7 +224,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('caja').then(function(){
     var s = document.createElement('script');
-    s.src = 'caja.js?v=202609121124';
+    s.src = 'caja.js?v=202609121152';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar caja.js. Recarga la pagina.'; };
     document.body.appendChild(s);
