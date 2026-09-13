@@ -1108,6 +1108,9 @@ function nombreCeca(letra){
   var n=(typeof CATALOGO_2E_CECAS!=="undefined") ? CATALOGO_2E_CECAS[letra] : "";
   return n ? letra+" · "+n : letra;
 }
+function conFotoDelCatalogo(){
+  var n=0; catalogo().forEach(function(c){ if(c.foto) n++; }); return n;
+}
 function piezasDelCatalogo(){
   var n=0; catalogo().forEach(function(c){ n+=c.cecas?c.cecas.length:1; }); return n;
 }
@@ -1153,8 +1156,9 @@ function catFiltrado(){
   var mapa=fichasDelCatalogo();
   return catalogo().filter(function(c){
     var n=puestasDe(c, mapa), total=c.cecas?c.cecas.length:1;
-    if(ui.catFiltro==="faltan" && n>=total) return false;
-    if(ui.catFiltro==="tengo"  && n===0)    return false;
+    if(ui.catFiltro==="faltan"  && n>=total) return false;
+    if(ui.catFiltro==="tengo"   && n===0)    return false;
+    if(ui.catFiltro==="sinfoto" && c.foto)   return false;
     if(!texto) return true;
     return (c.pais+" "+c.anio+" "+c.tema+" "+c.serie).toLowerCase().indexOf(texto)>=0;
   });
@@ -1195,6 +1199,19 @@ function pintarCatalogo(){
         '<div class="n">las de '+hasta+' son las anunciadas</div></div>'+
     '</div>'+
 
+    (function(){
+      var con=conFotoDelCatalogo(), sin=catalogo().length-con;
+      if(!sin) return "";
+      var de2026=catalogo().filter(function(c){ return !c.foto && c.anio>=hasta; }).length;
+      /* Que falte una foto no es un fallo de la app: es que nadie la ha
+         publicado todavía. Mejor decirlo que dejar el hueco en blanco. */
+      return '<p class="nota" style="margin:-4px 0 16px">'+
+        con+' de '+catalogo().length+' llevan foto, la oficial del Banco Central Europeo. '+
+        'De las '+sin+' que no, '+de2026+' son las de '+hasta+': aún no han salido y el BCE '+
+        'no ha publicado la imagen. Las demás tampoco las tiene él. '+
+        'Con <strong>Sin foto</strong> las ves todas juntas.</p>';
+    })()+
+
     '<div class="filtros">'+
       '<div class="grupo">'+
         '<button data-cagrupa="pais" aria-pressed="'+(ui.catAgrupa!=="anio")+'">Por país</button>'+
@@ -1204,6 +1221,7 @@ function pintarCatalogo(){
         '<button data-cfil="todas"  aria-pressed="'+(ui.catFiltro==="todas")+'">Todas</button>'+
         '<button data-cfil="faltan" aria-pressed="'+(ui.catFiltro==="faltan")+'">Las que me faltan</button>'+
         '<button data-cfil="tengo"  aria-pressed="'+(ui.catFiltro==="tengo")+'">Las que tengo</button>'+
+        '<button data-cfil="sinfoto" aria-pressed="'+(ui.catFiltro==="sinfoto")+'">Sin foto</button>'+
       '</div>'+
       '<input class="buscador" id="catBusca" placeholder="Buscar por país, año o tema…" '+
         'value="'+esc(ui.catBusca||"")+'">'+
@@ -1523,8 +1541,9 @@ function esFiltrado(){
   return catalogoES().filter(function(c){
     if(bloque!=="todo" && c.bloque!==bloque) return false;
     var puesta=!!(mapa[c.id] && tengo(mapa[c.id]));
-    if(ui.esFiltro==="faltan" && puesta) return false;
-    if(ui.esFiltro==="tengo"  && !puesta) return false;
+    if(ui.esFiltro==="faltan"  && puesta) return false;
+    if(ui.esFiltro==="tengo"   && !puesta) return false;
+    if(ui.esFiltro==="sinfoto" && c.foto) return false;
     if(!texto) return true;
     return (c.grupo+" "+c.titulo+" "+c.detalle+" "+c.anio+" "+c.divisa).toLowerCase().indexOf(texto)>=0;
   });
@@ -1569,6 +1588,16 @@ function pintarCatalogoES(){
       }).join("")+
     '</div>'+
 
+    (function(){
+      var con=lista.filter(function(c){ return !!c.foto; }).length;
+      var sinBil=lista.filter(function(c){ return !c.foto && c.tipo==="billete"; }).length;
+      if(con===lista.length) return "";
+      return '<p class="nota" style="margin:-4px 0 16px">'+
+        con+' de '+lista.length+' llevan foto, de Wikimedia Commons y del Banco Central Europeo. '+
+        'Los '+sinBil+' billetes que van sin ella es porque el anexo de la Wikipedia no trae '+
+        'ninguna: están igual para marcarlos. Con <strong>Sin foto</strong> los ves juntos.</p>';
+    })()+
+
     '<div class="filtros">'+
       '<div class="grupo">'+
         '<button data-esag="epoca" aria-pressed="'+((ui.esAgrupa||"epoca")==="epoca")+'">Por época</button>'+
@@ -1584,6 +1613,7 @@ function pintarCatalogoES(){
         '<button data-esf="todas"  aria-pressed="'+((ui.esFiltro||"todas")==="todas")+'">Todas</button>'+
         '<button data-esf="faltan" aria-pressed="'+(ui.esFiltro==="faltan")+'">Las que me faltan</button>'+
         '<button data-esf="tengo"  aria-pressed="'+(ui.esFiltro==="tengo")+'">Las que tengo</button>'+
+        '<button data-esf="sinfoto" aria-pressed="'+(ui.esFiltro==="sinfoto")+'">Sin foto</button>'+
       '</div>'+
       '<input class="buscador" id="esBusca" placeholder="Buscar por año, valor o época…" '+
         'value="'+esc(ui.esBusca||"")+'">'+
