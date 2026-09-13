@@ -8,8 +8,8 @@
      Resto         todo lo demás, agrupado por país
 
    Y aparte, el Catálogo: la lista fija de todas las conmemorativas de
-   2 € que se han emitido (catalogo2e.js), para ir marcando cuáles
-   tienes sin escribir cada ficha a mano.
+   2 € que se han emitido (catalogo2e.js), con su foto oficial, para ir
+   marcando cuáles tienes sin escribir cada ficha a mano.
 
    Dentro de cada uno, monedas y billetes por separado.
 
@@ -269,7 +269,7 @@ function pintarResumen(){
         (t.estimado?eur(t.estimado):"—")+'</div><div class="n">lo que tú anotas</div></div>'+
       (hayCatalogo()
         ? '<div class="cifra"><div class="k">Conmemorativas 2 €</div><div class="v">'+
-          tengoDelCatalogo()+'</div><div class="n">de '+catalogo().length+
+          tengoDelCatalogo()+'</div><div class="n">de '+piezasDelCatalogo()+
           ' que hay en el catálogo</div></div>'
         : "")+
     '</div>'+
@@ -418,8 +418,12 @@ function tarjetaPieza(p){
   var esBillete=(p.tipo==="billete");
   var falta=!tengo(p);
   var cantidad=cuantas(p);
-  var lamina = p.foto
-    ? '<img src="'+esc(p.foto)+'" alt="">'
+  /* Si no le has puesto foto y la moneda viene del catálogo, se enseña
+     la oficial del BCE: así el álbum se ve lleno desde el primer día
+     sin guardar ni una imagen. */
+  var suFoto = fotoDePieza(p);
+  var lamina = suFoto
+    ? '<img src="'+esc(suFoto)+'" alt="" loading="lazy">'
     : (esBillete
         ? '<div class="papel"><span class="n">'+esc(facial(p.valor))+'</span>'+
           '<span class="u">'+esc(p.divisa||"")+'</span></div>'
@@ -1044,9 +1048,19 @@ function bajarArchivo(texto, nombre){
 
    Por eso marcar una casilla aquí no «apunta un sí» en ninguna lista
    aparte: crea la ficha de verdad, con el país, el año y el tema ya
-   puestos, y a partir de ahí se abre, se le pone la foto y se edita
-   como cualquier otra pieza. Y desmarcar borra esa ficha, salvo que
-   le hayas añadido algo, que entonces se avisa antes. */
+   puestos, y a partir de ahí se abre, se le pone tu foto y se edita
+   como cualquier otra pieza. Desmarcar borra esa ficha, salvo que le
+   hayas añadido algo, que entonces se avisa antes.
+
+   Las alemanas se acuñan en cinco cecas (A Berlín, D Múnich, F
+   Stuttgart, G Karlsruhe, J Hamburgo) y cada una es una pieza
+   distinta: van con cinco casillas, una por letra, y cada una crea su
+   propia ficha.
+
+   Las fotos son las oficiales del Banco Central Europeo y se piden a
+   su web según hacen falta: no se guarda ninguna en el álbum, así que
+   no engordan lo que viaja a GitHub. Sin internet no se ven, y las
+   monedas anunciadas que aún no han salido no tienen. */
 
 var catCache = null;
 
@@ -1055,7 +1069,8 @@ function hayCatalogo(){ return typeof CATALOGO_2E !== "undefined" && CATALOGO_2E
 function catalogo(){
   if(!hayCatalogo()) return [];
   if(!catCache) catCache = CATALOGO_2E.map(function(f){
-    return { id:f[0], anio:f[1], pais:f[2], tema:f[3], serie:f[4], conjunta:!!f[5] };
+    return { id:f[0], anio:f[1], pais:f[2], tema:f[3], serie:f[4],
+             conjunta:!!f[5], foto:f[6]||"", cecas:f[7]||"" };
   });
   return catCache;
 }
@@ -1064,8 +1079,36 @@ function delCatalogo(id){
   for(var i=0;i<l.length;i++) if(l[i].id===id) return l[i];
   return null;
 }
+function fotoDelCatalogo(c){
+  return (c && c.foto) ? CATALOGO_2E_FOTOS+c.foto : "";
+}
+/* La foto que le toca a una ficha del álbum: la tuya manda, y si no
+   la has puesto se enseña la del BCE. */
+function fotoDePieza(p){
+  if(p.foto) return p.foto;
+  if(!p.cat || !hayCatalogo()) return "";
+  return fotoDelCatalogo(delCatalogo(String(p.cat).split("-")[0]));
+}
 
-/* Las fichas del álbum que vienen del catálogo, por su id. */
+/* Cada moneda es una pieza, menos las alemanas, que son cinco: una
+   por ceca. La clave de cada pieza es la que va en `p.cat`. */
+function clavesDe(c){
+  if(!c.cecas) return [c.id];
+  return c.cecas.split("").map(function(x){ return c.id+"-"+x; });
+}
+function cecaDeClave(clave){
+  var p=String(clave).split("-");
+  return p.length>1 ? p[1] : "";
+}
+function nombreCeca(letra){
+  var n=(typeof CATALOGO_2E_CECAS!=="undefined") ? CATALOGO_2E_CECAS[letra] : "";
+  return n ? letra+" · "+n : letra;
+}
+function piezasDelCatalogo(){
+  var n=0; catalogo().forEach(function(c){ n+=c.cecas?c.cecas.length:1; }); return n;
+}
+
+/* Las fichas del álbum que vienen del catálogo, por su clave. */
 function fichasDelCatalogo(){
   var mapa={};
   todas().forEach(function(p){ if(p.cat) mapa[p.cat]=p; });
@@ -1073,7 +1116,14 @@ function fichasDelCatalogo(){
 }
 function tengoDelCatalogo(){
   var mapa=fichasDelCatalogo(), n=0;
-  catalogo().forEach(function(c){ if(mapa[c.id] && tengo(mapa[c.id])) n++; });
+  catalogo().forEach(function(c){
+    clavesDe(c).forEach(function(k){ if(mapa[k] && tengo(mapa[k])) n++; });
+  });
+  return n;
+}
+function puestasDe(c, mapa){
+  var n=0;
+  clavesDe(c).forEach(function(k){ if(mapa[k] && tengo(mapa[k])) n++; });
   return n;
 }
 
@@ -1085,10 +1135,11 @@ function fichaIntacta(p, c){
          (p.notas||"")===(c?c.tema:"");
 }
 
-function nuevaDelCatalogo(c){
-  return { id:uid(), cat:c.id, ambito:"euro", tipo:"moneda",
+function nuevaDelCatalogo(c, clave){
+  var letra=cecaDeClave(clave);
+  return { id:uid(), cat:clave, ambito:"euro", tipo:"moneda",
            valor:2, divisa:"Euro", anio:String(c.anio), pais:c.pais,
-           ceca:c.serie||"", conmemorativa:true,
+           ceca:(letra?nombreCeca(letra):(c.serie||"")), conmemorativa:true,
            notas:c.tema, tengo:true, cantidad:1, alta:hoyISO() };
 }
 
@@ -1096,9 +1147,9 @@ function catFiltrado(){
   var texto=(ui.catBusca||"").trim().toLowerCase();
   var mapa=fichasDelCatalogo();
   return catalogo().filter(function(c){
-    var puesta = !!(mapa[c.id] && tengo(mapa[c.id]));
-    if(ui.catFiltro==="faltan" && puesta) return false;
-    if(ui.catFiltro==="tengo"  && !puesta) return false;
+    var n=puestasDe(c, mapa), total=c.cecas?c.cecas.length:1;
+    if(ui.catFiltro==="faltan" && n>=total) return false;
+    if(ui.catFiltro==="tengo"  && n===0)    return false;
     if(!texto) return true;
     return (c.pais+" "+c.anio+" "+c.tema+" "+c.serie).toLowerCase().indexOf(texto)>=0;
   });
@@ -1114,16 +1165,16 @@ function pintarCatalogo(){
     return;
   }
 
-  var total=catalogo().length, mios=tengoDelCatalogo();
+  var total=piezasDelCatalogo(), mios=tengoDelCatalogo();
   var paises=[], aa={};
   catalogo().forEach(function(c){ if(!aa[c.pais]){ aa[c.pais]=1; paises.push(c.pais); } });
-  var desde=catalogo()[0].anio, hasta=catalogo()[total-1].anio;
+  var desde=catalogo()[0].anio, hasta=catalogo()[catalogo().length-1].anio;
 
   main.innerHTML=
     cabecera("Conmemorativas de 2 €",
-      "Todas las que se han emitido desde "+desde+", país por país y año por año. "+
-      "Marca la casilla de las que tengas y se te crea la ficha en el álbum, con el país, "+
-      "el año y el tema ya escritos; luego la abres en <strong>Euros</strong> y le pones la foto.",
+      "Todas las que se han emitido desde "+desde+", con su foto, país por país y año por año. "+
+      "Marca la casilla de las que tengas y se te crea la ficha en el álbum. "+
+      "Las alemanas llevan cinco casillas, una por ceca.",
       '<button class="btn" id="catBajar">Descargar la lista</button>')+
 
     '<div class="cifras">'+
@@ -1168,6 +1219,36 @@ function pintarCatalogo(){
   pintarListaCatalogo();
 }
 
+function laminaCatalogo(c){
+  var u=fotoDelCatalogo(c);
+  if(u) return '<img src="'+esc(u)+'" alt="" loading="lazy" '+
+    'style="width:46px;height:46px;border-radius:50%;object-fit:cover;'+
+    'background:var(--sup2);border:1px solid var(--linea);display:block">';
+  return '<div style="width:46px;height:46px;border-radius:50%;background:var(--sup2);'+
+    'border:1px dashed var(--linea);display:flex;align-items:center;justify-content:center;'+
+    'font-family:var(--mono);font-size:9px;color:var(--muted);text-align:center;'+
+    'line-height:1.1">sin<br>foto</div>';
+}
+
+function casillasCatalogo(c, mapa){
+  if(!c.cecas){
+    var k=c.id, puesta=!!(mapa[k] && tengo(mapa[k]));
+    return '<input type="checkbox" style="width:auto;margin:0" data-marca="'+esc(k)+'"'+
+           (puesta?" checked":"")+' aria-label="La tengo">';
+  }
+  /* Cinco cecas, cinco piezas: una casilla por letra, con la letra
+     escrita al lado para no tener que adivinar cuál es cuál. */
+  return '<div style="display:inline-flex;gap:10px;white-space:nowrap">'+
+    c.cecas.split("").map(function(l){
+      var k=c.id+"-"+l, puesta=!!(mapa[k] && tengo(mapa[k]));
+      return '<label title="'+esc(nombreCeca(l))+'" style="display:inline-flex;gap:3px;'+
+        'align-items:center;cursor:pointer;font-family:var(--mono);font-size:11px;'+
+        (puesta?'color:var(--acento);font-weight:600':'color:var(--muted)')+'">'+
+        '<input type="checkbox" style="width:auto;margin:0" data-marca="'+esc(k)+'"'+
+        (puesta?" checked":"")+'>'+l+'</label>';
+    }).join("")+'</div>';
+}
+
 function pintarListaCatalogo(){
   var caja=document.getElementById("catLista"); if(!caja) return;
   var lista=catFiltrado(), mapa=fichasDelCatalogo();
@@ -1191,30 +1272,30 @@ function pintarListaCatalogo(){
     indice[clave].monedas.push(c);
   });
 
-  caja.innerHTML=grupos.map(function(g, i){
+  caja.innerHTML=grupos.map(function(g){
     var suyas=catalogo().filter(function(c){
       return (porAnio ? String(c.anio) : c.pais)===g.clave;
     });
-    var puestas=suyas.filter(function(c){ return mapa[c.id] && tengo(mapa[c.id]); }).length;
+    var hay=0, tengoAqui=0;
+    suyas.forEach(function(c){ hay+=c.cecas?c.cecas.length:1; tengoAqui+=puestasDe(c,mapa); });
 
     return '<div class="grupoTitulo">'+esc(g.clave)+
       '<span class="mono" style="text-transform:none;letter-spacing:0" '+
-      'data-marcador="'+esc(g.clave)+'">'+puestas+' de '+suyas.length+'</span></div>'+
+      'data-marcador="'+esc(g.clave)+'">'+tengoAqui+' de '+hay+'</span></div>'+
       '<div class="tarjeta" style="margin-bottom:14px"><div class="tarjeta-cuerpo tabla-caja" '+
       'style="padding:0"><table><tbody>'+
       g.monedas.map(function(c){
-        var p=mapa[c.id], puesta=!!(p && tengo(p));
-        return '<tr data-cat="'+esc(c.id)+'"'+(puesta?'':' style="color:var(--muted)"')+'>'+
-          '<td style="width:34px;padding-right:0">'+
-            '<input type="checkbox" style="width:auto;margin:0" data-marca="'+esc(c.id)+'"'+
-            (puesta?" checked":"")+' aria-label="La tengo"></td>'+
+        var n=puestasDe(c,mapa), total=c.cecas?c.cecas.length:1;
+        return '<tr data-cat="'+esc(c.id)+'"'+(n?'':' style="color:var(--muted)"')+'>'+
+          '<td style="width:58px;padding-right:0">'+laminaCatalogo(c)+'</td>'+
           '<td class="mono" style="width:52px">'+(porAnio?esc(c.pais).slice(0,3).toUpperCase():c.anio)+'</td>'+
           '<td><strong>'+esc(c.tema)+'</strong>'+
-            (porAnio?'<div class="pista" style="font-size:11.5px;color:var(--muted)">'+esc(c.pais)+'</div>':'')+
+            (porAnio?'<div style="font-size:11.5px;color:var(--muted)">'+esc(c.pais)+'</div>':'')+
             (c.serie?'<div style="font-size:11.5px;color:var(--muted)">Serie: '+esc(c.serie)+'</div>':'')+
           '</td>'+
           '<td style="width:1%;white-space:nowrap">'+
             (c.conjunta?'<span class="chapa neutra">Conjunta</span>':'')+'</td>'+
+          '<td style="width:1%;white-space:nowrap">'+casillasCatalogo(c, mapa)+'</td>'+
         '</tr>';
       }).join("")+
       '</tbody></table></div></div>';
@@ -1227,14 +1308,16 @@ function pintarListaCatalogo(){
   });
 }
 
-function marcarDelCatalogo(id, quiero, casilla){
-  var c=delCatalogo(id); if(!c) return;
-  var p=fichasDelCatalogo()[id];
+function marcarDelCatalogo(clave, quiero, casilla){
+  var c=delCatalogo(String(clave).split("-")[0]); if(!c) return;
+  var p=fichasDelCatalogo()[clave];
+  var letra=cecaDeClave(clave);
+  var comoSeLlama=c.pais+" "+c.anio+(letra?" ("+letra+")":"");
 
   if(quiero){
-    if(p){ p.tengo=true; } else { libro.piezas.push(nuevaDelCatalogo(c)); }
+    if(p){ p.tengo=true; } else { libro.piezas.push(nuevaDelCatalogo(c, clave)); }
     guardar(); refrescarCatalogo();
-    avisar(c.pais+" "+c.anio+": ficha creada en el álbum");
+    avisar(comoSeLlama+": ficha creada en el álbum");
     return;
   }
 
@@ -1243,14 +1326,14 @@ function marcarDelCatalogo(id, quiero, casilla){
   if(fichaIntacta(p, c)){
     libro.piezas=todas().filter(function(x){ return x!==p; });
     guardar(); refrescarCatalogo();
-    avisar(c.pais+" "+c.anio+": fuera del álbum");
+    avisar(comoSeLlama+": fuera del álbum");
     return;
   }
 
   /* Esta ya no es la ficha que salió del catálogo: tiene cosas tuyas
      dentro, así que borrarla sin avisar sería perderlas. */
   if(casilla) casilla.checked=true;
-  confirmar("Quitar "+c.pais+" "+c.anio,
+  confirmar("Quitar "+comoSeLlama,
     '<p class="nota">A esta ficha le has puesto cosas tuyas'+
     (p.foto?", la foto entre ellas":"")+'. Si la quitas del álbum, se borra con todo '+
     'lo que tenga dentro.</p>'+
@@ -1259,37 +1342,45 @@ function marcarDelCatalogo(id, quiero, casilla){
     function(){
       libro.piezas=todas().filter(function(x){ return x!==p; });
       guardar(); refrescarCatalogo();
-      avisar(c.pais+" "+c.anio+": borrada");
+      avisar(comoSeLlama+": borrada");
     },
     {aceptar:"Borrarla", malo:true});
 }
 
 /* Repintar entero mandaría la página otra vez arriba del todo, y con
-   600 monedas eso es insufrible: se tocan sólo las cifras y la fila. */
+   seiscientas monedas eso es insufrible: se tocan sólo las cifras y
+   la fila. */
 function refrescarCatalogo(){
-  var total=catalogo().length, mios=tengoDelCatalogo(), mapa=fichasDelCatalogo();
+  var total=piezasDelCatalogo(), mios=tengoDelCatalogo(), mapa=fichasDelCatalogo();
   var a=document.getElementById("catTengo"), b=document.getElementById("catFaltan");
   if(a) a.textContent=mios;
   if(b){ b.textContent=total-mios; b.className="v"+((total-mios)?" malo":""); }
 
   var porAnio=(ui.catAgrupa==="anio");
   document.querySelectorAll("[data-marcador]").forEach(function(e){
-    var clave=e.dataset.marcador;
-    var suyas=catalogo().filter(function(c){ return (porAnio?String(c.anio):c.pais)===clave; });
-    var puestas=suyas.filter(function(c){ return mapa[c.id] && tengo(mapa[c.id]); }).length;
-    e.textContent=puestas+" de "+suyas.length;
+    var clave=e.dataset.marcador, hay=0, n=0;
+    catalogo().forEach(function(c){
+      if((porAnio?String(c.anio):c.pais)!==clave) return;
+      hay+=c.cecas?c.cecas.length:1; n+=puestasDe(c,mapa);
+    });
+    e.textContent=n+" de "+hay;
   });
   document.querySelectorAll("[data-cat]").forEach(function(fila){
-    var p=mapa[fila.dataset.cat], puesta=!!(p && tengo(p));
-    fila.style.color = puesta ? "" : "var(--muted)";
-    var casilla=fila.querySelector("[data-marca]");
-    if(casilla) casilla.checked=puesta;
+    var c=delCatalogo(fila.dataset.cat); if(!c) return;
+    fila.style.color = puestasDe(c,mapa) ? "" : "var(--muted)";
+    fila.querySelectorAll("[data-marca]").forEach(function(casilla){
+      var k=casilla.dataset.marca, puesta=!!(mapa[k] && tengo(mapa[k]));
+      casilla.checked=puesta;
+      var et=casilla.parentNode;
+      if(et && et.tagName==="LABEL"){
+        et.style.color = puesta ? "var(--acento)" : "var(--muted)";
+        et.style.fontWeight = puesta ? "600" : "";
+      }
+    });
   });
   /* Con un filtro puesto, la fila que acabas de cambiar ya no pinta
      nada en la lista: se rehace. */
   if(ui.catFiltro!=="todas") pintarListaCatalogo();
-  /* El rail no se repinta, así que sus dos cuentas se ponen a mano:
-     la del catálogo y la de Euros, que es donde caen las fichas. */
   var nav=document.querySelector('[data-vista="catalogo"] .cuenta');
   if(nav) nav.textContent=mios;
   var navE=document.querySelector('[data-vista="euro"] .cuenta');
@@ -1298,10 +1389,12 @@ function refrescarCatalogo(){
 
 function bajarCatalogo(){
   var mapa=fichasDelCatalogo();
-  var lineas=["Año\tPaís\tTema\tSerie\tConjunta\t¿La tengo?"];
+  var lineas=["Año\tPaís\tTema\tSerie\tCeca\tConjunta\t¿La tengo?"];
   catalogo().forEach(function(c){
-    lineas.push([c.anio, c.pais, c.tema, c.serie||"", c.conjunta?"sí":"",
-                 (mapa[c.id] && tengo(mapa[c.id]))?"sí":"no"].join("\t"));
+    clavesDe(c).forEach(function(k){
+      lineas.push([c.anio, c.pais, c.tema, c.serie||"", cecaDeClave(k),
+                   c.conjunta?"sí":"", (mapa[k] && tengo(mapa[k]))?"sí":"no"].join("\t"));
+    });
   });
   bajarArchivo(lineas.join("\n"), "conmemorativas-2-euros.txt");
 }
