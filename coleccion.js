@@ -7,6 +7,10 @@
      Euros         por país y año, con las conmemorativas aparte
      Resto         todo lo demás, agrupado por país
 
+   Y aparte, el Catálogo: la lista fija de todas las conmemorativas de
+   2 € que se han emitido (catalogo2e.js), para ir marcando cuáles
+   tienes sin escribir cada ficha a mano.
+
    Dentro de cada uno, monedas y billetes por separado.
 
    Una pieza puede estar en el álbum o estar en la lista de las que
@@ -52,7 +56,8 @@ var PAISES_EURO = ["Alemania","Andorra","Austria","Bélgica","Chipre","Croacia",
 var DIVISAS_ESPANA = ["Peseta","Euro","Real","Escudo","Céntimo","Maravedí"];
 
 var libro = null;
-var ui = { vista:"resumen", tipo:"todo", busca:"", soloFaltan:false, orden:"pais" };
+var ui = { vista:"resumen", tipo:"todo", busca:"", soloFaltan:false, orden:"pais",
+           catAgrupa:"pais", catFiltro:"todas", catBusca:"" };
 
 /* ══════════════════════════════════════════════════════════════
    UTILIDADES
@@ -190,6 +195,7 @@ function pintar(){
       boton("espana", "España",  delAmbito("espana").length)+
       boton("euro",   "Euros",   delAmbito("euro").length)+
       boton("mundo",  "Resto del mundo", delAmbito("mundo").length)+
+      boton("catalogo","Catálogo 2 €", hayCatalogo()?tengoDelCatalogo():null)+
       boton("ajustes","Ajustes", null)+
       '<div class="pie-rail">'+
         '<span style="font-size:11px;color:var(--muted)" id="estadoSync">Guardado en GitHub</span>'+
@@ -206,6 +212,7 @@ function pintar(){
 
   if(ui.vista==="resumen") pintarResumen();
   else if(ui.vista==="ajustes") pintarAjustes();
+  else if(ui.vista==="catalogo") pintarCatalogo();
   else pintarAmbito(ui.vista);
 }
 
@@ -260,6 +267,11 @@ function pintarResumen(){
         t.faltan+'</div><div class="n">apuntadas para buscar</div></div>'+
       '<div class="cifra"><div class="k">Valor estimado</div><div class="v">'+
         (t.estimado?eur(t.estimado):"—")+'</div><div class="n">lo que tú anotas</div></div>'+
+      (hayCatalogo()
+        ? '<div class="cifra"><div class="k">Conmemorativas 2 €</div><div class="v">'+
+          tengoDelCatalogo()+'</div><div class="n">de '+catalogo().length+
+          ' que hay en el catálogo</div></div>'
+        : "")+
     '</div>'+
 
     '<div class="tarjeta" style="margin-bottom:16px">'+
@@ -1020,6 +1032,278 @@ function bajarArchivo(texto, nombre){
   a.href=url; a.download=nombre;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   EL CATÁLOGO DE LAS CONMEMORATIVAS DE 2 €
+   ══════════════════════════════════════════════════════════════
+   El catálogo (catalogo2e.js) es una lista fija con todas las que se
+   han emitido: no se toca nunca y no es tuya. Tuya es la ficha del
+   álbum, que se ata a su hueco del catálogo con `p.cat`.
+
+   Por eso marcar una casilla aquí no «apunta un sí» en ninguna lista
+   aparte: crea la ficha de verdad, con el país, el año y el tema ya
+   puestos, y a partir de ahí se abre, se le pone la foto y se edita
+   como cualquier otra pieza. Y desmarcar borra esa ficha, salvo que
+   le hayas añadido algo, que entonces se avisa antes. */
+
+var catCache = null;
+
+function hayCatalogo(){ return typeof CATALOGO_2E !== "undefined" && CATALOGO_2E.length>0; }
+
+function catalogo(){
+  if(!hayCatalogo()) return [];
+  if(!catCache) catCache = CATALOGO_2E.map(function(f){
+    return { id:f[0], anio:f[1], pais:f[2], tema:f[3], serie:f[4], conjunta:!!f[5] };
+  });
+  return catCache;
+}
+function delCatalogo(id){
+  var l=catalogo();
+  for(var i=0;i<l.length;i++) if(l[i].id===id) return l[i];
+  return null;
+}
+
+/* Las fichas del álbum que vienen del catálogo, por su id. */
+function fichasDelCatalogo(){
+  var mapa={};
+  todas().forEach(function(p){ if(p.cat) mapa[p.cat]=p; });
+  return mapa;
+}
+function tengoDelCatalogo(){
+  var mapa=fichasDelCatalogo(), n=0;
+  catalogo().forEach(function(c){ if(mapa[c.id] && tengo(mapa[c.id])) n++; });
+  return n;
+}
+
+/* Una ficha «tal cual salió del catálogo» se puede borrar sin preguntar;
+   si le has puesto foto, precio o notas tuyas, ya no. */
+function fichaIntacta(p, c){
+  return !p.foto && !p.pagado && !p.estimado && !p.origen && !p.estado &&
+         (Math.max(1,+p.cantidad||1)===1) &&
+         (p.notas||"")===(c?c.tema:"");
+}
+
+function nuevaDelCatalogo(c){
+  return { id:uid(), cat:c.id, ambito:"euro", tipo:"moneda",
+           valor:2, divisa:"Euro", anio:String(c.anio), pais:c.pais,
+           ceca:c.serie||"", conmemorativa:true,
+           notas:c.tema, tengo:true, cantidad:1, alta:hoyISO() };
+}
+
+function catFiltrado(){
+  var texto=(ui.catBusca||"").trim().toLowerCase();
+  var mapa=fichasDelCatalogo();
+  return catalogo().filter(function(c){
+    var puesta = !!(mapa[c.id] && tengo(mapa[c.id]));
+    if(ui.catFiltro==="faltan" && puesta) return false;
+    if(ui.catFiltro==="tengo"  && !puesta) return false;
+    if(!texto) return true;
+    return (c.pais+" "+c.anio+" "+c.tema+" "+c.serie).toLowerCase().indexOf(texto)>=0;
+  });
+}
+
+function pintarCatalogo(){
+  var main=document.getElementById("main");
+
+  if(!hayCatalogo()){
+    main.innerHTML=cabecera("Conmemorativas de 2 €","")+
+      '<div class="vacio"><strong>El catálogo no se ha cargado</strong>'+
+      'Falta el archivo catalogo2e.js. Recarga la página.</div>';
+    return;
+  }
+
+  var total=catalogo().length, mios=tengoDelCatalogo();
+  var paises=[], aa={};
+  catalogo().forEach(function(c){ if(!aa[c.pais]){ aa[c.pais]=1; paises.push(c.pais); } });
+  var desde=catalogo()[0].anio, hasta=catalogo()[total-1].anio;
+
+  main.innerHTML=
+    cabecera("Conmemorativas de 2 €",
+      "Todas las que se han emitido desde "+desde+", país por país y año por año. "+
+      "Marca la casilla de las que tengas y se te crea la ficha en el álbum, con el país, "+
+      "el año y el tema ya escritos; luego la abres en <strong>Euros</strong> y le pones la foto.",
+      '<button class="btn" id="catBajar">Descargar la lista</button>')+
+
+    '<div class="cifras">'+
+      '<div class="cifra"><div class="k">Las tengo</div>'+
+        '<div class="v acento" id="catTengo">'+mios+'</div>'+
+        '<div class="n">de '+total+' que hay</div></div>'+
+      '<div class="cifra"><div class="k">Me faltan</div>'+
+        '<div class="v'+((total-mios)?' malo':'')+'" id="catFaltan">'+(total-mios)+'</div>'+
+        '<div class="n">para tenerlas todas</div></div>'+
+      '<div class="cifra"><div class="k">Países</div><div class="v">'+paises.length+'</div>'+
+        '<div class="n">los que han emitido</div></div>'+
+      '<div class="cifra"><div class="k">Años</div><div class="v">'+desde+'–'+hasta+'</div>'+
+        '<div class="n">las de '+hasta+' son las anunciadas</div></div>'+
+    '</div>'+
+
+    '<div class="filtros">'+
+      '<div class="grupo">'+
+        '<button data-cagrupa="pais" aria-pressed="'+(ui.catAgrupa!=="anio")+'">Por país</button>'+
+        '<button data-cagrupa="anio" aria-pressed="'+(ui.catAgrupa==="anio")+'">Por año</button>'+
+      '</div>'+
+      '<div class="grupo">'+
+        '<button data-cfil="todas"  aria-pressed="'+(ui.catFiltro==="todas")+'">Todas</button>'+
+        '<button data-cfil="faltan" aria-pressed="'+(ui.catFiltro==="faltan")+'">Las que me faltan</button>'+
+        '<button data-cfil="tengo"  aria-pressed="'+(ui.catFiltro==="tengo")+'">Las que tengo</button>'+
+      '</div>'+
+      '<input class="buscador" id="catBusca" placeholder="Buscar por país, año o tema…" '+
+        'value="'+esc(ui.catBusca||"")+'">'+
+    '</div>'+
+
+    '<div id="catLista"></div>';
+
+  main.querySelectorAll("[data-cagrupa]").forEach(function(b){
+    b.addEventListener("click", function(){ ui.catAgrupa=b.dataset.cagrupa; pintarCatalogo(); });
+  });
+  main.querySelectorAll("[data-cfil]").forEach(function(b){
+    b.addEventListener("click", function(){ ui.catFiltro=b.dataset.cfil; pintarCatalogo(); });
+  });
+  var bus=document.getElementById("catBusca");
+  bus.addEventListener("input", function(){ ui.catBusca=bus.value; pintarListaCatalogo(); });
+  document.getElementById("catBajar").addEventListener("click", bajarCatalogo);
+
+  pintarListaCatalogo();
+}
+
+function pintarListaCatalogo(){
+  var caja=document.getElementById("catLista"); if(!caja) return;
+  var lista=catFiltrado(), mapa=fichasDelCatalogo();
+
+  if(!lista.length){
+    caja.innerHTML='<div class="vacio"><strong>Nada que enseñar</strong>'+
+      'Con lo que has escrito no sale ninguna. Prueba con otra cosa.</div>';
+    return;
+  }
+
+  /* Por país van ordenadas por año, y por año van ordenadas por país:
+     en los dos casos, lo que no es el título del grupo. */
+  var porAnio = (ui.catAgrupa==="anio");
+  var grupos=[], indice={};
+  lista.slice().sort(function(a,b){
+    return porAnio ? (a.anio-b.anio) || a.pais.localeCompare(b.pais,"es")
+                   : a.pais.localeCompare(b.pais,"es") || (a.anio-b.anio);
+  }).forEach(function(c){
+    var clave = porAnio ? String(c.anio) : c.pais;
+    if(!indice[clave]){ indice[clave]={clave:clave, monedas:[]}; grupos.push(indice[clave]); }
+    indice[clave].monedas.push(c);
+  });
+
+  caja.innerHTML=grupos.map(function(g, i){
+    var suyas=catalogo().filter(function(c){
+      return (porAnio ? String(c.anio) : c.pais)===g.clave;
+    });
+    var puestas=suyas.filter(function(c){ return mapa[c.id] && tengo(mapa[c.id]); }).length;
+
+    return '<div class="grupoTitulo">'+esc(g.clave)+
+      '<span class="mono" style="text-transform:none;letter-spacing:0" '+
+      'data-marcador="'+esc(g.clave)+'">'+puestas+' de '+suyas.length+'</span></div>'+
+      '<div class="tarjeta" style="margin-bottom:14px"><div class="tarjeta-cuerpo tabla-caja" '+
+      'style="padding:0"><table><tbody>'+
+      g.monedas.map(function(c){
+        var p=mapa[c.id], puesta=!!(p && tengo(p));
+        return '<tr data-cat="'+esc(c.id)+'"'+(puesta?'':' style="color:var(--muted)"')+'>'+
+          '<td style="width:34px;padding-right:0">'+
+            '<input type="checkbox" style="width:auto;margin:0" data-marca="'+esc(c.id)+'"'+
+            (puesta?" checked":"")+' aria-label="La tengo"></td>'+
+          '<td class="mono" style="width:52px">'+(porAnio?esc(c.pais).slice(0,3).toUpperCase():c.anio)+'</td>'+
+          '<td><strong>'+esc(c.tema)+'</strong>'+
+            (porAnio?'<div class="pista" style="font-size:11.5px;color:var(--muted)">'+esc(c.pais)+'</div>':'')+
+            (c.serie?'<div style="font-size:11.5px;color:var(--muted)">Serie: '+esc(c.serie)+'</div>':'')+
+          '</td>'+
+          '<td style="width:1%;white-space:nowrap">'+
+            (c.conjunta?'<span class="chapa neutra">Conjunta</span>':'')+'</td>'+
+        '</tr>';
+      }).join("")+
+      '</tbody></table></div></div>';
+  }).join("");
+
+  caja.querySelectorAll("[data-marca]").forEach(function(casilla){
+    casilla.addEventListener("change", function(){
+      marcarDelCatalogo(casilla.dataset.marca, casilla.checked, casilla);
+    });
+  });
+}
+
+function marcarDelCatalogo(id, quiero, casilla){
+  var c=delCatalogo(id); if(!c) return;
+  var p=fichasDelCatalogo()[id];
+
+  if(quiero){
+    if(p){ p.tengo=true; } else { libro.piezas.push(nuevaDelCatalogo(c)); }
+    guardar(); refrescarCatalogo();
+    avisar(c.pais+" "+c.anio+": ficha creada en el álbum");
+    return;
+  }
+
+  if(!p){ refrescarCatalogo(); return; }
+
+  if(fichaIntacta(p, c)){
+    libro.piezas=todas().filter(function(x){ return x!==p; });
+    guardar(); refrescarCatalogo();
+    avisar(c.pais+" "+c.anio+": fuera del álbum");
+    return;
+  }
+
+  /* Esta ya no es la ficha que salió del catálogo: tiene cosas tuyas
+     dentro, así que borrarla sin avisar sería perderlas. */
+  if(casilla) casilla.checked=true;
+  confirmar("Quitar "+c.pais+" "+c.anio,
+    '<p class="nota">A esta ficha le has puesto cosas tuyas'+
+    (p.foto?", la foto entre ellas":"")+'. Si la quitas del álbum, se borra con todo '+
+    'lo que tenga dentro.</p>'+
+    '<p class="nota">Si sólo quieres apuntarla como pendiente, déjala y desmarca '+
+    '«la tengo» al abrirla: así se queda en la lista de las que buscas.</p>',
+    function(){
+      libro.piezas=todas().filter(function(x){ return x!==p; });
+      guardar(); refrescarCatalogo();
+      avisar(c.pais+" "+c.anio+": borrada");
+    },
+    {aceptar:"Borrarla", malo:true});
+}
+
+/* Repintar entero mandaría la página otra vez arriba del todo, y con
+   600 monedas eso es insufrible: se tocan sólo las cifras y la fila. */
+function refrescarCatalogo(){
+  var total=catalogo().length, mios=tengoDelCatalogo(), mapa=fichasDelCatalogo();
+  var a=document.getElementById("catTengo"), b=document.getElementById("catFaltan");
+  if(a) a.textContent=mios;
+  if(b){ b.textContent=total-mios; b.className="v"+((total-mios)?" malo":""); }
+
+  var porAnio=(ui.catAgrupa==="anio");
+  document.querySelectorAll("[data-marcador]").forEach(function(e){
+    var clave=e.dataset.marcador;
+    var suyas=catalogo().filter(function(c){ return (porAnio?String(c.anio):c.pais)===clave; });
+    var puestas=suyas.filter(function(c){ return mapa[c.id] && tengo(mapa[c.id]); }).length;
+    e.textContent=puestas+" de "+suyas.length;
+  });
+  document.querySelectorAll("[data-cat]").forEach(function(fila){
+    var p=mapa[fila.dataset.cat], puesta=!!(p && tengo(p));
+    fila.style.color = puesta ? "" : "var(--muted)";
+    var casilla=fila.querySelector("[data-marca]");
+    if(casilla) casilla.checked=puesta;
+  });
+  /* Con un filtro puesto, la fila que acabas de cambiar ya no pinta
+     nada en la lista: se rehace. */
+  if(ui.catFiltro!=="todas") pintarListaCatalogo();
+  /* El rail no se repinta, así que sus dos cuentas se ponen a mano:
+     la del catálogo y la de Euros, que es donde caen las fichas. */
+  var nav=document.querySelector('[data-vista="catalogo"] .cuenta');
+  if(nav) nav.textContent=mios;
+  var navE=document.querySelector('[data-vista="euro"] .cuenta');
+  if(navE) navE.textContent=delAmbito("euro").length;
+}
+
+function bajarCatalogo(){
+  var mapa=fichasDelCatalogo();
+  var lineas=["Año\tPaís\tTema\tSerie\tConjunta\t¿La tengo?"];
+  catalogo().forEach(function(c){
+    lineas.push([c.anio, c.pais, c.tema, c.serie||"", c.conjunta?"sí":"",
+                 (mapa[c.id] && tengo(mapa[c.id]))?"sí":"no"].join("\t"));
+  });
+  bajarArchivo(lineas.join("\n"), "conmemorativas-2-euros.txt");
 }
 
 /* ══════════════════════════════════════════════════════════════
