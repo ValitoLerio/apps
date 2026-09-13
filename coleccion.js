@@ -1073,7 +1073,7 @@ function catalogo(){
   if(!hayCatalogo()) return [];
   if(!catCache) catCache = CATALOGO_2E.map(function(f){
     return { id:f[0], anio:f[1], pais:f[2], tema:f[3], serie:f[4],
-             conjunta:!!f[5], foto:f[6]||"", cecas:f[7]||"" };
+             conjunta:!!f[5], foto:f[6]||"", cecas:f[7]||"", fuente:f[8]||"" };
   });
   return catCache;
 }
@@ -1082,8 +1082,12 @@ function delCatalogo(id){
   for(var i=0;i<l.length;i++) if(l[i].id===id) return l[i];
   return null;
 }
+/* Casi todas las fotos se piden a la web del BCE. Las pocas que él no
+   ha publicado las saqué del Diario Oficial de la UE y viven en este
+   mismo repositorio: ésas se reconocen porque la ruta ya es de aquí. */
 function fotoDelCatalogo(c){
-  return (c && c.foto) ? CATALOGO_2E_FOTOS+c.foto : "";
+  if(!c || !c.foto) return "";
+  return /^(fotos2e\/|https?:)/.test(c.foto) ? c.foto : CATALOGO_2E_FOTOS+c.foto;
 }
 /* La foto que le toca a una ficha del álbum: la tuya manda, y si no
    la has puesto se enseña la del BCE. */
@@ -1284,7 +1288,17 @@ function engancharFotos(caja){
 }
 
 function laminaCatalogo(c){
-  return marcoFoto(fotoDelCatalogo(c), c.pais+" "+c.anio+" · "+c.tema, false);
+  var u=fotoDelCatalogo(c);
+  if(u) return marcoFoto(u, c.pais+" "+c.anio+" · "+c.tema, false);
+  /* Sin foto pero con una página donde verla, mejor el enlace que un
+     hueco mudo. */
+  if(c.fuente) return '<a href="'+esc(c.fuente)+'" target="_blank" rel="noopener" '+
+    'title="Verla en la página de donde viene" '+
+    'style="width:76px;height:48px;border-radius:7px;background:var(--sup2);'+
+    'border:1px dashed var(--linea);display:flex;align-items:center;justify-content:center;'+
+    'font-family:var(--mono);font-size:9px;color:var(--acento);text-decoration:none;'+
+    'text-align:center;line-height:1.2">ver<br>foto ↗</a>';
+  return marcoFoto("", "", false);
 }
 
 function casillasCatalogo(c, mapa){
