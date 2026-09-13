@@ -57,7 +57,8 @@ var DIVISAS_ESPANA = ["Peseta","Euro","Real","Escudo","Céntimo","Maravedí"];
 
 var libro = null;
 var ui = { vista:"resumen", tipo:"todo", busca:"", soloFaltan:false, orden:"pais",
-           catAgrupa:"pais", catFiltro:"todas", catBusca:"" };
+           catAgrupa:"pais", catFiltro:"todas", catBusca:"",
+           esBloque:"todo", esFiltro:"todas", esBusca:"", esAgrupa:"epoca" };
 
 /* ══════════════════════════════════════════════════════════════
    UTILIDADES
@@ -196,6 +197,7 @@ function pintar(){
       boton("euro",   "Euros",   delAmbito("euro").length)+
       boton("mundo",  "Resto del mundo", delAmbito("mundo").length)+
       boton("catalogo","Catálogo 2 €", hayCatalogo()?tengoDelCatalogo():null)+
+      boton("catalogoes","Catálogo España", hayCatalogoES()?tengoDeES():null)+
       boton("ajustes","Ajustes", null)+
       '<div class="pie-rail">'+
         '<span style="font-size:11px;color:var(--muted)" id="estadoSync">Guardado en GitHub</span>'+
@@ -213,6 +215,7 @@ function pintar(){
   if(ui.vista==="resumen") pintarResumen();
   else if(ui.vista==="ajustes") pintarAjustes();
   else if(ui.vista==="catalogo") pintarCatalogo();
+  else if(ui.vista==="catalogoes") pintarCatalogoES();
   else pintarAmbito(ui.vista);
 }
 
@@ -1086,8 +1089,9 @@ function fotoDelCatalogo(c){
    la has puesto se enseña la del BCE. */
 function fotoDePieza(p){
   if(p.foto) return p.foto;
-  if(!p.cat || !hayCatalogo()) return "";
-  return fotoDelCatalogo(delCatalogo(String(p.cat).split("-")[0]));
+  if(!p.cat) return "";
+  var it=itemDeCatalogo(String(p.cat).split("-")[0]);
+  return it ? it.foto : "";
 }
 
 /* Cada moneda es una pieza, menos las alemanas, que son cinco: una
@@ -1129,18 +1133,19 @@ function puestasDe(c, mapa){
 
 /* Una ficha «tal cual salió del catálogo» se puede borrar sin preguntar;
    si le has puesto foto, precio o notas tuyas, ya no. */
-function fichaIntacta(p, c){
+function fichaIntacta(p, item){
   return !p.foto && !p.pagado && !p.estimado && !p.origen && !p.estado &&
          (Math.max(1,+p.cantidad||1)===1) &&
-         (p.notas||"")===(c?c.tema:"");
+         (p.notas||"")===(item?item.notas:"");
 }
 
-function nuevaDelCatalogo(c, clave){
+function nuevaDelCatalogo(item, clave){
   var letra=cecaDeClave(clave);
-  return { id:uid(), cat:clave, ambito:"euro", tipo:"moneda",
-           valor:2, divisa:"Euro", anio:String(c.anio), pais:c.pais,
-           ceca:(letra?nombreCeca(letra):(c.serie||"")), conmemorativa:true,
-           notas:c.tema, tengo:true, cantidad:1, alta:hoyISO() };
+  var f=item.ficha, p={ id:uid(), cat:clave, tengo:true, cantidad:1, alta:hoyISO(),
+                        notas:item.notas };
+  Object.keys(f).forEach(function(k){ p[k]=f[k]; });
+  if(letra) p.ceca=nombreCeca(letra);
+  return p;
 }
 
 function catFiltrado(){
@@ -1309,23 +1314,23 @@ function pintarListaCatalogo(){
 }
 
 function marcarDelCatalogo(clave, quiero, casilla){
-  var c=delCatalogo(String(clave).split("-")[0]); if(!c) return;
+  var item=itemDeCatalogo(String(clave).split("-")[0]); if(!item) return;
   var p=fichasDelCatalogo()[clave];
   var letra=cecaDeClave(clave);
-  var comoSeLlama=c.pais+" "+c.anio+(letra?" ("+letra+")":"");
+  var comoSeLlama=item.comoSeLlama+(letra?" ("+letra+")":"");
 
   if(quiero){
-    if(p){ p.tengo=true; } else { libro.piezas.push(nuevaDelCatalogo(c, clave)); }
-    guardar(); refrescarCatalogo();
+    if(p){ p.tengo=true; } else { libro.piezas.push(nuevaDelCatalogo(item, clave)); }
+    guardar(); refrescarTodo();
     avisar(comoSeLlama+": ficha creada en el álbum");
     return;
   }
 
-  if(!p){ refrescarCatalogo(); return; }
+  if(!p){ refrescarTodo(); return; }
 
-  if(fichaIntacta(p, c)){
+  if(fichaIntacta(p, item)){
     libro.piezas=todas().filter(function(x){ return x!==p; });
-    guardar(); refrescarCatalogo();
+    guardar(); refrescarTodo();
     avisar(comoSeLlama+": fuera del álbum");
     return;
   }
@@ -1341,7 +1346,7 @@ function marcarDelCatalogo(clave, quiero, casilla){
     '«la tengo» al abrirla: así se queda en la lista de las que buscas.</p>',
     function(){
       libro.piezas=todas().filter(function(x){ return x!==p; });
-      guardar(); refrescarCatalogo();
+      guardar(); refrescarTodo();
       avisar(comoSeLlama+": borrada");
     },
     {aceptar:"Borrarla", malo:true});
@@ -1387,6 +1392,13 @@ function refrescarCatalogo(){
   if(navE) navE.textContent=delAmbito("euro").length;
 }
 
+/* Marcar se hace desde cualquiera de los dos catálogos, así que se
+   refresca el que esté en pantalla. */
+function refrescarTodo(){
+  if(document.getElementById("catLista")) refrescarCatalogo();
+  if(document.getElementById("esLista"))  refrescarCatalogoES();
+}
+
 function bajarCatalogo(){
   var mapa=fichasDelCatalogo();
   var lineas=["Año\tPaís\tTema\tSerie\tCeca\tConjunta\t¿La tengo?"];
@@ -1397,6 +1409,266 @@ function bajarCatalogo(){
     });
   });
   bajarArchivo(lineas.join("\n"), "conmemorativas-2-euros.txt");
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   EL CATÁLOGO DE ESPAÑA
+   ══════════════════════════════════════════════════════════════
+   Lo mismo que el de las conmemorativas, pero con lo de aquí: las
+   monedas de peseta desde 1869, las de euro año por año y los
+   billetes desde 1783. Comparte con él la maquinaria de marcar: una
+   casilla crea la ficha de verdad en el álbum y desmarcarla la quita.
+
+   La diferencia está en lo que hay detrás. El anexo de la peseta va
+   por TIPO de moneda, no por año: «1 Peseta · 1966-1975» es el cuño
+   entero, con todas sus estrellas. Por eso aquí no se puede contar
+   pieza por pieza como en las alemanas, y la cuenta que sale es de
+   tipos, no de monedas. */
+
+var catEsCache = null;
+
+function hayCatalogoES(){ return typeof CATALOGO_ES !== "undefined" && CATALOGO_ES.length>0; }
+
+function catalogoES(){
+  if(!hayCatalogoES()) return [];
+  if(!catEsCache) catEsCache = CATALOGO_ES.map(function(f){
+    return { id:f[0], bloque:f[1], grupo:f[2], titulo:f[3], detalle:f[4], foto:f[5],
+             tipo:f[6], valor:f[7], divisa:f[8], anio:f[9] };
+  });
+  return catEsCache;
+}
+/* Para agrupar por año hace falta un año y no un texto: «1966-1975» o
+   «1869*68» valen por el primero de cuatro cifras que traigan. Los
+   billetes antiguos muchas veces sólo lo llevan en la emisión. */
+function anioDeES(c){
+  var m=String(c.anio||"").match(/\d{4}/);
+  if(!m) m=String(c.detalle||"").match(/\d{4}/);
+  if(!m) m=String(c.grupo||"").match(/\d{4}/);
+  return m ? m[0] : "";
+}
+function claveGrupoES(c){
+  if((ui.esAgrupa||"epoca")!=="anio") return c.grupo;
+  var a=anioDeES(c);
+  return a || "Sin año";
+}
+
+function delCatalogoES(id){
+  var l=catalogoES();
+  for(var i=0;i<l.length;i++) if(l[i].id===id) return l[i];
+  return null;
+}
+
+/* Los dos catálogos hablan el mismo idioma a partir de aquí: lo que
+   marcar necesita saber de una pieza, venga de donde venga. */
+function itemDeCatalogo(id){
+  var c=hayCatalogo()?delCatalogo(id):null;
+  if(c) return { id:c.id, cecas:c.cecas, notas:c.tema, foto:fotoDelCatalogo(c),
+                 comoSeLlama:c.pais+" "+c.anio,
+                 ficha:{ ambito:"euro", tipo:"moneda", valor:2, divisa:"Euro",
+                         anio:String(c.anio), pais:c.pais, ceca:c.serie||"",
+                         conmemorativa:true } };
+  var e=hayCatalogoES()?delCatalogoES(id):null;
+  if(e) return { id:e.id, cecas:"", notas:e.titulo+(e.detalle?" · "+e.detalle:""),
+                 foto:e.foto,
+                 comoSeLlama:e.titulo+(e.anio?" "+e.anio:""),
+                 ficha:{ ambito:"espana", tipo:e.tipo,
+                         valor:(e.valor==null?"":e.valor), divisa:e.divisa||"",
+                         anio:e.anio||"", pais:"España", ceca:"",
+                         conmemorativa:false } };
+  return null;
+}
+
+function esBloque(x){ return ui.esBloque||"todo"; }
+
+function esFiltrado(){
+  var texto=(ui.esBusca||"").trim().toLowerCase();
+  var mapa=fichasDelCatalogo();
+  var bloque=ui.esBloque||"todo";
+  return catalogoES().filter(function(c){
+    if(bloque!=="todo" && c.bloque!==bloque) return false;
+    var puesta=!!(mapa[c.id] && tengo(mapa[c.id]));
+    if(ui.esFiltro==="faltan" && puesta) return false;
+    if(ui.esFiltro==="tengo"  && !puesta) return false;
+    if(!texto) return true;
+    return (c.grupo+" "+c.titulo+" "+c.detalle+" "+c.anio+" "+c.divisa).toLowerCase().indexOf(texto)>=0;
+  });
+}
+
+function tengoDeES(){
+  var mapa=fichasDelCatalogo(), n=0;
+  catalogoES().forEach(function(c){ if(mapa[c.id] && tengo(mapa[c.id])) n++; });
+  return n;
+}
+
+function pintarCatalogoES(){
+  var main=document.getElementById("main");
+
+  if(!hayCatalogoES()){
+    main.innerHTML=cabecera("Catálogo de España","")+
+      '<div class="vacio"><strong>El catálogo no se ha cargado</strong>'+
+      'Falta el archivo catalogoes.js. Recarga la página.</div>';
+    return;
+  }
+
+  var lista=catalogoES(), total=lista.length, mios=tengoDeES();
+  var cuenta={};
+  lista.forEach(function(c){ cuenta[c.bloque]=(cuenta[c.bloque]||0)+1; });
+  var bloques=Object.keys(cuenta);
+
+  main.innerHTML=
+    cabecera("Catálogo de España",
+      "Las monedas de peseta desde 1869, las de euro año por año y los billetes desde 1783. "+
+      "Marca lo que tengas y se te crea la ficha en <strong>España</strong>. "+
+      "Las pesetas van por tipo de moneda, no por estrella: si las coleccionas por estrella, "+
+      "súbele la cantidad a la ficha.",
+      '<button class="btn" id="esBajar">Descargar la lista</button>')+
+
+    '<div class="cifras">'+
+      '<div class="cifra"><div class="k">Las tengo</div>'+
+        '<div class="v acento" id="esTengo">'+mios+'</div>'+
+        '<div class="n">de '+total+' huecos</div></div>'+
+      bloques.map(function(b){
+        return '<div class="cifra"><div class="k">'+esc(b)+'</div><div class="v">'+cuenta[b]+'</div>'+
+               '<div class="n">en el catálogo</div></div>';
+      }).join("")+
+    '</div>'+
+
+    '<div class="filtros">'+
+      '<div class="grupo">'+
+        '<button data-esag="epoca" aria-pressed="'+((ui.esAgrupa||"epoca")==="epoca")+'">Por época</button>'+
+        '<button data-esag="anio"  aria-pressed="'+(ui.esAgrupa==="anio")+'">Por año</button>'+
+      '</div>'+
+      '<div class="grupo">'+
+        '<button data-esb="todo" aria-pressed="'+((ui.esBloque||"todo")==="todo")+'">Todo</button>'+
+        bloques.map(function(b){
+          return '<button data-esb="'+esc(b)+'" aria-pressed="'+(ui.esBloque===b)+'">'+esc(b)+'</button>';
+        }).join("")+
+      '</div>'+
+      '<div class="grupo">'+
+        '<button data-esf="todas"  aria-pressed="'+((ui.esFiltro||"todas")==="todas")+'">Todas</button>'+
+        '<button data-esf="faltan" aria-pressed="'+(ui.esFiltro==="faltan")+'">Las que me faltan</button>'+
+        '<button data-esf="tengo"  aria-pressed="'+(ui.esFiltro==="tengo")+'">Las que tengo</button>'+
+      '</div>'+
+      '<input class="buscador" id="esBusca" placeholder="Buscar por año, valor o época…" '+
+        'value="'+esc(ui.esBusca||"")+'">'+
+    '</div>'+
+
+    '<div id="esLista"></div>';
+
+  main.querySelectorAll("[data-esag]").forEach(function(b){
+    b.addEventListener("click", function(){ ui.esAgrupa=b.dataset.esag; pintarCatalogoES(); });
+  });
+  main.querySelectorAll("[data-esb]").forEach(function(b){
+    b.addEventListener("click", function(){
+      ui.esBloque=(b.dataset.esb==="todo"?"todo":b.dataset.esb); pintarCatalogoES();
+    });
+  });
+  main.querySelectorAll("[data-esf]").forEach(function(b){
+    b.addEventListener("click", function(){ ui.esFiltro=b.dataset.esf; pintarCatalogoES(); });
+  });
+  var bus=document.getElementById("esBusca");
+  bus.addEventListener("input", function(){ ui.esBusca=bus.value; pintarListaES(); });
+  document.getElementById("esBajar").addEventListener("click", bajarCatalogoES);
+
+  pintarListaES();
+}
+
+function laminaES(c){
+  if(c.foto) return '<img src="'+esc(c.foto)+'" alt="" loading="lazy" '+
+    'style="width:46px;height:46px;border-radius:'+(c.tipo==="billete"?"6px":"50%")+';'+
+    'object-fit:cover;background:var(--sup2);border:1px solid var(--linea);display:block">';
+  return '<div style="width:46px;height:46px;border-radius:'+(c.tipo==="billete"?"6px":"50%")+';'+
+    'background:var(--sup2);border:1px dashed var(--linea);display:flex;align-items:center;'+
+    'justify-content:center;font-family:var(--mono);font-size:9px;color:var(--muted);'+
+    'text-align:center;line-height:1.1">sin<br>foto</div>';
+}
+
+function pintarListaES(){
+  var caja=document.getElementById("esLista"); if(!caja) return;
+  var lista=esFiltrado(), mapa=fichasDelCatalogo();
+
+  if(!lista.length){
+    caja.innerHTML='<div class="vacio"><strong>Nada que enseñar</strong>'+
+      'Con lo que has escrito no sale ninguna. Prueba con otra cosa.</div>';
+    return;
+  }
+
+  var porAnio=((ui.esAgrupa||"epoca")==="anio");
+  var grupos=[], indice={};
+  lista.slice().sort(function(a,b){
+    if(!porAnio) return 0;                       /* por época manda el orden del catálogo */
+    var aa=anioDeES(a)||"9999", bb=anioDeES(b)||"9999";
+    return aa.localeCompare(bb) || a.titulo.localeCompare(b.titulo,"es");
+  }).forEach(function(c){
+    var clave=claveGrupoES(c);
+    if(!indice[clave]){ indice[clave]={clave:clave, cosas:[]}; grupos.push(indice[clave]); }
+    indice[clave].cosas.push(c);
+  });
+
+  caja.innerHTML=grupos.map(function(g){
+    var suyas=catalogoES().filter(function(c){ return claveGrupoES(c)===g.clave; });
+    var puestas=suyas.filter(function(c){ return mapa[c.id] && tengo(mapa[c.id]); }).length;
+    return '<div class="grupoTitulo">'+esc(g.clave)+
+      '<span class="mono" style="text-transform:none;letter-spacing:0" '+
+      'data-esmarcador="'+esc(g.clave)+'">'+puestas+' de '+suyas.length+'</span></div>'+
+      '<div class="tarjeta" style="margin-bottom:14px"><div class="tarjeta-cuerpo tabla-caja" '+
+      'style="padding:0"><table><tbody>'+
+      g.cosas.map(function(c){
+        var puesta=!!(mapa[c.id] && tengo(mapa[c.id]));
+        return '<tr data-escat="'+esc(c.id)+'"'+(puesta?'':' style="color:var(--muted)"')+'>'+
+          '<td style="width:58px;padding-right:0">'+laminaES(c)+'</td>'+
+          '<td><strong>'+esc(c.titulo)+'</strong>'+
+            (porAnio?'<div style="font-size:11.5px;color:var(--muted)">'+esc(c.grupo)+'</div>':'')+
+            (c.detalle?'<div style="font-size:11.5px;color:var(--muted)">'+esc(c.detalle)+'</div>':'')+
+          '</td>'+
+          '<td style="width:1%;white-space:nowrap">'+
+            (c.tipo==="billete"?'<span class="chapa neutra">Billete</span>':'')+'</td>'+
+          '<td style="width:1%;white-space:nowrap">'+
+            '<input type="checkbox" style="width:auto;margin:0" data-marca="'+esc(c.id)+'"'+
+            (puesta?" checked":"")+' aria-label="La tengo"></td>'+
+        '</tr>';
+      }).join("")+
+      '</tbody></table></div></div>';
+  }).join("");
+
+  caja.querySelectorAll("[data-marca]").forEach(function(casilla){
+    casilla.addEventListener("change", function(){
+      marcarDelCatalogo(casilla.dataset.marca, casilla.checked, casilla);
+    });
+  });
+}
+
+function refrescarCatalogoES(){
+  var mapa=fichasDelCatalogo(), mios=tengoDeES();
+  var a=document.getElementById("esTengo"); if(a) a.textContent=mios;
+  document.querySelectorAll("[data-esmarcador]").forEach(function(e){
+    var clave=e.dataset.esmarcador;
+    var suyas=catalogoES().filter(function(c){ return claveGrupoES(c)===clave; });
+    var n=suyas.filter(function(c){ return mapa[c.id] && tengo(mapa[c.id]); }).length;
+    e.textContent=n+" de "+suyas.length;
+  });
+  document.querySelectorAll("[data-escat]").forEach(function(fila){
+    var id=fila.dataset.escat, puesta=!!(mapa[id] && tengo(mapa[id]));
+    fila.style.color = puesta ? "" : "var(--muted)";
+    var casilla=fila.querySelector("[data-marca]");
+    if(casilla) casilla.checked=puesta;
+  });
+  if((ui.esFiltro||"todas")!=="todas") pintarListaES();
+  var nav=document.querySelector('[data-vista="catalogoes"] .cuenta');
+  if(nav) nav.textContent=mios;
+  var navE=document.querySelector('[data-vista="espana"] .cuenta');
+  if(navE) navE.textContent=delAmbito("espana").length;
+}
+
+function bajarCatalogoES(){
+  var mapa=fichasDelCatalogo();
+  var lineas=["Bloque\tÉpoca\tQué es\tDetalle\tValor\tDivisa\tAño\t¿La tengo?"];
+  catalogoES().forEach(function(c){
+    lineas.push([c.bloque, c.grupo, c.titulo, c.detalle, (c.valor==null?"":c.valor),
+                 c.divisa, c.anio, (mapa[c.id] && tengo(mapa[c.id]))?"sí":"no"].join("\t"));
+  });
+  bajarArchivo(lineas.join("\n"), "catalogo-espana.txt");
 }
 
 /* ══════════════════════════════════════════════════════════════
