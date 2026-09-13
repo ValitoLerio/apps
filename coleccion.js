@@ -426,7 +426,7 @@ function tarjetaPieza(p){
      sin guardar ni una imagen. */
   var suFoto = fotoDePieza(p);
   var lamina = suFoto
-    ? '<img src="'+esc(suFoto)+'" alt="" loading="lazy">'
+    ? '<img src="'+esc(suFoto)+'" alt="" loading="lazy" style="object-fit:contain;padding:6px">'
     : (esBillete
         ? '<div class="papel"><span class="n">'+esc(facial(p.valor))+'</span>'+
           '<span class="u">'+esc(p.divisa||"")+'</span></div>'
@@ -1224,15 +1224,49 @@ function pintarCatalogo(){
   pintarListaCatalogo();
 }
 
-function laminaCatalogo(c){
-  var u=fotoDelCatalogo(c);
-  if(u) return '<img src="'+esc(u)+'" alt="" loading="lazy" '+
-    'style="width:46px;height:46px;border-radius:50%;object-fit:cover;'+
-    'background:var(--sup2);border:1px solid var(--linea);display:block">';
-  return '<div style="width:46px;height:46px;border-radius:50%;background:var(--sup2);'+
+/* Muchas fotos del catálogo traen las dos caras de la moneda en la
+   misma imagen. Recortarlas en redondo partía la moneda por la mitad,
+   así que van enteras («contain») y se pueden abrir en grande. */
+function verFotoGrande(url, titulo){
+  if(!url) return;
+  abrirVentana(titulo||"Foto",
+    '<div style="text-align:center">'+
+      '<img src="'+esc(url)+'" alt="" style="max-width:100%;max-height:64vh;'+
+      'border-radius:8px;background:var(--sup2)">'+
+    '</div>',
+    function(){}, {aceptar:"Cerrar"});
+  /* Para mirar una foto sobran los dos botones de siempre: se queda
+     uno y se llama «Cerrar», que es lo único que hay que hacer. */
+  var d=document.getElementById("dlg");
+  if(d){
+    var ok=d.querySelector("[data-ok]"); if(ok) ok.className="btn";
+    var otros=d.querySelectorAll(".dlg-pie [data-x]");
+    otros.forEach(function(b){ b.remove(); });
+  }
+}
+function marcoFoto(url, titulo, redondo){
+  var forma = redondo ? "border-radius:50%" : "border-radius:7px";
+  if(!url) return '<div style="width:76px;height:48px;'+forma+';background:var(--sup2);'+
     'border:1px dashed var(--linea);display:flex;align-items:center;justify-content:center;'+
-    'font-family:var(--mono);font-size:9px;color:var(--muted);text-align:center;'+
-    'line-height:1.1">sin<br>foto</div>';
+    'font-family:var(--mono);font-size:9px;color:var(--muted)">sin foto</div>';
+  return '<button type="button" class="verFoto" data-foto="'+esc(url)+'" '+
+    'data-fototit="'+esc(titulo||"")+'" title="Verla en grande" '+
+    'style="padding:0;border:1px solid var(--linea);'+forma+';background:var(--sup2);'+
+    'cursor:zoom-in;display:block;width:76px;height:48px;overflow:hidden">'+
+    '<img src="'+esc(url)+'" alt="" loading="lazy" '+
+    'style="width:100%;height:100%;object-fit:contain;display:block"></button>';
+}
+function engancharFotos(caja){
+  (caja||document).querySelectorAll(".verFoto").forEach(function(b){
+    b.addEventListener("click", function(e){
+      e.preventDefault(); e.stopPropagation();
+      verFotoGrande(b.dataset.foto, b.dataset.fototit);
+    });
+  });
+}
+
+function laminaCatalogo(c){
+  return marcoFoto(fotoDelCatalogo(c), c.pais+" "+c.anio+" · "+c.tema, false);
 }
 
 function casillasCatalogo(c, mapa){
@@ -1292,7 +1326,7 @@ function pintarListaCatalogo(){
       g.monedas.map(function(c){
         var n=puestasDe(c,mapa), total=c.cecas?c.cecas.length:1;
         return '<tr data-cat="'+esc(c.id)+'"'+(n?'':' style="color:var(--muted)"')+'>'+
-          '<td style="width:58px;padding-right:0">'+laminaCatalogo(c)+'</td>'+
+          '<td style="width:88px;padding-right:0">'+laminaCatalogo(c)+'</td>'+
           '<td class="mono" style="width:52px">'+(porAnio?esc(c.pais).slice(0,3).toUpperCase():c.anio)+'</td>'+
           '<td><strong>'+esc(c.tema)+'</strong>'+
             (porAnio?'<div style="font-size:11.5px;color:var(--muted)">'+esc(c.pais)+'</div>':'')+
@@ -1311,6 +1345,7 @@ function pintarListaCatalogo(){
       marcarDelCatalogo(casilla.dataset.marca, casilla.checked, casilla);
     });
   });
+  engancharFotos(caja);
 }
 
 function marcarDelCatalogo(clave, quiero, casilla){
@@ -1575,13 +1610,7 @@ function pintarCatalogoES(){
 }
 
 function laminaES(c){
-  if(c.foto) return '<img src="'+esc(c.foto)+'" alt="" loading="lazy" '+
-    'style="width:46px;height:46px;border-radius:'+(c.tipo==="billete"?"6px":"50%")+';'+
-    'object-fit:cover;background:var(--sup2);border:1px solid var(--linea);display:block">';
-  return '<div style="width:46px;height:46px;border-radius:'+(c.tipo==="billete"?"6px":"50%")+';'+
-    'background:var(--sup2);border:1px dashed var(--linea);display:flex;align-items:center;'+
-    'justify-content:center;font-family:var(--mono);font-size:9px;color:var(--muted);'+
-    'text-align:center;line-height:1.1">sin<br>foto</div>';
+  return marcoFoto(c.foto, c.titulo+(c.anio?" · "+c.anio:""), false);
 }
 
 function pintarListaES(){
@@ -1617,7 +1646,7 @@ function pintarListaES(){
       g.cosas.map(function(c){
         var puesta=!!(mapa[c.id] && tengo(mapa[c.id]));
         return '<tr data-escat="'+esc(c.id)+'"'+(puesta?'':' style="color:var(--muted)"')+'>'+
-          '<td style="width:58px;padding-right:0">'+laminaES(c)+'</td>'+
+          '<td style="width:88px;padding-right:0">'+laminaES(c)+'</td>'+
           '<td><strong>'+esc(c.titulo)+'</strong>'+
             (porAnio?'<div style="font-size:11.5px;color:var(--muted)">'+esc(c.grupo)+'</div>':'')+
             (c.detalle?'<div style="font-size:11.5px;color:var(--muted)">'+esc(c.detalle)+'</div>':'')+
@@ -1637,6 +1666,7 @@ function pintarListaES(){
       marcarDelCatalogo(casilla.dataset.marca, casilla.checked, casilla);
     });
   });
+  engancharFotos(caja);
 }
 
 function refrescarCatalogoES(){
