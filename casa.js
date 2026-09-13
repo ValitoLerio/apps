@@ -1384,7 +1384,12 @@ function editarCompra(id){
       /* De paso, el precio visto hoy actualiza el comparador */
       lineas.forEach(function(l){ if(l.precio>0) ponerPrecio(l.productoId, c.superId, l.precio); });
       if(!id) libro.compras.push(c);
-      guardar(); pintar(); avisar(id?"Compra actualizada":"Compra anotada: "+eur(c.total));
+      guardar(); pintar();
+      /* Una compra de cero euros casi siempre es un precio sin escribir,
+         no una compra gratis: más vale decirlo al guardar que dejar el
+         mes cuadrando mal. */
+      if(c.total<=0.004) avisar("Guardada, pero a 0,00 €: te falta el precio", true);
+      else avisar(id?"Compra actualizada":"Compra anotada: "+eur(c.total));
     });
 
   /* Las líneas se montan a mano porque son dinámicas */
@@ -1406,7 +1411,9 @@ function editarCompra(id){
         productos.map(function(p){ return '<option value="'+p.id+'"'+(linea.productoId===p.id?" selected":"")+">"+esc(p.nombre)+"</option>"; }).join("")+
       '</select></div>'+
       '<div class="campo"><input type="number" class="l_cant" min="0" step="0.01" value="'+esc(linea.cantidad)+'" title="Cantidad"></div>'+
-      '<div class="campo"><input type="number" class="l_pre" min="0" step="0.01" value="'+esc(linea.precio)+'" title="Precio por unidad"></div>'+
+      '<div class="campo"><input type="number" class="l_pre" min="0" step="0.01" '+
+        'value="'+esc((+linea.precio||0)>0?linea.precio:"")+'" placeholder="precio" '+
+        'title="Precio por unidad"></div>'+
       '<button class="btn suave sm malo" title="Quitar">✕</button>';
     caja.appendChild(f);
     f.querySelector("button").addEventListener("click", function(){ f.remove(); totalLineas(); });
@@ -1428,23 +1435,48 @@ function editarCompra(id){
   }
 }
 
+/* Poner «1 producto» y no cuál es no sirve de nada: cuando vuelves al
+   mes no sabes qué compra es cuál. Van los nombres, y la que se quedó
+   sin precio se dice, que si no el total sale a cero sin explicación. */
+function queLlevaLaCompra(c){
+  var ls=c.lineas||[];
+  if(!ls.length) return '<span style="color:var(--muted)">—</span>';
+  return ls.map(function(l){
+    var cant=+l.cantidad||0;
+    return esc(nombreProducto(l.productoId))+
+      (cant>1?' <span class="mono" style="color:var(--muted)">×'+num(cant,cant%1?2:0)+'</span>':"")+
+      ((+l.precio||0)<=0.004?' <span class="chapa malo">sin precio</span>':"");
+  }).join("<br>");
+}
+function compraSinPrecio(c){
+  return (c.lineas||[]).some(function(l){ return (+l.precio||0)<=0.004; });
+}
+
 function pintarCompras(){
   var caja=document.getElementById("listaCompras");
   var lista=delMes(libro.compras, ui.mes).slice().sort(function(a,b){ return (b.fecha||"").localeCompare(a.fecha||""); });
   if(!lista.length){ caja.innerHTML='<div class="vacio">Sin compras en '+esc(mesLargo(ui.mes))+'.</div>'; return; }
   var total=r2(lista.reduce(function(s,c){ return s+totalCompra(c); },0));
-  caja.innerHTML='<table><thead><tr><th>Fecha</th><th>Supermercado</th><th class="num">Productos</th>'+
+  var sinPrecio=lista.filter(compraSinPrecio);
+  caja.innerHTML='<table><thead><tr><th>Fecha</th><th>Supermercado</th><th>Qué compraste</th>'+
     '<th class="num">Total</th><th></th></tr></thead><tbody>'+
     lista.map(function(c){
-      return "<tr><td>"+esc(dmy(c.fecha))+"</td><td>"+esc(nombreSuper(c.superId))+"</td>"+
-        '<td class="num">'+((c.lineas||[]).length)+"</td>"+
+      return "<tr><td style=\"white-space:nowrap\">"+esc(dmy(c.fecha))+"</td>"+
+        "<td>"+esc(nombreSuper(c.superId))+"</td>"+
+        '<td>'+queLlevaLaCompra(c)+"</td>"+
         '<td class="num"><strong>'+eur(totalCompra(c))+"</strong></td>"+
         '<td><div class="acciones-fila">'+
           '<button class="btn suave sm" data-cedit="'+c.id+'">Editar</button>'+
           '<button class="btn suave sm malo" data-cdel="'+c.id+'">Borrar</button></div></td></tr>';
     }).join("")+
-    '</tbody><tfoot><tr><td colspan="3">'+lista.length+' compras</td>'+
-    '<td class="num">'+eur(total)+'</td><td></td></tr></tfoot></table>';
+    '</tbody><tfoot><tr><td colspan="3">'+plural(lista.length,"compra","compras")+'</td>'+
+    '<td class="num">'+eur(total)+'</td><td></td></tr></tfoot></table>'+
+    (sinPrecio.length
+      ? '<p class="nota" style="margin:12px 0 0">'+
+        (sinPrecio.length===1 ? 'Una compra está' : plural(sinPrecio.length,"compra","compras")+' están')+
+        ' a cero porque no les pusiste el precio. Dale a <strong>Editar</strong> y escríbelo: '+
+        'además de cuadrar el mes, así el comparador aprende cuánto cuesta ahí.</p>'
+      : "");
 
   caja.querySelectorAll("[data-cedit]").forEach(function(b){
     b.addEventListener("click", function(){ editarCompra(b.getAttribute("data-cedit")); });
