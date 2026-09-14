@@ -53,12 +53,114 @@ var PAISES_EURO = ["Alemania","Andorra","Austria","Bélgica","Chipre","Croacia",
   "Eslovenia","España","Estonia","Finlandia","Francia","Grecia","Irlanda","Italia","Letonia",
   "Lituania","Luxemburgo","Malta","Mónaco","Países Bajos","Portugal","San Marino","Vaticano"];
 
+/* Todos los países del mundo, para elegirlos de una lista en vez de
+   escribirlos —con sus tildes— uno por uno. El de la izquierda es como
+   se llaman aquí; el de la derecha, como los escribe Wikimedia, que es
+   donde se le busca la foto a la moneda, y sólo se pone cuando cambia.
+   Van también los que ya no existen: en un álbum de monedas son media
+   colección. */
+var PAISES = [
+  ["Afganistán","Afghanistan"], ["Albania"], ["Alemania","Germany"],
+  ["Alemania Oriental (RDA)","East Germany"], ["Andorra"], ["Angola"],
+  ["Antigua y Barbuda","Antigua and Barbuda"],
+  ["Arabia Saudí","Saudi Arabia"], ["Argelia","Algeria"], ["Argentina"],
+  ["Armenia"], ["Australia"], ["Austria"], ["Azerbaiyán","Azerbaijan"],
+  ["Bahamas"], ["Bangladés","Bangladesh"], ["Barbados"], ["Baréin","Bahrain"],
+  ["Bélgica","Belgium"], ["Belice","Belize"], ["Benín","Benin"],
+  ["Bielorrusia","Belarus"], ["Birmania (Myanmar)","Myanmar"], ["Bolivia"],
+  ["Bosnia y Herzegovina","Bosnia and Herzegovina"], ["Botsuana","Botswana"],
+  ["Brasil","Brazil"], ["Brunéi","Brunei"], ["Bulgaria"], ["Burkina Faso"],
+  ["Burundi"], ["Bután","Bhutan"], ["Cabo Verde","Cape Verde"],
+  ["Camboya","Cambodia"], ["Camerún","Cameroon"], ["Canadá","Canada"],
+  ["Catar","Qatar"], ["Chad"], ["Checoslovaquia","Czechoslovakia"], ["Chile"],
+  ["China"], ["Chipre","Cyprus"], ["Ciudad del Vaticano","Vatican City"],
+  ["Colombia"], ["Comoras","Comoros"], ["Corea del Norte","North Korea"],
+  ["Corea del Sur","South Korea"], ["Costa de Marfil","Ivory Coast"],
+  ["Costa Rica"], ["Croacia","Croatia"], ["Cuba"], ["Dinamarca","Denmark"],
+  ["Dominica"], ["Ecuador"], ["Egipto","Egypt"], ["El Salvador"],
+  ["Emiratos Árabes Unidos","United Arab Emirates"], ["Eritrea"],
+  ["Eslovaquia","Slovakia"], ["Eslovenia","Slovenia"], ["España","Spain"],
+  ["Estados Unidos","United States"], ["Estonia"],
+  ["Esuatini (Suazilandia)","Eswatini"], ["Etiopía","Ethiopia"],
+  ["Filipinas","Philippines"], ["Finlandia","Finland"], ["Fiyi","Fiji"],
+  ["Francia","France"], ["Gabón","Gabon"], ["Gambia"], ["Georgia"], ["Ghana"],
+  ["Gibraltar"], ["Granada","Grenada"], ["Grecia","Greece"],
+  ["Groenlandia","Greenland"], ["Guatemala"], ["Guinea"],
+  ["Guinea Ecuatorial","Equatorial Guinea"], ["Guinea-Bisáu","Guinea-Bissau"],
+  ["Guyana"], ["Haití","Haiti"], ["Honduras"], ["Hong Kong"],
+  ["Hungría","Hungary"], ["India"], ["Indonesia"], ["Irak","Iraq"],
+  ["Irán","Iran"], ["Irlanda","Ireland"], ["Islandia","Iceland"],
+  ["Islas Caimán","Cayman Islands"], ["Islas Cook","Cook Islands"],
+  ["Islas Feroe","Faroe Islands"], ["Islas Marshall","Marshall Islands"],
+  ["Islas Salomón","Solomon Islands"], ["Israel"], ["Italia","Italy"],
+  ["Jamaica"], ["Japón","Japan"], ["Jordania","Jordan"],
+  ["Kazajistán","Kazakhstan"], ["Kenia","Kenya"], ["Kirguistán","Kyrgyzstan"],
+  ["Kiribati"], ["Kosovo"], ["Kuwait"], ["Laos"], ["Lesoto","Lesotho"],
+  ["Letonia","Latvia"], ["Líbano","Lebanon"], ["Liberia"], ["Libia","Libya"],
+  ["Liechtenstein"], ["Lituania","Lithuania"], ["Luxemburgo","Luxembourg"],
+  ["Macao","Macau"], ["Macedonia del Norte","North Macedonia"],
+  ["Madagascar"], ["Malasia","Malaysia"], ["Malaui","Malawi"],
+  ["Maldivas","Maldives"], ["Malí","Mali"], ["Malta"],
+  ["Marruecos","Morocco"], ["Mauricio","Mauritius"], ["Mauritania"],
+  ["México","Mexico"], ["Micronesia"], ["Moldavia","Moldova"],
+  ["Mónaco","Monaco"], ["Mongolia"], ["Montenegro"], ["Mozambique"],
+  ["Namibia"], ["Nauru"], ["Nepal"], ["Nicaragua"], ["Níger","Niger"],
+  ["Nigeria"], ["Noruega","Norway"], ["Nueva Zelanda","New Zealand"],
+  ["Omán","Oman"], ["Países Bajos","Netherlands"], ["Pakistán","Pakistan"],
+  ["Palaos","Palau"], ["Palestina","Palestine"], ["Panamá","Panama"],
+  ["Papúa Nueva Guinea","Papua New Guinea"], ["Paraguay"], ["Perú","Peru"],
+  ["Polonia","Poland"], ["Portugal"], ["Puerto Rico"],
+  ["Reino Unido","United Kingdom"],
+  ["República Centroafricana","Central African Republic"],
+  ["República Checa","Czech Republic"],
+  ["República del Congo","Republic of the Congo"],
+  ["República Democrática del Congo","Democratic Republic of the Congo"],
+  ["República Dominicana","Dominican Republic"], ["Ruanda","Rwanda"],
+  ["Rumanía","Romania"], ["Rusia","Russia"], ["Samoa"],
+  ["San Cristóbal y Nieves","Saint Kitts and Nevis"], ["San Marino"],
+  ["San Vicente y las Granadinas","Saint Vincent and the Grenadines"],
+  ["Santa Lucía","Saint Lucia"],
+  ["Santo Tomé y Príncipe","São Tomé and Príncipe"], ["Senegal"], ["Serbia"],
+  ["Seychelles"], ["Sierra Leona","Sierra Leone"], ["Singapur","Singapore"],
+  ["Siria","Syria"], ["Somalia"], ["Sri Lanka"], ["Sudáfrica","South Africa"],
+  ["Sudán","Sudan"], ["Sudán del Sur","South Sudan"], ["Suecia","Sweden"],
+  ["Suiza","Switzerland"], ["Surinam","Suriname"], ["Tailandia","Thailand"],
+  ["Taiwán","Taiwan"], ["Tanzania"], ["Tayikistán","Tajikistan"],
+  ["Timor Oriental","East Timor"], ["Togo"], ["Tonga"],
+  ["Trinidad y Tobago","Trinidad and Tobago"], ["Túnez","Tunisia"],
+  ["Turkmenistán","Turkmenistan"], ["Turquía","Turkey"], ["Tuvalu"],
+  ["Ucrania","Ukraine"], ["Uganda"], ["URSS","Soviet Union"], ["Uruguay"],
+  ["Uzbekistán","Uzbekistan"], ["Vanuatu"], ["Venezuela"], ["Vietnam"],
+  ["Yemen"], ["Yibuti","Djibouti"], ["Yugoslavia"], ["Zaire"], ["Zambia"],
+  ["Zimbabue","Zimbabwe"]
+];
+function paisEnIngles(nombre){
+  var n=(nombre||"").trim();
+  for(var i=0;i<PAISES.length;i++) if(PAISES[i][0]===n) return PAISES[i][1]||PAISES[i][0];
+  return n;
+}
+/* La que sale al pulsar el campo «País» de una ficha. */
+function listaDePaises(){
+  var vistos={}, salen=[];
+  PAISES.forEach(function(f){ if(!vistos[f[0]]){ vistos[f[0]]=1; salen.push(f[0]); } });
+  /* Y los que él haya escrito a su manera siguen apareciendo: si tiene
+     apuntado «Inglaterra», no se lo voy a corregir yo. */
+  todas().forEach(function(p){
+    var n=(p.pais||"").trim();
+    if(n && !vistos[n]){ vistos[n]=1; salen.push(n); }
+  });
+  return salen;
+}
+
 var DIVISAS_ESPANA = ["Peseta","Euro","Real","Escudo","Céntimo","Maravedí"];
 
 var libro = null;
 var ui = { vista:"resumen", tipo:"todo", busca:"", soloFaltan:false, orden:"pais",
-           catAgrupa:"pais", catFiltro:"todas", catBusca:"",
-           esBloque:"todo", esFiltro:"todas", esBusca:"", esAgrupa:"epoca" };
+           pais:"", anio:"",
+           catAgrupa:"pais", catFiltro:"todas", catBusca:"", catPais:"", catAnio:"",
+           esBloque:"todo", esFiltro:"todas", esBusca:"", esAgrupa:"epoca",
+           esGrupo:"", esDecada:"",
+           chipsMas:{} };
 
 /* ══════════════════════════════════════════════════════════════
    UTILIDADES
@@ -183,6 +285,94 @@ function paisDe(p){
   return (p.pais||"").trim() || "Sin país";
 }
 
+/* El año, para agrupar y para buscar: «1966-1975» o «1869*68» valen por
+   las primeras cuatro cifras que traigan. */
+function anioDe(p){
+  var m=String(p.anio||"").match(/\d{4}/);
+  return m ? m[0] : "";
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LOS PAÍSES Y LOS AÑOS, A LA VISTA
+   ══════════════════════════════════════════════════════════════
+   Para ver sólo las de Marruecos o sólo las de 2012 había que
+   escribirlo en el buscador y acertar con la tilde. Ahora cada
+   apartado enseña arriba lo que tiene dentro —países, años, épocas—
+   con cuántas hay de cada uno, y se elige pulsando.
+
+   Es el mismo trozo para los tres sitios. Cuando la lista es larga se
+   enseña el principio y el resto sale con «y N más», que si no la
+   pantalla empieza por tres filas de chapas.
+   ══════════════════════════════════════════════════════════════ */
+function cuentaPor(lista, deQuien){
+  var mapa={}, orden=[];
+  lista.forEach(function(x){
+    var c=deQuien(x);
+    if(c===""||c==null) return;
+    c=String(c);
+    if(mapa[c]==null){ mapa[c]=0; orden.push(c); }
+    mapa[c]++;
+  });
+  return orden.map(function(c){ return {clave:c, n:mapa[c]}; });
+}
+
+function filaDeChips(atributo, titulo, entradas, activa, todos){
+  if(entradas.length<2) return "";
+  /* Veinticinco países caben de sobra en tres renglones; cuarenta
+     épocas, no. */
+  var tope=30, abierto=!!ui.chipsMas[atributo];
+  var sobran=(!abierto && entradas.length>tope) ? entradas.length-tope : 0;
+  var vistas=sobran ? entradas.slice(0,tope) : entradas;
+  return '<div class="chips" data-chipsde="'+esc(atributo)+'">'+
+    '<span class="et">'+esc(titulo)+'</span>'+
+    '<button type="button" data-chip="" aria-pressed="'+(!activa)+'">'+esc(todos||"Todos")+'</button>'+
+    vistas.map(function(e){
+      return '<button type="button" data-chip="'+esc(e.clave)+'" '+
+        'aria-pressed="'+(String(activa)===e.clave)+'">'+esc(e.texto||e.clave)+
+        '<span class="n">'+e.n+'</span></button>';
+    }).join("")+
+    (sobran ? '<button type="button" class="mas" data-chipmas="1">y '+sobran+' más…</button>' : "")+
+    (abierto && entradas.length>tope
+      ? '<button type="button" class="mas" data-chipmas="1">ver menos</button>' : "")+
+  '</div>';
+}
+
+function engancharChips(atributo, fijar, repintar){
+  var fila=document.querySelector('[data-chipsde="'+atributo+'"]');
+  if(!fila) return;
+  fila.querySelectorAll("[data-chip]").forEach(function(b){
+    b.addEventListener("click", function(){ fijar(b.dataset.chip); repintar(); });
+  });
+  fila.querySelectorAll("[data-chipmas]").forEach(function(b){
+    b.addEventListener("click", function(){
+      ui.chipsMas[atributo]=!ui.chipsMas[atributo]; repintar();
+    });
+  });
+}
+
+/* En España lo que se colecciona no son países sino divisas, así que
+   allí la fila de arriba enseña pesetas, euros, reales… */
+function claveChip(p, ambito){
+  return ambito==="espana" ? ((p.divisa||"").trim()||"Sin divisa") : paisDe(p);
+}
+
+function chipsDelAmbito(ambito){
+  var base=delAmbito(ambito).filter(function(p){
+    if(ui.tipo!=="todo" && (p.tipo||"moneda")!==ui.tipo) return false;
+    if(ui.soloFaltan && tengo(p)) return false;
+    return true;
+  });
+  var suyos=cuentaPor(base, function(p){ return claveChip(p, ambito); })
+            .sort(function(a,b){ return a.clave.localeCompare(b.clave,"es"); });
+  /* Los años, de los del país que estés mirando: si no, salen los de
+     todo el apartado y la mitad no llevan a ninguna parte. */
+  var deEsos=base.filter(function(p){ return !ui.pais || claveChip(p,ambito)===ui.pais; });
+  var anios=cuentaPor(deEsos, anioDe).sort(function(a,b){ return a.clave.localeCompare(b.clave); });
+  return filaDeChips("pais", ambito==="espana"?"Divisas":"Países", suyos, ui.pais,
+                     ambito==="espana"?"Todas":"Todos")+
+         filaDeChips("anio", "Años", anios, ui.anio, "Todos");
+}
+
 /* ══════════════════════════════════════════════════════════════
    ARMAZÓN
    ══════════════════════════════════════════════════════════════ */
@@ -208,7 +398,7 @@ function pintar(){
 
   root.querySelectorAll("[data-vista]").forEach(function(b){
     b.addEventListener("click", function(){
-      ui.vista=b.dataset.vista; ui.busca=""; pintar();
+      ui.vista=b.dataset.vista; ui.busca=""; ui.pais=""; ui.anio=""; pintar();
     });
   });
 
@@ -321,10 +511,11 @@ function pintarAmbito(ambito){
       ? "Pesetas, euros de aquí, reales, lo que sea: todo lo español junto."
     : ambito==="euro"
       ? "Por país y por año. Marca las conmemorativas y las verás agrupadas aparte."
-      : "Agrupadas por país. Escribe el país tal y como quieras verlo en el álbum.";
+      : "Agrupadas por país. Al añadir una pieza el país se elige de la lista, que los trae todos, y aquí arriba salen los que ya tienes.";
 
   main.innerHTML=
     cabecera(info.nombre, explica,
+      '<button class="btn" id="fotosWiki">Buscarles la foto</button>'+
       '<button class="btn fuerte" id="nueva">+ Añadir pieza</button>')+
 
     '<div class="cifras">'+
@@ -351,9 +542,14 @@ function pintarAmbito(ambito){
         'value="'+esc(ui.busca)+'">'+
     '</div>'+
 
+    chipsDelAmbito(ambito)+
     '<div id="vitrina"></div>';
 
   document.getElementById("nueva").addEventListener("click", function(){ editarPieza(null, ambito); });
+  document.getElementById("fotosWiki").addEventListener("click", function(){ buscarFotosDelAmbito(ambito); });
+  engancharChips("pais", function(v){ ui.pais=v; ui.anio=""; },
+                 function(){ pintarAmbito(ambito); });
+  engancharChips("anio", function(v){ ui.anio=v; }, function(){ pintarAmbito(ambito); });
   main.querySelectorAll("[data-tipo]").forEach(function(b){
     b.addEventListener("click", function(){ ui.tipo=b.dataset.tipo; pintarAmbito(ambito); });
   });
@@ -371,6 +567,8 @@ function filtrar(ambito){
   return delAmbito(ambito).filter(function(p){
     if(ui.tipo!=="todo" && (p.tipo||"moneda")!==ui.tipo) return false;
     if(ui.soloFaltan && tengo(p)) return false;
+    if(ui.pais && claveChip(p, ambito)!==ui.pais) return false;
+    if(ui.anio && anioDe(p)!==ui.anio) return false;
     if(!texto) return true;
     var paja=[p.pais,p.divisa,p.anio,p.valor,p.ceca,p.material,p.estado,p.notas,p.serie]
              .join(" ").toLowerCase();
@@ -547,8 +745,9 @@ function editarPieza(p, ambitoPorDefecto){
       '<div class="campo" id="cajaPais"><label class="lbl" for="e_pais">País</label>'+
         '<input id="e_pais" list="listaPaises" value="'+esc(p.pais||"")+'">'+
         '<datalist id="listaPaises">'+
-          PAISES_EURO.map(function(x){ return '<option value="'+esc(x)+'">'; }).join("")+
-        '</datalist></div>'+
+          listaDePaises().map(function(x){ return '<option value="'+esc(x)+'">'; }).join("")+
+        '</datalist>'+
+        '<p class="nota" style="margin:5px 0 0">Pulsa y salen todos; escribe dos letras y se queda el que buscas.</p></div>'+
       '<div class="campo"><label class="lbl" for="e_ceca">Ceca o serie</label>'+
         '<input id="e_ceca" value="'+esc(p.ceca||p.serie||"")+'" placeholder="Madrid, estrella 74…"></div>'+
       '<div class="campo"><label class="lbl" for="e_material">Material</label>'+
@@ -591,6 +790,7 @@ function editarPieza(p, ambitoPorDefecto){
         '<img id="e_previa" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:8px;'+
           'background:var(--sup2);border:1px solid var(--linea);'+(p.foto?'" src="'+esc(p.foto):'display:none')+'">'+
         '<input type="file" id="e_foto" accept="image/*" style="width:auto;flex:1;min-width:150px">'+
+        '<button type="button" class="btn suave" id="e_buscarFoto">Buscarla en Wikimedia</button>'+
         '<button type="button" class="btn suave" id="e_quitarFoto"'+
           (p.foto?'':' style="display:none"')+'>Quitar</button>'+
       '</div>'+
@@ -599,6 +799,15 @@ function editarPieza(p, ambitoPorDefecto){
       'o cópiala y pégala con ⌘V. Las del iPhone (HEIC) se convierten solas, sin salir de tu '+
       'ordenador. Se guarda reducida a 320 px: el álbum entero viaja a GitHub en cada cambio, '+
       'así que conviene no cargarlo de fotos enormes.</p>'+
+      '<div id="e_wiki" style="display:none;border:1px solid var(--linea);border-radius:9px;'+
+        'padding:10px;margin-top:9px">'+
+        '<div style="display:flex;gap:8px;margin-bottom:9px">'+
+          '<input id="w_texto" placeholder="Japan 100 yen coin" style="flex:1">'+
+          '<button type="button" class="btn" id="w_buscar">Buscar</button>'+
+        '</div>'+
+        '<p class="nota" id="w_dice" style="margin:0 0 9px"></p>'+
+        '<div id="w_salida"></div>'+
+      '</div>'+
     '</div>',
 
     function(){
@@ -733,6 +942,75 @@ function editarPieza(p, ambitoPorDefecto){
         return;
       }
     }
+  });
+
+  /* Y buscarla en Wikimedia, aquí dentro y no en otra ventana: sólo
+     cabe una abierta a la vez, y la segunda se llevaría por delante lo
+     que estás escribiendo. */
+  var wiki=document.getElementById("e_wiki");
+  var wTexto=document.getElementById("w_texto");
+  var wDice=document.getElementById("w_dice");
+  var wSalida=document.getElementById("w_salida");
+  var wFotos=[];
+
+  /* Se busca con lo que hay escrito ahora mismo en la ficha, no con lo
+     que había al abrirla: así vale también para una pieza nueva. */
+  function loQueHayEscrito(){
+    var ambito=valor("e_ambito");
+    return { ambito:ambito, tipo:valor("e_tipo"), valor:valor("e_valor"),
+             divisa:valor("e_divisa"), anio:valor("e_anio"),
+             pais:(ambito==="espana" ? "España" : valor("e_pais")) };
+  }
+
+  function buscarla(texto){
+    wDice.textContent="Preguntándole a Wikimedia…";
+    wSalida.innerHTML="";
+    (texto
+      ? buscarEnCommons(texto, 12).then(
+          function(f){ return {texto:texto, fotos:f}; },
+          function(){ return {texto:texto, fotos:[], fallo:true}; })
+      : buscarFotoDe(loQueHayEscrito(), 12)
+    ).then(function(r){
+      wFotos=r.fotos;
+      if(r.texto) wTexto.value=r.texto;
+      if(r.fallo){
+        wDice.textContent="No he podido preguntarle a Wikimedia. Mira si tienes internet.";
+        return;
+      }
+      if(!r.fotos.length){
+        wDice.textContent="Wikimedia no tiene ninguna así. Prueba a escribirlo de otra manera: "+
+          "allí está todo en inglés, y con menos palabras salen más.";
+        return;
+      }
+      wDice.innerHTML=plural(r.fotos.length,"foto","fotos")+" buscando <strong>"+
+        esc(r.texto)+"</strong>. Pulsa la que sea la tuya.";
+      wSalida.innerHTML=rejillaHallazgos(r.fotos);
+      engancharHallazgos(wSalida, r.fotos, function(f){
+        fotoPendiente=f.url;
+        previa.src=f.url; previa.style.display="";
+        quitar.style.display="";
+        decir("Ésta es de Wikimedia: se guarda la dirección, no la imagen.", true);
+      }, function(){
+        fotoPendiente=null;
+        previa.style.display="none";
+        quitar.style.display="none";
+        decir("");
+      });
+    });
+  }
+
+  document.getElementById("e_buscarFoto").addEventListener("click", function(){
+    var cerrado=(wiki.style.display==="none");
+    wiki.style.display = cerrado ? "" : "none";
+    if(cerrado && !wFotos.length) buscarla("");
+  });
+  document.getElementById("w_buscar").addEventListener("click", function(){
+    buscarla(wTexto.value.trim());
+  });
+  /* Enter dentro de esta caja busca; si no, el diálogo lo tomaría por
+     un «Guardar» y cerraría la ficha a medio hacer. */
+  wTexto.addEventListener("keydown", function(e){
+    if(e.key==="Enter"){ e.preventDefault(); buscarla(wTexto.value.trim()); }
   });
 }
 
@@ -1098,6 +1376,236 @@ function fotoDePieza(p){
   return it ? it.foto : "";
 }
 
+/* ══════════════════════════════════════════════════════════════
+   LA FOTO, BUSCADA EN WIKIMEDIA
+   ══════════════════════════════════════════════════════════════
+   Las de España y las de euro sacan la foto de su catálogo. El resto
+   del mundo no tiene catálogo —son doscientos países, no hay lista que
+   valga— así que esas fichas salían siempre con el disco gris
+   dibujado. Aquí se le pide la foto a Wikimedia Commons, que tiene las
+   de medio mundo, y eliges tú cuál es la tuya viéndolas.
+
+   Se guarda la DIRECCIÓN, no la imagen, igual que las de los dos
+   catálogos: el álbum entero viaja a GitHub en cada cambio y así no
+   engorda nada. Y tu foto, el día que le hagas una, sigue mandando
+   sobre ésta.
+
+   Dos cosas aprendidas probando:
+
+   · Allí se busca en inglés. «Japón 100 yen moneda» no saca ni una y
+     saca cuatro libros antiguos; «Japan 100 yen coin» la encuentra a la
+     primera. Por eso el país y la divisa van traducidos.
+   · Hay que pedir poco. Pidiendo país, valor, divisa y año a la vez no
+     sale nada casi nunca, porque tienen que aparecer todas las palabras.
+     Así que se prueba de lo más concreto a lo más general y se para en
+     la primera que dé algo.
+
+   Lo que salga es un parecido, no una certeza: por eso se enseñan
+   varias y no se pone ninguna sola.
+   ══════════════════════════════════════════════════════════════ */
+var COMMONS = "https://commons.wikimedia.org/w/api.php";
+
+/* Sólo hacen falta las divisas que cambian de nombre: «dirham» o «yen»
+   se escriben igual en los dos idiomas. */
+var DIVISAS_EN = {
+  "dólar":"dollar", "dolar":"dollar", "libra":"pound", "corona":"krona",
+  "franco":"franc", "marco":"mark", "rublo":"ruble", "rupia":"rupee",
+  "chelín":"shilling", "chelin":"shilling", "florín":"guilder", "florin":"guilder",
+  "forinto":"forint", "esloti":"zloty", "zloti":"zloty", "dracma":"drachma",
+  "céntimo":"cent", "centimo":"cent", "colón":"colon", "guaraní":"guarani",
+  "bolívar":"bolivar", "córdoba":"cordoba", "yuan":"yuan", "won":"won",
+  "rial":"rial", "riyal":"riyal", "leu":"leu", "lev":"lev"
+};
+function divisaEnIngles(d){
+  var k=(d||"").trim().toLowerCase();
+  return DIVISAS_EN[k] || k;
+}
+
+/* Las búsquedas que se le van a probar, de la más apretada a la más
+   suelta. */
+function palabrasDeFoto(p){
+  var pais=paisEnIngles(p.ambito==="espana" ? "España" : p.pais);
+  var que=(p.tipo==="billete") ? "banknote" : "coin";
+  var v=+p.valor||0, valor=v?String(v):"";
+  var divisa=divisaEnIngles(p.divisa);
+  var anio=anioDe(p);
+  var salen=[];
+  function meter(t){
+    t=t.replace(/\s+/g," ").trim();
+    if(t && t!==que && salen.indexOf(t)<0) salen.push(t);
+  }
+  meter(pais+" "+valor+" "+divisa+" "+anio+" "+que);
+  meter(pais+" "+valor+" "+divisa+" "+que);
+  meter(pais+" "+divisa+" "+anio+" "+que);
+  meter(pais+" "+divisa+" "+que);
+  meter(pais+" "+que);
+  return salen;
+}
+
+/* La dirección viene con una coletilla de estadísticas pegada y a veces
+   por thumb.wikimedia.org. Se deja como las del catálogo de España,
+   que llevan meses funcionando. */
+function limpiaWikimedia(u){
+  return String(u||"").split("?")[0]
+    .replace("https://thumb.wikimedia.org/", "https://upload.wikimedia.org/");
+}
+
+function buscarEnCommons(texto, cuantas){
+  var u=COMMONS+"?action=query&format=json&origin=*&generator=search&gsrnamespace=6"+
+        "&gsrlimit="+(cuantas||8)+"&prop=imageinfo&iiprop=url&iiurlwidth=320"+
+        /* filetype:bitmap deja fuera los PDF y los planos, que si no
+           salen a puñados en cuanto el país tiene historia. */
+        "&gsrsearch="+encodeURIComponent(texto+" filetype:bitmap");
+  return fetch(u).then(function(r){
+    if(!r.ok) throw new Error("Wikimedia "+r.status);
+    return r.json();
+  }).then(function(d){
+    var pg=(d.query && d.query.pages) || {};
+    return Object.keys(pg).map(function(k){ return pg[k]; })
+      .sort(function(a,b){ return (a.index||99)-(b.index||99); })
+      .map(function(x){
+        var ii=(x.imageinfo||[])[0];
+        if(!ii) return null;
+        return { url: limpiaWikimedia(ii.thumburl||ii.url),
+                 pagina: ii.descriptionurl||"",
+                 nombre: String(x.title||"").replace(/^File:/,"").replace(/\.[a-z0-9]+$/i,"") };
+      })
+      .filter(function(x){ return x && x.url; });
+  });
+}
+
+function buscarFotoDe(p, cuantas){
+  var intentos=palabrasDeFoto(p), i=0;
+  function otra(){
+    if(i>=intentos.length) return Promise.resolve({texto:intentos[0]||"", fotos:[]});
+    var texto=intentos[i++];
+    return buscarEnCommons(texto, cuantas).then(function(fotos){
+      return fotos.length ? {texto:texto, fotos:fotos} : otra();
+    }, function(){
+      return {texto:texto, fotos:[], fallo:true};
+    });
+  }
+  return otra();
+}
+
+/* Las que ha encontrado, para elegir una pulsándola. */
+function rejillaHallazgos(fotos){
+  if(!fotos.length) return "";
+  return '<div class="hallazgos">'+fotos.map(function(f,i){
+    return '<button type="button" data-hallazgo="'+i+'" aria-pressed="false" '+
+      'title="'+esc(f.nombre)+'"><img src="'+esc(f.url)+'" alt="" loading="lazy">'+
+      '<span class="pie">'+esc(f.nombre)+'</span></button>';
+  }).join("")+'</div>';
+}
+/* Pulsar una deja marcada sólo ésa; volver a pulsarla la desmarca. */
+function engancharHallazgos(caja, fotos, alElegir, alQuitar){
+  caja.querySelectorAll("[data-hallazgo]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var f=fotos[+b.dataset.hallazgo];
+      if(!f) return;
+      var yaEstaba=(b.getAttribute("aria-pressed")==="true");
+      caja.querySelectorAll("[data-hallazgo]").forEach(function(o){
+        o.setAttribute("aria-pressed","false");
+      });
+      if(yaEstaba){ if(alQuitar) alQuitar(); return; }
+      b.setAttribute("aria-pressed","true");
+      alElegir(f);
+    });
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BUSCARLE LA FOTO A TODAS LAS QUE NO TIENEN
+   ══════════════════════════════════════════════════════════════
+   Una por una sería una tarde entera. Esto las busca seguidas y las va
+   poniendo en fila según llegan: pulsas la que valga de cada una y las
+   que no se parezcan a nada se quedan como estaban. Van de una en una y
+   con una pausa corta, que a Wikimedia no hay que atropellarla.
+   ══════════════════════════════════════════════════════════════ */
+function buscarFotosDelAmbito(ambito){
+  var sin=delAmbito(ambito).filter(function(p){ return !fotoDePieza(p); });
+  if(!sin.length){ avisar("Aquí ya tienen todas su foto."); return; }
+
+  var TOPE=40, lista=sin.slice(0,TOPE), elegidas={};
+
+  var d=abrirVentana("Buscarles la foto en Wikimedia",
+    '<p class="nota" style="margin:0 0 12px">'+
+      segunCuantos(sin.length,
+        "Una ficha de este apartado no tiene foto",
+        sin.length+" fichas de este apartado no tienen foto")+
+      (sin.length>TOPE ? ", y se miran las "+TOPE+" primeras" : "")+
+      '. Se le pregunta por cada una a Wikimedia Commons, que busca por el país, el valor y '+
+      'el año. Lo que salga es un parecido: <strong>pulsa la que sea la tuya</strong> y deja '+
+      'en blanco las que no se parezcan a ninguna. Se guarda la dirección de la foto, no la '+
+      'imagen, así que no le añade peso al álbum.</p>'+
+    '<p class="nota" id="wl_estado" style="margin:0 0 4px"><strong>Buscando… 0 de '+
+      lista.length+'</strong></p>'+
+    '<div id="wl_filas"></div>',
+    function(){
+      var puestas=0;
+      Object.keys(elegidas).forEach(function(id){
+        var p=todas().filter(function(x){ return x.id===id; })[0];
+        if(p){ p.foto=elegidas[id]; puestas++; }
+      });
+      if(!puestas){ avisar("No has elegido ninguna, así que se queda todo como estaba."); return; }
+      guardar(); pintar();
+      avisar(plural(puestas,"foto puesta","fotos puestas"));
+    },
+    {aceptar:"Guardar las elegidas"});
+
+  var estado=document.getElementById("wl_estado");
+  var filas=document.getElementById("wl_filas");
+  var i=0, cortado=false, miradas=0;
+  /* Si cierra la ventana a medias, se paran las búsquedas: si no,
+     seguirían pidiéndole fotos a Wikimedia para nada. */
+  d.addEventListener("close", function(){ cortado=true; });
+
+  function siguiente(){
+    if(cortado) return;
+    if(i>=lista.length){
+      estado.innerHTML="<strong>Ya está.</strong> "+
+        plural(miradas,"ficha mirada","fichas miradas")+
+        ". Pulsa las que quieras y luego «Guardar las elegidas».";
+      return;
+    }
+    var p=lista[i++];
+    estado.innerHTML="<strong>Buscando… "+i+" de "+lista.length+"</strong>";
+    buscarFotoDe(p, 4).then(function(r){
+      if(cortado) return;
+      miradas++;
+      ponerFila(p, r);
+      setTimeout(siguiente, 150);
+    });
+  }
+
+  function ponerFila(p, r){
+    var caja=document.createElement("div");
+    caja.style.cssText="border-top:1px solid var(--linea-suave);padding:11px 0";
+    caja.innerHTML=
+      '<div style="font-size:13px;margin-bottom:7px">'+
+        '<strong>'+esc(facial(p.valor)+" "+(p.divisa||""))+'</strong> · '+esc(paisDe(p))+
+        (p.anio?" · "+esc(p.anio):"")+
+        (r.texto?'<span style="color:var(--muted);font-family:var(--mono);font-size:10.5px;'+
+          'margin-left:9px">'+esc(r.texto)+'</span>':"")+
+      '</div>'+
+      (r.fallo
+        ? '<p class="nota" style="margin:0;color:var(--malo)">No he podido preguntarle a '+
+          'Wikimedia. Mira si tienes internet y vuelve a intentarlo.</p>'
+        : r.fotos.length
+          ? rejillaHallazgos(r.fotos)
+          : '<p class="nota" style="margin:0">Wikimedia no tiene ninguna que se le parezca. '+
+            'Ábrela y búscala tú, o hazle una foto.</p>');
+    filas.appendChild(caja);
+    if(r.fotos.length){
+      engancharHallazgos(caja, r.fotos,
+        function(f){ elegidas[p.id]=f.url; },
+        function(){ delete elegidas[p.id]; });
+    }
+  }
+
+  siguiente();
+}
+
 /* Cada moneda es una pieza, menos las alemanas, que son cinco: una
    por ceca. La clave de cada pieza es la que va en `p.cat`. */
 function clavesDe(c){
@@ -1163,6 +1671,8 @@ function catFiltrado(){
     if(ui.catFiltro==="faltan"  && n>=total) return false;
     if(ui.catFiltro==="tengo"   && n===0)    return false;
     if(ui.catFiltro==="sinfoto" && c.foto)   return false;
+    if(ui.catPais && c.pais!==ui.catPais)    return false;
+    if(ui.catAnio && String(c.anio)!==ui.catAnio) return false;
     if(!texto) return true;
     return (c.pais+" "+c.anio+" "+c.tema+" "+c.serie).toLowerCase().indexOf(texto)>=0;
   });
@@ -1231,6 +1741,19 @@ function pintarCatalogo(){
         'value="'+esc(ui.catBusca||"")+'">'+
     '</div>'+
 
+    /* Los veinticinco países y los veintitantos años, pulsables: es
+       como se busca de verdad aquí, y así no hay que escribir
+       «Luxemburgo» con la ge en su sitio. */
+    filaDeChips("catPais", "Países",
+      cuentaPor(catalogo(), function(c){ return c.pais; })
+        .sort(function(a,b){ return a.clave.localeCompare(b.clave,"es"); }),
+      ui.catPais, "Todos")+
+    filaDeChips("catAnio", "Años",
+      cuentaPor(catalogo().filter(function(c){ return !ui.catPais || c.pais===ui.catPais; }),
+                function(c){ return c.anio; })
+        .sort(function(a,b){ return a.clave.localeCompare(b.clave); }),
+      ui.catAnio, "Todos")+
+
     '<div id="catLista"></div>';
 
   main.querySelectorAll("[data-cagrupa]").forEach(function(b){
@@ -1239,6 +1762,8 @@ function pintarCatalogo(){
   main.querySelectorAll("[data-cfil]").forEach(function(b){
     b.addEventListener("click", function(){ ui.catFiltro=b.dataset.cfil; pintarCatalogo(); });
   });
+  engancharChips("catPais", function(v){ ui.catPais=v; ui.catAnio=""; }, pintarCatalogo);
+  engancharChips("catAnio", function(v){ ui.catAnio=v; }, pintarCatalogo);
   var bus=document.getElementById("catBusca");
   bus.addEventListener("input", function(){ ui.catBusca=bus.value; pintarListaCatalogo(); });
   document.getElementById("catBajar").addEventListener("click", bajarCatalogo);
@@ -1514,6 +2039,15 @@ function anioDeES(c){
   if(!m) m=String(c.grupo||"").match(/\d{4}/);
   return m ? m[0] : "";
 }
+/* Por años no se puede ir aquí: son doscientos cuarenta, de 1783 a hoy.
+   Por décadas sí, y es como se mira una colección: «lo de los treinta». */
+function decadaES(c){
+  var a=anioDeES(c);
+  return a ? a.slice(0,3)+"0" : "";
+}
+function comoSeLeeLaDecada(d){
+  return d+"-"+String((+d+9)%100).padStart(2,"0");
+}
 function claveGrupoES(c){
   if((ui.esAgrupa||"epoca")!=="anio") return c.grupo;
   var a=anioDeES(c);
@@ -1558,6 +2092,8 @@ function esFiltrado(){
     if(ui.esFiltro==="faltan"  && puesta) return false;
     if(ui.esFiltro==="tengo"   && !puesta) return false;
     if(ui.esFiltro==="sinfoto" && c.foto) return false;
+    if(ui.esGrupo && c.grupo!==ui.esGrupo) return false;
+    if(ui.esDecada && decadaES(c)!==ui.esDecada) return false;
     if(!texto) return true;
     return (c.grupo+" "+c.titulo+" "+c.detalle+" "+c.anio+" "+c.divisa).toLowerCase().indexOf(texto)>=0;
   });
@@ -1633,6 +2169,26 @@ function pintarCatalogoES(){
         'value="'+esc(ui.esBusca||"")+'">'+
     '</div>'+
 
+    /* Aquí el país es siempre el mismo, así que lo que se enseña
+       pulsable son las épocas —los reyes— y las décadas. */
+    (function(){
+      var dentro=lista.filter(function(c){
+        return (ui.esBloque||"todo")==="todo" || c.bloque===ui.esBloque;
+      });
+      /* Las épocas sólo cuando ya has elegido bloque: con todo junto
+         son ciento cuarenta, y la mitad son emisiones de billetes con
+         nombre de tres renglones. Con «Todo» quedan las décadas, que
+         es como se mira una colección entera. */
+      return ((ui.esBloque||"todo")==="todo" ? "" :
+        filaDeChips("esGrupo", "Épocas",
+          cuentaPor(dentro, function(c){ return c.grupo; }), ui.esGrupo, "Todas"))+
+      filaDeChips("esDecada", "Décadas",
+        cuentaPor(dentro.filter(function(c){ return !ui.esGrupo || c.grupo===ui.esGrupo; }), decadaES)
+          .sort(function(a,b){ return a.clave.localeCompare(b.clave); })
+          .map(function(e){ e.texto=comoSeLeeLaDecada(e.clave); return e; }),
+        ui.esDecada, "Todas");
+    })()+
+
     '<div id="esLista"></div>';
 
   main.querySelectorAll("[data-esag]").forEach(function(b){
@@ -1640,12 +2196,16 @@ function pintarCatalogoES(){
   });
   main.querySelectorAll("[data-esb]").forEach(function(b){
     b.addEventListener("click", function(){
-      ui.esBloque=(b.dataset.esb==="todo"?"todo":b.dataset.esb); pintarCatalogoES();
+      ui.esBloque=(b.dataset.esb==="todo"?"todo":b.dataset.esb);
+      ui.esGrupo=""; ui.esDecada="";
+      pintarCatalogoES();
     });
   });
   main.querySelectorAll("[data-esf]").forEach(function(b){
     b.addEventListener("click", function(){ ui.esFiltro=b.dataset.esf; pintarCatalogoES(); });
   });
+  engancharChips("esGrupo", function(v){ ui.esGrupo=v; ui.esDecada=""; }, pintarCatalogoES);
+  engancharChips("esDecada", function(v){ ui.esDecada=v; }, pintarCatalogoES);
   var bus=document.getElementById("esBusca");
   bus.addEventListener("input", function(){ ui.esBusca=bus.value; pintarListaES(); });
   document.getElementById("esBajar").addEventListener("click", bajarCatalogoES);

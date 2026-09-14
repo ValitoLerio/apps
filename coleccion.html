@@ -132,6 +132,33 @@ textarea{resize:vertical;min-height:62px}
 .grupo button[aria-pressed="true"]{background:var(--acento-suave);color:var(--acento);font-weight:600}
 .buscador{flex:1;min-width:170px;max-width:320px}
 
+/* ── Los países y los años, pulsables ─────────────────────────────── */
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 12px}
+.chips .et{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+           color:var(--muted);margin-right:3px}
+.chips button{background:var(--sup);border:1px solid var(--linea);border-radius:999px;
+              padding:4px 11px;font-size:12.5px;color:var(--muted);cursor:pointer;
+              font-weight:500;display:inline-flex;align-items:center;gap:6px;
+              font-family:inherit;line-height:1.35}
+.chips button:hover{border-color:var(--acento-linea);color:var(--tinta)}
+.chips button[aria-pressed="true"]{background:var(--acento-suave);border-color:var(--acento-linea);
+                                   color:var(--acento);font-weight:600}
+.chips button .n{font-family:var(--mono);font-size:10px;opacity:.7}
+.chips button.mas{border-style:dashed}
+
+/* ── Las fotos que trae Wikimedia ─────────────────────────────────── */
+.hallazgos{display:grid;grid-template-columns:repeat(auto-fill,minmax(116px,1fr));gap:9px}
+.hallazgos button{padding:0;border:1px solid var(--linea);border-radius:9px;background:var(--sup);
+                  cursor:pointer;overflow:hidden;display:block;text-align:left;
+                  font-family:inherit;color:inherit}
+.hallazgos button:hover{border-color:var(--acento-linea)}
+.hallazgos button[aria-pressed="true"]{border-color:var(--acento);
+                  box-shadow:0 0 0 2px var(--acento-suave)}
+.hallazgos img{width:100%;height:84px;object-fit:contain;background:var(--sup2);display:block;
+               border-bottom:1px solid var(--linea-suave)}
+.hallazgos .pie{display:block;font-size:10.5px;color:var(--muted);padding:5px 7px;
+                line-height:1.25;max-height:32px;overflow:hidden}
+
 /* ── Vitrina ──────────────────────────────────────────────────────── */
 .vitrina{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:14px}
 .pieza{background:var(--sup);border:1px solid var(--linea);border-radius:var(--radio);
@@ -239,9 +266,9 @@ dialog::backdrop{background:rgba(16,13,8,.55)}
 
 <div id="root" class="app"></div>
 
-<script src="catalogo2e.js?v=202609131949"></script>
-<script src="catalogoes.js?v=202609131949"></script>
-<script src="sync.js?v=202609131949"></script>
+<script src="catalogo2e.js?v=202609141048"></script>
+<script src="catalogoes.js?v=202609141048"></script>
+<script src="sync.js?v=202609141048"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -249,7 +276,7 @@ dialog::backdrop{background:rgba(16,13,8,.55)}
 
   Sync.iniciar('coleccion').then(function(){
     var s = document.createElement('script');
-    s.src = 'coleccion.js?v=202609131949';
+    s.src = 'coleccion.js?v=202609141048';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar coleccion.js. Recarga la pagina.'; };
     document.body.appendChild(s);
