@@ -160,6 +160,7 @@ var ui = { vista:"resumen", tipo:"todo", busca:"", soloFaltan:false, orden:"pais
            catAgrupa:"pais", catFiltro:"todas", catBusca:"", catPais:"", catAnio:"",
            esBloque:"todo", esFiltro:"todas", esBusca:"", esAgrupa:"epoca",
            esGrupo:"", esDecada:"",
+           bilFiltro:"todas", bilBusca:"", bilPais:"", bilDivisa:"",
            chipsMas:{} };
 
 /* ══════════════════════════════════════════════════════════════
@@ -388,6 +389,7 @@ function pintar(){
       boton("mundo",  "Resto del mundo", delAmbito("mundo").length)+
       boton("catalogo","Catálogo 2 €", hayCatalogo()?tengoDelCatalogo():null)+
       boton("catalogoes","Catálogo España", hayCatalogoES()?tengoDeES():null)+
+      boton("catalogobil","Catálogo billetes", hayCatalogoBil()?tengoDeBil():null)+
       boton("ajustes","Ajustes", null)+
       '<div class="pie-rail">'+
         '<span style="font-size:11px;color:var(--muted)" id="estadoSync">Guardado en GitHub</span>'+
@@ -406,6 +408,7 @@ function pintar(){
   else if(ui.vista==="ajustes") pintarAjustes();
   else if(ui.vista==="catalogo") pintarCatalogo();
   else if(ui.vista==="catalogoes") pintarCatalogoES();
+  else if(ui.vista==="catalogobil") pintarCatalogoBil();
   else pintarAmbito(ui.vista);
 }
 
@@ -1989,6 +1992,7 @@ function refrescarCatalogo(){
 function refrescarTodo(){
   if(document.getElementById("catLista")) refrescarCatalogo();
   if(document.getElementById("esLista"))  refrescarCatalogoES();
+  if(document.getElementById("bilLista")) refrescarCatalogoBil();
 }
 
 function bajarCatalogo(){
@@ -2069,6 +2073,13 @@ function itemDeCatalogo(id){
                  ficha:{ ambito:"euro", tipo:"moneda", valor:2, divisa:"Euro",
                          anio:String(c.anio), pais:c.pais, ceca:c.serie||"",
                          conmemorativa:true } };
+  var b=hayCatalogoBil()?delCatalogoBil(id):null;
+  if(b) return { id:b.id, cecas:"", notas:nombreBillete(b),
+                 foto:b.foto,
+                 comoSeLlama:nombreBillete(b),
+                 ficha:{ ambito:(b.pais==="España"?"espana":"mundo"), tipo:"billete",
+                         valor:b.valor, divisa:b.divisa, anio:"",
+                         pais:paisDeBillete(b), ceca:"", conmemorativa:false } };
   var e=hayCatalogoES()?delCatalogoES(id):null;
   if(e) return { id:e.id, cecas:"", notas:e.titulo+(e.detalle?" · "+e.detalle:""),
                  foto:e.foto,
@@ -2303,6 +2314,264 @@ function bajarCatalogoES(){
                  c.divisa, c.anio, (mapa[c.id] && tengo(mapa[c.id]))?"sí":"no"].join("\t"));
   });
   bajarArchivo(lineas.join("\n"), "catalogo-espana.txt");
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CATÁLOGO DE BILLETES DEL MUNDO
+   ══════════════════════════════════════════════════════════════
+   El tercer catálogo: todos los billetes que están en circulación hoy,
+   país por país. 1.165 huecos de 163 monedas distintas, del apsar de
+   Abjasia al dólar de Zimbabue.
+
+   De dónde sale (`catalogobil.js`): la lista de monedas en circulación
+   de la Wikipedia inglesa da qué moneda usa cada país; la ficha del
+   artículo de cada moneda da los billetes que hay de ella —los campos
+   frequently_used_banknotes y rarely_used_banknotes—, y las fotos son
+   de Wikimedia Commons, enlazadas y no copiadas, como las de los otros
+   dos catálogos.
+
+   Tres cosas que conviene saber al mirarlo:
+
+   · Va por MONEDA, no por país. Los billetes de euro son los mismos en
+     los veintiocho sitios donde vale el euro, así que están una sola
+     vez, bajo «Zona euro»; igual el franco CFA y el dólar del Caribe
+     Oriental. Al marcar uno, la ficha se crea con el país que pone
+     aquí, y si era de otro basta con cambiárselo en el álbum.
+   · Son los de HOY, los que circulan. Los billetes viejos —las pesetas,
+     los marcos, los francos— no están: los españoles tienen su catálogo
+     aparte, con 485.
+   · Los que van con la chapa «poco corriente» son los que la Wikipedia
+     marca como raros de ver: el de 500 € o el de 1 peso de la India.
+     Existen y valen, pero no andan por la calle.
+
+   Las fotos son un parecido, no una certeza: se buscaron por país,
+   valor y moneda, y unas cuantas serán de otra serie del mismo billete.
+   Si una no es la que toca, se abre la ficha del álbum y se le pone la
+   tuya, que siempre manda.
+   ══════════════════════════════════════════════════════════════ */
+var catBilCache = null;
+
+function hayCatalogoBil(){ return typeof CATALOGO_BIL !== "undefined" && CATALOGO_BIL.length>0; }
+
+function catalogoBil(){
+  if(!hayCatalogoBil()) return [];
+  if(!catBilCache) catBilCache = CATALOGO_BIL.map(function(f){
+    return { id:f[0], pais:f[1], divisa:f[2], valor:f[3], iso:f[4]||"",
+             raro:!!f[5], otros:+f[6]||0, foto:f[7]||"" };
+  });
+  return catBilCache;
+}
+function delCatalogoBil(id){
+  var l=catalogoBil();
+  for(var i=0;i<l.length;i++) if(l[i].id===id) return l[i];
+  return null;
+}
+/* «50 Dírham de Marruecos». Sirve para el aviso al marcarlo y para las
+   notas de la ficha que se crea. */
+function nombreBillete(b){
+  return facial(b.valor)+" "+b.divisa+" de "+b.pais;
+}
+/* Las monedas de varios países no son de ninguno: en el álbum, la ficha
+   se guarda con la zona tal cual («Zona euro»), que ya la corregirá él
+   si ese billete suyo es de Irlanda. */
+function paisDeBillete(b){ return b.pais; }
+
+function tengoDeBil(){
+  var mapa=fichasDelCatalogo(), n=0;
+  catalogoBil().forEach(function(b){ if(mapa[b.id] && tengo(mapa[b.id])) n++; });
+  return n;
+}
+function conFotoDeBil(){
+  return catalogoBil().filter(function(b){ return !!b.foto; }).length;
+}
+
+function bilFiltrado(){
+  var texto=(ui.bilBusca||"").trim().toLowerCase();
+  var mapa=fichasDelCatalogo();
+  return catalogoBil().filter(function(b){
+    var puesta=!!(mapa[b.id] && tengo(mapa[b.id]));
+    if(ui.bilFiltro==="faltan"  && puesta) return false;
+    if(ui.bilFiltro==="tengo"   && !puesta) return false;
+    if(ui.bilFiltro==="sinfoto" && b.foto) return false;
+    if(ui.bilFiltro==="corrientes" && b.raro) return false;
+    if(ui.bilPais   && b.pais!==ui.bilPais) return false;
+    if(ui.bilDivisa && b.divisa!==ui.bilDivisa) return false;
+    if(!texto) return true;
+    return (b.pais+" "+b.divisa+" "+b.iso+" "+b.valor).toLowerCase().indexOf(texto)>=0;
+  });
+}
+
+function pintarCatalogoBil(){
+  var main=document.getElementById("main");
+
+  if(!hayCatalogoBil()){
+    main.innerHTML=cabecera("Catálogo de billetes","")+
+      '<div class="vacio"><strong>El catálogo no se ha cargado</strong>'+
+      'Falta el archivo catalogobil.js. Recarga la página.</div>';
+    return;
+  }
+
+  var lista=catalogoBil(), total=lista.length, mios=tengoDeBil();
+  var paises={}, nPaises=0, divisas={}, nDivisas=0;
+  lista.forEach(function(b){
+    if(!paises[b.pais]){ paises[b.pais]=1; nPaises++; }
+    if(!divisas[b.divisa]){ divisas[b.divisa]=1; nDivisas++; }
+  });
+
+  main.innerHTML=
+    cabecera("Catálogo de billetes",
+      "Todos los billetes que circulan hoy en el mundo, país por país. Marca los que tengas y "+
+      "se te crea la ficha en <strong>Resto del mundo</strong>. Va por moneda: los de euro están "+
+      "una sola vez, porque son los mismos en los veintiocho sitios donde vale.",
+      '<button class="btn" id="bilBajar">Descargar la lista</button>')+
+
+    '<div class="cifras">'+
+      '<div class="cifra"><div class="k">Los tengo</div>'+
+        '<div class="v acento" id="bilTengo">'+mios+'</div>'+
+        '<div class="n">de '+total+' huecos</div></div>'+
+      '<div class="cifra"><div class="k">Me faltan</div>'+
+        '<div class="v'+((total-mios)?' malo':'')+'">'+(total-mios)+'</div>'+
+        '<div class="n">para tenerlos todos</div></div>'+
+      '<div class="cifra"><div class="k">Países</div><div class="v">'+nPaises+'</div>'+
+        '<div class="n">y zonas de moneda</div></div>'+
+      '<div class="cifra"><div class="k">Monedas</div><div class="v">'+nDivisas+'</div>'+
+        '<div class="n">distintas</div></div>'+
+    '</div>'+
+
+    (function(){
+      var con=conFotoDeBil(), sin=total-con;
+      if(!sin) return "";
+      return '<p class="nota" style="margin:-4px 0 16px">'+
+        con+' de '+total+' llevan foto, de Wikimedia Commons. Los '+sin+' que no, es que allí '+
+        'no hay ninguna suya. Y ojo: la foto es la que más se le parecía buscando por país, '+
+        'valor y moneda, así que alguna será de otra serie del mismo billete. '+
+        'Con <strong>Sin foto</strong> ves los que están en blanco.</p>';
+    })()+
+
+    '<div class="filtros">'+
+      '<div class="grupo">'+
+        '<button data-bfil="todas"  aria-pressed="'+((ui.bilFiltro||"todas")==="todas")+'">Todos</button>'+
+        '<button data-bfil="faltan" aria-pressed="'+(ui.bilFiltro==="faltan")+'">Los que me faltan</button>'+
+        '<button data-bfil="tengo"  aria-pressed="'+(ui.bilFiltro==="tengo")+'">Los que tengo</button>'+
+        '<button data-bfil="corrientes" aria-pressed="'+(ui.bilFiltro==="corrientes")+'">Los corrientes</button>'+
+        '<button data-bfil="sinfoto" aria-pressed="'+(ui.bilFiltro==="sinfoto")+'">Sin foto</button>'+
+      '</div>'+
+      '<input class="buscador" id="bilBusca" placeholder="Buscar por país, moneda o valor…" '+
+        'value="'+esc(ui.bilBusca||"")+'">'+
+    '</div>'+
+
+    filaDeChips("bilPais", "Países",
+      cuentaPor(lista, function(b){ return b.pais; })
+        .sort(function(a,b){ return a.clave.localeCompare(b.clave,"es"); }),
+      ui.bilPais, "Todos")+
+    filaDeChips("bilDivisa", "Monedas",
+      cuentaPor(lista.filter(function(b){ return !ui.bilPais || b.pais===ui.bilPais; }),
+                function(b){ return b.divisa; })
+        .sort(function(a,b){ return a.clave.localeCompare(b.clave,"es"); }),
+      ui.bilDivisa, "Todas")+
+
+    '<div id="bilLista"></div>';
+
+  main.querySelectorAll("[data-bfil]").forEach(function(b){
+    b.addEventListener("click", function(){ ui.bilFiltro=b.dataset.bfil; pintarCatalogoBil(); });
+  });
+  engancharChips("bilPais", function(v){ ui.bilPais=v; ui.bilDivisa=""; }, pintarCatalogoBil);
+  engancharChips("bilDivisa", function(v){ ui.bilDivisa=v; }, pintarCatalogoBil);
+  var bus=document.getElementById("bilBusca");
+  bus.addEventListener("input", function(){ ui.bilBusca=bus.value; pintarListaBil(); });
+  document.getElementById("bilBajar").addEventListener("click", bajarCatalogoBil);
+
+  pintarListaBil();
+}
+
+function pintarListaBil(){
+  var caja=document.getElementById("bilLista"); if(!caja) return;
+  var lista=bilFiltrado(), mapa=fichasDelCatalogo();
+
+  if(!lista.length){
+    caja.innerHTML='<div class="vacio"><strong>Nada que enseñar</strong>'+
+      'Con esos filtros no queda ninguno. Prueba con otra cosa.</div>';
+    return;
+  }
+
+  var grupos=[], indice={};
+  lista.forEach(function(b){
+    if(!indice[b.pais]){ indice[b.pais]={clave:b.pais, cosas:[]}; grupos.push(indice[b.pais]); }
+    indice[b.pais].cosas.push(b);
+  });
+  grupos.sort(function(a,b){ return a.clave.localeCompare(b.clave,"es"); });
+
+  caja.innerHTML=grupos.map(function(g){
+    var suyos=catalogoBil().filter(function(b){ return b.pais===g.clave; });
+    var puestos=suyos.filter(function(b){ return mapa[b.id] && tengo(mapa[b.id]); }).length;
+    /* Los de menor valor primero, que es como se guardan en el álbum. */
+    var cosas=g.cosas.slice().sort(function(a,b){ return a.valor-b.valor; });
+    return '<div class="grupoTitulo">'+esc(g.clave)+
+      '<span class="mono" style="text-transform:none;letter-spacing:0" '+
+      'data-bilmarcador="'+esc(g.clave)+'">'+puestos+' de '+suyos.length+'</span></div>'+
+      '<div class="tarjeta" style="margin-bottom:14px"><div class="tarjeta-cuerpo tabla-caja" '+
+      'style="padding:0"><table><tbody>'+
+      cosas.map(function(b){
+        var puesto=!!(mapa[b.id] && tengo(mapa[b.id]));
+        return '<tr data-bilcat="'+esc(b.id)+'"'+(puesto?'':' style="color:var(--muted)"')+'>'+
+          '<td style="width:88px;padding-right:0">'+
+            marcoFoto(b.foto, nombreBillete(b), false)+'</td>'+
+          '<td><strong>'+esc(facial(b.valor)+" "+b.divisa)+'</strong>'+
+            (b.iso?'<div style="font-size:11.5px;color:var(--muted);font-family:var(--mono)">'+
+              esc(b.iso)+
+              /* Lo de «y N países más» sólo cuando son varios de verdad:
+                 con uno solo casi siempre es un territorio pegado, y
+                 decirlo no aclara nada. */
+              (b.otros>1?" · en "+(b.otros+1)+" países":"")+'</div>':'')+
+          '</td>'+
+          '<td style="width:1%;white-space:nowrap">'+
+            (b.raro?'<span class="chapa neutra">poco corriente</span>':'')+'</td>'+
+          '<td style="width:1%;white-space:nowrap">'+
+            '<input type="checkbox" style="width:auto;margin:0" data-marca="'+esc(b.id)+'"'+
+            (puesto?" checked":"")+' aria-label="Lo tengo"></td>'+
+        '</tr>';
+      }).join("")+
+      '</tbody></table></div></div>';
+  }).join("");
+
+  caja.querySelectorAll("[data-marca]").forEach(function(casilla){
+    casilla.addEventListener("change", function(){
+      marcarDelCatalogo(casilla.dataset.marca, casilla.checked, casilla);
+    });
+  });
+  engancharFotos(caja);
+}
+
+function refrescarCatalogoBil(){
+  var mapa=fichasDelCatalogo(), mios=tengoDeBil();
+  var a=document.getElementById("bilTengo"); if(a) a.textContent=mios;
+  document.querySelectorAll("[data-bilmarcador]").forEach(function(e){
+    var clave=e.dataset.bilmarcador;
+    var suyos=catalogoBil().filter(function(b){ return b.pais===clave; });
+    var n=suyos.filter(function(b){ return mapa[b.id] && tengo(mapa[b.id]); }).length;
+    e.textContent=n+" de "+suyos.length;
+  });
+  document.querySelectorAll("[data-bilcat]").forEach(function(fila){
+    var id=fila.dataset.bilcat, puesto=!!(mapa[id] && tengo(mapa[id]));
+    fila.style.color = puesto ? "" : "var(--muted)";
+    var casilla=fila.querySelector("[data-marca]");
+    if(casilla) casilla.checked=puesto;
+  });
+  if((ui.bilFiltro||"todas")!=="todas") pintarListaBil();
+  var nav=document.querySelector('[data-vista="catalogobil"] .cuenta');
+  if(nav) nav.textContent=mios;
+  var navM=document.querySelector('[data-vista="mundo"] .cuenta');
+  if(navM) navM.textContent=delAmbito("mundo").length;
+}
+
+function bajarCatalogoBil(){
+  var mapa=fichasDelCatalogo();
+  var lineas=["País o zona\tValor\tMoneda\tISO\t¿Poco corriente?\t¿Lo tengo?"];
+  catalogoBil().forEach(function(b){
+    lineas.push([b.pais, b.valor, b.divisa, b.iso, b.raro?"sí":"",
+                 (mapa[b.id] && tengo(mapa[b.id]))?"sí":"no"].join("\t"));
+  });
+  bajarArchivo(lineas.join("\n"), "catalogo-billetes.txt");
 }
 
 /* ══════════════════════════════════════════════════════════════
