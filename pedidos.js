@@ -53,7 +53,7 @@ function libroVacio(){
     v:1, actualizado:new Date().toISOString(),
     ajustes:{ nombre:"", conImportes:false, mesesViejo:24 },
     productos:[],     /* {id, seccion, nombre, proveedor, precio, fecha, igi, udsCaja} */
-    proveedores:{},   /* "INTERPESCA": {telefono, contacto, nota} */
+    proveedores:{},   /* "INTERPESCA": {movil, telefono, contacto, nota} */
     pedido:{},        /* id del producto -> {cajas, kg, litros, uds} */
     enviados:[]       /* {id, fecha, proveedor, lineas:[{nombre,pedido,texto,importe}], total} */
   };
@@ -833,10 +833,11 @@ function tarjetaProveedorPedido(g){
     '</div>'+
     /* El aviso sólo cuando no hay a dónde mandarlo: con su móvil puesto
        siempre se puede mandar a sí mismo y reenviarlo. */
-    (datos.telefono || miMovil() ? "" :
+    (telWhatsApp(g.proveedor) || miMovil() ? "" :
       '<div class="tarjeta-cuerpo" style="padding-bottom:0">'+
-      '<div class="aviso-caja">A '+esc(g.proveedor)+' no le has puesto teléfono. '+
-      'Ponlo en <strong>Proveedores</strong> y el pedido se manda de una.</div></div>')+
+      '<div class="aviso-caja">A '+esc(g.proveedor)+' no le has puesto ningún teléfono. '+
+      'Ponle el móvil del comercial en <strong>Proveedores</strong> y el pedido se le manda '+
+      'de una.</div></div>')+
     '<div class="tabla-caja pegada"><table><thead><tr>'+
       '<th>Producto</th><th class="num">Cuánto</th>'+
       '<th class="num">Precio</th><th class="num">Importe</th><th></th>'+
@@ -1167,6 +1168,33 @@ function mandarTodos(){
   });
 }
 
+/* ── Los dos teléfonos de un proveedor ────────────────────────────
+   En la empresa sólo dan un número y casi siempre es un fijo, que no
+   tiene WhatsApp. El que lo lleva es el comercial, en su móvil. Así
+   que cada proveedor tiene los dos: el móvil del comercial, que es al
+   que se le manda el pedido, y el fijo de la empresa, que es para
+   llamar cuando hace falta hablar.
+
+   Si sólo hay fijo, se ofrece igual pero avisando: hay fijos con
+   WhatsApp Business y no voy a decidir yo por él.
+   ══════════════════════════════════════════════════════════════ */
+function movilDe(prov){
+  return soloNumero((libro.proveedores[prov]||{}).movil);
+}
+function fijoDe(prov){
+  return soloNumero((libro.proveedores[prov]||{}).telefono);
+}
+/* A dónde se le manda el WhatsApp: al móvil del comercial, y si no lo
+   tienes, al que haya. */
+function telWhatsApp(prov){
+  return movilDe(prov) || fijoDe(prov);
+}
+/* Para decirlo en la pantalla sin mentir: no sé si ese número es fijo o
+   móvil, sólo sé que no me ha dicho cuál es el del comercial. */
+function esSoloFijo(prov){
+  return !movilDe(prov) && !!fijoDe(prov);
+}
+
 /* El enlace que abre el chat con el pedido ya escrito. En el ordenador
    tiene que ser WhatsApp Web: la aplicación de escritorio rechaza los
    enlaces que llevan texto dentro. */
@@ -1204,7 +1232,9 @@ function mandarPedido(prov){
   var textoDirecto=textoPedido(prov, false);  /* el que va al proveedor */
   var g=pedidoPorProveedor().filter(function(x){ return x.proveedor===prov; })[0];
   var mio=miMovil();
-  var suyo=soloNumero((libro.proveedores[prov]||{}).telefono);
+  var suyo=telWhatsApp(prov);
+  var soloFijo=esSoloFijo(prov);
+  var quien=(libro.proveedores[prov]||{}).contacto;
   var mioPrimero=!!libro.ajustes.aMi;
 
   var botonMio = mio
@@ -1229,13 +1259,19 @@ function mandarPedido(prov){
             '» escrito arriba, y se lo reenvías tú. '
           : '')+
         (suyo
-          ? '<strong>A '+esc(prov)+'</strong> abre su chat, el +'+esc(suyo)+', con el pedido puesto.'
-          : (mio ? 'A '+esc(prov)+' no se le puede mandar directo: no tiene teléfono guardado. '+
-                   'Pónselo en <strong>Proveedores</strong>.' : ""))+
+          ? '<strong>A '+esc(prov)+'</strong> abre el chat del +'+esc(suyo)+
+            (quien && !soloFijo ? ', el móvil de '+esc(quien) : "")+', con el pedido puesto.'+
+            (soloFijo
+              ? ' Ése es el teléfono de la empresa: no le has puesto el móvil del comercial. '+
+                'Si resulta ser un fijo, no tendrá WhatsApp y no le llegará; ponle el móvil en '+
+                'Proveedores y vas seguro.'
+              : "")
+          : (mio ? 'A '+esc(prov)+' no se le puede mandar directo: no tiene ningún teléfono '+
+                   'guardado. Ponle el móvil del comercial en <strong>Proveedores</strong>.' : ""))+
       '</p>'+
       (!mio && !suyo
         ? '<div class="aviso-caja" style="margin:10px 0 0">No hay ningún teléfono a donde '+
-          'mandarlo: ponte el tuyo en <strong>Ajustes</strong> o el suyo en '+
+          'mandarlo: ponte el tuyo en <strong>Ajustes</strong> o el del comercial en '+
           '<strong>Proveedores</strong>. Mientras tanto, cópialo y pégalo tú.</div>'
         : "")+
       '<p class="nota" style="margin:10px 0 0">Ninguno de los dos lo manda solo: te lo deja '+
@@ -1286,20 +1322,26 @@ function mandarPedido(prov){
    ══════════════════════════════════════════════════════════════ */
 function verProveedores(main){
   var lista=listaProveedores();
-  var conTel=lista.filter(function(p){ return soloNumero((libro.proveedores[p.nombre]||{}).telefono); }).length;
+  var conMovil=lista.filter(function(p){ return movilDe(p.nombre); }).length;
+  var conAlgo=lista.filter(function(p){ return telWhatsApp(p.nombre); }).length;
 
   main.innerHTML=
     cabecera("Proveedores",
-      "El teléfono de cada uno, para que el pedido se mande de una. Es el mismo número que "+
-      "ves en su ficha de WhatsApp, con el país delante.")+
+      "Dos teléfonos por cada uno: el <strong>móvil del comercial</strong>, que es al que se le "+
+      "manda el pedido porque es el que lleva WhatsApp, y el <strong>de la empresa</strong>, "+
+      "que casi siempre es un fijo y sirve para llamar.")+
 
     '<div class="cifras">'+
       '<div class="cifra"><div class="k">Proveedores</div><div class="v">'+lista.length+'</div>'+
         '<div class="n">en la lista de precios</div></div>'+
-      '<div class="cifra"><div class="k">Con teléfono</div>'+
-        '<div class="v'+(conTel<lista.length?"":" acento")+'">'+conTel+'</div>'+
-        '<div class="n">'+(conTel<lista.length
-          ? "a "+(lista.length-conTel)+" les falta" : "todos puestos")+'</div></div>'+
+      '<div class="cifra"><div class="k">Con móvil</div>'+
+        '<div class="v'+(conMovil<lista.length?"":" acento")+'">'+conMovil+'</div>'+
+        '<div class="n">'+(conMovil<lista.length
+          ? "a "+(lista.length-conMovil)+" les falta el del comercial"
+          : "todos puestos")+'</div></div>'+
+      '<div class="cifra"><div class="k">Se les puede mandar</div>'+
+        '<div class="v'+(conAlgo<lista.length?"":" acento")+'">'+conAlgo+'</div>'+
+        '<div class="n">contando los que sólo tienen fijo</div></div>'+
       '<div class="cifra"><div class="k">Precios viejos</div>'+
         '<div class="v'+(libro.productos.filter(esViejo).length?" malo":"")+'">'+
         libro.productos.filter(esViejo).length+'</div>'+
@@ -1308,11 +1350,11 @@ function verProveedores(main){
 
     '<div class="tarjeta"><div class="tabla-caja"><table><thead><tr>'+
       '<th>Proveedor</th><th class="num">Productos</th><th class="num">Precios viejos</th>'+
-      '<th>Teléfono</th><th>Contacto</th><th></th></tr></thead><tbody>'+
+      '<th>Comercial</th><th>La empresa</th><th></th></tr></thead><tbody>'+
     lista.map(function(p){
       var d=libro.proveedores[p.nombre]||{};
       var viejos=libro.productos.filter(function(x){ return x.proveedor===p.nombre && esViejo(x); }).length;
-      var tel=soloNumero(d.telefono);
+      var mov=movilDe(p.nombre), fijo=fijoDe(p.nombre);
       return '<tr><td>'+
           (p.n ? '<button class="enlace-prov" data-abrir-prov="'+esc(p.nombre)+'">'+
                  esc(p.nombre)+'</button>'
@@ -1320,8 +1362,11 @@ function verProveedores(main){
                  ' <span class="chapa neutra" style="font-size:10.5px">sólo la ficha</span>')+'</td>'+
         '<td class="num">'+(p.n||"—")+'</td>'+
         '<td class="num"'+(viejos?' style="color:var(--aviso)"':"")+'>'+(viejos||"—")+'</td>'+
-        '<td class="mono">'+(tel?"+"+esc(tel):'<span style="color:var(--muted)">—</span>')+'</td>'+
-        '<td>'+esc(d.contacto||"")+'</td>'+
+        '<td>'+(d.contacto?'<div>'+esc(d.contacto)+'</div>':"")+
+          (mov?'<a class="mono" href="tel:+'+esc(mov)+'" style="color:var(--acento)">+'+esc(mov)+'</a>'
+              :'<span style="color:var(--muted)">sin móvil</span>')+'</td>'+
+        '<td class="mono">'+(fijo?'<a href="tel:+'+esc(fijo)+'" style="color:inherit">+'+esc(fijo)+'</a>'
+                                 :'<span style="color:var(--muted)">—</span>')+'</td>'+
         '<td class="num"><div class="acciones-fila">'+
           '<button class="btn suave sm" data-prov="'+esc(p.nombre)+'">Cambiar</button>'+
           '<button class="btn suave sm malo" data-borrar-prov="'+esc(p.nombre)+'" '+
@@ -1362,7 +1407,7 @@ function verProveedor(main){
   if(!nombre || !suyos.length){ ui.vista="proveedores"; pintar(); return; }
 
   var datos=libro.proveedores[nombre]||{};
-  var tel=soloNumero(datos.telefono);
+  var tel=telWhatsApp(nombre);
   var enPedido=suyos.filter(function(p){ return hayPedido(delPedido(p.id)); });
   var total=r2(enPedido.reduce(function(t,p){ return t+importeLinea(p); },0));
   var viejos=suyos.filter(esViejo).length;
@@ -1391,8 +1436,8 @@ function verProveedor(main){
       '<button class="btn" id="pv_ficha">Teléfono y contacto</button>')+
 
     (tel || miMovil() ? "" :
-      '<div class="aviso-caja">No tiene teléfono guardado, así que no se le puede mandar el '+
-      'pedido de una. Pónselo con <strong>Teléfono y contacto</strong>.</div>')+
+      '<div class="aviso-caja">No tiene ningún teléfono guardado. Ponle el móvil del comercial '+
+      'con <strong>Teléfono y contacto</strong> y el pedido se le manda de una.</div>')+
 
     '<div class="cifras">'+
       '<div class="cifra"><div class="k">Le compras</div><div class="v">'+suyos.length+'</div>'+
@@ -1612,17 +1657,25 @@ function editarProveedor(nombre){
   var d=libro.proveedores[nombre]||{};
   abrirVentana("Proveedor: "+nombre,
     '<div class="rejilla">'+
-      '<div class="campo"><label class="lbl" for="pv_tel">Teléfono</label>'+
-        '<input id="pv_tel" value="'+esc(d.telefono||"")+'" placeholder="+376 800000"></div>'+
-      '<div class="campo"><label class="lbl" for="pv_con">Persona de contacto</label>'+
+      '<div class="campo"><label class="lbl" for="pv_con">Comercial</label>'+
         '<input id="pv_con" value="'+esc(d.contacto||"")+'" placeholder="Nombre"></div>'+
+      '<div class="campo"><label class="lbl" for="pv_mov">Su móvil <span class="mono" '+
+        'style="text-transform:none">(el del WhatsApp)</span></label>'+
+        '<input id="pv_mov" value="'+esc(d.movil||"")+'" placeholder="+376 300000"></div>'+
+      '<div class="campo"><label class="lbl" for="pv_tel">Teléfono de la empresa</label>'+
+        '<input id="pv_tel" value="'+esc(d.telefono||"")+'" placeholder="+376 800000"></div>'+
     '</div>'+
     '<div class="campo" style="margin-top:12px"><label class="lbl" for="pv_nota">Nota</label>'+
       '<input id="pv_nota" value="'+esc(d.nota||"")+'" placeholder="Reparte los martes, pedido antes de las 10…"></div>'+
-    '<p class="nota" style="margin:12px 0 0">Escribe el número entero, empezando por el país: '+
+    '<p class="nota" style="margin:12px 0 0">El pedido se manda al <strong>móvil del '+
+    'comercial</strong>, que es el que lleva WhatsApp. El de la empresa casi siempre es un fijo '+
+    'y sirve para llamar, no para mandarle nada. Si sólo tienes uno, ponlo donde sea: se usa el '+
+    'móvil si lo hay, y si no, el otro.</p>'+
+    '<p class="nota" style="margin:8px 0 0">Los números, enteros y con el país delante: '+
     '<span class="mono">+376</span> Andorra, <span class="mono">+34</span> España.</p>',
     function(){
-      libro.proveedores[nombre]={ telefono:valor("pv_tel"), contacto:valor("pv_con"), nota:valor("pv_nota") };
+      libro.proveedores[nombre]={ movil:valor("pv_mov"), telefono:valor("pv_tel"),
+                                  contacto:valor("pv_con"), nota:valor("pv_nota") };
       guardar(); pintar(); avisar("Guardado");
     });
 }
