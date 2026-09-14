@@ -24,9 +24,12 @@
    La verdura y la carne llegaron a tener pantalla propia, «Cada día»,
    con la lista entera a la vista. Se quitó: con el buscador y la chapa
    «Del día» de aquí se llega igual, y una pantalla menos es una pantalla
-   menos que mantener. Los productos siguen todos, marcados como del día
-   y con su unidad —kilos, litros, unidades—, que eso es del producto y
-   no de la pantalla que se borró.
+   menos que mantener. Los productos siguen todos, marcados como del día.
+
+   Todo se puede pedir de cuatro maneras —cajas, kilos, litros y
+   unidades— y las cuatro están en todos los artículos. La unidad que
+   lleva escrita cada producto ya no manda: dice a qué se refiere el
+   precio y cuál es la casilla que se rellena sola al apuntar.
 
    Hubo un «stock semanal» —lo que quieres tener de cada cosa, y un
    botón que lo volcaba entero en el pedido—. Se quitó. Lo que sí se
@@ -51,8 +54,8 @@ function libroVacio(){
     ajustes:{ nombre:"", conImportes:false, mesesViejo:24 },
     productos:[],     /* {id, seccion, nombre, proveedor, precio, fecha, igi, udsCaja} */
     proveedores:{},   /* "INTERPESCA": {telefono, contacto, nota} */
-    pedido:{},        /* id del producto -> {uds, cajas} */
-    enviados:[]       /* {id, fecha, proveedor, lineas:[{nombre,uds,cajas,importe}], total} */
+    pedido:{},        /* id del producto -> {cajas, kg, litros, uds} */
+    enviados:[]       /* {id, fecha, proveedor, lineas:[{nombre,pedido,texto,importe}], total} */
   };
 }
 
@@ -107,6 +110,23 @@ function cargar(){
     /* Y «un» sobraba: sin unidad ya son unidades. */
     if(p.ud==="un"){ p.ud=""; tocado=true; }
   });
+  /* Hasta hoy el pedido guardaba una cantidad suelta y las cajas, y esa
+     cantidad iba en la unidad del producto: si el tomate era de kilos,
+     un 3 ahí eran tres kilos. Ahora cada unidad tiene su casilla, así
+     que lo que estuviera a medias se pasa a la suya y nadie se queda
+     pidiendo tres de nada. */
+  if(libro.v!==2){
+    Object.keys(libro.pedido).forEach(function(id){
+      var l=libro.pedido[id]; if(!l) return;
+      var sueltas=+l.uds||0;
+      if(sueltas>0){
+        var u=unidadDe(productoPorId(id));
+        if(u==="kg"){ l.kg=sueltas; l.uds=0; }
+        else if(u==="L"){ l.litros=sueltas; l.uds=0; }
+      }
+    });
+    libro.v=2; tocado=true;
+  }
   if(tocado) guardar();
 }
 
@@ -199,24 +219,48 @@ function listaProveedores(){
    entrar el pescado o el pan sin tocar nada. */
 function esDiario(p){ return !!(p && p.diario); }
 
-/* Cada cosa se pide como se pide: el tomate en kilos, la leche en
-   litros y los huevos a unidades. La unidad se guarda EN EL PRODUCTO, no
-   en el pedido de hoy: cada cosa se pide siempre igual, y así no hay que
-   volver a decirlo todas las mañanas.
+/* ── Las cuatro maneras de pedir una cosa ─────────────────────────
+   Cajas, kilos, litros y unidades, y las cuatro en TODOS los artículos.
 
-   Cajas NO está aquí a propósito. Las cajas tienen su propia casilla, la
-   de al lado, y tenerlas también como unidad era lo que liaba el pedido:
-   ponías 3 en Unidades y salía «3 cajas». */
+   Antes cada producto llevaba su unidad escrita —el tomate en kilos, la
+   leche en litros— y en el pedido salían sólo ésa y las cajas, y las
+   cajas sólo si el producto tenía puesto cuántas unidades trae. Pero un
+   día el tomate se pide por cajas y otro por kilos, y eso no se sabe
+   cuando se escribe la lista de precios: se sabe por la mañana. Así que
+   ahora las cuatro casillas están en todas las líneas y se escribe en la
+   que haga falta ese día. Las que no se usan se quedan en blanco y no
+   salen en el pedido.
+
+   Se pueden mezclar, que es como se pide de verdad: «3 cajas y 2 kg».
+
+   El orden es el de la cabeza: primero las cajas, que es lo que más se
+   pide, y las unidades sueltas al final. */
+var MODOS=[
+  { campo:"cajas",  corto:"caj", uno:"caja",   varios:"cajas"    },
+  { campo:"kg",     corto:"kg",  uno:"kg",     varios:"kg"       },
+  { campo:"litros", corto:"L",   uno:"L",      varios:"L"        },
+  { campo:"uds",    corto:"un",  uno:"unidad", varios:"unidades" }
+];
+function modoDe(campo){
+  for(var i=0;i<MODOS.length;i++) if(MODOS[i].campo===campo) return MODOS[i];
+  return null;
+}
+
+/* La unidad del producto ya no manda en el pedido, pero sigue diciendo a
+   qué se refiere el precio —2,40 € el kilo, 0,68 € el litro— y cuál es
+   la casilla que se rellena sola al apuntar sobre la marcha. */
 var UNIDADES=["kg","L",""];
 function unidadDe(p){
   var u=(p&&p.ud)||"";
   return UNIDADES.indexOf(u)>=0 ? u : "";
 }
-function siguienteUnidad(u){
-  var i=UNIDADES.indexOf(u);
-  return UNIDADES[(i<0?UNIDADES.length-1:i+1)%UNIDADES.length];
+/* La casilla que le toca a un producto cuando no se dice otra cosa: la
+   caja si viene en cajas, y si no, la de su unidad. */
+function campoNatural(p){
+  if((+(p&&p.udsCaja)||0)>0) return "cajas";
+  var u=unidadDe(p);
+  return u==="kg" ? "kg" : u==="L" ? "litros" : "uds";
 }
-function etiquetaUnidad(u){ return u || "—"; }
 /* "3 kg", "2 L", "4 un" o, si no tiene unidad, "4 unidades". */
 function cantidadConUnidad(n, u){
   if(!u) return n+(n===1?" unidad":" unidades");
@@ -233,19 +277,43 @@ function productoPorId(id){
 
 /* ── El pedido ────────────────────────────────────────────────── */
 function delPedido(id){
-  var l=libro.pedido[id];
-  return { uds:(l&&+l.uds)||0, cajas:(l&&+l.cajas)||0 };
+  var l=libro.pedido[id], r={};
+  MODOS.forEach(function(m){ r[m.campo]=(l && +l[m.campo])||0; });
+  return r;
+}
+/* Si se queda todo a cero, la línea se va del pedido entera: una línea
+   con cuatro ceros no es una línea, es basura que luego hay que contar. */
+function hayPedido(l){
+  for(var i=0;i<MODOS.length;i++) if(l[MODOS[i].campo]>0) return true;
+  return false;
 }
 function ponerEnPedido(id, campo, n){
   n=Math.max(0, Math.round(+n||0));
-  var l=libro.pedido[id] || {uds:0, cajas:0};
+  var l=delPedido(id);
   l[campo]=n;
-  if(!l.uds && !l.cajas) delete libro.pedido[id]; else libro.pedido[id]=l;
+  if(!hayPedido(l)) delete libro.pedido[id]; else libro.pedido[id]=l;
   guardar();
 }
+/* Kilos, litros y unidades van al precio de siempre, que es por unidad
+   de lo que sea; las cajas, al precio de la caja. Si a un producto no se
+   le ha puesto cuántas unidades trae la caja, su precio de caja es cero
+   y esas cajas no suman: se piden igual, pero el importe se queda corto
+   y por eso la línea lo dice. */
 function importeLinea(p){
   var l=delPedido(p.id);
-  return r2(l.uds*conIgi(p) + l.cajas*precioCaja(p));
+  return r2((l.kg+l.litros+l.uds)*conIgi(p) + l.cajas*precioCaja(p));
+}
+/* Lo que se le escribe al proveedor de una línea: «3 cajas de 12 + 2 kg». */
+function trozosPedidos(p, l){
+  var fuera=[];
+  MODOS.forEach(function(m){
+    var n=l[m.campo]; if(!n) return;
+    var t=num(n, n%1?1:0)+" "+(n===1?m.uno:m.varios);
+    if(m.campo==="cajas" && (+p.udsCaja||0)>1)
+      t+=" de "+num(+p.udsCaja, (+p.udsCaja)%1?1:0);
+    fuera.push(t);
+  });
+  return fuera;
 }
 /* El pedido, repartido por proveedor: a cada uno se le manda el suyo. */
 function pedidoPorProveedor(){
@@ -253,10 +321,10 @@ function pedidoPorProveedor(){
   Object.keys(libro.pedido).forEach(function(id){
     var p=productoPorId(id); if(!p) return;
     var l=delPedido(id);
-    if(!l.uds && !l.cajas) return;
+    if(!hayPedido(l)) return;
     var prov=p.proveedor||"Sin proveedor";
     if(!por[prov]) por[prov]={proveedor:prov, lineas:[], total:0};
-    por[prov].lineas.push({p:p, uds:l.uds, cajas:l.cajas, importe:importeLinea(p)});
+    por[prov].lineas.push({p:p, l:l, importe:importeLinea(p)});
     por[prov].total=r2(por[prov].total+importeLinea(p));
   });
   return Object.keys(por).sort(function(a,b){ return a.localeCompare(b); })
@@ -267,7 +335,7 @@ function totalPedido(){
 }
 function lineasPedido(){
   return Object.keys(libro.pedido).filter(function(id){
-    var l=delPedido(id); return l.uds||l.cajas;
+    return hayPedido(delPedido(id));
   }).length;
 }
 
@@ -360,7 +428,7 @@ function filtrados(){
   return libro.productos.filter(function(p){
     if(ui.seccion==="__diario"){ if(!esDiario(p)) return false; }
     else if(ui.seccion && p.seccion!==ui.seccion) return false;
-    if(ui.soloPedido){ var l=delPedido(p.id); if(!l.uds && !l.cajas) return false; }
+    if(ui.soloPedido && !hayPedido(delPedido(p.id))) return false;
     if(!trozos.length) return true;
     /* Se busca por producto y por proveedor a la vez, y cada palabra
        tiene que estar en alguno de los dos: así "alitas inter" cae en
@@ -472,7 +540,7 @@ function pintarResultado(){
    que se abre esta pantalla y esconderlos era esconder el trabajo. Si
    hace falta ver más productos de golpe, para eso está el buscador. */
 function fichaProducto(g){
-  var enPedido=g.ofertas.some(function(o){ var l=delPedido(o.id); return l.uds||l.cajas; });
+  var enPedido=g.ofertas.some(function(o){ return hayPedido(delPedido(o.id)); });
   var total=r2(g.ofertas.reduce(function(s,o){ return s+importeLinea(o); },0));
   return '<article class="prod'+(enPedido?" pedido":"")+'">'+
     '<div class="prod-cab"><h3>'+esc(g.nombre)+'</h3>'+
@@ -486,7 +554,7 @@ function fichaProducto(g){
 
 function lineaOferta(o, g){
   var l=delPedido(o.id);
-  var pedida=(l.uds||l.cajas);
+  var pedida=hayPedido(l);
   var neto=conIgi(o);
   var esMejor=(g.mejor && g.mejor.id===o.id);
   var meses=mesesDe(o.fecha);
@@ -499,20 +567,24 @@ function lineaOferta(o, g){
   else info.push('<span class="viejo">sin fecha</span>');
   if(neto) info.push('<span>'+num(o.igi,1)+' % IGI</span>');
   if(caja>0) info.push('<span>'+esc(deCaja(o))+' · '+eur(precioCaja(o))+'</span>');
+  /* Las cajas se pueden pedir siempre, pero si nadie ha dicho cuántas
+     unidades trae la caja no hay precio que ponerle: se avisa aquí, que
+     es donde está el botón de arreglarlo. */
+  else if(l.cajas) info.push('<span class="viejo">caja sin tamaño: no suma</span>');
 
   return '<div class="oferta'+(esMejor?" mejor":"")+(pedida?" encargada":"")+'" data-of="'+esc(o.id)+'">'+
     '<div class="of-quien">'+
       '<div class="of-prov">'+esc(o.proveedor||"— sin proveedor —")+
         (esMejor?' <span class="chapa ok" style="font-size:10.5px">más barato</span>':"")+'</div>'+
       '<div class="of-precio'+(esMejor?" mejor":"")+(neto?"":" sin")+'">'+
-        (neto?eur(neto):"sin precio")+'</div>'+
+        (neto?eur(neto):"sin precio")+
+        (neto?'<span class="of-por">/'+esc(unidadDe(o)||"ud")+'</span>':"")+'</div>'+
       '<div class="of-info">'+info.join("")+
         ' <button class="btn suave sm" data-editar="'+esc(o.id)+'" '+
         'style="padding:0 4px;font-size:11.5px;text-decoration:underline">cambiar</button></div>'+
     '</div>'+
     '<div class="of-acciones">'+
-      contador(o.id, "uds", l.uds, unidadDe(o)||"un")+
-      (caja>0 ? contador(o.id, "cajas", l.cajas, "caj") : "")+
+      MODOS.map(function(m){ return contador(o.id, m.campo, l[m.campo], m.corto); }).join("")+
     '</div>'+
   '</div>';
 }
@@ -564,15 +636,15 @@ function refrescarFicha(id){
   var linea=document.querySelector('[data-of="'+id+'"]');
   if(!linea) return;
   var l=delPedido(id);
-  linea.classList.toggle("encargada", !!(l.uds||l.cajas));
-  linea.classList.toggle("puesta", !!(l.uds||l.cajas));
+  linea.classList.toggle("encargada", hayPedido(l));
+  linea.classList.toggle("puesta", hayPedido(l));
   var ficha=linea.closest(".prod"); if(!ficha) return;
   var ids=[].slice.call(ficha.querySelectorAll("[data-of]"))
              .map(function(x){ return x.getAttribute("data-of"); });
   var total=r2(ids.reduce(function(s,x){
     var p=productoPorId(x); return s+(p?importeLinea(p):0); },0));
   ficha.classList.toggle("pedido", total>0 || ids.some(function(x){
-    var q=delPedido(x); return q.uds||q.cajas; }));
+    return hayPedido(delPedido(x)); }));
   var pie=ficha.querySelector(".linea-total");
   if(total>0){
     if(!pie){ pie=document.createElement("div"); pie.className="linea-total"; ficha.appendChild(pie); }
@@ -644,7 +716,7 @@ function verPedido(main){
       /* Si se queda a cero, la línea desaparece: hay que repintar, pero
          sólo entonces, para no perder el cursor mientras se escribe. */
       var l=delPedido(id);
-      if(!l.uds && !l.cajas) pintar(); else refrescarTotales();
+      if(!hayPedido(l)) pintar(); else refrescarTotales();
     });
   });
   main.querySelectorAll("[data-quitar]").forEach(function(b){
@@ -673,12 +745,15 @@ function tarjetaProveedorPedido(g){
         '<button class="btn wa" data-mandar="'+esc(g.proveedor)+'">📱 Mandar el pedido</button>'+
       '</div>'+
     '</div>'+
-    (datos.telefono ? "" :
+    /* Mientras los pedidos vayan a su móvil, el teléfono del proveedor
+       no hace ninguna falta y el aviso sobraba. */
+    (datos.telefono || vaAMi() ? "" :
       '<div class="tarjeta-cuerpo" style="padding-bottom:0">'+
       '<div class="aviso-caja">A '+esc(g.proveedor)+' no le has puesto teléfono. '+
       'Ponlo en <strong>Proveedores</strong> y el pedido se manda de una.</div></div>')+
     '<div class="tabla-caja pegada"><table><thead><tr>'+
-      '<th>Producto</th><th class="num">Unidades</th><th class="num">Cajas</th>'+
+      '<th>Producto</th>'+
+      MODOS.map(function(m){ return '<th class="num">'+esc(m.varios)+'</th>'; }).join("")+
       '<th class="num">Precio</th><th class="num">Importe</th><th></th>'+
     '</tr></thead><tbody>'+
     g.lineas.map(function(l){
@@ -688,11 +763,13 @@ function tarjetaProveedorPedido(g){
         /* Editables aquí mismo: esto es la lista que se va llenando
            durante la semana, así que hay que poder subir una cantidad
            sin ir a buscar el producto a otra pantalla. */
-        '<td class="num">'+casillaPedido(l.p.id, "uds", l.uds, unidadDe(l.p)||"un")+'</td>'+
-        '<td class="num">'+((+l.p.udsCaja||0)>0
-          ? casillaPedido(l.p.id, "cajas", l.cajas,
-                          (+l.p.udsCaja||0)>1 ? "de "+num(+l.p.udsCaja, (+l.p.udsCaja)%1?1:0) : "cajas")
-          : '<span style="color:var(--muted)">—</span>')+'</td>'+
+        MODOS.map(function(m){
+          /* La caja enseña de cuántas es, que es lo que hay que saber
+             para poner el número. */
+          var pie=(m.campo==="cajas" && (+l.p.udsCaja||0)>1)
+                  ? "de "+num(+l.p.udsCaja, (+l.p.udsCaja)%1?1:0) : m.corto;
+          return '<td class="num">'+casillaPedido(l.p.id, m.campo, l.l[m.campo], pie)+'</td>';
+        }).join("")+
         '<td class="num">'+(conIgi(l.p)?eur(conIgi(l.p)):
           '<span style="color:var(--muted)">sin precio</span>')+'</td>'+
         '<td class="num">'+(l.importe?"<strong>"+eur(l.importe)+"</strong>":
@@ -701,7 +778,7 @@ function tarjetaProveedorPedido(g){
           'title="Quitar del pedido">✕</button></td>'+
       '</tr>';
     }).join("")+
-    '</tbody><tfoot><tr><td colspan="4">Total</td>'+
+    '</tbody><tfoot><tr><td colspan="'+(MODOS.length+2)+'">Total</td>'+
       '<td class="num" data-total-prov="'+esc(g.proveedor)+'">'+
         (g.total?eur(g.total):"—")+'</td><td></td></tr></tfoot></table></div>'+
   '</div>';
@@ -726,11 +803,12 @@ function filaSugerencia(o, barato){
   var detalle=[];
   if(caj>0) detalle.push(deCaja(o)+(p?" · "+eur(precioCaja(o)):""));
   if(o.fecha) detalle.push(dmy(o.fecha));
-  return '<button type="button" class="sug'+((l.uds||l.cajas)?" ya":"")+'" '+
+  var ya=hayPedido(l);
+  return '<button type="button" class="sug'+(ya?" ya":"")+'" '+
     'data-apunta="'+esc(o.id)+'">'+
     '<span class="sug-nom">'+esc(o.proveedor||"sin proveedor")+
       (esBarato?' <span class="chapa ok" style="font-size:10px">más barato</span>':"")+
-      ((l.uds||l.cajas)?' <span class="chapa" style="font-size:10px">ya apuntado</span>':"")+
+      (ya?' <span class="chapa" style="font-size:10px">ya apuntado</span>':"")+
     '</span>'+
     '<span class="sug-precio'+(p?"":" sin")+'">'+(p?eur(p):"sin precio")+
       (demas>0?'<span class="sug-demas">+'+eur(demas)+'</span>':"")+
@@ -788,14 +866,14 @@ function engancharApuntar(){
   function apuntar(id){
     var p=productoPorId(id); if(!p) return;
     var l=delPedido(id);
-    /* Si viene en caja, se pide por cajas; si no, por unidades. Es lo
-       que se haría a mano, y así no hay que corregirlo después. */
-    var campoN=(+p.udsCaja||0)>0 ? "cajas" : "uds";
+    /* Se suma en la casilla que le pega: la caja si viene en cajas, y
+       si no la de su unidad. Las otras tres siguen ahí para cambiarlo a
+       mano, que es de lo que se trata. */
+    var campoN=campoNatural(p);
     var cuantas=(l[campoN]||0)+1;
+    var m=modoDe(campoN);
     ponerEnPedido(id, campoN, cuantas);
-    avisar("Apuntado: "+p.nombre+" · "+
-           (campoN==="cajas" ? plural(cuantas,"caja","cajas")
-                             : cantidadConUnidad(cuantas, unidadDe(p))));
+    avisar("Apuntado: "+p.nombre+" · "+cuantas+" "+(cuantas===1?m.uno:m.varios));
     ui.qApunte=""; pintar();
     var nuevo=document.getElementById("qa");
     if(nuevo && !("ontouchstart" in window)) nuevo.focus();
@@ -858,6 +936,21 @@ function vaciarPedido(){
     {aceptar:"Vaciar", malo:true});
 }
 
+/* ── ¿A quién se le manda? ────────────────────────────────────────
+   De momento, a él. Los pedidos no salen todavía de la app al
+   proveedor: se mandan a su propio móvil, los mira, y los reenvía él a
+   quien toque. Así el día que uno salga mal no se entera el proveedor.
+
+   Por eso el pedido que va a su móvil lleva escrito arriba PARA QUIÉN
+   es: llegan cuatro seguidos al mismo chat y, sin esa línea, no se sabe
+   cuál es de cuál.
+
+   El teléfono se guarda en los ajustes, no aquí: este archivo es
+   público y un móvil no pinta nada en él. Cuando quiera que los pedidos
+   salgan directos al proveedor, sólo hay que quitar la marca. */
+function miMovil(){ return soloNumero(libro.ajustes.miMovil); }
+function vaAMi(){ return !!(libro.ajustes.aMi && miMovil()); }
+
 /* ── Mandarlo por WhatsApp ────────────────────────────────────── */
 /* Mismo apaño que en Caja: la aplicación de escritorio rechaza los
    enlaces wa.me con texto, así que se enseña el pedido, se puede copiar,
@@ -869,15 +962,12 @@ function textoPedido(prov){
   var l=[];
   if(libro.ajustes.nombre) l.push(libro.ajustes.nombre);
   l.push("Pedido del "+dmy(hoyISO()));
+  if(vaAMi()) l.push("Para: "+prov);
   l.push("");
   g.lineas.forEach(function(x){
-    var trozos=[];
-    if(x.cajas) trozos.push(x.cajas+(x.cajas===1?" caja":" cajas")+
-      ((+x.p.udsCaja||0)>1 ? " de "+num(+x.p.udsCaja, (+x.p.udsCaja)%1?1:0) : ""));
-    /* Cada cosa con su unidad —«3 kg», «2 L», «4 un»— y, si no se le ha
-       puesto ninguna, unidades a secas. Las cajas van aparte, arriba:
-       son la otra casilla y no se mezclan con ésta. */
-    if(x.uds) trozos.push(cantidadConUnidad(x.uds, unidadDe(x.p)));
+    /* Cada casilla que lleve algo, con su nombre entero: «3 cajas de 12
+       + 2 kg». El que lo lee al otro lado no tiene la pantalla delante. */
+    var trozos=trozosPedidos(x.p, x.l);
     l.push("- "+x.p.nombre+": "+trozos.join(" + ")+
            (libro.ajustes.conImportes && x.importe ? "  ("+eur(x.importe)+")" : ""));
   });
@@ -905,7 +995,8 @@ function mandarPedido(prov){
   var texto=textoPedido(prov);
   if(!texto){ avisar("Ese proveedor ya no tiene nada en el pedido.", true); return; }
   var g=pedidoPorProveedor().filter(function(x){ return x.proveedor===prov; })[0];
-  var tel=soloNumero((libro.proveedores[prov]||{}).telefono);
+  var aMi=vaAMi();
+  var tel=aMi ? miMovil() : soloNumero((libro.proveedores[prov]||{}).telefono);
   var enlaceApp="https://wa.me/"+tel+"?text="+encodeURIComponent(texto);
   var enlaceWeb="https://web.whatsapp.com/send?phone="+tel+"&text="+encodeURIComponent(texto);
   var primero=enOrdenador()?enlaceWeb:enlaceApp;
@@ -913,14 +1004,18 @@ function mandarPedido(prov){
   var vieja=document.getElementById("dlg"); if(vieja) vieja.remove();
   var d=document.createElement("dialog"); d.id="dlg";
   d.innerHTML=
-    '<div class="dlg-cab"><h3>Pedido a '+esc(prov)+'</h3>'+
+    '<div class="dlg-cab"><h3>Pedido a '+esc(prov)+(aMi?" · a tu móvil":"")+'</h3>'+
       '<button class="btn suave" data-cerrar>✕</button></div>'+
     '<div class="dlg-cuerpo">'+
       '<div class="parte" id="elPedido">'+esc(texto)+'</div>'+
       (tel
-        ? '<p class="nota" style="margin:14px 0 0">Se abrirá el chat de <strong>+'+esc(tel)+
-          '</strong> con el pedido escrito. Revísalo antes de darle a enviar: esto lo deja puesto, '+
-          'no lo manda solo.</p>'
+        ? (aMi
+            ? '<p class="nota" style="margin:14px 0 0">Esto <strong>no se le manda a '+esc(prov)+
+              '</strong>: va a tu móvil, <strong>+'+esc(tel)+'</strong>, y se lo reenvías tú. '+
+              'Así lo has puesto en Ajustes; quítale la marca y saldrá directo al proveedor.</p>'
+            : '<p class="nota" style="margin:14px 0 0">Se abrirá el chat de <strong>+'+esc(tel)+
+              '</strong> con el pedido escrito. Revísalo antes de darle a enviar: esto lo deja puesto, '+
+              'no lo manda solo.</p>')
         : '<div class="aviso-caja" style="margin:14px 0 0">Este proveedor no tiene teléfono guardado. '+
           'Copia el pedido y pégalo tú, o ponle el teléfono en <strong>Proveedores</strong>.</div>')+
       (enOrdenador()
@@ -955,7 +1050,8 @@ function mandarPedido(prov){
     libro.enviados.push({
       id:uid(), fecha:hoyISO(), proveedor:prov, total:g.total,
       lineas:g.lineas.map(function(x){
-        return {nombre:x.p.nombre, uds:x.uds, cajas:x.cajas, importe:x.importe};
+        return {nombre:x.p.nombre, pedido:x.l, texto:trozosPedidos(x.p, x.l).join(" + "),
+                importe:x.importe};
       })
     });
     g.lineas.forEach(function(x){ delete libro.pedido[x.p.id]; });
@@ -1046,7 +1142,7 @@ function verProveedor(main){
 
   var datos=libro.proveedores[nombre]||{};
   var tel=soloNumero(datos.telefono);
-  var enPedido=suyos.filter(function(p){ var l=delPedido(p.id); return l.uds||l.cajas; });
+  var enPedido=suyos.filter(function(p){ return hayPedido(delPedido(p.id)); });
   var total=r2(enPedido.reduce(function(t,p){ return t+importeLinea(p); },0));
   var viejos=suyos.filter(esViejo).length;
 
@@ -1095,7 +1191,7 @@ function verProveedor(main){
       '<h2>Su lista</h2><span class="pista">escribe la cantidad y ya queda apuntado</span></div>'+
       '<div class="tabla-caja pegada"><table class="hoja"><thead><tr>'+
         '<th>Producto</th><th class="num">Precio</th>'+
-        '<th class="num">Unidades</th><th class="num">Cajas</th>'+
+        MODOS.map(function(m){ return '<th class="num">'+esc(m.varios)+'</th>'; }).join("")+
       '</tr></thead><tbody>'+
       suyos.sort(function(a,b){
         return (a.seccion||"").localeCompare(b.seccion||"") ||
@@ -1103,7 +1199,7 @@ function verProveedor(main){
       }).map(function(p){
         var l=delPedido(p.id), caja=+p.udsCaja||0;
         var caro=caros.filter(function(c){ return c.p===p; })[0];
-        return '<tr class="st-fila'+((l.uds||l.cajas)?" puesta":"")+'" data-of="'+esc(p.id)+'">'+
+        return '<tr class="st-fila'+(hayPedido(l)?" puesta":"")+'" data-of="'+esc(p.id)+'">'+
           '<td><div class="st-nom">'+esc(p.nombre)+'</div>'+
             '<div class="st-info">'+esc((p.seccion||"").toLowerCase())+
               (p.fecha?' · '+esc(dmy(p.fecha)):' · sin fecha')+
@@ -1116,9 +1212,9 @@ function verProveedor(main){
             : '<span style="color:var(--muted)">sin precio</span>')+
             (caja>0&&conIgi(p)?'<div style="font-size:11px;color:var(--muted)">caja '+
               eur(precioCaja(p))+'</div>':"")+'</td>'+
-          '<td class="num">'+casillaProv(p.id,"uds",l.uds,unidadDe(p)||"un")+'</td>'+
-          '<td class="num">'+(caja>0 ? casillaProv(p.id,"cajas",l.cajas,"")
-                                     : '<span style="color:var(--muted)">—</span>')+'</td>'+
+          MODOS.map(function(m){
+            return '<td class="num">'+casillaProv(p.id, m.campo, l[m.campo], m.corto)+'</td>';
+          }).join("")+
         '</tr>';
       }).join("")+
       '</tbody></table></div></div>';
@@ -1137,7 +1233,7 @@ function verProveedor(main){
       ponerEnPedido(id, campo, input.value);
       var l=delPedido(id);
       var fila=input.closest(".st-fila");
-      if(fila) fila.classList.toggle("puesta", !!(l.uds||l.cajas));
+      if(fila) fila.classList.toggle("puesta", hayPedido(l));
       refrescarCabeceraProv(nombre, tel);
       pintarBarra();
     });
@@ -1149,7 +1245,7 @@ function verProveedor(main){
    mandar tiene que aparecer en cuanto haya algo que mandar. */
 function refrescarCabeceraProv(nombre, tel){
   var suyos=libro.productos.filter(function(p){ return p.proveedor===nombre; });
-  var enPedido=suyos.filter(function(p){ var l=delPedido(p.id); return l.uds||l.cajas; });
+  var enPedido=suyos.filter(function(p){ return hayPedido(delPedido(p.id)); });
   var total=r2(enPedido.reduce(function(t,p){ return t+importeLinea(p); },0));
 
   var cifras=document.querySelectorAll(".cifra");
@@ -1188,7 +1284,7 @@ function casillaProv(id, campo, valor, etiqueta){
    es borrar, es juntar. */
 function quitarProveedor(nombre){
   var suyos=libro.productos.filter(function(p){ return p.proveedor===nombre; });
-  var enPedido=suyos.filter(function(p){ var l=delPedido(p.id); return l.uds||l.cajas; }).length;
+  var enPedido=suyos.filter(function(p){ return hayPedido(delPedido(p.id)); }).length;
   var otros=listaProveedores().map(function(x){ return x.nombre; })
                               .filter(function(x){ return x!==nombre; });
 
@@ -1424,7 +1520,17 @@ function verAjustes(main){
           '<div class="campo"><label class="lbl" for="aj_meses">Un precio es viejo a los… (meses)</label>'+
             '<input type="number" id="aj_meses" min="1" max="60" step="1" '+
             'value="'+esc(libro.ajustes.mesesViejo||24)+'"></div>'+
+          '<div class="campo"><label class="lbl" for="aj_movil">Tu móvil</label>'+
+            '<input id="aj_movil" value="'+esc(libro.ajustes.miMovil||"")+'" '+
+            'placeholder="00376 341 459"></div>'+
         '</div>'+
+        '<label style="display:flex;gap:9px;align-items:flex-start;margin-top:14px;cursor:pointer">'+
+          '<input type="checkbox" id="aj_ami" style="width:auto;margin-top:3px"'+
+          (libro.ajustes.aMi?" checked":"")+'>'+
+          '<span><b>Mandarme a mí todos los pedidos</b>'+
+          '<div class="nota" style="margin:2px 0 0">Los pedidos no salen al proveedor: van a tu '+
+          'móvil, con el nombre de para quién es escrito arriba, y se los reenvías tú. '+
+          'Quítale la marca el día que quieras que salgan directos.</div></span></label>'+
         '<label style="display:flex;gap:9px;align-items:flex-start;margin-top:14px;cursor:pointer">'+
           '<input type="checkbox" id="aj_imp" style="width:auto;margin-top:3px"'+
           (libro.ajustes.conImportes?" checked":"")+'>'+
@@ -1476,7 +1582,10 @@ function verAjustes(main){
     libro.ajustes.nombre=valor("aj_nom");
     libro.ajustes.mesesViejo=Math.max(1, numero("aj_meses")||12);
     libro.ajustes.conImportes=document.getElementById("aj_imp").checked;
-    guardar(); pintar(); avisar("Ajustes guardados");
+    libro.ajustes.miMovil=valor("aj_movil");
+    libro.ajustes.aMi=document.getElementById("aj_ami").checked;
+    guardar(); pintar();
+    avisar(vaAMi() ? "Ajustes guardados: los pedidos van a tu móvil" : "Ajustes guardados");
   });
   main.querySelectorAll("[data-editar2]").forEach(function(b){
     b.addEventListener("click", function(){ editarProducto(productoPorId(b.getAttribute("data-editar2"))); });

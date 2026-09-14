@@ -118,8 +118,10 @@ main{padding:22px 24px 120px;max-width:1180px;min-width:0}
 .prod-cab .sec{font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;
                color:var(--muted);white-space:nowrap;padding-top:4px}
 
-.oferta{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;
-        padding:8px 13px;border-bottom:1px solid var(--linea-suave)}
+/* Las cuatro casillas —cajas, kilos, litros, unidades— no caben al lado
+   del precio, así que van debajo y a todo lo ancho de la ficha, que es
+   donde se puede pulsar sin apuntar. */
+.oferta{display:block;padding:8px 13px;border-bottom:1px solid var(--linea-suave)}
 .oferta:last-child{border-bottom:0}
 .oferta.mejor{background:var(--ok-suave)}
 .oferta.encargada{background:var(--acento-suave)}
@@ -129,24 +131,27 @@ main{padding:22px 24px 120px;max-width:1180px;min-width:0}
 .of-prov{font-weight:600;font-size:14px;line-height:1.25;overflow-wrap:anywhere}
 .of-precio{font-size:19px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em;
            line-height:1.15;margin-top:1px}
+/* 2,40 € el kilo y 0,68 € el litro no son lo mismo: con cuatro casillas
+   a la vista hay que decir a qué se refiere el precio. */
+.of-por{font-size:12px;font-weight:500;color:var(--muted);letter-spacing:0;margin-left:2px}
 .of-precio.mejor{color:var(--ok)}
 .of-precio.sin{color:var(--muted);font-size:15px;font-weight:500}
 .of-info{font-size:11.5px;color:var(--muted);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap}
 .of-info .viejo{color:var(--aviso);font-weight:600}
-.of-acciones{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.of-acciones{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
 
 .contador{display:flex;align-items:center;gap:2px;background:var(--sup2);border:1px solid var(--linea);
           border-radius:24px;padding:2px}
-.contador button{width:34px;height:34px;border:0;background:transparent;color:var(--tinta);
-                 border-radius:50%;cursor:pointer;font-size:19px;line-height:1;font-weight:600}
+.contador button{width:28px;height:28px;border:0;background:transparent;color:var(--tinta);
+                 border-radius:50%;cursor:pointer;font-size:18px;line-height:1;font-weight:600}
 .contador button:hover{background:var(--linea)}
-.contador input{width:46px;border:0;background:transparent;text-align:center;font-size:16px;
+.contador input{width:34px;border:0;background:transparent;text-align:center;font-size:15px;
                 font-weight:700;font-variant-numeric:tabular-nums;padding:0;box-shadow:none!important}
 .contador input:focus{outline:none}
 /* Sin el cero apagado, la casilla vacia parece una cantidad puesta a 0. */
 .contador input::placeholder{color:var(--muted);font-weight:400;opacity:.5}
 .contador .ud{font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.08em;
-              text-transform:uppercase;padding:0 8px 0 2px}
+              text-transform:uppercase;padding:0 7px 0 1px}
 .contador.activo{background:var(--acento);border-color:var(--acento)}
 .contador.activo button,.contador.activo input,.contador.activo .ud{color:var(--acento-tinta)}
 .contador.activo button:hover{background:rgba(255,255,255,.18)}
@@ -165,7 +170,7 @@ main{padding:22px 24px 120px;max-width:1180px;min-width:0}
 .st-fila.puesta .st-nom{font-weight:700}
 .st-info{font-size:11px;color:var(--muted);margin-top:1px}
 .st-casilla{display:inline-flex;align-items:center;gap:5px}
-.st-casilla input{width:62px;text-align:center;font-size:15px;font-weight:700;
+.st-casilla input{width:52px;text-align:center;font-size:15px;font-weight:700;
                   padding:5px 4px;border-radius:7px;font-variant-numeric:tabular-nums}
 .st-casilla input::placeholder{color:var(--muted);font-weight:400;opacity:.5}
 .st-fila.puesta .st-casilla input{border-color:var(--acento);
@@ -357,7 +362,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609141048"></script>
+<script src="sync.js?v=202609141100"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -365,7 +370,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('pedidos').then(function(){
     var s = document.createElement('script');
-    s.src = 'pedidos.js?v=202609141048';
+    s.src = 'pedidos.js?v=202609141100';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar pedidos.js. Recarga la pagina.'; };
     document.body.appendChild(s);
