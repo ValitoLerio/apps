@@ -730,17 +730,18 @@ function verPedido(main){
   main.innerHTML=
     cabecera("El pedido",
       grupos.length
-        ? (grupos.length>1 && vaAMi()
-            ? "Lo que vas apuntando se queda aquí hasta que lo mandes. Como van todos a tu "+
-              "móvil, puedes mandarlos <strong>de una</strong> y reenviar luego a cada uno lo suyo."
+        ? (grupos.length>1 && miMovil()
+            ? "Lo que vas apuntando se queda aquí hasta que lo mandes. Cada pedido se puede "+
+              "mandar <strong>a ti</strong> o <strong>al proveedor</strong>, y si los quieres "+
+              "todos de una para reenviarlos tú, ahí arriba."
             : "Lo que vas apuntando se queda aquí hasta que lo mandes. El día del pedido, "+
               "cada proveedor lleva el suyo.")
         : "Ve apuntando aquí lo que haga falta según lo veas. El día del pedido, "+
           "sale repartido por proveedor.",
       /* Si van todos al mismo móvil, no tiene sentido ir de uno en uno:
          se mandan todos juntos en un mensaje y él reenvía cada trozo. */
-      (grupos.length>1 && vaAMi()
-        ? '<button class="btn wa" id="pd_todo">📱 Mandarlos todos</button>' : "")+
+      (grupos.length>1 && miMovil()
+        ? '<button class="btn wa" id="pd_todo">📱 Mandármelos todos</button>' : "")+
       (grupos.length ? '<button class="btn malo" id="pd_vaciar">Vaciar el pedido</button>' : ""))+
 
     '<div class="apuntar">'+
@@ -830,9 +831,9 @@ function tarjetaProveedorPedido(g){
         '<button class="btn wa" data-mandar="'+esc(g.proveedor)+'">📱 Mandar el pedido</button>'+
       '</div>'+
     '</div>'+
-    /* Mientras los pedidos vayan a su móvil, el teléfono del proveedor
-       no hace ninguna falta y el aviso sobraba. */
-    (datos.telefono || vaAMi() ? "" :
+    /* El aviso sólo cuando no hay a dónde mandarlo: con su móvil puesto
+       siempre se puede mandar a sí mismo y reenviarlo. */
+    (datos.telefono || miMovil() ? "" :
       '<div class="tarjeta-cuerpo" style="padding-bottom:0">'+
       '<div class="aviso-caja">A '+esc(g.proveedor)+' no le has puesto teléfono. '+
       'Ponlo en <strong>Proveedores</strong> y el pedido se manda de una.</div></div>')+
@@ -1035,6 +1036,8 @@ function vaciarPedido(){
    público y un móvil no pinta nada en él. Cuando quiera que los pedidos
    salgan directos al proveedor, sólo hay que quitar la marca. */
 function miMovil(){ return soloNumero(libro.ajustes.miMovil); }
+/* La marca de Ajustes ya no decide a dónde va el pedido —para eso están
+   los dos botones—, sólo cuál de los dos sale destacado. */
 function vaAMi(){ return !!(libro.ajustes.aMi && miMovil()); }
 
 /* ── Mandarlo por WhatsApp ────────────────────────────────────── */
@@ -1042,13 +1045,17 @@ function vaAMi(){ return !!(libro.ajustes.aMi && miMovil()); }
    enlaces wa.me con texto, así que se enseña el pedido, se puede copiar,
    y el enlace es un enlace de verdad —que pulsar un enlace no lo bloquea
    ningún navegador, y abrir una ventana a ciegas sí. */
-function textoPedido(prov){
+/* El mismo pedido escrito de dos maneras: el que va a su móvil lleva
+   arriba PARA QUIÉN es —al chat llegan cuatro seguidos y sin esa línea
+   no se sabe cuál es cuál— y el que va al proveedor, no, que ya sabe
+   quién es él. */
+function textoPedido(prov, paraMi){
   var g=pedidoPorProveedor().filter(function(x){ return x.proveedor===prov; })[0];
   if(!g) return "";
   var l=[];
   if(libro.ajustes.nombre) l.push(libro.ajustes.nombre);
   l.push("Pedido del "+dmy(hoyISO()));
-  if(vaAMi()) l.push("Para: "+prov);
+  if(paraMi) l.push("Para: "+prov);
   l.push("");
   g.lineas.forEach(function(x){
     /* Cada casilla que lleve algo, con su nombre entero: «3 cajas de 12
@@ -1185,41 +1192,63 @@ function enOrdenador(){
   }catch(e){ return true; }
 }
 
+/* ── Mandar un pedido ─────────────────────────────────────────────
+   Dos botones, no uno: **A mí** y **A ellos**. Hasta ahora lo decidía
+   una marca de Ajustes y había que ir a cambiarla para mandar uno
+   directo; ahora están los dos a la vez y se elige en el momento, que
+   hay días de las dos cosas. El destacado es el que diga Ajustes.
+   ══════════════════════════════════════════════════════════════ */
 function mandarPedido(prov){
-  var texto=textoPedido(prov);
+  var texto=textoPedido(prov, true);          /* el que va a su móvil */
   if(!texto){ avisar("Ese proveedor ya no tiene nada en el pedido.", true); return; }
+  var textoDirecto=textoPedido(prov, false);  /* el que va al proveedor */
   var g=pedidoPorProveedor().filter(function(x){ return x.proveedor===prov; })[0];
-  var aMi=vaAMi();
-  var tel=aMi ? miMovil() : soloNumero((libro.proveedores[prov]||{}).telefono);
-  var primero=enlaceWhatsApp(tel, texto);
+  var mio=miMovil();
+  var suyo=soloNumero((libro.proveedores[prov]||{}).telefono);
+  var mioPrimero=!!libro.ajustes.aMi;
+
+  var botonMio = mio
+    ? '<a class="btn wa'+(mioPrimero?"":" suave")+'" href="'+esc(enlaceWhatsApp(mio, texto))+'" '+
+      'target="_blank" rel="noopener" style="text-decoration:none" data-abrir>📱 A mí</a>'
+    : "";
+  var botonSuyo = suyo
+    ? '<a class="btn wa'+(mioPrimero?" suave":"")+'" href="'+esc(enlaceWhatsApp(suyo, textoDirecto))+'" '+
+      'target="_blank" rel="noopener" style="text-decoration:none" data-abrir>📱 A '+esc(prov)+'</a>'
+    : "";
 
   var vieja=document.getElementById("dlg"); if(vieja) vieja.remove();
   var d=document.createElement("dialog"); d.id="dlg";
   d.innerHTML=
-    '<div class="dlg-cab"><h3>Pedido a '+esc(prov)+(aMi?" · a tu móvil":"")+'</h3>'+
+    '<div class="dlg-cab"><h3>Pedido a '+esc(prov)+'</h3>'+
       '<button class="btn suave" data-cerrar>✕</button></div>'+
     '<div class="dlg-cuerpo">'+
       '<div class="parte" id="elPedido">'+esc(texto)+'</div>'+
-      (tel
-        ? (aMi
-            ? '<p class="nota" style="margin:14px 0 0">Esto <strong>no se le manda a '+esc(prov)+
-              '</strong>: va a tu móvil, <strong>+'+esc(tel)+'</strong>, y se lo reenvías tú. '+
-              'Así lo has puesto en Ajustes; quítale la marca y saldrá directo al proveedor.</p>'
-            : '<p class="nota" style="margin:14px 0 0">Se abrirá el chat de <strong>+'+esc(tel)+
-              '</strong> con el pedido escrito. Revísalo antes de darle a enviar: esto lo deja puesto, '+
-              'no lo manda solo.</p>')
-        : '<div class="aviso-caja" style="margin:14px 0 0">Este proveedor no tiene teléfono guardado. '+
-          'Copia el pedido y pégalo tú, o ponle el teléfono en <strong>Proveedores</strong>.</div>')+
-      (enOrdenador()
-        ? '<p class="nota" style="margin:10px 0 0">En el ordenador, la aplicación de WhatsApp rechaza '+
-          'estos enlaces con texto dentro, así que el botón abre WhatsApp Web.</p>'
+      '<p class="nota" style="margin:14px 0 0">'+
+        (mio
+          ? '<strong>A mí</strong> lo manda a tu móvil, +'+esc(mio)+', con el «Para: '+esc(prov)+
+            '» escrito arriba, y se lo reenvías tú. '
+          : '')+
+        (suyo
+          ? '<strong>A '+esc(prov)+'</strong> abre su chat, el +'+esc(suyo)+', con el pedido puesto.'
+          : (mio ? 'A '+esc(prov)+' no se le puede mandar directo: no tiene teléfono guardado. '+
+                   'Pónselo en <strong>Proveedores</strong>.' : ""))+
+      '</p>'+
+      (!mio && !suyo
+        ? '<div class="aviso-caja" style="margin:10px 0 0">No hay ningún teléfono a donde '+
+          'mandarlo: ponte el tuyo en <strong>Ajustes</strong> o el suyo en '+
+          '<strong>Proveedores</strong>. Mientras tanto, cópialo y pégalo tú.</div>'
         : "")+
+      '<p class="nota" style="margin:10px 0 0">Ninguno de los dos lo manda solo: te lo deja '+
+      'escrito en el chat y le das a enviar tú.'+
+      (enOrdenador()
+        ? ' Y en el ordenador abre WhatsApp Web, porque la aplicación de escritorio rechaza '+
+          'los enlaces que llevan el texto dentro.'
+        : "")+'</p>'+
     '</div>'+
     '<div class="dlg-pie">'+
       '<button class="btn" id="pd_copiar">Copiar</button>'+
       '<button class="btn" id="pd_hecho">Darlo por mandado</button>'+
-      (tel ? '<a class="btn wa" href="'+esc(primero)+'" target="_blank" rel="noopener" '+
-             'style="text-decoration:none" data-abrir>Abrir WhatsApp</a>' : "")+
+      (mioPrimero ? botonSuyo+botonMio : botonMio+botonSuyo)+
     '</div>';
   document.body.appendChild(d);
   d.showModal();
@@ -1357,11 +1386,11 @@ function verProveedor(main){
       "Lo que le compras a este proveedor. Pon las cantidades aquí mismo y mándaselo.",
       /* Mientras los pedidos vayan a su móvil, el teléfono del
          proveedor no hace falta para nada. */
-      (enPedido.length && (tel || vaAMi())
+      (enPedido.length && (tel || miMovil())
         ? '<button class="btn wa" id="pv_mandar">📱 Mandar el pedido</button>' : "")+
       '<button class="btn" id="pv_ficha">Teléfono y contacto</button>')+
 
-    (tel || vaAMi() ? "" :
+    (tel || miMovil() ? "" :
       '<div class="aviso-caja">No tiene teléfono guardado, así que no se le puede mandar el '+
       'pedido de una. Pónselo con <strong>Teléfono y contacto</strong>.</div>')+
 
@@ -1728,10 +1757,11 @@ function verAjustes(main){
         '<label style="display:flex;gap:9px;align-items:flex-start;margin-top:14px;cursor:pointer">'+
           '<input type="checkbox" id="aj_ami" style="width:auto;margin-top:3px"'+
           (libro.ajustes.aMi?" checked":"")+'>'+
-          '<span><b>Mandarme a mí todos los pedidos</b>'+
-          '<div class="nota" style="margin:2px 0 0">Los pedidos no salen al proveedor: van a tu '+
-          'móvil, con el nombre de para quién es escrito arriba, y se los reenvías tú. '+
-          'Quítale la marca el día que quieras que salgan directos.</div></span></label>'+
+          '<span><b>Mandármelos a mí, de primeras</b>'+
+          '<div class="nota" style="margin:2px 0 0">Al mandar un pedido salen siempre los dos '+
+          'botones —<strong>a mí</strong> y <strong>al proveedor</strong>—; esto sólo decide '+
+          'cuál va destacado. El que va a tu móvil lleva escrito arriba para quién es, porque '+
+          'te llegan varios al mismo chat.</div></span></label>'+
         '<label style="display:flex;gap:9px;align-items:flex-start;margin-top:14px;cursor:pointer">'+
           '<input type="checkbox" id="aj_imp" style="width:auto;margin-top:3px"'+
           (libro.ajustes.conImportes?" checked":"")+'>'+
@@ -1786,7 +1816,7 @@ function verAjustes(main){
     libro.ajustes.miMovil=valor("aj_movil");
     libro.ajustes.aMi=document.getElementById("aj_ami").checked;
     guardar(); pintar();
-    avisar(vaAMi() ? "Ajustes guardados: los pedidos van a tu móvil" : "Ajustes guardados");
+    avisar(vaAMi() ? "Ajustes guardados: el botón de tu móvil va primero" : "Ajustes guardados");
   });
   main.querySelectorAll("[data-editar2]").forEach(function(b){
     b.addEventListener("click", function(){ editarProducto(productoPorId(b.getAttribute("data-editar2"))); });
