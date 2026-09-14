@@ -730,10 +730,17 @@ function verPedido(main){
   main.innerHTML=
     cabecera("El pedido",
       grupos.length
-        ? "Lo que vas apuntando se queda aquí hasta que lo mandes. El día del pedido, "+
-          "cada proveedor lleva el suyo: se manda uno, se vuelve y se manda el siguiente."
+        ? (grupos.length>1 && vaAMi()
+            ? "Lo que vas apuntando se queda aquí hasta que lo mandes. Como van todos a tu "+
+              "móvil, puedes mandarlos <strong>de una</strong> y reenviar luego a cada uno lo suyo."
+            : "Lo que vas apuntando se queda aquí hasta que lo mandes. El día del pedido, "+
+              "cada proveedor lleva el suyo.")
         : "Ve apuntando aquí lo que haga falta según lo veas. El día del pedido, "+
           "sale repartido por proveedor.",
+      /* Si van todos al mismo móvil, no tiene sentido ir de uno en uno:
+         se mandan todos juntos en un mensaje y él reenvía cada trozo. */
+      (grupos.length>1 && vaAMi()
+        ? '<button class="btn wa" id="pd_todo">📱 Mandarlos todos</button>' : "")+
       (grupos.length ? '<button class="btn malo" id="pd_vaciar">Vaciar el pedido</button>' : ""))+
 
     '<div class="apuntar">'+
@@ -773,6 +780,8 @@ function verPedido(main){
 
   var bv=document.getElementById("pd_vaciar");
   if(bv) bv.addEventListener("click", vaciarPedido);
+  var bt=document.getElementById("pd_todo");
+  if(bt) bt.addEventListener("click", mandarTodos);
 
   main.querySelectorAll("[data-mandar]").forEach(function(b){
     b.addEventListener("click", function(){ mandarPedido(b.getAttribute("data-mandar")); });
@@ -1053,6 +1062,114 @@ function textoPedido(prov){
   l.push("Gracias.");
   return l.join("\n");
 }
+/* Todos los pedidos en un mensaje, uno detrás de otro y con el nombre
+   de cada proveedor por delante. Va a su móvil, así que lo que hace
+   falta es que se distinga bien dónde acaba uno y empieza el otro para
+   poder reenviar cada trozo. */
+function textoDeTodos(){
+  var grupos=pedidoPorProveedor();
+  if(!grupos.length) return "";
+  var l=[];
+  if(libro.ajustes.nombre) l.push(libro.ajustes.nombre);
+  l.push("Pedidos del "+dmy(hoyISO()));
+  grupos.forEach(function(g){
+    l.push("");
+    l.push("── "+g.proveedor+" ──");
+    g.lineas.forEach(function(x){
+      l.push("- "+x.p.nombre+": "+trozosPedidos(x.p, x.l).join(" + ")+
+             (libro.ajustes.conImportes && x.importe ? "  ("+eur(x.importe)+")" : ""));
+    });
+    if(libro.ajustes.conImportes && g.total) l.push("Total "+g.proveedor+": "+eur(g.total));
+  });
+  if(libro.ajustes.conImportes && totalPedido()){
+    l.push("");
+    l.push("Total de todo: "+eur(totalPedido()));
+  }
+  return l.join("\n");
+}
+
+/* ── Mandarlos todos de una ───────────────────────────────────────
+   La ventana enseña el mensaje entero y, debajo, un botón por
+   proveedor para copiar sólo su trozo: reenviar es lo que va a hacer
+   después, y así no tiene que ir seleccionando a mano.
+   ══════════════════════════════════════════════════════════════ */
+function mandarTodos(){
+  var grupos=pedidoPorProveedor();
+  if(!grupos.length){ avisar("El pedido está vacío.", true); return; }
+  var texto=textoDeTodos();
+  var tel=miMovil();
+
+  var vieja=document.getElementById("dlg"); if(vieja) vieja.remove();
+  var d=document.createElement("dialog"); d.id="dlg";
+  d.innerHTML=
+    '<div class="dlg-cab"><h3>Los '+grupos.length+' pedidos, en un mensaje</h3>'+
+      '<button class="btn suave" data-cerrar>✕</button></div>'+
+    '<div class="dlg-cuerpo">'+
+      '<div class="parte" id="elPedido">'+esc(texto)+'</div>'+
+      '<p class="nota" style="margin:14px 0 8px">Va entero a tu móvil, <strong>+'+esc(tel)+
+        '</strong>. Luego reenvías a cada uno lo suyo: aquí abajo tienes el trozo de cada '+
+        'proveedor para copiarlo suelto.</p>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        grupos.map(function(g,i){
+          return '<button class="btn suave sm" data-copiauno="'+i+'">Copiar el de '+
+                 esc(g.proveedor)+'</button>';
+        }).join("")+
+      '</div>'+
+    '</div>'+
+    '<div class="dlg-pie">'+
+      '<button class="btn" id="pd_copiar">Copiar todo</button>'+
+      '<button class="btn" id="pd_hecho">Darlos por mandados</button>'+
+      '<a class="btn wa" href="'+esc(enlaceWhatsApp(tel, texto))+'" target="_blank" '+
+        'rel="noopener" style="text-decoration:none">Abrir WhatsApp</a>'+
+    '</div>';
+  document.body.appendChild(d);
+  d.showModal();
+  d.querySelector("[data-cerrar]").addEventListener("click", function(){ d.close(); d.remove(); });
+
+  function copiar(t, dicho){
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(t).then(function(){ avisar(dicho); },
+                                           function(){ avisar("No he podido copiarlo.", true); });
+    } else avisar("Este navegador no deja copiar solo: selecciónalo y usa Cmd+C.", true);
+  }
+  document.getElementById("pd_copiar").addEventListener("click", function(){
+    copiar(texto, "Copiado el mensaje entero");
+  });
+  d.querySelectorAll("[data-copiauno]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var g=grupos[+b.getAttribute("data-copiauno")];
+      copiar(textoPedido(g.proveedor), "Copiado el de "+g.proveedor);
+    });
+  });
+
+  /* Darlos por mandados: cada proveedor va al historial por su cuenta,
+     que es como se mira luego. */
+  document.getElementById("pd_hecho").addEventListener("click", function(){
+    grupos.forEach(function(g){
+      libro.enviados.push({
+        id:uid(), fecha:hoyISO(), proveedor:g.proveedor, total:g.total,
+        lineas:g.lineas.map(function(x){
+          return {nombre:x.p.nombre, pedido:x.l, texto:trozosPedidos(x.p, x.l).join(" + "),
+                  importe:x.importe};
+        })
+      });
+      g.lineas.forEach(function(x){ delete libro.pedido[x.p.id]; });
+    });
+    guardar(); d.close(); d.remove(); pintar();
+    avisar("Apuntados "+plural(grupos.length,"pedido","pedidos")+" como mandados");
+  });
+}
+
+/* El enlace que abre el chat con el pedido ya escrito. En el ordenador
+   tiene que ser WhatsApp Web: la aplicación de escritorio rechaza los
+   enlaces que llevan texto dentro. */
+function enlaceWhatsApp(tel, texto){
+  var t=encodeURIComponent(texto);
+  return enOrdenador()
+    ? "https://web.whatsapp.com/send?phone="+tel+"&text="+t
+    : "https://wa.me/"+tel+"?text="+t;
+}
+
 function soloNumero(bruto){
   var t=String(bruto||"").replace(/[^\d+]/g,"");
   if(!t) return "";
@@ -1074,9 +1191,7 @@ function mandarPedido(prov){
   var g=pedidoPorProveedor().filter(function(x){ return x.proveedor===prov; })[0];
   var aMi=vaAMi();
   var tel=aMi ? miMovil() : soloNumero((libro.proveedores[prov]||{}).telefono);
-  var enlaceApp="https://wa.me/"+tel+"?text="+encodeURIComponent(texto);
-  var enlaceWeb="https://web.whatsapp.com/send?phone="+tel+"&text="+encodeURIComponent(texto);
-  var primero=enOrdenador()?enlaceWeb:enlaceApp;
+  var primero=enlaceWhatsApp(tel, texto);
 
   var vieja=document.getElementById("dlg"); if(vieja) vieja.remove();
   var d=document.createElement("dialog"); d.id="dlg";
