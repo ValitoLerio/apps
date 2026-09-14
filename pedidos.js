@@ -231,7 +231,11 @@ function esDiario(p){ return !!(p && p.diario); }
    que haga falta ese día. Las que no se usan se quedan en blanco y no
    salen en el pedido.
 
-   Se pueden mezclar, que es como se pide de verdad: «3 cajas y 2 kg».
+   Pero una casilla por unidad son cuatro casillas en cada línea, y eso
+   no es más fácil: es lo mismo cuatro veces. Me lo dijo él. Así que la
+   casilla es UNA y la unidad se elige al lado, en un desplegable. Lo
+   que se escribe va a la unidad elegida, y al cambiar de unidad la
+   cantidad se muda con ella: no se queda un 3 olvidado en los kilos.
 
    El orden es el de la cabeza: primero las cajas, que es lo que más se
    pide, y las unidades sueltas al final. */
@@ -254,6 +258,39 @@ function unidadDe(p){
   var u=(p&&p.ud)||"";
   return UNIDADES.indexOf(u)>=0 ? u : "";
 }
+/* La unidad que lleva puesta una línea del pedido: aquella en la que
+   hay algo escrito. Si no hay nada, la que le pega al producto.
+
+   Cuando esto llevaba cuatro casillas se podían llenar dos a la vez, y
+   alguna línea vieja puede venir así. En ese caso manda la mayor, y lo
+   otro se dice al lado para que no se quede escondido. */
+function unidadPuesta(p, l){
+  var mejor=null;
+  MODOS.forEach(function(m){
+    if(l[m.campo]>0 && (!mejor || l[m.campo]>l[mejor])) mejor=m.campo;
+  });
+  return mejor || campoNatural(p);
+}
+/* Lo que lleve la línea aparte de su unidad principal. */
+function loOtroQueLleva(p, l){
+  var principal=unidadPuesta(p, l), fuera=[];
+  MODOS.forEach(function(m){
+    if(m.campo!==principal && l[m.campo]>0)
+      fuera.push(num(l[m.campo], l[m.campo]%1?1:0)+" "+
+                 (l[m.campo]===1?m.uno:m.varios));
+  });
+  return fuera;
+}
+/* Cambiar de unidad se lleva la cantidad consigo. */
+function cambiarUnidad(id, campoNuevo){
+  var l=delPedido(id), p=productoPorId(id);
+  var cuanto=l[unidadPuesta(p, l)]||0;
+  MODOS.forEach(function(m){ l[m.campo]=0; });
+  l[campoNuevo]=cuanto;
+  if(!hayPedido(l)) delete libro.pedido[id]; else libro.pedido[id]=l;
+  guardar();
+}
+
 /* La casilla que le toca a un producto cuando no se dice otra cosa: la
    caja si viene en cajas, y si no, la de su unidad. */
 function campoNatural(p){
@@ -584,19 +621,38 @@ function lineaOferta(o, g){
         'style="padding:0 4px;font-size:11.5px;text-decoration:underline">cambiar</button></div>'+
     '</div>'+
     '<div class="of-acciones">'+
-      MODOS.map(function(m){ return contador(o.id, m.campo, l[m.campo], m.corto); }).join("")+
+      (function(){
+        var campo=unidadPuesta(o, l);
+        var otros=loOtroQueLleva(o, l);
+        return contador(o.id, campo, l[campo], caja>1 ? "caj "+num(caja, caja%1?1:0) : "")+
+          (otros.length
+            ? '<span class="nota" style="align-self:center;margin:0">y '+
+              esc(otros.join(" y "))+'</span>'
+            : "");
+      })()+
     '</div>'+
   '</div>';
 }
 
-function contador(id, campo, valor, etiqueta){
+function contador(id, campo, valor, etiquetaCaja){
   return '<div class="contador'+(valor?" activo":"")+'" data-cnt="'+esc(id)+'|'+campo+'">'+
     '<button type="button" data-paso="-1" aria-label="Quitar uno">−</button>'+
     '<input type="number" min="0" step="1" value="'+(valor||"")+'" placeholder="0" '+
       'inputmode="numeric" aria-label="Cantidad">'+
     '<button type="button" data-paso="1" aria-label="Añadir uno">+</button>'+
-    '<span class="ud">'+etiqueta+'</span>'+
+    selectorUnidad(id, campo, etiquetaCaja)+
   '</div>';
+}
+/* El desplegable de la unidad. La caja dice de cuántas es cuando se
+   sabe: «caj 12» le ahorra ir a mirarlo. */
+function selectorUnidad(id, campo, etiquetaCaja){
+  return '<select class="ud" data-ud="'+esc(id)+'" aria-label="En qué se pide">'+
+    MODOS.map(function(m){
+      var texto=(m.campo==="cajas" && etiquetaCaja) ? etiquetaCaja : m.corto;
+      return '<option value="'+m.campo+'"'+(m.campo===campo?" selected":"")+'>'+
+             esc(texto)+'</option>';
+    }).join("")+
+  '</select>';
 }
 
 /* Tocar una cantidad no repinta la lista entera: se cambia lo justo —el
@@ -607,6 +663,7 @@ function engancharFichas(caja){
     var partes=c.getAttribute("data-cnt").split("|");
     var id=partes[0], campo=partes[1];
     var input=c.querySelector("input");
+    var elige=c.querySelector("[data-ud]");
     function aplicar(n){
       ponerEnPedido(id, campo, n);
       var l=delPedido(id);
@@ -621,6 +678,18 @@ function engancharFichas(caja){
       });
     });
     input.addEventListener("input", function(){ aplicar(input.value); });
+    /* Cambiar de unidad se lleva la cantidad: si había 3 cajas y pasas
+       a kilos, quedan 3 kilos y ninguna caja. */
+    if(elige) elige.addEventListener("change", function(){
+      cambiarUnidad(id, elige.value);
+      campo=elige.value;
+      c.setAttribute("data-cnt", id+"|"+campo);
+      var l=delPedido(id);
+      input.value=l[campo]||"";
+      c.classList.toggle("activo", !!l[campo]);
+      refrescarFicha(id);
+      pintarBarra();
+    });
   });
   caja.querySelectorAll("[data-editar]").forEach(function(b){
     b.addEventListener("click", function(e){
@@ -719,6 +788,13 @@ function verPedido(main){
       if(!hayPedido(l)) pintar(); else refrescarTotales();
     });
   });
+  /* El desplegable de la unidad, en la tabla del pedido. */
+  main.querySelectorAll("select[data-ud]").forEach(function(sel){
+    sel.addEventListener("change", function(){
+      cambiarUnidad(sel.getAttribute("data-ud"), sel.value);
+      pintar();
+    });
+  });
   main.querySelectorAll("[data-quitar]").forEach(function(b){
     b.addEventListener("click", function(){
       delete libro.pedido[b.getAttribute("data-quitar")];
@@ -752,8 +828,7 @@ function tarjetaProveedorPedido(g){
       '<div class="aviso-caja">A '+esc(g.proveedor)+' no le has puesto teléfono. '+
       'Ponlo en <strong>Proveedores</strong> y el pedido se manda de una.</div></div>')+
     '<div class="tabla-caja pegada"><table><thead><tr>'+
-      '<th>Producto</th>'+
-      MODOS.map(function(m){ return '<th class="num">'+esc(m.varios)+'</th>'; }).join("")+
+      '<th>Producto</th><th class="num">Cuánto</th>'+
       '<th class="num">Precio</th><th class="num">Importe</th><th></th>'+
     '</tr></thead><tbody>'+
     g.lineas.map(function(l){
@@ -763,13 +838,15 @@ function tarjetaProveedorPedido(g){
         /* Editables aquí mismo: esto es la lista que se va llenando
            durante la semana, así que hay que poder subir una cantidad
            sin ir a buscar el producto a otra pantalla. */
-        MODOS.map(function(m){
-          /* La caja enseña de cuántas es, que es lo que hay que saber
-             para poner el número. */
-          var pie=(m.campo==="cajas" && (+l.p.udsCaja||0)>1)
-                  ? "de "+num(+l.p.udsCaja, (+l.p.udsCaja)%1?1:0) : m.corto;
-          return '<td class="num">'+casillaPedido(l.p.id, m.campo, l.l[m.campo], pie)+'</td>';
-        }).join("")+
+        (function(){
+          var campo=unidadPuesta(l.p, l.l);
+          var caja=+l.p.udsCaja||0;
+          var otros=loOtroQueLleva(l.p, l.l);
+          return '<td class="num">'+casillaPedido(l.p.id, campo, l.l[campo],
+                   caja>1 ? "caj "+num(caja, caja%1?1:0) : "")+
+                 (otros.length?'<div style="font-size:11px;color:var(--muted)">y '+
+                   esc(otros.join(" y "))+'</div>':"")+'</td>';
+        })()+
         '<td class="num">'+(conIgi(l.p)?eur(conIgi(l.p)):
           '<span style="color:var(--muted)">sin precio</span>')+'</td>'+
         '<td class="num">'+(l.importe?"<strong>"+eur(l.importe)+"</strong>":
@@ -778,17 +855,17 @@ function tarjetaProveedorPedido(g){
           'title="Quitar del pedido">✕</button></td>'+
       '</tr>';
     }).join("")+
-    '</tbody><tfoot><tr><td colspan="'+(MODOS.length+2)+'">Total</td>'+
+    '</tbody><tfoot><tr><td colspan="3">Total</td>'+
       '<td class="num" data-total-prov="'+esc(g.proveedor)+'">'+
         (g.total?eur(g.total):"—")+'</td><td></td></tr></tfoot></table></div>'+
   '</div>';
 }
 
-function casillaPedido(id, campo, valor, etiqueta){
+function casillaPedido(id, campo, valor, etiquetaCaja){
   return '<span class="st-casilla">'+
     '<input type="number" min="0" step="1" value="'+(valor||"")+'" placeholder="—" '+
       'inputmode="numeric" data-cpd="'+esc(id)+'|'+campo+'" aria-label="Cantidad">'+
-    (etiqueta?'<span class="st-ud">'+esc(etiqueta)+'</span>':"")+
+    selectorUnidad(id, campo, etiquetaCaja)+
   '</span>';
 }
 
@@ -1163,11 +1240,13 @@ function verProveedor(main){
     cabecera(nombre,
       (datos.contacto?esc(datos.contacto)+". ":"")+
       "Lo que le compras a este proveedor. Pon las cantidades aquí mismo y mándaselo.",
-      (enPedido.length && tel
+      /* Mientras los pedidos vayan a su móvil, el teléfono del
+         proveedor no hace falta para nada. */
+      (enPedido.length && (tel || vaAMi())
         ? '<button class="btn wa" id="pv_mandar">📱 Mandar el pedido</button>' : "")+
       '<button class="btn" id="pv_ficha">Teléfono y contacto</button>')+
 
-    (tel ? "" :
+    (tel || vaAMi() ? "" :
       '<div class="aviso-caja">No tiene teléfono guardado, así que no se le puede mandar el '+
       'pedido de una. Pónselo con <strong>Teléfono y contacto</strong>.</div>')+
 
@@ -1190,8 +1269,7 @@ function verProveedor(main){
     '<div class="tarjeta"><div class="tarjeta-cab">'+
       '<h2>Su lista</h2><span class="pista">escribe la cantidad y ya queda apuntado</span></div>'+
       '<div class="tabla-caja pegada"><table class="hoja"><thead><tr>'+
-        '<th>Producto</th><th class="num">Precio</th>'+
-        MODOS.map(function(m){ return '<th class="num">'+esc(m.varios)+'</th>'; }).join("")+
+        '<th>Producto</th><th class="num">Precio</th><th class="num">Cuánto</th>'+
       '</tr></thead><tbody>'+
       suyos.sort(function(a,b){
         return (a.seccion||"").localeCompare(b.seccion||"") ||
@@ -1212,9 +1290,11 @@ function verProveedor(main){
             : '<span style="color:var(--muted)">sin precio</span>')+
             (caja>0&&conIgi(p)?'<div style="font-size:11px;color:var(--muted)">caja '+
               eur(precioCaja(p))+'</div>':"")+'</td>'+
-          MODOS.map(function(m){
-            return '<td class="num">'+casillaProv(p.id, m.campo, l[m.campo], m.corto)+'</td>';
-          }).join("")+
+          (function(){
+            var campo=unidadPuesta(p, l);
+            return '<td class="num">'+casillaProv(p.id, campo, l[campo],
+                     caja>1 ? "caj "+num(caja, caja%1?1:0) : "")+'</td>';
+          })()+
         '</tr>';
       }).join("")+
       '</tbody></table></div></div>';
@@ -1236,6 +1316,12 @@ function verProveedor(main){
       if(fila) fila.classList.toggle("puesta", hayPedido(l));
       refrescarCabeceraProv(nombre, tel);
       pintarBarra();
+    });
+  });
+  main.querySelectorAll("select[data-ud]").forEach(function(sel){
+    sel.addEventListener("change", function(){
+      cambiarUnidad(sel.getAttribute("data-ud"), sel.value);
+      pintar();
     });
   });
 }
@@ -1266,11 +1352,11 @@ function refrescarCabeceraProv(nombre, tel){
   } else if((!enPedido.length || !tel) && boton) boton.remove();
 }
 
-function casillaProv(id, campo, valor, etiqueta){
+function casillaProv(id, campo, valor, etiquetaCaja){
   return '<span class="st-casilla">'+
     '<input type="number" min="0" step="1" value="'+(valor||"")+'" placeholder="—" '+
       'inputmode="numeric" data-cpv="'+esc(id)+'|'+campo+'" aria-label="Cantidad">'+
-    (etiqueta?'<span class="st-ud">'+esc(etiqueta)+'</span>':"")+
+    selectorUnidad(id, campo, etiquetaCaja)+
   '</span>';
 }
 

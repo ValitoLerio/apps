@@ -150,8 +150,18 @@ main{padding:22px 24px 120px;max-width:1180px;min-width:0}
 .contador input:focus{outline:none}
 /* Sin el cero apagado, la casilla vacia parece una cantidad puesta a 0. */
 .contador input::placeholder{color:var(--muted);font-weight:400;opacity:.5}
-.contador .ud{font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.08em;
-              text-transform:uppercase;padding:0 7px 0 1px}
+/* La unidad no es una etiqueta: es un desplegable, que la elige él. Se
+   disfraza de etiqueta para que el contador no parezca un formulario. */
+.contador .ud{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.06em;
+              text-transform:uppercase;padding:0 4px 0 1px;border:0;background:transparent;
+              width:auto;min-width:0;cursor:pointer;box-shadow:none!important;
+              -webkit-appearance:none;appearance:none;text-align:center}
+.contador .ud:focus{outline:2px solid var(--acento-linea);border-radius:5px}
+.contador.activo .ud{color:var(--acento-tinta)}
+.contador.activo .ud option{color:var(--tinta)}
+.st-casilla .ud{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.06em;
+                text-transform:uppercase;border:1px solid var(--linea);background:var(--sup);
+                width:auto;min-width:0;padding:3px 4px;border-radius:6px;cursor:pointer}
 .contador.activo{background:var(--acento);border-color:var(--acento)}
 .contador.activo button,.contador.activo input,.contador.activo .ud{color:var(--acento-tinta)}
 .contador.activo button:hover{background:rgba(255,255,255,.18)}
@@ -362,7 +372,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609141214"></script>
+<script src="sync.js?v=202609141816"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -370,7 +380,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('pedidos').then(function(){
     var s = document.createElement('script');
-    s.src = 'pedidos.js?v=202609141214';
+    s.src = 'pedidos.js?v=202609141816';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar pedidos.js. Recarga la pagina.'; };
     document.body.appendChild(s);

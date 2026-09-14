@@ -143,6 +143,25 @@ tbody tr:hover td{background:var(--sup2)}
 .mono{font-family:var(--mono);font-size:12.5px}
 tfoot td{border-top:1px solid var(--linea);border-bottom:0;font-weight:600;background:var(--sup2)}
 .acciones-fila{display:flex;gap:2px;justify-content:flex-end}
+/* ── La lista de la compra ───────────────────────────────────── */
+.l-fila{display:flex;align-items:center;gap:10px;padding:7px 0;
+        border-bottom:1px solid var(--linea-suave)}
+.l-fila.cogido{opacity:.5}
+.l-fila.cogido .l-nom{text-decoration:line-through}
+.l-nom{flex:1;min-width:0}
+.l-cant{width:62px;text-align:center;padding:5px 4px;font-variant-numeric:tabular-nums}
+
+/* ── Lo que se puede plegar ──────────────────────────────────── */
+.plegable{background:var(--sup);border:1px solid var(--linea);border-radius:var(--radio);
+          box-shadow:var(--sombra);overflow:hidden}
+.plegable>summary{cursor:pointer;padding:13px 16px;font-weight:600;font-size:15px;
+                  list-style:none;display:flex;align-items:center;gap:8px}
+.plegable>summary::-webkit-details-marker{display:none}
+.plegable>summary::before{content:"▸";color:var(--muted);font-size:12px}
+.plegable[open]>summary{border-bottom:1px solid var(--linea)}
+.plegable[open]>summary::before{content:"▾"}
+.plegable>summary:hover{background:var(--sup2)}
+
 .vacio{padding:32px 16px;text-align:center;color:var(--muted);font-size:13.5px}
 .vacio strong{display:block;color:var(--tinta);font-family:var(--titulo);font-size:16px;
               font-weight:600;margin-bottom:5px}
@@ -201,7 +220,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609141214"></script>
+<script src="sync.js?v=202609141816"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -209,7 +228,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('casa').then(function(){
     var s = document.createElement('script');
-    s.src = 'casa.js?v=202609141214';
+    s.src = 'casa.js?v=202609141816';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar casa.js. Recarga la pagina.'; };
     document.body.appendChild(s);

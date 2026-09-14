@@ -69,7 +69,24 @@ function cargar(){
     if(!d.ajustes || !d.ajustes.personas || !d.ajustes.personas.length) d.ajustes=base.ajustes;
     if(!d.coches) d.coches=[];
     libro=d;
+    arreglarLista();
   }catch(e){}
+}
+
+/* Antes, en la lista de la compra había dos clases de cosas: las del
+   catálogo, que contaban para los precios, y las escritas a mano, que
+   no contaban para nada. Ahora sólo hay una, así que lo que estuviera
+   escrito a mano se convierte en producto y deja de ser un ciudadano
+   de segunda. */
+function arreglarLista(){
+  var tocado=false;
+  (libro.lista||[]).forEach(function(it){
+    if(it.productoId || !it.texto) return;
+    it.productoId=productoDeNombre(it.texto).id;
+    it.texto="";
+    tocado=true;
+  });
+  if(tocado) guardar();
 }
 
 /* ── Aviso flotante ───────────────────────────────────────────── */
@@ -629,45 +646,137 @@ function quitarPrecio(productoId, superId){
   return antes-(libro.precios||[]).length;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   LA COMPRA, ESCRIBIENDO
+   ══════════════════════════════════════════════════════════════
+   Esto estaba muy liado y lo dijo él. Para anotar una compra había que
+   dar de alta antes el supermercado, dar de alta antes el producto —con
+   su marca, su formato y sus unidades—, y sólo entonces elegirlos en un
+   par de desplegables. Y la lista de la compra tenía dos clases de
+   cosas: las del catálogo, que contaban, y las escritas a mano, que no
+   contaban para nada y había que explicarlo en cada pantalla.
+
+   Ahora hay una sola manera de hacer las cosas: **se escribe el
+   nombre**. Si ya existe, se usa; si no, se crea solo. Un supermercado
+   nuevo se crea escribiéndolo en la compra; un producto nuevo, igual.
+   Y en la lista no hay dos clases de cosas: lo que escribes es un
+   producto, y por eso entra en la cuenta como todo lo demás.
+
+   Lo que se fue de en medio: el reparto de la lista por tiendas, la
+   tabla de lo que costaría en cada una y la ventana de tres campos para
+   añadir algo a la lista. La tabla de precios sigue, pero plegada: es
+   lo que menos se toca y lo que más sitio ocupa.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Para no acabar con «Pirinees» y «pirinees» como dos sitios distintos:
+   se compara sin tildes ni mayúsculas. */
+function comoSeLlama(t){
+  return String(t==null?"":t).trim().toLowerCase()
+    /* Dos espacios seguidos no hacen un producto distinto. */
+    .replace(/\s+/g," ")
+    .normalize("NFD").replace(/[̀-ͯ]/g,"");
+}
+function buscaSuper(nombre){
+  var n=comoSeLlama(nombre);
+  if(!n) return null;
+  return (libro.supermercados||[]).filter(function(s){
+    return comoSeLlama(s.nombre)===n;
+  })[0] || null;
+}
+function buscaProducto(nombre){
+  var n=comoSeLlama(nombre);
+  if(!n) return null;
+  return (libro.productos||[]).filter(function(p){
+    return comoSeLlama(p.nombre)===n;
+  })[0] || null;
+}
+/* Crear escribiendo: es la idea entera de esta pantalla. */
+function superDeNombre(nombre){
+  var ya=buscaSuper(nombre);
+  if(ya) return ya;
+  var s={id:uid(), nombre:String(nombre).trim(), sitio:""};
+  libro.supermercados.push(s);
+  return s;
+}
+function productoDeNombre(nombre){
+  var ya=buscaProducto(nombre);
+  if(ya) return ya;
+  var p={id:uid(), nombre:String(nombre).trim(), marca:"", formato:"", unidades:""};
+  libro.productos.push(p);
+  return p;
+}
+
+/* Las listas que salen al escribir. Van los nombres pelados: son los
+   que se vuelven a leer al guardar. */
+function datalistProductos(){
+  return '<datalist id="listaProductos">'+
+    (libro.productos||[]).slice().sort(function(a,b){
+      return a.nombre.localeCompare(b.nombre,"es");
+    }).map(function(p){ return '<option value="'+esc(p.nombre)+'">'; }).join("")+
+  '</datalist>';
+}
+function datalistSupers(){
+  return '<datalist id="listaSupers">'+
+    (libro.supermercados||[]).slice().sort(function(a,b){
+      return a.nombre.localeCompare(b.nombre,"es");
+    }).map(function(s){ return '<option value="'+esc(s.nombre)+'">'; }).join("")+
+  '</datalist>';
+}
+
+/* El último precio que le anotaste a un producto, mire donde mire: si
+   no lo tienes en ese súper, algo es algo y se puede corregir encima. */
+function ultimoPrecioDe(productoId){
+  var l=(libro.precios||[]).filter(function(x){ return x.productoId===productoId && +x.precio>0; });
+  if(!l.length) return null;
+  l.sort(function(a,b){ return (b.fecha||"").localeCompare(a.fecha||""); });
+  return l[0];
+}
+/* El supermercado de la última compra: casi siempre es el mismo. */
+function ultimoSuper(){
+  var cs=(libro.compras||[]).slice().sort(function(a,b){
+    return (b.fecha||"").localeCompare(a.fecha||"");
+  });
+  for(var i=0;i<cs.length;i++) if(cs[i].superId) return cs[i].superId;
+  return (libro.supermercados[0]||{}).id||"";
+}
+
 function verCompra(main){
-  var supers=libro.supermercados||[], productos=libro.productos||[];
   var comprasMes=delMes(libro.compras, ui.mes);
   var gastado=r2(comprasMes.reduce(function(s,c){ return s+totalCompra(c); },0));
+  var hayPrecios=(libro.precios||[]).length>0;
 
   main.innerHTML=
     cabecera("Compra",
-      "Los precios de cada producto en cada supermercado, para ver dónde sale más barato. Y lo que compras cada mes.",
+      "Apunta lo que falta en casa y, al volver del súper, lo que has comprado. "+
+      "No hay que dar de alta nada: se escribe el nombre y ya.",
       selectorMes("c_mes")+
-      '<button class="btn" id="nuevoSuper">Nuevo supermercado</button>'+
-      '<button class="btn" id="nuevoProd">Nuevo producto</button>'+
       '<button class="btn fuerte" id="nuevaCompra">Anotar compra</button>')+
+
     '<div class="cifras">'+
       '<div class="cifra"><div class="k">Gastado</div><div class="v acento">'+eur(gastado)+'</div>'+
         '<div class="n">'+mesLargo(ui.mes)+'</div></div>'+
       '<div class="cifra"><div class="k">Compras</div><div class="v">'+comprasMes.length+'</div>'+
         '<div class="n">del mes</div></div>'+
-      '<div class="cifra"><div class="k">Productos</div><div class="v">'+productos.length+'</div>'+
-        '<div class="n">en la lista</div></div>'+
-      '<div class="cifra"><div class="k">Supermercados</div><div class="v">'+supers.length+'</div>'+
-        '<div class="n">comparando</div></div>'+
     '</div>'+
 
     '<div class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab">'+
-      '<h2>Lista de la compra</h2>'+
-      '<span class="pista">Lo que hay que comprar, y dónde sale más barato</span></div>'+
+      '<h2>Lo que falta en casa</h2>'+
+      '<span class="pista">Escríbelo y dale a Intro</span></div>'+
       '<div class="tarjeta-cuerpo" id="listaCompra"></div></div>'+
 
     '<div class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab">'+
-      '<h2>Comparador de precios</h2>'+
-      '<span class="pista">En verde, el más barato de cada producto</span></div>'+
-      '<div class="tabla-caja" id="comparador"></div></div>'+
+      '<h2>Compras de '+esc(mesLargo(ui.mes))+'</h2></div>'+
+      '<div class="tabla-caja" id="listaCompras"></div></div>'+
 
-    '<div class="tarjeta"><div class="tarjeta-cab"><h2>Compras de '+esc(mesLargo(ui.mes))+'</h2></div>'+
-      '<div class="tabla-caja" id="listaCompras"></div></div>';
+    /* La tabla de precios es lo que menos se toca y lo que más ocupa:
+       va plegada, y se abre sola mientras no haya ningún precio, que es
+       cuando hace falta ver de qué va. */
+    '<details class="plegable"'+(hayPrecios?"":" open")+'>'+
+      '<summary>Los precios de cada sitio</summary>'+
+      '<div class="tabla-caja" id="comparador"></div>'+
+    '</details>';
 
   engancharMes("c_mes");
-  document.getElementById("nuevoSuper").addEventListener("click", function(){ editarSuper(null); });
-  document.getElementById("nuevoProd").addEventListener("click", function(){ editarProducto(null); });
   document.getElementById("nuevaCompra").addEventListener("click", function(){ editarCompra(null); });
 
   pintarLista();
@@ -676,17 +785,23 @@ function verCompra(main){
 }
 
 /* ══════════════════════════════════════════════════════════════
-   LISTA DE LA COMPRA
+   LO QUE FALTA EN CASA
    ══════════════════════════════════════════════════════════════
-   Lo que hay que comprar, marcable a medida que cae en el carro.
-   Con los precios ya anotados, dice lo que costaría en cada
-   supermercado, que es para lo que sirve tener el comparador.
+   Un renglón para escribir, una fila por cosa y una casilla para
+   tacharla. Nada más. Lo que escribes se guarda como producto, así que
+   la próxima vez sale solo al teclear y su precio entra en la cuenta.
    ══════════════════════════════════════════════════════════════ */
 function laLista(){ return libro.lista||(libro.lista=[]); }
 
-/* Lo que costaría la lista en un supermercado. Devuelve también cuántos
-   productos no tienen precio allí, para no dar por buena una cuenta
-   coja. */
+/* El nombre de una cosa de la lista: las de antes podían ser texto
+   suelto, y ésas se siguen leyendo. */
+function nombreDeItem(it){
+  return it.productoId ? nombreProducto(it.productoId) : (it.texto||"");
+}
+
+/* Lo que costaría lo que queda por coger en un supermercado. Devuelve
+   también cuántos no tienen precio allí, para no dar por buena una
+   cuenta coja. */
 function costeLista(superId){
   var total=0, sinPrecio=0;
   laLista().forEach(function(it){
@@ -698,39 +813,46 @@ function costeLista(superId){
   return {total:r2(total), sinPrecio:sinPrecio};
 }
 
-/* Dónde está más barato cada producto. Devuelve null cuando no tiene
-   precio en ningún sitio: eso no es que sea gratis, es que falta el
-   dato, y hay que decirlo aparte. */
-function dondeMasBarato(productoId){
+/* Dónde sale más barata la lista. Gana el que tenga precio de más
+   cosas, y entre los que empatan, el más barato: decir «el más barato
+   es el que sólo sabe el precio de una» sería engañar. */
+function dondeSaleMasBarata(){
   var mejor=null;
   (libro.supermercados||[]).forEach(function(s){
-    var pr=precioDe(productoId, s.id);
-    if(!pr) return;
-    var precio=+pr.precio||0;
-    if(!mejor || precio<mejor.precio) mejor={superId:s.id, nombre:s.nombre, precio:precio};
+    var c=costeLista(s.id);
+    if(c.total<=0) return;
+    if(!mejor || c.sinPrecio<mejor.sinPrecio ||
+       (c.sinPrecio===mejor.sinPrecio && c.total<mejor.total))
+      mejor={nombre:s.nombre, total:c.total, sinPrecio:c.sinPrecio};
   });
   return mejor;
 }
 
-/* La lista repartida: cada cosa en la tienda donde sale más barata. */
-function repartoDeLaLista(){
-  var grupos={}, sinPrecio=[], total=0;
-  laLista().forEach(function(it){
-    if(it.hecho) return;
-    if(!it.productoId){ sinPrecio.push({item:it, motivo:"escrito a mano"}); return; }
-    var mejor=dondeMasBarato(it.productoId);
-    if(!mejor){ sinPrecio.push({item:it, motivo:"sin precio en ningún sitio"}); return; }
-    var cant=+it.cantidad||1;
-    var importe=r2(cant*mejor.precio);
-    total=r2(total+importe);
-    var g=grupos[mejor.superId] || (grupos[mejor.superId]=
-      {superId:mejor.superId, nombre:mejor.nombre, lineas:[], total:0});
-    g.lineas.push({item:it, precio:mejor.precio, cantidad:cant, importe:importe});
-    g.total=r2(g.total+importe);
-  });
-  var lista=Object.keys(grupos).map(function(k){ return grupos[k]; })
-                  .sort(function(a,b){ return b.total-a.total; });
-  return {tiendas:lista, sinPrecio:sinPrecio, total:total};
+function anadirALista(texto, cantidad){
+  var n=String(texto||"").trim();
+  if(!n) return null;
+  var p=productoDeNombre(n);
+  /* Si ya estaba apuntado y sin coger, se le suma y no se repite. */
+  var ya=laLista().filter(function(x){ return !x.hecho && x.productoId===p.id; })[0];
+  if(ya){ ya.cantidad=(+ya.cantidad||1)+(+cantidad||1); guardar(); return ya; }
+  var it={id:uid(), productoId:p.id, texto:"", cantidad:Math.max(1,+cantidad||1),
+          nota:"", hecho:false};
+  laLista().push(it);
+  guardar();
+  return it;
+}
+
+function filaLista(it){
+  return '<div class="l-fila'+(it.hecho?" cogido":"")+'">'+
+    '<input type="checkbox" data-lcheck="'+esc(it.id)+'"'+(it.hecho?" checked":"")+
+      ' style="width:auto;flex:0 0 auto" aria-label="Ya lo tengo">'+
+    '<span class="l-nom">'+esc(nombreDeItem(it))+
+      (it.nota?'<div style="color:var(--muted);font-size:12px">'+esc(it.nota)+'</div>':"")+
+    '</span>'+
+    '<input type="number" class="l-cant" min="1" step="1" value="'+(+it.cantidad||1)+'" '+
+      'data-lcant="'+esc(it.id)+'" aria-label="Cuántos">'+
+    '<button class="btn suave sm malo" data-ldel="'+esc(it.id)+'" title="Quitar">✕</button>'+
+  '</div>';
 }
 
 function pintarLista(){
@@ -738,75 +860,56 @@ function pintarLista(){
   var items=laLista();
   var pendientes=items.filter(function(i){ return !i.hecho; });
   var hechos=items.filter(function(i){ return i.hecho; });
-  var supers=libro.supermercados||[];
-
-  /* Lo que costaría en cada sitio, de más barato a más caro */
-  var costes=supers.map(function(s){
-    var c=costeLista(s.id);
-    return {id:s.id, nombre:s.nombre, total:c.total, sinPrecio:c.sinPrecio};
-  }).filter(function(c){ return c.total>0 || c.sinPrecio>0; })
-    .sort(function(a,b){ return a.total-b.total; });
+  var mejor=dondeSaleMasBarata();
 
   caja.innerHTML=
-    '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'+
-      '<button class="btn fuerte sm" id="l_nuevo">+ Añadir a la lista</button>'+
-      (hechos.length?'<button class="btn sm" id="l_limpiar">Quitar lo ya cogido ('+hechos.length+')</button>':"")+
-      (pendientes.length?'<button class="btn sm" id="l_compra">Pasarla a compra</button>':"")+
+    '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">'+
+      '<input id="l_nuevo" list="listaProductos" autocomplete="off" '+
+        'placeholder="Leche, pan, pilas…" style="flex:1;min-width:170px">'+
+      '<button class="btn fuerte" id="l_add">Añadir</button>'+
     '</div>'+
+    datalistProductos()+
 
     (!items.length
       ? '<div class="vacio"><strong>La lista está vacía</strong>'+
-        'Ve apuntando lo que falta en casa y márcalo cuando lo cojas.</div>'
-      : '<div id="itemsLista">'+
-        items.slice().sort(function(a,b){ return (a.hecho?1:0)-(b.hecho?1:0); })
-             .map(filaLista).join("")+'</div>')+
+        'Ve apuntando lo que falta y márcalo cuando lo cojas.</div>'
+      : items.slice().sort(function(a,b){ return (a.hecho?1:0)-(b.hecho?1:0); })
+             .map(filaLista).join(""))+
 
-    (pendientes.length && costes.length
-      ? '<div style="border-top:1px solid var(--linea);margin-top:14px;padding-top:14px">'+
-        '<p class="nota" style="margin:0 0 8px">Lo que costaría lo que queda por coger:</p>'+
-        '<div class="tabla-caja"><table><tbody>'+
-        costes.map(function(c,i){
-          return '<tr><td>'+(i===0&&costes.length>1?'<span class="chapa ok">Más barato</span> ':"")+
-            esc(c.nombre)+'</td>'+
-            '<td class="num"><strong>'+eur(c.total)+'</strong></td>'+
-            '<td style="color:var(--muted);font-size:12px">'+
-            (c.sinPrecio? c.sinPrecio+(c.sinPrecio===1?" sin precio ahí":" sin precio ahí") : "todos con precio")+
-            '</td></tr>';
-        }).join("")+'</tbody></table></div>'+
-        (function(){
-          var avisos=[];
-          if(costes.some(function(c){ return c.sinPrecio; }))
-            avisos.push('Los que no tienen precio en un sitio no cuentan en su total: pon el precio '+
-                        'en el comparador y cuadrará.');
-          var aMano=pendientes.filter(function(i){ return !i.productoId; }).length;
-          if(aMano)
-            avisos.push(aMano===1
-              ? 'Lo escrito a mano no entra en la cuenta, porque no tiene precio en ningún sitio.'
-              : 'Los '+aMano+' escritos a mano no entran en la cuenta, porque no tienen precio '+
-                'en ningún sitio.');
-          return avisos.length
-            ? '<p class="nota" style="margin:8px 0 0">'+avisos.join(" ")+'</p>' : "";
-        })()+
+    /* Una sola frase con lo que costaría: antes había una tabla por
+       supermercado y otra repartiendo la lista entre varios, y era lo
+       más liado de la pantalla. */
+    (pendientes.length && mejor
+      ? '<p class="nota" style="margin:12px 0 0">Lo que queda saldría por <strong>'+
+        eur(mejor.total)+'</strong> en '+esc(mejor.nombre)+'.'+
+        (mejor.sinPrecio?' Y '+(mejor.sinPrecio===1?"una cosa que no tiene":mejor.sinPrecio+
+          " cosas que no tienen")+' precio anotado ahí.':"")+'</p>'
+      : pendientes.length
+        ? '<p class="nota" style="margin:12px 0 0">Cuando anotes precios de estas cosas, '+
+          'aquí te diré dónde sale más barata la lista.</p>'
+        : "")+
+
+    (pendientes.length || hechos.length
+      ? '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'+
+        (pendientes.length?'<button class="btn sm" id="l_compra">Ya la he comprado</button>':"")+
+        (hechos.length?'<button class="btn sm" id="l_limpiar">Quitar lo cogido ('+hechos.length+')</button>':"")+
         '</div>'
-      : "")+
-    '<div id="repartoCompra"></div>';
+      : "");
 
-  pintarReparto();
-
-  document.getElementById("l_nuevo").addEventListener("click", function(){ editarItem(null); });
-  var limpiar=document.getElementById("l_limpiar");
-  if(limpiar) limpiar.addEventListener("click", function(){
-    confirmar("Quitar lo ya cogido",
-      '<p style="margin:0">Se van de la lista '+
-      (hechos.length===1?"<strong>el producto marcado</strong>":"los <strong>"+hechos.length+" productos marcados</strong>")+
-      '. Lo que queda por coger no se toca.</p>',
-      function(){
-        libro.lista=laLista().filter(function(i){ return !i.hecho; });
-        guardar(); pintar(); avisar("Lista limpia");
-      }, {aceptar:"Quitar", malo:true});
+  var campo=document.getElementById("l_nuevo");
+  function meter(){
+    var t=campo.value.trim();
+    if(!t){ campo.focus(); return; }
+    anadirALista(t, 1);
+    campo.value="";
+    pintarLista();
+    pintarComparador();
+    document.getElementById("l_nuevo").focus();
+  }
+  document.getElementById("l_add").addEventListener("click", meter);
+  campo.addEventListener("keydown", function(e){
+    if(e.key==="Enter"){ e.preventDefault(); meter(); }
   });
-  var aCompra=document.getElementById("l_compra");
-  if(aCompra) aCompra.addEventListener("click", listaACompra);
 
   caja.querySelectorAll("[data-lcheck]").forEach(function(c){
     c.addEventListener("change", function(){
@@ -814,8 +917,11 @@ function pintarLista(){
       if(it){ it.hecho=c.checked; guardar(); pintarLista(); }
     });
   });
-  caja.querySelectorAll("[data-ledit]").forEach(function(b){
-    b.addEventListener("click", function(){ editarItem(b.getAttribute("data-ledit")); });
+  caja.querySelectorAll("[data-lcant]").forEach(function(inp){
+    inp.addEventListener("change", function(){
+      var it=laLista().filter(function(x){ return x.id===inp.getAttribute("data-lcant"); })[0];
+      if(it){ it.cantidad=Math.max(1, Math.round(+inp.value||1)); guardar(); pintarLista(); }
+    });
   });
   caja.querySelectorAll("[data-ldel]").forEach(function(b){
     b.addEventListener("click", function(){
@@ -823,285 +929,31 @@ function pintarLista(){
       guardar(); pintarLista(); avisar("Quitado de la lista");
     });
   });
-}
 
-/* La lista repartida por tiendas, con lo que se ahorra frente a hacerla
-   entera en el sitio más barato. Ir a tres sitios cuesta tiempo y
-   gasolina, así que la cifra del ahorro se enseña para que decida él. */
-function pintarReparto(){
-  var caja=document.getElementById("repartoCompra"); if(!caja) return;
-  var rep=repartoDeLaLista();
-  if(!rep.tiendas.length && !rep.sinPrecio.length){ caja.innerHTML=""; return; }
-
-  /* Lo mismo comprado todo en una sola tienda, la más barata posible */
-  var enteroMasBarato=null;
-  (libro.supermercados||[]).forEach(function(s){
-    var c=costeLista(s.id);
-    if(c.sinPrecio) return;   /* sin todos los precios no es comparable */
-    if(!enteroMasBarato || c.total<enteroMasBarato.total)
-      enteroMasBarato={nombre:s.nombre, total:c.total};
+  var limpiar=document.getElementById("l_limpiar");
+  if(limpiar) limpiar.addEventListener("click", function(){
+    libro.lista=laLista().filter(function(i){ return !i.hecho; });
+    guardar(); pintarLista(); avisar("Lista limpia");
   });
-  var ahorro = enteroMasBarato ? r2(enteroMasBarato.total-rep.total) : null;
 
-  caja.innerHTML=
-    '<div style="border-top:1px solid var(--linea);margin-top:14px;padding-top:14px">'+
-    '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;'+
-      'flex-wrap:wrap;margin-bottom:12px">'+
-      '<h3 style="font-size:15px;margin:0">Comprando cada cosa donde está más barata</h3>'+
-      '<strong style="font-size:17px">'+eur(rep.total)+'</strong>'+
-    '</div>'+
-
-    (rep.tiendas.length>1
-      ? (ahorro==null
-          /* Sin todos los precios en un mismo sitio, la comparación seria
-             mentira: se dice en vez de callarla. */
-          ? '<p class="nota" style="margin:0 0 12px">No puedo decirte cuánto te ahorras '+
-            'repartiéndola: a ningún supermercado le tienes anotados todos los precios de '+
-            'la lista, así que no hay con qué compararla.</p>'
-          : (ahorro>0.004
-              ? '<p class="nota" style="margin:0 0 12px">Repartiéndola en '+
-                plural(rep.tiendas.length,"tienda","tiendas")+' te ahorras <strong>'+eur(ahorro)+
-                '</strong> frente a hacerla entera en '+esc(enteroMasBarato.nombre)+' ('+
-                eur(enteroMasBarato.total)+'). Tú verás si compensa el viaje.</p>'
-              : '<p class="nota" style="margin:0 0 12px">No te ahorras nada repartiéndola: '+
-                'sale igual haciéndola entera en '+esc(enteroMasBarato.nombre)+'.</p>'))
-      : "")+
-
-    rep.tiendas.map(function(g){
-      return '<div class="tarjeta" style="margin-bottom:10px;box-shadow:none">'+
-        '<div class="tarjeta-cab" style="padding:9px 13px">'+
-          '<h2 style="font-size:14px">'+esc(g.nombre)+'</h2>'+
-          '<strong>'+eur(g.total)+'</strong></div>'+
-        '<div style="padding:4px 13px 10px">'+
-          g.lineas.map(function(l){
-            return '<div style="display:flex;justify-content:space-between;gap:10px;'+
-              'padding:5px 0;border-bottom:1px solid var(--linea-suave);font-size:13px">'+
-              '<span>'+esc(nombreProducto(l.item.productoId))+
-                (l.cantidad>1?' <span style="color:var(--muted)">× '+l.cantidad+'</span>':"")+'</span>'+
-              '<span class="num" style="white-space:nowrap">'+eur(l.importe)+
-                (l.cantidad>1?' <span style="color:var(--muted);font-size:12px">('+
-                  eur(l.precio)+' c/u)</span>':"")+'</span></div>';
-          }).join("")+
-        '</div></div>';
-    }).join("")+
-
-    (rep.sinPrecio.length
-      ? '<div class="tarjeta" style="margin-bottom:10px;box-shadow:none;border-style:dashed">'+
-        '<div class="tarjeta-cab" style="padding:9px 13px">'+
-          '<h2 style="font-size:14px;color:var(--muted)">Sin sitio asignado</h2>'+
-          '<span class="pista">'+plural(rep.sinPrecio.length,"producto","productos")+'</span></div>'+
-        '<div style="padding:4px 13px 10px">'+
-          rep.sinPrecio.map(function(x){
-            var nombre = x.item.productoId ? nombreProducto(x.item.productoId) : (x.item.texto||"");
-            return '<div style="display:flex;justify-content:space-between;gap:10px;'+
-              'padding:5px 0;border-bottom:1px solid var(--linea-suave);font-size:13px">'+
-              '<span>'+esc(nombre)+'</span>'+
-              '<span style="color:var(--muted);font-size:12px">'+esc(x.motivo)+'</span></div>';
-          }).join("")+
-          '<p class="nota" style="margin:10px 0 0">Estos no entran en el total. '+
-          'Pon su precio en el comparador y se colocarán solos en la tienda que toque.</p>'+
-        '</div></div>'
-      : "")+
-    '</div>';
-}
-
-function filaLista(it){
-  var nombre = it.productoId ? nombreProducto(it.productoId) : (it.texto||"");
-  return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;'+
-    'border-bottom:1px solid var(--linea-suave)'+(it.hecho?";opacity:.5":"")+'">'+
-    '<input type="checkbox" data-lcheck="'+esc(it.id)+'"'+(it.hecho?" checked":"")+
-      ' style="width:auto;flex:0 0 auto">'+
-    '<span style="flex:1;min-width:0'+(it.hecho?";text-decoration:line-through":"")+'">'+
-      esc(nombre)+
-      ((+it.cantidad||1)>1?' <span style="color:var(--muted)">× '+(+it.cantidad)+'</span>':"")+
-      (it.nota?'<div style="color:var(--muted);font-size:12px">'+esc(it.nota)+'</div>':"")+
-    '</span>'+
-    '<div class="acciones-fila">'+
-      '<button class="btn suave sm" data-ledit="'+esc(it.id)+'">Editar</button>'+
-      '<button class="btn suave sm malo" data-ldel="'+esc(it.id)+'">✕</button>'+
-    '</div></div>';
-}
-
-function editarItem(id){
-  var it=id?laLista().filter(function(x){ return x.id===id; })[0]
-           :{id:uid(), productoId:"", texto:"", cantidad:1, nota:"", hecho:false};
-  /* Lo elegido mientras la ventana está abierta, para poder cambiar de
-     idea sin tocar la lista hasta que se guarde. */
-  var elegido = it.productoId || "";
-
-  abrirVentana(id?"Editar de la lista":"Añadir a la lista",
-    '<div class="campo" style="margin-bottom:10px">'+
-      '<label class="lbl" for="l_busca">Buscar en tus productos</label>'+
-      '<input id="l_busca" placeholder="leche, aceite, Ariel…" autocomplete="off"></div>'+
-    '<div id="l_resultados" style="margin-bottom:12px"></div>'+
-    '<div class="campo" id="cajaTexto" style="margin-bottom:12px">'+
-      '<label class="lbl" for="l_texto">O escríbelo a mano</label>'+
-      '<input id="l_texto" value="'+esc(it.texto||"")+'" placeholder="Pan, pilas, bombilla…"></div>'+
-    '<div class="rejilla">'+
-      '<div class="campo"><label class="lbl" for="l_cant">Cuántos</label>'+
-        '<input type="number" id="l_cant" min="1" step="1" value="'+esc(it.cantidad||1)+'"></div>'+
-      '<div class="campo"><label class="lbl" for="l_nota">Nota</label>'+
-        '<input id="l_nota" value="'+esc(it.nota||"")+'" placeholder="El de la tapa azul…"></div>'+
-    '</div>'+
-    '<p class="nota" style="margin:12px 0 0">Los de tu lista de productos entran en la cuenta de '+
-    'lo que cuesta en cada supermercado y en el reparto por tiendas. Los escritos a mano, no.</p>',
-
-    function(){
-      var texto=valor("l_texto");
-      if(!elegido && !texto){ avisar("Busca un producto o escríbelo a mano.", true); return true; }
-      it.productoId=elegido; it.texto=elegido?"":texto;
-      it.cantidad=Math.max(1, Math.round(numero("l_cant")))||1;
-      it.nota=valor("l_nota");
-      if(!id) laLista().push(it);
-      guardar(); pintar(); avisar(id?"Actualizado":"Añadido a la lista");
-    }, {aceptar:id?"Guardar":"Añadir"});
-
-  var busca=document.getElementById("l_busca");
-  var caja=document.getElementById("l_resultados");
-  var cajaTexto=document.getElementById("cajaTexto");
-
-  /* Busca por nombre, marca y formato a la vez: así «ariel» encuentra el
-     detergente aunque el producto se llame sólo «Detergente». */
-  function buscar(texto){
-    var t=texto.trim().toLowerCase();
-    var lista=(libro.productos||[]).slice()
-      .sort(function(a,b){ return a.nombre.localeCompare(b.nombre,"es"); });
-    if(!t) return lista.slice(0,6);
-    return lista.filter(function(p){
-      return (p.nombre+" "+(p.marca||"")+" "+(p.formato||"")).toLowerCase().indexOf(t)>=0;
-    }).slice(0, 12);
-  }
-
-  function pintarResultados(){
-    if(elegido){
-      var p=(libro.productos||[]).filter(function(x){ return x.id===elegido; })[0];
-      caja.innerHTML='<div style="display:flex;align-items:center;gap:10px;padding:9px 11px;'+
-        'background:var(--acento-suave);border:1px solid var(--acento);border-radius:8px">'+
-        '<span style="flex:1"><strong>'+esc(p?nombreProducto(elegido):"")+'</strong></span>'+
-        '<button type="button" class="btn suave sm" id="l_quitar">Cambiar</button></div>';
-      document.getElementById("l_quitar").addEventListener("click", function(){
-        elegido=""; pintarResultados(); busca.focus();
-      });
-      busca.style.display="none";
-      busca.previousElementSibling.style.display="none";
-      cajaTexto.style.display="none";
-      return;
-    }
-    busca.style.display="";
-    busca.previousElementSibling.style.display="";
-    cajaTexto.style.display="";
-
-    var encontrados=buscar(busca.value);
-    var hayCatalogo=(libro.productos||[]).length>0;
-
-    caja.innerHTML = !hayCatalogo
-      ? '<p class="nota" style="margin:0">Todavía no tienes productos dados de alta. '+
-        'Escríbelo a mano aquí abajo, o créalo con «Nuevo producto».</p>'
-      : (!encontrados.length
-          ? '<p class="nota" style="margin:0">Ninguno de tus productos se llama así. '+
-            'Escríbelo a mano aquí abajo, o dalo de alta con «Nuevo producto» para que '+
-            'entre en la comparación de precios.</p>'
-          : '<div style="border:1px solid var(--linea);border-radius:8px;overflow:hidden;'+
-            'max-height:200px;overflow-y:auto">'+
-            encontrados.map(function(p){
-              return '<button type="button" class="l-opcion" data-pick="'+esc(p.id)+'" '+
-                'style="display:block;width:100%;text-align:left;border:0;'+
-                'border-bottom:1px solid var(--linea-suave);background:transparent;'+
-                'padding:8px 11px;cursor:pointer;font:inherit;color:inherit">'+
-                '<strong>'+esc(p.nombre)+'</strong>'+
-                ((p.marca||p.formato)
-                  ? '<span style="color:var(--muted);font-size:12px"> · '+
-                    esc([p.marca,p.formato].filter(function(x){return !!x;}).join(", "))+'</span>'
-                  : "")+
-                '</button>';
-            }).join("")+'</div>'+
-            (busca.value.trim()
-              ? "" : '<p class="nota" style="margin:6px 0 0">Escribe para buscar entre '+
-                     plural((libro.productos||[]).length,"producto","productos")+'.</p>'));
-
-    caja.querySelectorAll("[data-pick]").forEach(function(b){
-      b.addEventListener("click", function(){
-        elegido=b.getAttribute("data-pick");
-        document.getElementById("l_texto").value="";
-        pintarResultados();
-      });
-    });
-  }
-
-  busca.addEventListener("input", pintarResultados);
-  /* Con Intro, si sólo queda uno, se elige sin tener que apuntar con el
-     ratón. La tecla se para aquí: si sigue subiendo, la ventana la toma
-     por un «Guardar» y se cierra a medio buscar. */
-  busca.addEventListener("keydown", function(e){
-    if(e.key!=="Enter") return;
-    e.preventDefault();
-    e.stopPropagation();
-    var encontrados=buscar(busca.value);
-    if(encontrados.length===1){
-      elegido=encontrados[0].id;
-      document.getElementById("l_texto").value="";
-      pintarResultados();
-    } else if(encontrados.length>1){
-      avisar("Hay "+encontrados.length+" que encajan: elige uno.", true);
-    }
+  /* «Ya la he comprado» abre la compra con la lista dentro y los
+     precios puestos: no hay que volver a escribir nada. */
+  var aCompra=document.getElementById("l_compra");
+  if(aCompra) aCompra.addEventListener("click", function(){
+    editarCompra(null, pendientes.map(function(it){
+      return {productoId:it.productoId, cantidad:+it.cantidad||1, precio:0};
+    }), pendientes.map(function(it){ return it.id; }));
   });
-  pintarResultados();
-  if(!elegido) busca.focus();
 }
 
-/* Pasar lo que queda por coger a una compra ya hecha, con los precios
-   que tenga anotados ese supermercado. */
-function listaACompra(){
-  var pendientes=laLista().filter(function(i){ return !i.hecho && i.productoId; });
-  if(!pendientes.length){
-    avisar("En la lista no hay productos del catálogo por coger.", true); return;
-  }
-  var supers=libro.supermercados||[];
-  if(!supers.length){ avisar("Antes da de alta un supermercado.", true); return; }
-
-  abrirVentana("Pasar la lista a compra",
-    '<p class="nota" style="margin:0 0 12px">Se crea una compra con '+
-    pendientes.length+' '+(pendientes.length===1?"producto":"productos")+
-    ', con el último precio anotado en ese supermercado. Después la puedes retocar.</p>'+
-    '<div class="rejilla">'+
-      '<div class="campo"><label class="lbl" for="lc_fecha">Fecha</label>'+
-        '<input type="date" id="lc_fecha" value="'+esc(hoyISO())+'"></div>'+
-      '<div class="campo"><label class="lbl" for="lc_super">Supermercado</label>'+
-        '<select id="lc_super">'+supers.map(function(s){
-          return '<option value="'+esc(s.id)+'">'+esc(s.nombre)+'</option>'; }).join("")+
-      '</select></div>'+
-    '</div>'+
-    '<label class="marca-check" style="margin-top:14px">'+
-      '<input type="checkbox" id="lc_quitar" checked>'+
-      '<span>Quitarlos de la lista al pasarlos</span></label>',
-    function(){
-      var superId=valor("lc_super");
-      var lineas=pendientes.map(function(it){
-        var pr=precioDe(it.productoId, superId);
-        return {productoId:it.productoId, cantidad:+it.cantidad||1, precio:pr?+pr.precio:0};
-      });
-      var c={id:uid(), fecha:valor("lc_fecha")||hoyISO(), superId:superId, lineas:lineas};
-      c.total=r2(lineas.reduce(function(s,l){ return s+l.cantidad*l.precio; },0));
-      libro.compras.push(c);
-      if(marcado("lc_quitar")){
-        var ids={};
-        pendientes.forEach(function(it){ ids[it.id]=1; });
-        libro.lista=laLista().filter(function(i){ return !ids[i.id]; });
-      }
-      guardar(); pintar();
-      var sinPrecio=lineas.filter(function(l){ return !l.precio; }).length;
-      avisar(sinPrecio
-        ? "Compra creada. "+sinPrecio+" sin precio: ponlos en la compra."
-        : "Compra creada por "+eur(c.total));
-    }, {aceptar:"Crear la compra"});
-}
 
 function pintarComparador(){
   var caja=document.getElementById("comparador");
   var supers=libro.supermercados||[], productos=libro.productos||[];
   if(!supers.length || !productos.length){
-    caja.innerHTML='<div class="vacio"><strong>Falta lo básico</strong>'+
-      'Da de alta al menos un supermercado y un producto, y aquí podrás ir poniendo el precio de cada uno en cada sitio.</div>';
+    caja.innerHTML='<div class="vacio"><strong>Todavía no hay precios</strong>'+
+      'Anota una compra y aquí se quedará el precio de cada cosa en cada sitio, '+
+      'para saber dónde sale más barato. Pulsa cualquier hueco para escribirlo a mano.</div>';
     return;
   }
   var html='<table><thead><tr><th>Producto</th>'+
@@ -1348,48 +1200,70 @@ function borrarProducto(id){
     }, {aceptar:"Borrar", malo:true});
 }
 
-function editarCompra(id){
+/* Anotar la compra: la fecha, dónde, y qué has echado al carro.
+   Todo escribiendo. Lo que no exista se crea al guardar, así que no hay
+   que salir a dar de alta nada a media compra —que era justo lo que
+   pasaba antes y por lo que quedaron tres compras a 0 €. */
+function editarCompra(id, lineasPrevias, deLaLista){
   var c=id?(libro.compras||[]).filter(function(x){return x.id===id;})[0]
-          :{id:uid(), fecha:hoyISO(), superId:(libro.supermercados[0]||{}).id||"", lineas:[]};
-  var supers=libro.supermercados||[], productos=libro.productos||[];
-  if(!supers.length){ avisar("Antes da de alta un supermercado.", true); return; }
+          :{id:uid(), fecha:hoyISO(), superId:ultimoSuper(),
+            lineas:lineasPrevias||[]};
+  var nombreDelSuper=(libro.supermercados||[]).filter(function(s){
+    return s.id===c.superId; })[0];
 
   abrirVentana(id?"Editar compra":"Anotar compra",
     '<div class="rejilla">'+
       '<div class="campo"><label class="lbl" for="co_fecha">Fecha</label>'+
         '<input type="date" id="co_fecha" value="'+esc(c.fecha)+'"></div>'+
-      '<div class="campo"><label class="lbl" for="co_super">Supermercado</label><select id="co_super">'+
-        supers.map(function(s){ return '<option value="'+s.id+'"'+(c.superId===s.id?" selected":"")+">"+esc(s.nombre)+"</option>"; }).join("")+
-      '</select></div>'+
+      '<div class="campo"><label class="lbl" for="co_super">Dónde</label>'+
+        '<input id="co_super" list="listaSupers" autocomplete="off" '+
+        'value="'+esc(nombreDelSuper?nombreDelSuper.nombre:"")+'" '+
+        'placeholder="Mercadona"></div>'+
     '</div>'+
-    '<p class="nota" style="margin-top:14px">Qué has comprado. El precio se rellena solo con el último que anotaste en ese supermercado.</p>'+
+    datalistSupers()+datalistProductos()+
+    '<p class="nota" style="margin-top:14px">Escribe el nombre de cada cosa. Si es la primera '+
+    'vez, se crea sola; si ya la has comprado, sale al teclear y el precio se pone solo.</p>'+
     '<div id="lineas"></div>'+
-    '<button class="btn sm" id="masLinea" style="margin-top:8px">+ Añadir producto</button>'+
+    '<button class="btn sm" id="masLinea" style="margin-top:8px">+ Otra cosa</button>'+
     '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;'+
     'padding-top:12px;border-top:1px solid var(--linea)">'+
       '<span class="lbl">Total</span><strong id="co_total" style="font-size:18px">0,00 €</strong></div>',
+
     function(){
-      var lineas=[];
+      var nombreSuper=valor("co_super");
+      if(!nombreSuper){ avisar("¿En qué supermercado?", true); return true; }
+      var s=superDeNombre(nombreSuper);
+
+      var lineas=[], sinPrecio=0;
       document.querySelectorAll("#lineas .linea").forEach(function(f){
-        var pid=f.querySelector(".l_prod").value;
+        var nom=f.querySelector(".l_prod").value.trim();
         var cant=+f.querySelector(".l_cant").value||0;
         var pre=+f.querySelector(".l_pre").value||0;
-        if(pid && cant>0) lineas.push({productoId:pid, cantidad:cant, precio:pre});
+        if(!nom || cant<=0) return;
+        var p=productoDeNombre(nom);
+        if(pre<=0) sinPrecio++;
+        lineas.push({productoId:p.id, cantidad:cant, precio:pre});
       });
-      if(!lineas.length){ avisar("Añade al menos un producto.", true); return true; }
+      if(!lineas.length){ avisar("Escribe al menos una cosa.", true); return true; }
+
       c.fecha=valor("co_fecha")||hoyISO();
-      c.superId=valor("co_super");
+      c.superId=s.id;
       c.lineas=lineas;
-      c.total=r2(lineas.reduce(function(s,l){ return s+l.cantidad*l.precio; },0));
-      /* De paso, el precio visto hoy actualiza el comparador */
+      c.total=r2(lineas.reduce(function(x,l){ return x+l.cantidad*l.precio; },0));
+      /* De paso, el precio de hoy queda anotado para la próxima. */
       lineas.forEach(function(l){ if(l.precio>0) ponerPrecio(l.productoId, c.superId, l.precio); });
       if(!id) libro.compras.push(c);
+      /* Si venía de la lista, lo comprado se tacha solo. */
+      if(deLaLista && deLaLista.length){
+        laLista().forEach(function(it){
+          if(deLaLista.indexOf(it.id)>=0) it.hecho=true;
+        });
+      }
       guardar(); pintar();
-      /* Una compra de cero euros casi siempre es un precio sin escribir,
-         no una compra gratis: más vale decirlo al guardar que dejar el
-         mes cuadrando mal. */
-      if(c.total<=0.004) avisar("Guardada, pero a 0,00 €: te falta el precio", true);
-      else avisar(id?"Compra actualizada":"Compra anotada: "+eur(c.total));
+      avisar(sinPrecio
+        ? "Compra guardada, pero "+(sinPrecio===1?"una cosa se queda":sinPrecio+" cosas se quedan")+
+          " sin precio"
+        : (id?"Compra actualizada":"Compra anotada: "+eur(c.total)), sinPrecio>0);
     });
 
   /* Las líneas se montan a mano porque son dinámicas */
@@ -1401,38 +1275,68 @@ function editarCompra(id){
     });
     document.getElementById("co_total").textContent=eur(r2(t));
   }
-  function añadirLinea(linea){
-    linea=linea||{productoId:(productos[0]||{}).id||"", cantidad:1, precio:0};
+  /* El precio que le toca a lo que acabas de escribir: el de aquí si lo
+     tienes, y si no el último que le pusieras en cualquier sitio, que
+     casi siempre acierta y siempre se puede corregir encima. */
+  function precioQueLeToca(nombre){
+    var p=buscaProducto(nombre);
+    if(!p) return null;
+    var s=buscaSuper(valor("co_super"));
+    var aqui=s?precioDe(p.id, s.id):null;
+    if(aqui) return +aqui.precio||0;
+    var otro=ultimoPrecioDe(p.id);
+    return otro ? +otro.precio||0 : null;
+  }
+  function anadirLinea(linea){
+    linea=linea||{productoId:"", cantidad:1, precio:0};
+    var prod=(libro.productos||[]).filter(function(x){ return x.id===linea.productoId; })[0];
     var f=document.createElement("div");
     f.className="linea";
-    f.style.cssText="display:grid;grid-template-columns:minmax(120px,2fr) 72px 92px auto;gap:8px;margin-top:8px;align-items:end";
+    f.style.cssText="display:grid;grid-template-columns:minmax(120px,2fr) 72px 92px auto;"+
+                    "gap:8px;margin-top:8px;align-items:end";
     f.innerHTML=
-      '<div class="campo"><select class="l_prod">'+
-        productos.map(function(p){ return '<option value="'+p.id+'"'+(linea.productoId===p.id?" selected":"")+">"+esc(p.nombre)+"</option>"; }).join("")+
-      '</select></div>'+
-      '<div class="campo"><input type="number" class="l_cant" min="0" step="0.01" value="'+esc(linea.cantidad)+'" title="Cantidad"></div>'+
+      '<div class="campo"><input class="l_prod" list="listaProductos" autocomplete="off" '+
+        'value="'+esc(prod?prod.nombre:"")+'" placeholder="Leche, pan…"></div>'+
+      '<div class="campo"><input type="number" class="l_cant" min="0" step="0.01" '+
+        'value="'+esc(linea.cantidad)+'" title="Cuántos"></div>'+
       '<div class="campo"><input type="number" class="l_pre" min="0" step="0.01" '+
         'value="'+esc((+linea.precio||0)>0?linea.precio:"")+'" placeholder="precio" '+
-        'title="Precio por unidad"></div>'+
+        'title="Precio de uno"></div>'+
       '<button class="btn suave sm malo" title="Quitar">✕</button>';
     caja.appendChild(f);
     f.querySelector("button").addEventListener("click", function(){ f.remove(); totalLineas(); });
-    f.querySelector(".l_prod").addEventListener("change", function(){
-      var pr=precioDe(this.value, valor("co_super"));
-      if(pr) f.querySelector(".l_pre").value=pr.precio;
-      totalLineas();
-    });
+    var campoProd=f.querySelector(".l_prod");
+    var campoPre=f.querySelector(".l_pre");
+    function rellenarPrecio(){
+      if(campoPre.value!=="") return;          /* lo que hayas escrito manda */
+      var v=precioQueLeToca(campoProd.value);
+      if(v!=null && v>0){ campoPre.value=v; totalLineas(); }
+    }
+    campoProd.addEventListener("change", rellenarPrecio);
+    campoProd.addEventListener("blur", rellenarPrecio);
     f.querySelector(".l_cant").addEventListener("input", totalLineas);
-    f.querySelector(".l_pre").addEventListener("input", totalLineas);
+    campoPre.addEventListener("input", totalLineas);
     totalLineas();
+    return f;
   }
-  if(!productos.length){
-    caja.innerHTML='<p class="nota">Aún no hay productos. Créalos con «Nuevo producto» y vuelve.</p>';
-  } else {
-    (c.lineas||[]).forEach(añadirLinea);
-    if(!(c.lineas||[]).length) añadirLinea();
-    document.getElementById("masLinea").addEventListener("click", function(){ añadirLinea(); });
-  }
+  (c.lineas||[]).forEach(function(l){
+    var f=anadirLinea(l);
+    /* Las que vienen de la lista llegan sin precio: se les pone el que
+       les toque nada más abrir. */
+    if(!(+l.precio>0)){
+      var pre=f.querySelector(".l_pre");
+      var v=precioQueLeToca(f.querySelector(".l_prod").value);
+      if(v!=null && v>0){ pre.value=v; }
+    }
+  });
+  if(!(c.lineas||[]).length) anadirLinea();
+  totalLineas();
+  document.getElementById("masLinea").addEventListener("click", function(){
+    anadirLinea().querySelector(".l_prod").focus();
+  });
+  /* El cursor, donde se empieza a escribir. */
+  var primero=caja.querySelector(".l_prod");
+  if(primero && !primero.value) primero.focus();
 }
 
 /* Poner «1 producto» y no cuál es no sirve de nada: cuando vuelves al
