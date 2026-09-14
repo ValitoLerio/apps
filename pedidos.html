@@ -191,6 +191,27 @@ main{padding:22px 24px 120px;max-width:1180px;min-width:0}
              text-decoration:underline;text-underline-offset:3px;
              text-decoration-color:var(--acento-linea)}
 .enlace-prov:hover{text-decoration-color:var(--acento)}
+/* ── La agenda de teléfonos ──────────────────────────────────── */
+.agenda td{vertical-align:top;padding:11px 10px}
+.agenda tr:not(:last-child) td{border-bottom:1px solid var(--linea-suave)}
+.tel-num{display:inline-block;font-family:var(--mono);font-size:14px;font-weight:600;
+         color:var(--acento);text-decoration:none;letter-spacing:.02em;
+         padding:2px 0;white-space:nowrap}
+.tel-num:hover{text-decoration:underline}
+.tel-num.flojo{color:var(--tinta);font-weight:500}
+.tel-nota{font-size:11.5px;color:var(--muted);line-height:1.3}
+
+/* Para dejarla impresa al lado del teléfono: fuera el menú, los
+   botones y el buscador, que en papel no sirven de nada. */
+@media print{
+  .rail,.no-imprimir,.barra-pedido,.cabecera>div:last-child{display:none!important}
+  .app{display:block}
+  main{padding:0}
+  .tarjeta{box-shadow:none;border:0}
+  .cifras{display:none}
+  .tel-num{color:#000}
+}
+
 .st-ud{font-family:var(--mono);font-size:10px;color:var(--muted);
        letter-spacing:.06em;text-transform:uppercase}
 
@@ -372,7 +393,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609141846"></script>
+<script src="sync.js?v=202609141908"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -380,7 +401,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('pedidos').then(function(){
     var s = document.createElement('script');
-    s.src = 'pedidos.js?v=202609141846';
+    s.src = 'pedidos.js?v=202609141908';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar pedidos.js. Recarga la pagina.'; };
     document.body.appendChild(s);

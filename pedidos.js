@@ -61,7 +61,7 @@ function libroVacio(){
 
 var libro = libroVacio();
 var ui = { vista:"precios", q:"", seccion:"", soloPedido:false, soloBaratos:false,
-           qApunte:"", prov:null };
+           qApunte:"", prov:null, qTel:"" };
 
 /* ── Dinero, fechas y texto ───────────────────────────────────── */
 function r2(n){ return Math.round(((+n||0)+Number.EPSILON)*100)/100; }
@@ -383,7 +383,8 @@ var APARTADOS=[
   {id:"precios",     nombre:"Precios"},
   {id:"pedido",      nombre:"El pedido", cuenta:function(){ return lineasPedido(); }},
   {id:"proveedores", nombre:"Proveedores"},
-  {id:"ajustes",     nombre:"Ajustes"}
+  {id:"ajustes",     nombre:"Ajustes"},
+  {id:"telefonos",   nombre:"Teléfonos"}
 ];
 function pintar(){
   var root=document.getElementById("root");
@@ -410,7 +411,8 @@ function pintar(){
   if(window.Sync && Sync.mostrarEstadoEn) Sync.mostrarEstadoEn(document.getElementById("sync-estado"));
 
   ({precios:verPrecios, pedido:verPedido, proveedores:verProveedores,
-    proveedor:verProveedor, ajustes:verAjustes})[ui.vista](document.getElementById("main"));
+    proveedor:verProveedor, ajustes:verAjustes,
+    telefonos:verTelefonos})[ui.vista](document.getElementById("main"));
 
   pintarBarra();
 }
@@ -1873,6 +1875,114 @@ function verAjustes(main){
   });
   main.querySelectorAll("[data-editar2]").forEach(function(b){
     b.addEventListener("click", function(){ editarProducto(productoPorId(b.getAttribute("data-editar2"))); });
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LA LISTA DE TELÉFONOS
+   ══════════════════════════════════════════════════════════════
+   La agenda de los proveedores, de corrido y para llamar: el nombre, el
+   comercial con su móvil y el teléfono de la empresa. Los números se
+   pulsan y marcan.
+
+   Es lo mismo que hay en Proveedores, pero allí se va a poner precios y
+   a cambiar fichas, y esto es para cuando lo que quieres es llamar a
+   uno y ya. Por eso va sola, al final, y se puede imprimir para
+   dejarla al lado del teléfono.
+   ══════════════════════════════════════════════════════════════ */
+function verTelefonos(main){
+  var lista=listaProveedores().slice().sort(function(a,b){
+    return a.nombre.localeCompare(b.nombre,"es");
+  });
+  var texto=(ui.qTel||"").trim().toLowerCase();
+  var salen=lista.filter(function(p){
+    if(!texto) return true;
+    var d=libro.proveedores[p.nombre]||{};
+    return norm(p.nombre+" "+(d.contacto||"")+" "+(d.movil||"")+" "+(d.telefono||"")+" "+(d.nota||""))
+           .indexOf(norm(texto))>=0;
+  });
+  var conMovil=lista.filter(function(p){ return movilDe(p.nombre); }).length;
+  var sinNada=lista.filter(function(p){ return !telWhatsApp(p.nombre); });
+
+  main.innerHTML=
+    cabecera("Teléfonos",
+      "Todos los proveedores, para llamar. Pulsa un número y se marca solo.",
+      '<button class="btn" id="tel_copiar">Copiar la lista</button>'+
+      '<button class="btn" id="tel_imprimir">Imprimir</button>')+
+
+    '<div class="cifras">'+
+      '<div class="cifra"><div class="k">Proveedores</div><div class="v">'+lista.length+'</div>'+
+        '<div class="n">en la lista de precios</div></div>'+
+      '<div class="cifra"><div class="k">Con móvil</div>'+
+        '<div class="v'+(conMovil<lista.length?"":" acento")+'">'+conMovil+'</div>'+
+        '<div class="n">el del comercial</div></div>'+
+      '<div class="cifra"><div class="k">Sin ningún teléfono</div>'+
+        '<div class="v'+(sinNada.length?" malo":"")+'">'+sinNada.length+'</div>'+
+        '<div class="n">'+(sinNada.length?"no se les puede llamar":"todos localizables")+'</div></div>'+
+    '</div>'+
+
+    '<div class="filtros no-imprimir">'+
+      '<input class="buscador" id="tel_busca" placeholder="Buscar por nombre, comercial o número…" '+
+        'value="'+esc(ui.qTel||"")+'" style="max-width:340px">'+
+    '</div>'+
+
+    (!salen.length
+      ? '<div class="tarjeta"><div class="vacio"><strong>Ninguno se llama así</strong>'+
+        'Prueba con otra cosa.</div></div>'
+      : '<div class="tarjeta"><div class="tabla-caja"><table class="agenda"><tbody>'+
+        salen.map(function(p){
+          var d=libro.proveedores[p.nombre]||{};
+          var mov=movilDe(p.nombre), fijo=fijoDe(p.nombre);
+          return '<tr>'+
+            '<td><strong>'+esc(p.nombre)+'</strong>'+
+              (d.nota?'<div class="tel-nota">'+esc(d.nota)+'</div>':"")+'</td>'+
+            '<td>'+(d.contacto?'<div>'+esc(d.contacto)+'</div>':
+                    '<div class="tel-nota">sin comercial</div>')+
+              (mov?'<a class="tel-num" href="tel:+'+esc(mov)+'">+'+esc(mov)+'</a>'
+                  :'<span class="tel-nota">sin móvil</span>')+'</td>'+
+            '<td class="num">'+(fijo
+              ? '<a class="tel-num flojo" href="tel:+'+esc(fijo)+'">+'+esc(fijo)+'</a>'+
+                '<div class="tel-nota">la empresa</div>'
+              : '<span class="tel-nota">—</span>')+'</td>'+
+            '<td class="num no-imprimir"><button class="btn suave sm" data-teledit="'+
+              esc(p.nombre)+'">Cambiar</button></td>'+
+          '</tr>';
+        }).join("")+
+        '</tbody></table></div></div>')+
+
+    (sinNada.length
+      ? '<p class="nota no-imprimir" style="margin:12px 0 0">Sin ningún teléfono: '+
+        esc(sinNada.map(function(p){ return p.nombre; }).join(", "))+'.</p>'
+      : "");
+
+  var busca=document.getElementById("tel_busca");
+  busca.addEventListener("input", function(){
+    ui.qTel=busca.value;
+    verTelefonos(main);
+    /* Repintar la pantalla se lleva el cursor del buscador: se devuelve
+       al final de lo escrito, que si no hay que volver a pulsar en la
+       caja por cada letra. */
+    var otra=document.getElementById("tel_busca");
+    if(otra){ otra.focus(); otra.setSelectionRange(otra.value.length, otra.value.length); }
+  });
+  main.querySelectorAll("[data-teledit]").forEach(function(b){
+    b.addEventListener("click", function(){ editarProveedor(b.getAttribute("data-teledit")); });
+  });
+  document.getElementById("tel_imprimir").addEventListener("click", function(){ window.print(); });
+  document.getElementById("tel_copiar").addEventListener("click", function(){
+    var t=lista.map(function(p){
+      var d=libro.proveedores[p.nombre]||{};
+      var trozos=[p.nombre];
+      if(d.contacto) trozos.push(d.contacto);
+      if(movilDe(p.nombre)) trozos.push("+"+movilDe(p.nombre));
+      if(fijoDe(p.nombre)) trozos.push("empresa +"+fijoDe(p.nombre));
+      return trozos.join(" · ");
+    }).join("\n");
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(t).then(
+        function(){ avisar("Lista copiada: "+plural(lista.length,"proveedor","proveedores")); },
+        function(){ avisar("No he podido copiarla.", true); });
+    } else avisar("Este navegador no deja copiar solo.", true);
   });
 }
 
