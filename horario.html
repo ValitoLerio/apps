@@ -73,12 +73,12 @@
   .eb{background:rgba(231,76,60,.18);color:#f1948a;border:1px solid rgba(231,76,60,.35);}
   .ea{background:rgba(230,126,34,.18);color:#f0a070;border:1px solid rgba(230,126,34,.35);}
   .el{background:transparent;color:var(--border);border:1px dashed var(--border);}
-  .rt{font-size:.62rem;padding:1px 4px;border-radius:3px;margin-left:3px;font-weight:600;}
+  .rt{font-size:.56rem;padding:0 3px;border-radius:3px;margin-left:2px;font-weight:600;}
   .re{background:rgba(201,168,76,.2);color:var(--enc);}
   .rc{background:rgba(224,123,57,.2);color:var(--coc);}
   .ra{background:rgba(91,155,213,.2);color:var(--cam);}
   .gs td{background:var(--surface);height:3px;border:none;padding:0;}
-  .nc-row .hide-btn{background:none;border:none;color:transparent;cursor:pointer;font-size:.75rem;padding:2px 3px;border-radius:3px;transition:color .15s;line-height:1;}
+  .nc-row .hide-btn{background:none;border:none;color:transparent;cursor:pointer;font-size:.68rem;padding:1px 2px;border-radius:3px;transition:color .15s;line-height:1;}
   .nc:hover .hide-btn{color:var(--text2);}
   .nc:hover .hide-btn:hover{color:#c080e0;background:rgba(142,68,173,.15);}
 
@@ -465,7 +465,7 @@
 
 
 
-<script src="sync.js?v=202609170036"></script>
+<script src="sync.js?v=202609170049"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -473,7 +473,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609170036';
+    s.src = 'horario.js?v=202609170049';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

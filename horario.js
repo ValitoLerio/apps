@@ -890,8 +890,8 @@ function renderTable() {
       if (si > 0) tb += '<tr class="gs"><td colspan="'+(dias.length+1)+'"></td></tr>';
       lastR = s.role;
     }
-    tb += '<tr><td class="nc"><div style="display:flex;align-items:center;justify-content:center;gap:4px" class="nc-row">'
-       +  '<div style="text-align:center"><span style="color:'+RCOL[s.role]+';font-weight:600">'+s.name+'</span><span class="rt r'+s.role+'">'+RLBL[s.role]+'</span></div>'
+    tb += '<tr><td class="nc"><div style="display:flex;align-items:center;justify-content:center;gap:2px" class="nc-row">'
+       +  '<div style="text-align:center;line-height:1.15"><span style="color:'+RCOL[s.role]+';font-weight:600;font-size:.74rem">'+s.name+'</span><span class="rt r'+s.role+'">'+RLBL[s.role]+'</span></div>'
        +  '<button onclick="toggleHide(\''+s.id+'\')" class="hide-btn" title="Ocultar">O</button>'
        +  '</div></td>';
     dias.forEach(function(dia){
@@ -958,13 +958,13 @@ function renderWeekTable() {
   var fmt   = function(d){ return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear(); };
   var end   = new Date(weekStart); end.setDate(end.getDate()+6);
 
-  var th = '<thead><tr><th style="background:#111;color:var(--gold);font-size:.8rem;padding:8px 10px;border:1px solid #2a2820;text-align:left;width:120px;min-width:120px">Personal</th>';
+  var th = '<thead><tr><th style="background:#111;color:var(--gold);font-size:.72rem;padding:5px 8px;border:1px solid #2a2820;text-align:left;width:96px;min-width:96px">Personal</th>';
   dias.forEach(function(dd){
     var dow = dd.getDay(); var we = dow===0||dow===6;
     var tod = dd.toDateString()===today.toDateString();
     var bg  = tod?'rgba(201,168,76,.22)':(we?'#1e1c14':'#141210');
     var col = tod?'var(--gold2)':(we?'var(--gold)':'#ccc');
-    th += '<th style="background:'+bg+';color:'+col+';padding:10px 4px;border:1px solid #2a2820;border-bottom:3px solid '+(we?'var(--gold)':'#444')+';text-align:center;min-width:140px">'
+    th += '<th style="background:'+bg+';color:'+col+';padding:6px 4px;border:1px solid #2a2820;border-bottom:3px solid '+(we?'var(--gold)':'#444')+';text-align:center;min-width:140px">'
         + '<div style="font-weight:900;font-size:1rem;letter-spacing:.04em">'+DC_FULL[dow].substring(0,3)+'</div>'
         + '<div style="font-size:.78rem;opacity:.85;margin-top:2px">'+dd.getDate()+'/'+(dd.getMonth()+1)+'</div>'
         + '</th>';
@@ -979,8 +979,8 @@ function renderWeekTable() {
       lastR = s.role;
     }
     tb += '<tr>';
-    tb += '<td style="background:#111;position:sticky;left:0;z-index:5;padding:6px 10px;border:1px solid #2a2820;width:120px;min-width:120px">'
-        + '<span style="color:'+RCOL[s.role]+';font-weight:700;font-size:.88rem;white-space:nowrap">'+s.name+'</span>'
+    tb += '<td style="background:#111;position:sticky;left:0;z-index:8;padding:3px 8px;border:1px solid #2a2820;width:96px;min-width:96px;box-shadow:2px 0 0 #2a2820">'
+        + '<span style="color:'+RCOL[s.role]+';font-weight:700;font-size:.76rem;line-height:1.15;white-space:nowrap">'+s.name+'</span>'
         + '</td>';
     dias.forEach(function(dd){
       var m  = dd.getMonth(), y = dd.getFullYear(), d = dd.getDate();
@@ -1003,16 +1003,16 @@ function renderWeekTable() {
            borde, como en el cuadrante del mes. */
         var wradius = walign==='flex-start' ? 'border-radius:0 7px 7px 0' : walign==='flex-end' ? 'border-radius:7px 0 0 7px' : 'border-radius:7px';
         var wbgCol  = shiftBg(walign);
-        var raya = function(x){ return '<div style="position:absolute;top:8px;bottom:8px;left:'+x+
+        var raya = function(x){ return '<div style="position:absolute;top:5px;bottom:5px;left:'+x+
                    '%;width:1px;background:rgba(255,255,255,.07)"></div>'; };
-        inner = '<div style="position:relative;width:100%;height:56px;display:flex;align-items:center;justify-content:'+walign+'">'
+        inner = '<div style="position:relative;width:100%;height:40px;display:flex;align-items:center;justify-content:'+walign+'">'
               + raya(33.33) + raya(66.66)
               + '<div title="' + textoTurno(cell) + '" style="position:relative;display:inline-flex;align-items:center;justify-content:center;gap:3px;'
-              +   'min-width:42%;'+wradius+';background:'+wbgCol+';padding:7px 10px;box-shadow:0 1px 3px rgba(0,0,0,.35)">'
-              + '<div style="font-size:1.02rem;font-weight:900;color:#e0ffe0;white-space:nowrap">'+fmtC(cell.inicio)+'</div>'
-              + '<div style="font-size:.9rem;font-weight:700;color:#8ac898">-'+fmtC(cell.fin)+'</div>'
+              +   'min-width:42%;'+wradius+';background:'+wbgCol+';padding:4px 9px;box-shadow:0 1px 3px rgba(0,0,0,.35)">'
+              + '<div style="font-size:.92rem;font-weight:900;color:#e0ffe0;white-space:nowrap">'+fmtC(cell.inicio)+'</div>'
+              + '<div style="font-size:.82rem;font-weight:700;color:#8ac898">-'+fmtC(cell.fin)+'</div>'
               + (esPartido(cell)
-                  ? '<div style="font-size:.9rem;font-weight:700;color:#8ac898">/ '+fmtC(cell.inicio2)+'-'+fmtC(cell.fin2)+'</div>'
+                  ? '<div style="font-size:.82rem;font-weight:700;color:#8ac898">/ '+fmtC(cell.inicio2)+'-'+fmtC(cell.fin2)+'</div>'
                   : '')
               + (cell.nota?'<div style="font-size:.62rem;color:#6a9a78;margin-left:2px">'+cell.nota+'</div>':'')
               + '</div></div>';
@@ -1032,7 +1032,7 @@ function renderWeekTable() {
       tb += '<td onclick="openCell(\''+s.id+'\','+d+',event,'+m+','+y+')" style="'+fullCell+'border:1px solid #3e3c30;border-bottom:2px solid #555240;padding:0;vertical-align:middle;cursor:pointer;text-align:center" onmouseover="this.style.filter=\'brightness(1.3)\'" onmouseout="this.style.filter=\'none\'">'
           + (est==='trabajo' && cell && cell.inicio
               ? inner
-              : '<div style="width:100%;height:56px;display:flex;align-items:center;'+wrapAlign+'">'+inner+'</div>')
+              : '<div style="width:100%;height:40px;display:flex;align-items:center;'+wrapAlign+'">'+inner+'</div>')
           + '</td>';
     });
     tb += '</tr>';
