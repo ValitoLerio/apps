@@ -22,7 +22,12 @@
   body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
 
   /* HEADER */
-  .topbar{background:linear-gradient(135deg,#1a1814,#201c12);border-bottom:1px solid var(--border);padding:5px 14px;display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow-x:auto;min-height:38px;}
+  /* La barra de arriba se queda pegada: lleva el mes, y asi no se pierde
+     de vista por mucho que se baje. El cuadrante del mes tiene su propio
+     scroll, de modo que sus cabeceras pegajosas no se cruzan con esta. */
+  .topbar{background:linear-gradient(135deg,#1a1814,#201c12);border-bottom:1px solid var(--border);padding:5px 14px;display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow-x:auto;min-height:38px;position:sticky;top:0;z-index:60;}
+  /* El mes de cada cuadrante, para saber donde estas sin subir arriba. */
+  .mes-chip{margin-left:auto;background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.32);color:var(--gold2);border-radius:12px;padding:3px 11px;font-size:.74rem;font-weight:600;white-space:nowrap;}
   .topbar-title{font-family:'Playfair Display',serif;font-size:.9rem;color:var(--gold2);white-space:nowrap;margin-right:6px;}
   select{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 7px;font-family:'DM Sans',sans-serif;font-size:.72rem;cursor:pointer;}
   .sb{padding:3px 9px;border-radius:14px;border:1.5px solid;font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:500;cursor:pointer;background:transparent;transition:all .15s;white-space:nowrap;}
@@ -36,19 +41,23 @@
   .mb:hover{color:var(--gold2);} .mb.on{color:var(--gold2);border-bottom-color:var(--gold2);}
 
   /* SCHEDULE */
-  .schedule-area{overflow:auto;background:var(--bg);height:calc(100vh - 96px);}
+  /* Alto el que haga falta: con cuatro personas no tiene por que dejar
+     media pantalla en blanco y mandar los demas cuadrantes abajo. */
+  .schedule-area{overflow:auto;background:var(--bg);max-height:calc(100vh - 96px);}
   .sched{border-collapse:collapse;min-width:100%;font-size:.79rem;}
-  .sched th{background:var(--surface);position:sticky;top:0;z-index:10;padding:8px 4px;font-weight:500;color:var(--text2);border:1px solid var(--border);text-align:center;white-space:nowrap;}
-  .sched th.dh{font-size:.7rem;min-width:116px;}
+  .sched th{background:var(--surface);position:sticky;top:0;z-index:10;padding:5px 3px;font-weight:500;color:var(--text2);border:1px solid var(--border);text-align:center;white-space:nowrap;}
+  .sched th.dh{font-size:.7rem;min-width:84px;}
   .sched th.dh.we{background:#1e1c14;color:var(--gold);}
   .sched th.dh.tod{background:rgba(201,168,76,.15);color:var(--gold2);}
-  .nc{position:sticky;left:0;background:var(--surface);z-index:5;white-space:nowrap;font-weight:500;padding:6px 10px;border:1px solid var(--border);min-width:130px;text-align:center;}
+  .nc{position:sticky;left:0;background:var(--surface);z-index:5;white-space:nowrap;font-weight:500;padding:4px 8px;border:1px solid var(--border);min-width:112px;text-align:center;}
   .nch{position:sticky;left:0;z-index:15;background:var(--surface);text-align:center;}
   .sched td{border:1px solid var(--border);padding:0;vertical-align:middle;text-align:center;}
-  .ci{display:flex;flex-direction:column;align-items:center;gap:2px;min-height:72px;justify-content:center;padding:4px 0;width:100%;}
-  .tb{display:inline-flex;align-items:center;gap:3px;padding:6px 10px;border-radius:5px;font-size:.88rem;font-weight:600;cursor:pointer;transition:opacity .12s;white-space:nowrap;}
+  /* Celdas justas: cuanto menos abultan, mas dias caben en la pantalla
+     sin tener que ir arrastrando el cuadrante de lado. */
+  .ci{display:flex;flex-direction:column;align-items:center;gap:1px;min-height:44px;justify-content:center;padding:2px 0;width:100%;}
+  .tb{display:inline-flex;align-items:center;gap:3px;padding:3px 7px;border-radius:5px;font-size:.78rem;font-weight:600;cursor:pointer;transition:opacity .12s;white-space:nowrap;}
   .tb:hover{opacity:.75;}
-  .th{font-size:.85rem;color:var(--text2);font-weight:700;}
+  .th{font-size:.76rem;color:var(--text2);font-weight:700;}
   .et{background:rgba(39,174,96,.18);color:#5dca82;border:1px solid rgba(39,174,96,.3);}
   .ef{background:rgba(192,57,43,.18);color:#e87c6f;border:1px solid rgba(192,57,43,.3);}
   .ev{background:rgba(41,128,185,.18);color:#74b3e0;border:1px solid rgba(41,128,185,.3);}
@@ -216,7 +225,8 @@
       <div class="covt">&#128101; Personal trabajando dia a dia</div>
       <div style="font-size:.71rem;color:var(--text2)">Personas activas por hora y dia del mes</div>
     </div>
-    <div class="covleg">
+    <div class="mes-chip" id="cov-mes"></div>
+    <div class="covleg" style="margin-left:0">
       <div style="display:flex;align-items:center;gap:3px"><div class="sw" style="background:#16140f;border:1px solid #2a2720"></div>0</div>
       <div style="display:flex;align-items:center;gap:3px"><div class="sw" style="background:#0d2e14"></div>1-2</div>
       <div style="display:flex;align-items:center;gap:3px"><div class="sw" style="background:#0f4a1e"></div>3-4</div>
@@ -234,7 +244,8 @@
       <div style="font-family:'Playfair Display',serif;font-size:1rem;color:var(--gold2)">&#128338; Horas y dias trabajados</div>
       <div style="font-size:.71rem;color:var(--text2)">Por persona - mes actual y acumulado anual</div>
     </div>
-    <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+    <div class="mes-chip" id="hours-mes"></div>
+    <div style="display:flex;gap:6px;align-items:center">
       <select id="hours-view-sel" onchange="renderHours()" style="font-size:.75rem;padding:4px 8px">
         <option value="monthly">Mensual</option>
         <option value="weekly">Semanal</option>
@@ -258,7 +269,8 @@
       <div style="font-family:'Playfair Display',serif;font-size:1rem;color:var(--gold2)">&#127958;&#65039; Vacaciones, festivos y bajas</div>
       <div style="font-size:.71rem;color:var(--text2)">Quién falta y qué días, de un vistazo</div>
     </div>
-    <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+    <div class="mes-chip" id="aus-mes"></div>
+    <div style="display:flex;gap:6px;align-items:center">
       <select id="aus-alcance" onchange="renderAusencias()" style="font-size:.75rem;padding:4px 8px">
         <option value="mes">Mes en curso</option>
         <option value="ano">Todo el año</option>
@@ -281,7 +293,7 @@
       <div style="font-family:'Playfair Display',serif;font-size:1rem;color:var(--gold2)">&#127958;&#65039; Cuadrante de vacaciones y ausencias</div>
       <div style="font-size:.71rem;color:var(--text2)">Elige qu&eacute; pones y pulsa los d&iacute;as. Sale solo en el horario del mes y de la semana.</div>
     </div>
-    <div style="margin-left:auto;font-size:.75rem;color:var(--gold)" id="vac-rango"></div>
+    <div class="mes-chip" id="vac-rango"></div>
   </div>
   <div id="vac-tipos" style="display:flex;gap:8px;padding:12px 20px 0;flex-wrap:wrap"></div>
   <div style="display:flex;gap:14px;padding:10px 20px 0;flex-wrap:wrap;font-size:.7rem;color:var(--text2)">
@@ -443,7 +455,7 @@
 
 
 
-<script src="sync.js?v=202609162353"></script>
+<script src="sync.js?v=202609170001"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -451,7 +463,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609162353';
+    s.src = 'horario.js?v=202609170001';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

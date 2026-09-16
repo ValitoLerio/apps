@@ -267,6 +267,17 @@ function updateWeekLabel() {
 // ================================================================
 // RENDER ALL
 // ================================================================
+// El mes que se esta mirando, tal cual se escribe en la chapa de cada
+// cuadrante. Los cuadrantes quedan lejos de la barra de arriba, y al
+// bajar la pantalla hay que poder ver en que mes se esta sin subir.
+function rotuloMes(y, m) {
+  return MESES[m] + ' ' + y + ' \u00b7 ' + rangoDelMes(y, m);
+}
+function ponerChapa(id, texto) {
+  var el = document.getElementById(id);
+  if (el) el.textContent = texto;
+}
+
 function renderAll() {
   var yr = document.getElementById('yr');
   if (yr) curY = parseInt(yr.value);
@@ -303,6 +314,10 @@ function renderHours() {
   var all = staff();
   var view = document.getElementById('hours-view-sel');
   var mode = view ? view.value : 'monthly';
+  ponerChapa('hours-mes',
+    mode === 'annual' ? 'Año ' + y :
+    mode === 'weekly' ? 'Semanas de ' + y :
+    rotuloMes(y, curM));
   if (mode === 'weekly')  { renderHoursWeekly(tbl, y, all); return; }
   if (mode === 'annual')  { renderHoursAnnual(tbl, y, all); return; }
   renderHoursMonthly(tbl, y, all);
@@ -493,6 +508,7 @@ function recogerAusencias(){
 function renderAusencias(){
   var tbl = document.getElementById('austbl'); if (!tbl) return;
   var datos = recogerAusencias();
+  ponerChapa('aus-mes', datos.alcance === 'ano' ? 'Todo ' + curY : rotuloMes(curY, curM));
 
   // Fichas de recuento
   var caja = document.getElementById('aus-resumen');
@@ -729,8 +745,7 @@ function renderVacaciones(){
   var hoy  = new Date();
   var all  = visibleStaff();
 
-  var rot = document.getElementById('vac-rango');
-  if (rot) rot.textContent = MESES[curM] + ' ' + curY + ' - ' + rangoDelMes(curY, curM);
+  ponerChapa('vac-rango', rotuloMes(curY, curM));
 
   // Los botones de que se esta poniendo.
   var barra = document.getElementById('vac-tipos');
@@ -795,22 +810,22 @@ function renderVacaciones(){
             : ' - poner ' + VAC_EST[vacTipo].uno.toLowerCase());
       return '<td onclick="marcarDiaVac(\'' + s.id + '\',' + dia.y + ',' + dia.m + ',' + dia.d + ')" ' +
              'title="' + esc(s.name) + ' - ' + etiquetaDia(dia, curM) + pista + '" ' +
-             'style="cursor:pointer;text-align:center;padding:7px 2px;border:1px solid var(--border);' +
+             'style="cursor:pointer;text-align:center;padding:4px 2px;border:1px solid var(--border);' +
              'background:' + fondo + ';color:' + color + ';font-weight:700;font-size:.78rem;user-select:none">' +
              (trab ? '&bull;' : marca) + '</td>';
     }).join('');
     var ano = diasTipoAno(s.id, curY, vacTipo);
     var desglose = VAC_TIPOS.map(function(t){ return VAC_EST[t].letra + cuenta[t]; }).join(' ');
-    tb += '<tr><td style="background:var(--surface);position:sticky;left:0;z-index:5;padding:7px 12px;' +
+    tb += '<tr><td style="background:var(--surface);position:sticky;left:0;z-index:5;padding:4px 10px;' +
           'border:1px solid var(--border);white-space:nowrap">' +
           '<span style="color:' + RCOL[s.role] + ';font-weight:600;font-size:.8rem">' + esc(s.name) + '</span>' +
           '<span class="rt r' + s.role + '" style="margin-left:3px">' + RLBL[s.role] + '</span></td>' +
           celdas +
-          '<td style="background:#1a2010;padding:7px 10px;border:1px solid var(--border);text-align:center" ' +
+          '<td style="background:#1a2010;padding:4px 9px;border:1px solid var(--border);text-align:center" ' +
           'title="En este mes: ' + desglose + '">' +
           '<div style="font-size:.9rem;font-weight:900;color:' + VAC_EST[vacTipo].col + '">' + enElMes + 'd</div>' +
-          '<div style="font-size:.7rem;color:var(--text2)">' + ano + ' en ' + curY + '</div>' +
-          '<div style="font-size:.6rem;color:var(--text2);opacity:.8">' + desglose + '</div></td></tr>';
+          '<div style="font-size:.64rem;color:var(--text2);white-space:nowrap">' + ano + ' en ' + curY +
+          ' &middot; ' + desglose + '</div></td></tr>';
   });
   tb += '</tbody>';
   tbl.innerHTML = th + tb;
@@ -1040,6 +1055,7 @@ function cbg(n) {
 }
 function renderCov() {
   var tbl  = document.getElementById('covtbl');
+  ponerChapa('cov-mes', rotuloMes(curY, curM));
   if (!tbl) return;
   var dias = diasDelMes(curY, curM);
   var all  = visibleStaff();
