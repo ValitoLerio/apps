@@ -225,7 +225,7 @@
   <div class="covh">
     <div>
       <div class="covt">&#128101; Personal trabajando dia a dia</div>
-      <div style="font-size:.71rem;color:var(--text2)">Personas activas por hora y dia del mes</div>
+      <div style="font-size:.71rem;color:var(--text2)">Personas activas por hora y d&iacute;a del mes &middot; de las 7:00 a las 3:00; las horas con <b style="color:#c090e8">L</b> son de la madrugada del d&iacute;a siguiente</div>
     </div>
     <div class="mes-chip" id="cov-mes"></div>
     <div class="covleg" style="margin-left:0">
@@ -457,7 +457,7 @@
 
 
 
-<script src="sync.js?v=202609170007"></script>
+<script src="sync.js?v=202609170016"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -465,7 +465,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609170007';
+    s.src = 'horario.js?v=202609170016';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

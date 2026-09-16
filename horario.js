@@ -19,9 +19,14 @@ var SCFG  = {
   verano:   {lbl:'Verano',   h:'8-9h',  eH:9,  rH:8},
   invierno: {lbl:'Invierno', h:'9-10h', eH:10, rH:9}
 };
+// Las horas que se miran en el cuadro de quien esta trabajando: de las
+// siete de la manana a las tres de la madrugada, que es hasta donde se
+// abre, en verano y en invierno igual. Las de despues de medianoche van
+// al final, marcadas con una L, porque son de la madrugada del dia
+// siguiente aunque el turno empezara el dia de antes.
 var SLOTS = [];
 for (var _h = 7; _h <= 23; _h++) SLOTS.push(_h);
-SLOTS.push(0); SLOTS.push(1);
+SLOTS.push(0); SLOTS.push(1); SLOTS.push(2); SLOTS.push(3);
 
 // ================================================================
 // STATE
@@ -1047,12 +1052,20 @@ function renderWeekTable() {
 // ================================================================
 // COVERAGE
 // ================================================================
+/* Si alguien esta trabajando en esa hora del reloj. La hora va de s0 a
+   s1 (las 21:00 son de 21:00 a 21:59) y el turno de a a b.
+
+   Con el turno que cruza la medianoche (a mayor que b) se trabaja de a
+   a las doce y de las doce a b, y basta con pisar un trozo de la hora:
+   antes se pedia la hora entera por los dos lados, asi que el que
+   entraba a las 21:30 no salia en las nueve y el que se iba a las 02:30
+   no salia en las dos. */
 function isW(ini, fin, slot) {
   if (!ini||!fin) return false;
   var a = parseInt(ini.split(':')[0])*60+parseInt(ini.split(':')[1]);
   var b = parseInt(fin.split(':')[0])*60+parseInt(fin.split(':')[1]);
   var s0 = slot*60, s1 = slot*60+59;
-  return a < b ? (s0<b && s1>=a) : (s0>=a || s1<b);
+  return a < b ? (s0 < b && s1 >= a) : (s1 >= a || s0 < b);
 }
 function cbg(n) {
   if (n===0) return {bg:'#16140f',fg:'#3a3530'};
@@ -1096,7 +1109,7 @@ function renderCov() {
   });
   html += '</tr></thead><tbody>';
   SLOTS.forEach(function(slot, si){
-    var isMid = slot===0||slot===1;
+    var isMid = slot <= 3;               // de madrugada: 00, 01, 02 y 03
     var lbl   = (slot<10?'0':'')+slot+':00';
     if (slot===12||slot===20) html += '<tr><td colspan="'+(dias.length+1)+'" style="height:3px;background:var(--border);padding:0;border:none"></td></tr>';
     var rbg = isMid?'rgba(142,68,173,.07)':(si%2===0?'rgba(255,255,255,.013)':'transparent');
