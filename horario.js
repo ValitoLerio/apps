@@ -995,15 +995,24 @@ function renderWeekTable() {
         var hIni = parseInt(cell.inicio.split(':')[0]);
         var autoA = hIni>=7&&hIni<=12 ? 'flex-start' : hIni>=13&&hIni<=15 ? 'center' : 'flex-end';
         var walign  = cell.align || autoA;
-        var wpad    = walign==='flex-start' ? 'margin-left:-1px' : walign==='flex-end' ? 'margin-right:-1px' : '';
-        var wradius = walign==='flex-start' ? 'border-radius:0 4px 4px 0' : walign==='flex-end' ? 'border-radius:4px 0 0 4px' : 'border-radius:4px';
+        /* En la semana sobra sitio, asi que el turno se pega del todo al
+           lado que le toca: a la izquierda la manana, al medio la tarde
+           y a la derecha la noche. Dos rayas finas parten la celda en
+           tres, para que la posicion se vea de un golpe sin leer la
+           hora. El bloque pierde la esquina por el lado que toca el
+           borde, como en el cuadrante del mes. */
+        var wradius = walign==='flex-start' ? 'border-radius:0 7px 7px 0' : walign==='flex-end' ? 'border-radius:7px 0 0 7px' : 'border-radius:7px';
         var wbgCol  = shiftBg(walign);
-        inner = '<div style="width:100%;display:flex;justify-content:'+walign+';'+wpad+'">'
-              + '<div style="display:inline-flex;align-items:center;gap:3px;'+wradius+';background:'+wbgCol+';padding:3px 6px">'
-              + '<div style="font-size:.95rem;font-weight:900;color:#e0ffe0;white-space:nowrap">'+fmtH(cell.inicio)+'</div>'
-              + '<div style="font-size:.82rem;font-weight:700;color:#8ac898">-'+fmtH(cell.fin)+'</div>'
+        var raya = function(x){ return '<div style="position:absolute;top:8px;bottom:8px;left:'+x+
+                   '%;width:1px;background:rgba(255,255,255,.07)"></div>'; };
+        inner = '<div style="position:relative;width:100%;height:56px;display:flex;align-items:center;justify-content:'+walign+'">'
+              + raya(33.33) + raya(66.66)
+              + '<div title="' + textoTurno(cell) + '" style="position:relative;display:inline-flex;align-items:center;justify-content:center;gap:3px;'
+              +   'min-width:42%;'+wradius+';background:'+wbgCol+';padding:7px 10px;box-shadow:0 1px 3px rgba(0,0,0,.35)">'
+              + '<div style="font-size:1.02rem;font-weight:900;color:#e0ffe0;white-space:nowrap">'+fmtC(cell.inicio)+'</div>'
+              + '<div style="font-size:.9rem;font-weight:700;color:#8ac898">-'+fmtC(cell.fin)+'</div>'
               + (esPartido(cell)
-                  ? '<div style="font-size:.82rem;font-weight:700;color:#8ac898">/ '+fmtH(cell.inicio2)+'-'+fmtH(cell.fin2)+'</div>'
+                  ? '<div style="font-size:.9rem;font-weight:700;color:#8ac898">/ '+fmtC(cell.inicio2)+'-'+fmtC(cell.fin2)+'</div>'
                   : '')
               + (cell.nota?'<div style="font-size:.62rem;color:#6a9a78;margin-left:2px">'+cell.nota+'</div>':'')
               + '</div></div>';
@@ -1021,7 +1030,9 @@ function renderWeekTable() {
 
       var wrapAlign = est==='trabajo' ? '' : 'justify-content:center;';
       tb += '<td onclick="openCell(\''+s.id+'\','+d+',event,'+m+','+y+')" style="'+fullCell+'border:1px solid #3e3c30;border-bottom:2px solid #555240;padding:0;vertical-align:middle;cursor:pointer;text-align:center" onmouseover="this.style.filter=\'brightness(1.3)\'" onmouseout="this.style.filter=\'none\'">'
-          + '<div style="width:100%;height:56px;display:flex;align-items:center;'+wrapAlign+'">'+inner+'</div>'
+          + (est==='trabajo' && cell && cell.inicio
+              ? inner
+              : '<div style="width:100%;height:56px;display:flex;align-items:center;'+wrapAlign+'">'+inner+'</div>')
           + '</td>';
     });
     tb += '</tr>';
@@ -1031,6 +1042,11 @@ function renderWeekTable() {
   area.innerHTML =
     '<div style="padding:5px 10px;background:#0d0d0b;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2a2820">'
     + '<span style="font-family:\'Playfair Display\',serif;font-size:.85rem;color:var(--gold2)">Horario - '+MESES[curM]+' '+curY+'</span>'
+    + '<span style="font-size:.63rem;color:var(--text2);margin-left:14px">'
+    +   '<span style="color:'+cssVar('--shift-l','#1a4a2e')+';font-weight:900">&#9608;</span> izquierda: ma&ntilde;ana &nbsp; '
+    +   '<span style="color:'+cssVar('--shift-c','#1a1814')+';font-weight:900">&#9608;</span> centro: tarde &nbsp; '
+    +   '<span style="color:'+cssVar('--shift-r','#2a1a0a')+';font-weight:900">&#9608;</span> derecha: noche'
+    + '</span>'
     + '<span style="font-size:.65rem;color:var(--text2)">'+fmt(weekStart)+' - '+fmt(end)+' - '+SCFG[curS].lbl+'</span>'
     + '</div>'
     + '<div id="wk-scaler" style="overflow:hidden;width:100%">'
