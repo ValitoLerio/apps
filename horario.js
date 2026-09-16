@@ -105,7 +105,15 @@ function rangoDelMes(y, m) {
 function autoS(m)       { return VERANO.indexOf(m) >= 0 ? 'verano' : 'invierno'; }
 function esc(t)         { return String(t==null?'':t).replace(/[&<>"']/g, function(c){
                             return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
-function fmtH(t)        { if (!t) return '?'; return t.slice(-2) === ':00' ? t.slice(0,-3) : t; }
+function fmtH(t)        { if (!t) return '?'; return t; }
+/* La hora en corto, solo para el cuadrante del mes, donde el sitio esta
+   contado: las horas en punto pierden los minutos (09:00 -> 9) y asi el
+   turno cabe en una celda estrecha. En el horario de WhatsApp, en la
+   semana y en la ventana de editar, las horas van enteras. */
+function fmtC(t) {
+  if (!t) return '?';
+  return t.slice(-3) === ':00' ? String(parseInt(t.slice(0,2), 10)) : t;
+}
 
 // ----------------------------------------------------------------
 // TURNO PARTIDO
@@ -895,12 +903,12 @@ function renderTable() {
         var bgCol = shiftBg(align);
         inn = '<div style="width:100%;display:flex;justify-content:'+align+';'+pad+'">'
             + '<span class="tb '+cls+'" style="'+radius+';background:'+bgCol+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'
-            + '<span class="th">'+fmtH(cell.inicio)+'-'+fmtH(cell.fin)
-            + (esPartido(cell) ? '<br>'+fmtH(cell.inicio2)+'-'+fmtH(cell.fin2) : '')
+            + '<span class="th">'+fmtC(cell.inicio)+'-'+fmtC(cell.fin)
+            + (esPartido(cell) ? '<br>'+fmtC(cell.inicio2)+'-'+fmtC(cell.fin2) : '')
             + '</span></span></div>';
         if (cell.nota) inn += '<div style="width:100%;display:flex;justify-content:'+align+';'+pad+'"><span style="font-size:.6rem;color:var(--text2);max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+cell.nota+'</span></div>';
       } else if (est !== 'libre') {
-        var lbl = est==='baja'?'B Baja':est==='ausencia'?'A Aus':EICO[est]||est;
+        var lbl = est==='baja'?'B':est==='ausencia'?'A':EICO[est]||est;
         inn = '<span class="tb '+cls+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'+lbl+'</span>';
       } else {
         inn = '<span class="tb '+cls+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">+</span>';
