@@ -20,13 +20,15 @@ var SCFG  = {
   invierno: {lbl:'Invierno', h:'9-10h', eH:10, rH:9}
 };
 // Las horas que se miran en el cuadro de quien esta trabajando: de las
-// siete de la manana a las tres de la madrugada, que es hasta donde se
-// abre, en verano y en invierno igual. Las de despues de medianoche van
-// al final, marcadas con una L, porque son de la madrugada del dia
+// siete de la manana a las dos de la madrugada, en verano y en invierno
+// igual. Se cierra a las tres, y la ultima hora que se trabaja es la de
+// las dos: el que sale a las 03:00 no esta trabajando en la hora de las
+// tres, asi que esa fila no existe. Las de despues de medianoche van al
+// final, marcadas con una L, porque son de la madrugada del dia
 // siguiente aunque el turno empezara el dia de antes.
 var SLOTS = [];
 for (var _h = 7; _h <= 23; _h++) SLOTS.push(_h);
-SLOTS.push(0); SLOTS.push(1); SLOTS.push(2); SLOTS.push(3);
+SLOTS.push(0); SLOTS.push(1); SLOTS.push(2);
 
 // ================================================================
 // STATE
@@ -1109,7 +1111,7 @@ function renderCov() {
   });
   html += '</tr></thead><tbody>';
   SLOTS.forEach(function(slot, si){
-    var isMid = slot <= 3;               // de madrugada: 00, 01, 02 y 03
+    var isMid = slot <= 2;               // de madrugada: 00, 01 y 02
     var lbl   = (slot<10?'0':'')+slot+':00';
     if (slot===12||slot===20) html += '<tr><td colspan="'+(dias.length+1)+'" style="height:3px;background:var(--border);padding:0;border:none"></td></tr>';
     var rbg = isMid?'rgba(142,68,173,.07)':(si%2===0?'rgba(255,255,255,.013)':'transparent');

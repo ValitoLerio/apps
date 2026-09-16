@@ -19,7 +19,14 @@
     --wk-aus-bg:#3a1a00; --wk-aus-txt:#f0a070;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+  /* La pagina no se desplaza: se queda quieta y lo que se mueve es el
+     cuerpo, que va debajo de las dos barras de arriba. Asi la barra del
+     mes y la de los meses estan siempre a la vista y no tapan nada,
+     porque lo que sube se recorta al llegar a ellas. */
+  html{height:100%;}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);height:100%;display:flex;flex-direction:column;overflow:hidden;}
+  .topbar,.mnav,.week-bar{flex:0 0 auto;}
+  #cuerpo{flex:1 1 auto;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;}
 
   /* HEADER */
   /* La barra de arriba NO se queda pegada: al bajar tapaba la cabecera
@@ -43,7 +50,7 @@
   /* SCHEDULE */
   /* Alto el que haga falta: con cuatro personas no tiene por que dejar
      media pantalla en blanco y mandar los demas cuadrantes abajo. */
-  .schedule-area{overflow:auto;background:var(--bg);max-height:calc(100vh - 96px);}
+  .schedule-area{overflow:auto;background:var(--bg);max-height:calc(100vh - 150px);}
   .sched{border-collapse:collapse;min-width:100%;font-size:.79rem;}
   .sched th{background:var(--surface);position:sticky;top:0;z-index:10;padding:5px 3px;font-weight:500;color:var(--text2);border:1px solid var(--border);text-align:center;white-space:nowrap;}
   .sched th.dh{font-size:.66rem;min-width:64px;}
@@ -194,6 +201,8 @@
   <button onclick="toggleWeekMode()" style="margin-left:auto;background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:5px;padding:4px 10px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.75rem">&#10005; Salir</button>
 </div>
 
+<div id="cuerpo">
+
 <!-- SCHEDULE -->
 <div class="schedule-area" id="sarea"></div>
 
@@ -225,7 +234,7 @@
   <div class="covh">
     <div>
       <div class="covt">&#128101; Personal trabajando dia a dia</div>
-      <div style="font-size:.71rem;color:var(--text2)">Personas activas por hora y d&iacute;a del mes &middot; de las 7:00 a las 3:00; las horas con <b style="color:#c090e8">L</b> son de la madrugada del d&iacute;a siguiente</div>
+      <div style="font-size:.71rem;color:var(--text2)">Personas activas por hora y d&iacute;a del mes &middot; de las 7:00 a las 2:00, que es la &uacute;ltima hora que se trabaja antes de cerrar a las tres; las horas con <b style="color:#c090e8">L</b> son de la madrugada del d&iacute;a siguiente</div>
     </div>
     <div class="mes-chip" id="cov-mes"></div>
     <div class="covleg" style="margin-left:0">
@@ -310,6 +319,8 @@
     <table id="vactbl" style="border-collapse:collapse;font-size:.8rem;min-width:100%"></table>
   </div>
 </div>
+
+</div><!-- /cuerpo -->
 
 <div class="popup" id="popup">
   <h4 id="ptitle">Editar</h4>
@@ -457,7 +468,7 @@
 
 
 
-<script src="sync.js?v=202609170016"></script>
+<script src="sync.js?v=202609170024"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -465,7 +476,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609170016';
+    s.src = 'horario.js?v=202609170024';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
