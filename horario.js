@@ -667,10 +667,10 @@ function renderAusencias(){
 // que se manda por WhatsApp. No hay que apuntarlo dos veces.
 var VAC_TIPOS = ['vacaciones','festivo','baja','ausencia'];
 var VAC_EST = {
-  vacaciones: {letra:'V', lbl:'Vacaciones', uno:'Vacaciones', bg:'var(--est-vacaciones-lleno)', col:'var(--est-vacaciones)'},
-  festivo:    {letra:'F', lbl:'Festivos',   uno:'Festivo',    bg:'var(--est-festivo-lleno)',    col:'var(--est-festivo)'},
-  baja:       {letra:'B', lbl:'Bajas',      uno:'Baja',       bg:'var(--est-baja-lleno)',       col:'var(--est-baja)'},
-  ausencia:   {letra:'A', lbl:'Ausencias',  uno:'Ausencia',   bg:'var(--est-ausencia-lleno)',   col:'var(--est-ausencia)'}
+  vacaciones: {letra:'V', lbl:'Vacaciones', uno:'Vacaciones', bg:'var(--est-vacaciones-lleno)', col:'var(--est-vacaciones-txt)', puro:'var(--est-vacaciones)'},
+  festivo:    {letra:'F', lbl:'Festivos',   uno:'Festivo',    bg:'var(--est-festivo-lleno)',    col:'var(--est-festivo-txt)',    puro:'var(--est-festivo)'},
+  baja:       {letra:'B', lbl:'Bajas',      uno:'Baja',       bg:'var(--est-baja-lleno)',       col:'var(--est-baja-txt)',       puro:'var(--est-baja)'},
+  ausencia:   {letra:'A', lbl:'Ausencias',  uno:'Ausencia',   bg:'var(--est-ausencia-lleno)',   col:'var(--est-ausencia-txt)',   puro:'var(--est-ausencia)'}
 };
 // Lo que se esta poniendo ahora mismo al pulsar un dia.
 var vacTipo = 'vacaciones';
@@ -771,7 +771,7 @@ function renderVacaciones(){
       return '<button onclick="setVacTipo(\'' + t + '\')" ' +
         'title="Poner ' + e.uno.toLowerCase() + ' al pulsar un dia" ' +
         'style="cursor:pointer;font-family:inherit;font-size:.74rem;font-weight:600;padding:5px 12px;' +
-        'border-radius:14px;border:1px solid ' + (on ? e.col : 'var(--border)') + ';' +
+        'border-radius:14px;border:1px solid ' + (on ? e.puro : 'var(--border)') + ';' +
         'background:' + (on ? e.bg : 'transparent') + ';color:' + (on ? e.col : 'var(--text2)') + ';">' +
         '<span style="font-weight:900">' + e.letra + '</span> ' + e.uno + '</button>';
     }).join('');
@@ -839,7 +839,7 @@ function renderVacaciones(){
           celdas +
           '<td style="background:#1a2010;padding:4px 9px;border:1px solid var(--border);text-align:center" ' +
           'title="En este mes: ' + desglose + '">' +
-          '<div style="font-size:.9rem;font-weight:900;color:' + VAC_EST[vacTipo].col + '">' + enElMes + 'd</div>' +
+          '<div style="font-size:.9rem;font-weight:900;color:' + VAC_EST[vacTipo].puro + '">' + enElMes + 'd</div>' +
           '<div style="font-size:.64rem;color:var(--text2);white-space:nowrap">' + ano + ' en ' + curY +
           ' &middot; ' + desglose + '</div></td></tr>';
   });
@@ -1026,7 +1026,7 @@ function renderWeekTable() {
       var fullCell = '';
       var pinta = function(clave, letra){
         return {fondo:'background:var(--'+clave+'-lleno);',
-                dentro:'<div style="font-weight:900;font-size:1rem;color:var(--'+clave+')">'+letra+'</div>'};
+                dentro:'<div style="font-weight:900;font-size:1rem;color:var(--'+clave+'-txt)">'+letra+'</div>'};
       };
       var p = inner==='VAC' ? pinta('est-vacaciones','V')
             : inner==='FES' ? pinta('est-festivo','F')
@@ -1842,7 +1842,7 @@ var THEME_DEFAULTS = {
   enc:'#c9a84c', coc:'#e07b39', cam:'#5b9bd5',
   'shift-l':'#1a4a2e', 'shift-c':'#1a1814', 'shift-r':'#2a1a0a',
   'est-trabajo':'#5dca82', 'est-festivo':'#e87c6f', 'est-vacaciones':'#74b3e0',
-  'est-baja':'#f1948a', 'est-ausencia':'#f0a070'
+  'est-baja':'#c48ae0', 'est-ausencia':'#f0a070'
 };
 
 /* El color de una etiqueta, con la transparencia que se le pida. */
@@ -1854,15 +1854,49 @@ function conAlfa(hex, a) {
   var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
   return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
 }
-/* De cada color de estado salen tres: el fondo flojo de la etiqueta, su
-   borde, y el fondo fuerte de la celda entera en la vista de semana. */
+/* Cuanta luz tiene un color, de 0 (negro) a 1 (blanco). */
+function claridad(hex) {
+  hex = String(hex || '').trim();
+  if (hex.charAt(0) !== '#') return 0;
+  if (hex.length === 4) hex = '#' + hex[1]+hex[1] + hex[2]+hex[2] + hex[3]+hex[3];
+  if (hex.length !== 7) return 0;
+  var r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
+  return 0.2126*r + 0.7152*g + 0.0722*b;
+}
+function oscurecer(hex, cuanto) {
+  hex = String(hex || '').trim();
+  if (hex.charAt(0) !== '#' || hex.length !== 7) return hex;
+  var p = function(i){ return Math.max(0, Math.round(parseInt(hex.slice(i,i+2),16) * (1-cuanto))); };
+  var h = function(v){ return (v<16?'0':'') + v.toString(16); };
+  return '#' + h(p(1)) + h(p(3)) + h(p(5));
+}
+
+/* De cada color de estado salen cuatro: el fondo de la etiqueta, su
+   borde, la letra y el relleno de la celda entera en la vista de semana.
+
+   Y depende del tema. Sobre fondo oscuro el color se pone flojito por
+   detras y la letra va del color, que es como se leia bien. Sobre fondo
+   claro eso no vale: un rojo al 18% sobre blanco sale rosa, y un rojo y
+   un salmon acaban iguales. Ahi la etiqueta va del color entero, a
+   pelo, con la letra en blanco o en negro segun lo que se lea mejor. */
 function derivarEstados() {
-  var raiz = document.documentElement;
+  var raiz  = document.documentElement;
+  var fondo = cssVar('--bg', THEME_DEFAULTS.bg);
+  var temaClaro = claridad(fondo) > .5;
   ESTADOS.forEach(function(k){
     var col = cssVar('--'+k, THEME_DEFAULTS[k]);
-    raiz.style.setProperty('--'+k+'-bg',    conAlfa(col, .18));
-    raiz.style.setProperty('--'+k+'-bd',    conAlfa(col, .40));
-    raiz.style.setProperty('--'+k+'-lleno', conAlfa(col, .30));
+    var bg, bd, lleno, txt;
+    if (temaClaro) {
+      bg = col; lleno = col; bd = oscurecer(col, .25);
+      txt = claridad(col) > .6 ? '#141414' : '#ffffff';
+    } else {
+      bg = conAlfa(col, .18); lleno = conAlfa(col, .30); bd = conAlfa(col, .40);
+      txt = col;
+    }
+    raiz.style.setProperty('--'+k+'-bg',    bg);
+    raiz.style.setProperty('--'+k+'-bd',    bd);
+    raiz.style.setProperty('--'+k+'-lleno', lleno);
+    raiz.style.setProperty('--'+k+'-txt',   txt);
   });
 }
 /* Los temas rapidos. Cada uno se pone entero -fondos, letras, oficios,
@@ -1873,47 +1907,47 @@ var PRESETS = {
   dark: {nombre:'Oscuro', nota:'el de siempre',
     bg:'#0f0e0b',surface:'#1a1814',surface2:'#232017',border:'#2e2b22',text:'#f0ece0',text2:'#b0aa98',gold:'#c9a84c',gold2:'#e8c96d',enc:'#c9a84c',coc:'#e07b39',cam:'#5b9bd5',
     'shift-l':'#1a4a2e','shift-c':'#1a1814','shift-r':'#2a1a0a',
-    'est-trabajo':'#5dca82','est-festivo':'#e87c6f','est-vacaciones':'#74b3e0','est-baja':'#f1948a','est-ausencia':'#f0a070'},
+    'est-trabajo':'#5dca82','est-festivo':'#e87c6f','est-vacaciones':'#74b3e0','est-baja':'#c48ae0','est-ausencia':'#f0a070'},
 
   contraste: {nombre:'Contraste', nota:'el que mas resalta',
     bg:'#000000',surface:'#101010',surface2:'#1c1c1c',border:'#4a4a4a',text:'#ffffff',text2:'#d0d0d0',gold:'#ffd400',gold2:'#ffe866',enc:'#ffd400',coc:'#ff8a2b',cam:'#4fc3ff',
     'shift-l':'#0b6b34','shift-c':'#2b2b2b','shift-r':'#6b3a00',
-    'est-trabajo':'#39ff88','est-festivo':'#ff6b5a','est-vacaciones':'#4fc3ff','est-baja':'#ff8f85','est-ausencia':'#ffb15c'},
+    'est-trabajo':'#39ff88','est-festivo':'#ff6b5a','est-vacaciones':'#4fc3ff','est-baja':'#d98aff','est-ausencia':'#ffb15c'},
 
   neon: {nombre:'Neon', nota:'colores muy vivos',
     bg:'#0a0a12',surface:'#14142a',surface2:'#1d1d3a',border:'#3a3a6a',text:'#f2f2ff',text2:'#a9a9d8',gold:'#00e5ff',gold2:'#7bf5ff',enc:'#00e5ff',coc:'#ff4fd8',cam:'#9dff3c',
     'shift-l':'#0a5a4a','shift-c':'#2a2a4a','shift-r':'#4a1a5a',
-    'est-trabajo':'#9dff3c','est-festivo':'#ff4fd8','est-vacaciones':'#00e5ff','est-baja':'#ff7a9c','est-ausencia':'#ffd24a'},
+    'est-trabajo':'#9dff3c','est-festivo':'#ff4fd8','est-vacaciones':'#00e5ff','est-baja':'#c77dff','est-ausencia':'#ffd24a'},
 
   pizarra: {nombre:'Pizarra', nota:'gris, sin dorados',
     bg:'#16181a',surface:'#202427',surface2:'#2a2f33',border:'#3c4348',text:'#eef2f4',text2:'#a8b2b8',gold:'#ff9f45',gold2:'#ffc07a',enc:'#ff9f45',coc:'#7ad1a0',cam:'#7fb4ff',
     'shift-l':'#1f4d38','shift-c':'#2a2f33','shift-r':'#4a331c',
-    'est-trabajo':'#7ad1a0','est-festivo':'#f0968a','est-vacaciones':'#8fcdf0','est-baja':'#f3a29a','est-ausencia':'#f5b985'},
+    'est-trabajo':'#7ad1a0','est-festivo':'#f0968a','est-vacaciones':'#8fcdf0','est-baja':'#c39ae0','est-ausencia':'#f5b985'},
 
   navy: {nombre:'Marino', nota:'azul oscuro',
     bg:'#060e1a',surface:'#0d1828',surface2:'#142234',border:'#1e3050',text:'#cce0ff',text2:'#7a9ac0',gold:'#5b9bd5',gold2:'#8ac0f0',enc:'#5b9bd5',coc:'#e07b39',cam:'#4caf50',
     'shift-l':'#0a2a4a','shift-c':'#0a1a2a','shift-r':'#1a0a3a',
-    'est-trabajo':'#6ad39a','est-festivo':'#f09a8a','est-vacaciones':'#8fcdf0','est-baja':'#f3a2ac','est-ausencia':'#f0b070'},
+    'est-trabajo':'#6ad39a','est-festivo':'#f09a8a','est-vacaciones':'#8fcdf0','est-baja':'#b79af0','est-ausencia':'#f0b070'},
 
   forest: {nombre:'Bosque', nota:'verde oscuro',
     bg:'#070f09',surface:'#0e1e12',surface2:'#162a1a',border:'#1e3a22',text:'#d0f0d8',text2:'#7aaa88',gold:'#4caf50',gold2:'#80d888',enc:'#4caf50',coc:'#cddc39',cam:'#26c6da',
     'shift-l':'#0a2a10','shift-c':'#0a1a0a','shift-r':'#1a2a0a',
-    'est-trabajo':'#7fe08a','est-festivo':'#e8998a','est-vacaciones':'#86ccdd','est-baja':'#eda49c','est-ausencia':'#e5c072'},
+    'est-trabajo':'#7fe08a','est-festivo':'#e8998a','est-vacaciones':'#86ccdd','est-baja':'#b69ae8','est-ausencia':'#e5c072'},
 
   vino: {nombre:'Vino', nota:'granate, calido',
     bg:'#140a0c',surface:'#201015',surface2:'#2b171d',border:'#43222b',text:'#f6e7ea',text2:'#c0a0a8',gold:'#e0a33c',gold2:'#f3c76f',enc:'#e0a33c',coc:'#e8705a',cam:'#c48ae0',
     'shift-l':'#1f4a33','shift-c':'#2b171d','shift-r':'#4a2416',
-    'est-trabajo':'#7fd4a0','est-festivo':'#f5998f','est-vacaciones':'#8ccbe8','est-baja':'#f7a9a1','est-ausencia':'#f2b97f'},
+    'est-trabajo':'#7fd4a0','est-festivo':'#f5998f','est-vacaciones':'#8ccbe8','est-baja':'#cf9be8','est-ausencia':'#f2b97f'},
 
   light: {nombre:'Claro', nota:'fondo blanco',
     bg:'#f5f0e8',surface:'#ede8dc',surface2:'#e0d8c8',border:'#c8bfa8',text:'#2a2010',text2:'#6a5a3a',gold:'#8a6a1a',gold2:'#6a4a0a',enc:'#7a5500',coc:'#a04010',cam:'#1a5a8a',
     'shift-l':'#c8e8d0','shift-c':'#e8e8d0','shift-r':'#e8d8b0',
-    'est-trabajo':'#12703f','est-festivo':'#8a2418','est-vacaciones':'#134a70','est-baja':'#8a1a1a','est-ausencia':'#8a4a10'},
+    'est-trabajo':'#12703f','est-festivo':'#8a2418','est-vacaciones':'#134a70','est-baja':'#5e2a8a','est-ausencia':'#8a4a10'},
 
   papel: {nombre:'Papel', nota:'blanco, como la hoja',
     bg:'#ffffff',surface:'#f2f2f2',surface2:'#e7e7e7',border:'#b9b9b9',text:'#111111',text2:'#555555',gold:'#0a58ca',gold2:'#003a99',enc:'#0a58ca',coc:'#b3450f',cam:'#0f7a4a',
     'shift-l':'#bfe8cd','shift-c':'#e7e7e7','shift-r':'#ffdfae',
-    'est-trabajo':'#0f7a4a','est-festivo':'#8c1d0f','est-vacaciones':'#0a3d6b','est-baja':'#8c0f0f','est-ausencia':'#8c4a0f'}
+    'est-trabajo':'#0f7a4a','est-festivo':'#8c1d0f','est-vacaciones':'#0a3d6b','est-baja':'#5b2a8c','est-ausencia':'#8c4a0f'}
 };
 
 function getThemeVals() {
