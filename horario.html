@@ -270,7 +270,7 @@
     </div>
   </div>
   <div style="overflow-x:auto;padding:10px 14px 0">
-    <table id="hourstbl" style="border-collapse:collapse;font-size:.76rem;width:auto"></table>
+    <table id="hourstbl" style="border-collapse:collapse;font-size:.82rem;width:auto"></table>
   </div>
 </div>
 <!-- AUSENCIAS -->
@@ -290,7 +290,7 @@
   </div>
   <div id="aus-resumen" style="display:flex;gap:10px;padding:12px 20px 0;flex-wrap:wrap"></div>
   <div style="overflow-x:auto;padding:10px 14px 0">
-    <table id="austbl" style="border-collapse:collapse;font-size:.76rem;width:auto"></table>
+    <table id="austbl" style="border-collapse:collapse;font-size:.82rem;width:auto"></table>
   </div>
 </div>
 
@@ -465,7 +465,7 @@
 
 
 
-<script src="sync.js?v=202609170056"></script>
+<script src="sync.js?v=202609170101"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -473,7 +473,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609170056';
+    s.src = 'horario.js?v=202609170101';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
