@@ -28,8 +28,10 @@ SLOTS.push(0); SLOTS.push(1);
 // ================================================================
 var curM = new Date().getMonth(), curY = 2026, curS = 'verano';
 var sched = {};
-// El cuadrante de vacaciones va por su cuenta: su propio cajon, que no
-// se cruza con `sched` ni con nada del horario. vac[año][mes][id][dia]
+// El cajon viejo del cuadrante de vacaciones, de cuando iba por su
+// cuenta. Ya no se escribe en el: ahora el cuadrante guarda en `sched`,
+// igual que los turnos. Se sigue leyendo solo para pasar al horario lo
+// que quedara apuntado ahi. vac[año][mes][id][dia]
 var vac   = {};
 var active = null;
 var clip   = null;
@@ -621,37 +623,104 @@ function renderAusencias(){
 
 
 // ================================================================
-// CUADRANTE DE VACACIONES
+// CUADRANTE DE VACACIONES, FESTIVOS, BAJAS Y AUSENCIAS
 // ================================================================
-// Un cuadrante aparte que no lleva nada configurado: ni horas, ni turnos,
-// ni temporada, ni el horario. Solo dias. Un toque pone el dia de
-// vacaciones y otro lo quita.
+// Un cuadrante de dias sueltos, sin horas ni turnos ni temporada: se
+// elige arriba que se esta poniendo (vacaciones, festivo, baja o
+// ausencia) y se van pulsando los dias.
 //
-// Y aparte de verdad: tiene su propio cajon, `vac`, que se guarda en
-// 'rvac'. Lo que se marca aqui NO sale en el cuadrante del mes, ni en
-// el de la semana, ni en el recuento de horas, ni en ausencias; y al
-// reves, lo que haya puesto en el horario no asoma aqui. Son dos
-// cuadrantes distintos que no se pisan el uno al otro.
-function esVacaciones(sid, dia){
-  return !!((((vac[dia.y] || {})[dia.m] || {})[sid] || {})[dia.d]);
+// Y lo que se marca aqui ES el horario: se guarda en el mismo sitio que
+// los turnos (`sched`), asi que el dia sale solo en el cuadrante del
+// mes, en el de la semana, en el recuento de ausencias y en el horario
+// que se manda por WhatsApp. No hay que apuntarlo dos veces.
+var VAC_TIPOS = ['vacaciones','festivo','baja','ausencia'];
+var VAC_EST = {
+  vacaciones: {letra:'V', lbl:'Vacaciones', uno:'Vacaciones', bg:'rgba(41,128,185,.28)',  col:'#8ec8f0'},
+  festivo:    {letra:'F', lbl:'Festivos',   uno:'Festivo',    bg:'rgba(231,76,60,.24)',   col:'#e87c6f'},
+  baja:       {letra:'B', lbl:'Bajas',      uno:'Baja',       bg:'rgba(192,57,43,.32)',   col:'#f1948a'},
+  ausencia:   {letra:'A', lbl:'Ausencias',  uno:'Ausencia',   bg:'rgba(230,126,34,.26)',  col:'#f0a070'}
+};
+// Lo que se esta poniendo ahora mismo al pulsar un dia.
+var vacTipo = 'vacaciones';
+function setVacTipo(t){ if (!VAC_EST[t]) return; vacTipo = t; renderVacaciones(); }
+
+// La celda del horario de un dia cualquiera, sin tocar el mes en curso.
+function celdaDe(sid, dia){
+  return ((((sched[dia.y] || {})[dia.m] || {})[sid]) || {})[dia.d] || null;
 }
-function diasVacacionesAno(sid, y){
+function estadoDe(sid, dia){
+  var c = celdaDe(sid, dia);
+  return c && c.estado ? c.estado : 'libre';
+}
+// Cuantos dias de un tipo tiene alguien en un mes del horario.
+function diasTipoMes(sid, y, m, tipo){
   var n = 0;
-  for (var m = 0; m < 12; m++) {
-    diasDelMes(y, m).forEach(function(dia){ if (esVacaciones(sid, dia)) n++; });
-  }
+  diasDelMes(y, m).forEach(function(dia){ if (estadoDe(sid, dia) === tipo) n++; });
   return n;
 }
-// Un toque pone el dia y otro lo quita. Nada mas: no mira el horario ni
-// avisa de nada, porque aqui el horario no cuenta.
-function toggleVac(sid, y, m, d){
-  if (!vac[y])           vac[y] = {};
-  if (!vac[y][m])        vac[y][m] = {};
-  if (!vac[y][m][sid])   vac[y][m][sid] = {};
-  if (vac[y][m][sid][d]) delete vac[y][m][sid][d];
-  else                   vac[y][m][sid][d] = 1;
-  save();
-  renderVacaciones();
+function diasTipoAno(sid, y, tipo){
+  var n = 0;
+  for (var m = 0; m < 12; m++) n += diasTipoMes(sid, y, m, tipo);
+  return n;
+}
+
+// Un toque pone el dia del tipo elegido y otro toque, del mismo tipo, lo
+// quita. Si el dia tenia un turno con horas, el turno se va: estar de
+// vacaciones y trabajar a la vez no puede ser, y se avisa de lo que se
+// ha llevado por delante.
+function marcarDiaVac(sid, y, m, d){
+  var dia = {y:y, m:m, d:d};
+  var celda = celdaDe(sid, dia);
+  var est   = celda && celda.estado ? celda.estado : 'libre';
+  var savedM = curM, savedY = curY;
+  curM = m; curY = y;
+  if (est === vacTipo) {
+    var mes = (sched[y] || {})[m] || {};
+    if (mes[sid]) delete mes[sid][d];
+    save();
+    curM = savedM; curY = savedY;
+    toast(VAC_EST[vacTipo].uno + ' quitado - dia ' + etiquetaDia(dia, curM));
+  } else {
+    var teniaTurno = (est === 'trabajo' && celda && celda.inicio) ? textoTurno(celda) : '';
+    sc(sid, d, {estado: vacTipo, nota: (celda && celda.nota) || ''});
+    curM = savedM; curY = savedY;
+    toast(VAC_EST[vacTipo].uno + ' - dia ' + etiquetaDia(dia, curM) +
+          (teniaTurno ? ' (se ha quitado el turno ' + teniaTurno + ')' : ''));
+  }
+  // Se repinta todo, que esto ya es el horario: el mes, la semana, la
+  // cobertura, las horas y el recuento de ausencias.
+  renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
+}
+
+// ----------------------------------------------------------------
+// LO QUE HABIA EN EL CAJON VIEJO
+// ----------------------------------------------------------------
+// Antes el cuadrante guardaba las vacaciones aparte, en `vac` ('rvac'),
+// sin que el horario se enterara. Esas vacaciones se pasan al horario
+// una sola vez, y solo a los dias que esten libres: si en un dia ya hay
+// algo puesto a mano, manda el horario. El cajon viejo se queda como
+// estaba, por si acaso.
+function migrarVacacionesViejas(){
+  try { if (localStorage.getItem('rvacmig') === '1') return; } catch(e){}
+  var pasadas = 0;
+  Object.keys(vac || {}).forEach(function(y){
+    Object.keys(vac[y] || {}).forEach(function(m){
+      Object.keys(vac[y][m] || {}).forEach(function(sid){
+        Object.keys(vac[y][m][sid] || {}).forEach(function(d){
+          if (!vac[y][m][sid][d]) return;
+          if (!sched[y])           sched[y] = {};
+          if (!sched[y][m])        sched[y][m] = {};
+          if (!sched[y][m][sid])   sched[y][m][sid] = {};
+          if (sched[y][m][sid][d]) return;     // en el horario ya hay algo
+          sched[y][m][sid][d] = {estado:'vacaciones', nota:''};
+          pasadas++;
+        });
+      });
+    });
+  });
+  if (pasadas) save();
+  try { localStorage.setItem('rvacmig', '1'); } catch(e){}
+  return pasadas;
 }
 
 function renderVacaciones(){
@@ -662,6 +731,20 @@ function renderVacaciones(){
 
   var rot = document.getElementById('vac-rango');
   if (rot) rot.textContent = MESES[curM] + ' ' + curY + ' - ' + rangoDelMes(curY, curM);
+
+  // Los botones de que se esta poniendo.
+  var barra = document.getElementById('vac-tipos');
+  if (barra) {
+    barra.innerHTML = VAC_TIPOS.map(function(t){
+      var e = VAC_EST[t], on = (t === vacTipo);
+      return '<button onclick="setVacTipo(\'' + t + '\')" ' +
+        'title="Poner ' + e.uno.toLowerCase() + ' al pulsar un dia" ' +
+        'style="cursor:pointer;font-family:inherit;font-size:.74rem;font-weight:600;padding:5px 12px;' +
+        'border-radius:14px;border:1px solid ' + (on ? e.col : 'var(--border)') + ';' +
+        'background:' + (on ? e.bg : 'transparent') + ';color:' + (on ? e.col : 'var(--text2)') + ';">' +
+        '<span style="font-weight:900">' + e.letra + '</span> ' + e.uno + '</button>';
+    }).join('');
+  }
 
   if (!all.length) {
     tbl.innerHTML = '<tbody><tr><td style="padding:26px 4px;text-align:center;color:var(--text2)">' +
@@ -681,7 +764,8 @@ function renderVacaciones(){
           '<br><span style="font-size:.82rem;font-weight:700">' + etiquetaDia(dia, curM) + '</span></th>';
   });
   th += '<th style="background:#1a2010;color:var(--gold2);padding:6px 10px;border:1px solid var(--border);' +
-        'text-align:center;min-width:74px;font-size:.72rem;font-weight:700">Mes / Año</th></tr></thead>';
+        'text-align:center;min-width:74px;font-size:.72rem;font-weight:700">' + VAC_EST[vacTipo].lbl +
+        '<br><span style="font-size:.64rem;font-weight:500;color:var(--text2)">mes / a&ntilde;o</span></th></tr></thead>';
 
   var tb = '<tbody>';
   var ultimoRol = null;
@@ -691,30 +775,42 @@ function renderVacaciones(){
       ultimoRol = s.role;
     }
     var enElMes = 0;
+    var cuenta  = {vacaciones:0, festivo:0, baja:0, ausencia:0};
     var celdas = dias.map(function(dia){
-      // Aqui solo hay dos cosas: o el dia esta de vacaciones o no. Del
-      // horario no se ve nada, que para eso es otro cuadrante.
-      var deVac = esVacaciones(s.id, dia);
-      if (deVac) enElMes++;
-      var we  = dia.dow===0||dia.dow===6;
-      var marca = deVac ? 'V' : '';
-      var fondo = deVac ? 'rgba(41,128,185,.28)' : (we ? 'rgba(30,28,20,.5)' : 'transparent');
-      var color = deVac ? '#8ec8f0' : 'var(--border)';
-      return '<td onclick="toggleVac(\'' + s.id + '\',' + dia.y + ',' + dia.m + ',' + dia.d + ')" ' +
-             'title="' + esc(s.name) + ' - ' + etiquetaDia(dia, curM) + (deVac ? ' - quitar vacaciones' : ' - poner vacaciones') + '" ' +
+      var est = estadoDe(s.id, dia);
+      var e   = VAC_EST[est];
+      if (e) cuenta[est]++;
+      if (est === vacTipo) enElMes++;
+      var we    = dia.dow===0||dia.dow===6;
+      var trab  = (est === 'trabajo');
+      var marca = e ? e.letra : '&middot;';
+      var fondo = e ? e.bg : (we ? 'rgba(30,28,20,.5)' : 'transparent');
+      var color = e ? e.col : (trab ? 'var(--gold)' : 'var(--border)');
+      // El dia que tiene turno se ve, para no borrarlo sin querer.
+      var celda = trab ? celdaDe(s.id, dia) : null;
+      var pista = e
+        ? ' - ' + e.uno + (est === vacTipo ? ' (pulsa para quitarlo)' : ' (pulsa para poner ' + VAC_EST[vacTipo].uno.toLowerCase() + ')')
+        : (trab && celda && celda.inicio
+            ? ' - turno ' + textoTurno(celda) + ' (pulsa y se cambia por ' + VAC_EST[vacTipo].uno.toLowerCase() + ')'
+            : ' - poner ' + VAC_EST[vacTipo].uno.toLowerCase());
+      return '<td onclick="marcarDiaVac(\'' + s.id + '\',' + dia.y + ',' + dia.m + ',' + dia.d + ')" ' +
+             'title="' + esc(s.name) + ' - ' + etiquetaDia(dia, curM) + pista + '" ' +
              'style="cursor:pointer;text-align:center;padding:7px 2px;border:1px solid var(--border);' +
              'background:' + fondo + ';color:' + color + ';font-weight:700;font-size:.78rem;user-select:none">' +
-             (marca || '&middot;') + '</td>';
+             (trab ? '&bull;' : marca) + '</td>';
     }).join('');
-    var ano = diasVacacionesAno(s.id, curY);
+    var ano = diasTipoAno(s.id, curY, vacTipo);
+    var desglose = VAC_TIPOS.map(function(t){ return VAC_EST[t].letra + cuenta[t]; }).join(' ');
     tb += '<tr><td style="background:var(--surface);position:sticky;left:0;z-index:5;padding:7px 12px;' +
           'border:1px solid var(--border);white-space:nowrap">' +
           '<span style="color:' + RCOL[s.role] + ';font-weight:600;font-size:.8rem">' + esc(s.name) + '</span>' +
           '<span class="rt r' + s.role + '" style="margin-left:3px">' + RLBL[s.role] + '</span></td>' +
           celdas +
-          '<td style="background:#1a2010;padding:7px 10px;border:1px solid var(--border);text-align:center">' +
-          '<div style="font-size:.9rem;font-weight:900;color:#8ec8f0">' + enElMes + 'd</div>' +
-          '<div style="font-size:.7rem;color:var(--text2)">' + ano + ' en ' + curY + '</div></td></tr>';
+          '<td style="background:#1a2010;padding:7px 10px;border:1px solid var(--border);text-align:center" ' +
+          'title="En este mes: ' + desglose + '">' +
+          '<div style="font-size:.9rem;font-weight:900;color:' + VAC_EST[vacTipo].col + '">' + enElMes + 'd</div>' +
+          '<div style="font-size:.7rem;color:var(--text2)">' + ano + ' en ' + curY + '</div>' +
+          '<div style="font-size:.6rem;color:var(--text2);opacity:.8">' + desglose + '</div></td></tr>';
   });
   tb += '</tbody>';
   tbl.innerHTML = th + tb;
@@ -1010,7 +1106,7 @@ function openCell(sid, day, event, mo, yr) {
     var donde = etiquetaDia({y:curY, m:curM, d:day}, savedM);
     sc(sid, day, Object.assign({}, clip));
     curM = savedM; curY = savedY;
-    renderTable(); renderCov(); renderAusencias();
+    renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
     toast('Turno pegado en el '+donde);
     return;
   }
@@ -1140,7 +1236,7 @@ function aplicarEstado(est) {
   var previo = gc(active.sid, active.day) || {};
   sc(active.sid, active.day, {estado: est, nota: previo.nota || ''});
   curM = savedM; curY = savedY;
-  closePopup(); renderTable(); renderCov(); renderAusencias();
+  closePopup(); renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
   var comoSeLlama = {festivo:'Festivo', vacaciones:'Vacaciones', baja:'Baja', ausencia:'Ausencia'};
   toast((comoSeLlama[est] || est) + ' · día ' + dia);
 }
@@ -1201,7 +1297,7 @@ function saveCell() {
   if (active.mo !== undefined) { curM = active.mo; curY = active.yr; }
   sc(active.sid, active.day, data);
   curM = savedM; curY = savedY;
-  closePopup(); renderTable(); renderCov(); renderAusencias();
+  closePopup(); renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
 }
 
 /* Vacia el dia y cierra: un solo toque, sin elegir "Libre" ni Guardar. */
@@ -1213,7 +1309,7 @@ function borrarCelda() {
   if (mes[active.sid]) delete mes[active.sid][active.day];
   save();
   curM = savedM; curY = savedY;
-  closePopup(); renderTable(); renderCov(); renderAusencias();
+  closePopup(); renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
   toast('Día vaciado');
 }
 
@@ -1521,7 +1617,7 @@ function toggleHide(sid) {
   var s = staff().find(function(x){ return x.id===sid; });
   if (hidden[sid]) { delete hidden[sid]; toast(s.name+' visible'); }
   else             { hidden[sid]=true;   toast(s.name+' oculto'); }
-  save(); renderTable(); renderCov(); renderAusencias();
+  save(); renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
 }
 
 // ================================================================
@@ -1745,6 +1841,8 @@ function closeTheme() { var el=document.getElementById('themeov'); if(el)el.clas
 // ================================================================
 function iniciarHorario(){
   load(); loadTheme();
+  // Las vacaciones que quedaran en el cajon viejo pasan al horario.
+  var pasadas = migrarVacacionesViejas();
   // Se abre por el mes al que pertenece hoy, que ya no es el del
   // calendario: los primeros dias de septiembre son todavia de agosto.
   var ahora = mesDeFecha(new Date());
@@ -1758,6 +1856,7 @@ function iniciarHorario(){
   if(bv) bv.classList.toggle('on', curS==='verano');
   if(bi) bi.classList.toggle('on', curS==='invierno');
   renderAll();
+  if (pasadas) toast(pasadas + ' dias de vacaciones pasados al horario');
   if (staff().length === 0) openAddModal();
 }
 iniciarHorario();

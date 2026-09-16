@@ -271,23 +271,26 @@
   </div>
 </div>
 
-<!-- CUADRANTE DE VACACIONES -->
-<!-- Un cuadrante aparte, sin nada configurado y sin nada del horario:
-     solo dias. Un toque pone unas vacaciones y otro las quita, y se
-     guardan en su propio cajon ('rvac'), asi que lo marcado aqui no sale
-     en el mes ni en la semana, ni al reves. -->
+<!-- CUADRANTE DE VACACIONES, FESTIVOS, BAJAS Y AUSENCIAS -->
+<!-- Solo dias: se elige arriba que se esta poniendo y se pulsan los
+     dias. Lo marcado aqui se guarda en el horario, asi que sale solo en
+     el cuadrante del mes, en el de la semana y en las ausencias. -->
 <div id="vac-section" style="background:var(--bg);border-top:2px solid var(--border);padding-bottom:40px">
   <div style="display:flex;align-items:center;gap:14px;padding:13px 20px 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap">
     <div>
-      <div style="font-family:'Playfair Display',serif;font-size:1rem;color:var(--gold2)">&#127958;&#65039; Cuadrante de vacaciones</div>
-      <div style="font-size:.71rem;color:var(--text2)">Solo vacaciones: pulsa un d&iacute;a para ponerlas o quitarlas. Va por su cuenta, no toca el horario ni las horas.</div>
+      <div style="font-family:'Playfair Display',serif;font-size:1rem;color:var(--gold2)">&#127958;&#65039; Cuadrante de vacaciones y ausencias</div>
+      <div style="font-size:.71rem;color:var(--text2)">Elige qu&eacute; pones y pulsa los d&iacute;as. Sale solo en el horario del mes y de la semana.</div>
     </div>
     <div style="margin-left:auto;font-size:.75rem;color:var(--gold)" id="vac-rango"></div>
   </div>
+  <div id="vac-tipos" style="display:flex;gap:8px;padding:12px 20px 0;flex-wrap:wrap"></div>
   <div style="display:flex;gap:14px;padding:10px 20px 0;flex-wrap:wrap;font-size:.7rem;color:var(--text2)">
     <span><span style="display:inline-block;width:16px;height:16px;border:1px solid var(--border);background:rgba(41,128,185,.28);color:#8ec8f0;text-align:center;font-weight:700;line-height:16px;font-size:.66rem;vertical-align:middle">V</span> vacaciones</span>
-    <span><span style="display:inline-block;width:16px;height:16px;border:1px solid var(--border);color:var(--border);text-align:center;line-height:16px;vertical-align:middle">&middot;</span> sin vacaciones</span>
-    <span>Aqu&iacute; no se ve el horario: turnos, festivos y bajas se llevan en su cuadrante.</span>
+    <span><span style="display:inline-block;width:16px;height:16px;border:1px solid var(--border);background:rgba(231,76,60,.24);color:#e87c6f;text-align:center;font-weight:700;line-height:16px;font-size:.66rem;vertical-align:middle">F</span> festivo</span>
+    <span><span style="display:inline-block;width:16px;height:16px;border:1px solid var(--border);background:rgba(192,57,43,.32);color:#f1948a;text-align:center;font-weight:700;line-height:16px;font-size:.66rem;vertical-align:middle">B</span> baja</span>
+    <span><span style="display:inline-block;width:16px;height:16px;border:1px solid var(--border);background:rgba(230,126,34,.26);color:#f0a070;text-align:center;font-weight:700;line-height:16px;font-size:.66rem;vertical-align:middle">A</span> ausencia</span>
+    <span><span style="display:inline-block;width:16px;height:16px;border:1px solid var(--border);color:var(--gold);text-align:center;line-height:16px;vertical-align:middle">&bull;</span> ese d&iacute;a trabaja</span>
+    <span>Pulsa otra vez, con lo mismo elegido, y se quita. Si el d&iacute;a ten&iacute;a turno, el turno se va.</span>
   </div>
   <div style="overflow-x:auto;padding:12px 20px 0">
     <table id="vactbl" style="border-collapse:collapse;font-size:.8rem;min-width:100%"></table>
@@ -440,7 +443,7 @@
 
 
 
-<script src="sync.js?v=202609141908"></script>
+<script src="sync.js?v=202609162353"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -448,7 +451,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609141908';
+    s.src = 'horario.js?v=202609162353';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
