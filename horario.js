@@ -1819,11 +1819,55 @@ var THEME_DEFAULTS = {
   'wk-baj-bg':'#3a0a0a', 'wk-baj-txt':'#f1948a',
   'wk-aus-bg':'#3a1a00', 'wk-aus-txt':'#f0a070'
 };
+/* Los temas rapidos. Cada uno se pone entero -fondos, letras, oficios,
+   turnos y los colores de la semana- para que al cambiar de tema no se
+   quede nada del anterior descolgado. El nombre y la nota son lo que se
+   lee en los botones: dicen cuanto resalta cada uno. */
 var PRESETS = {
-  dark:  {bg:'#0f0e0b',surface:'#1a1814',surface2:'#232017',border:'#2e2b22',text:'#f0ece0',text2:'#b0aa98',gold:'#c9a84c',gold2:'#e8c96d',enc:'#c9a84c',coc:'#e07b39',cam:'#5b9bd5','shift-l':'#1a4a2e','shift-c':'#1a1814','shift-r':'#2a1a0a'},
-  light: {bg:'#f5f0e8',surface:'#ede8dc',surface2:'#e0d8c8',border:'#c8bfa8',text:'#2a2010',text2:'#6a5a3a',gold:'#8a6a1a',gold2:'#6a4a0a',enc:'#7a5500',coc:'#a04010',cam:'#1a5a8a','shift-l':'#c8e8d0','shift-c':'#e8e8d0','shift-r':'#e8d8b0'},
-  navy:  {bg:'#060e1a',surface:'#0d1828',surface2:'#142234',border:'#1e3050',text:'#cce0ff',text2:'#7a9ac0',gold:'#5b9bd5',gold2:'#8ac0f0',enc:'#5b9bd5',coc:'#e07b39',cam:'#4caf50','shift-l':'#0a2a4a','shift-c':'#0a1a2a','shift-r':'#1a0a3a'},
-  forest:{bg:'#070f09',surface:'#0e1e12',surface2:'#162a1a',border:'#1e3a22',text:'#d0f0d8',text2:'#7aaa88',gold:'#4caf50',gold2:'#80d888',enc:'#4caf50',coc:'#cddc39',cam:'#26c6da','shift-l':'#0a2a10','shift-c':'#0a1a0a','shift-r':'#1a2a0a'}
+  dark: {nombre:'Oscuro', nota:'el de siempre',
+    bg:'#0f0e0b',surface:'#1a1814',surface2:'#232017',border:'#2e2b22',text:'#f0ece0',text2:'#b0aa98',gold:'#c9a84c',gold2:'#e8c96d',enc:'#c9a84c',coc:'#e07b39',cam:'#5b9bd5',
+    'shift-l':'#1a4a2e','shift-c':'#1a1814','shift-r':'#2a1a0a',
+    'wk-vac-bg':'#0f3a5a','wk-vac-txt':'#74b3e0','wk-fes-bg':'#3a0f0a','wk-fes-txt':'#e87c6f','wk-baj-bg':'#3a0a0a','wk-baj-txt':'#f1948a','wk-aus-bg':'#3a1a00','wk-aus-txt':'#f0a070'},
+
+  contraste: {nombre:'Contraste', nota:'el que mas resalta',
+    bg:'#000000',surface:'#101010',surface2:'#1c1c1c',border:'#4a4a4a',text:'#ffffff',text2:'#d0d0d0',gold:'#ffd400',gold2:'#ffe866',enc:'#ffd400',coc:'#ff8a2b',cam:'#4fc3ff',
+    'shift-l':'#0b6b34','shift-c':'#2b2b2b','shift-r':'#6b3a00',
+    'wk-vac-bg':'#004a80','wk-vac-txt':'#9fd8ff','wk-fes-bg':'#6b0d0d','wk-fes-txt':'#ff9b90','wk-baj-bg':'#7a0000','wk-baj-txt':'#ffb3ab','wk-aus-bg':'#6b3200','wk-aus-txt':'#ffbe8a'},
+
+  neon: {nombre:'Neon', nota:'colores muy vivos',
+    bg:'#0a0a12',surface:'#14142a',surface2:'#1d1d3a',border:'#3a3a6a',text:'#f2f2ff',text2:'#a9a9d8',gold:'#00e5ff',gold2:'#7bf5ff',enc:'#00e5ff',coc:'#ff4fd8',cam:'#9dff3c',
+    'shift-l':'#0a5a4a','shift-c':'#2a2a4a','shift-r':'#4a1a5a',
+    'wk-vac-bg':'#0d3f6b','wk-vac-txt':'#7bdcff','wk-fes-bg':'#5a0a3a','wk-fes-txt':'#ff8ad8','wk-baj-bg':'#5a0a1a','wk-baj-txt':'#ff8aa0','wk-aus-bg':'#5a3a00','wk-aus-txt':'#ffd06a'},
+
+  pizarra: {nombre:'Pizarra', nota:'gris, sin dorados',
+    bg:'#16181a',surface:'#202427',surface2:'#2a2f33',border:'#3c4348',text:'#eef2f4',text2:'#a8b2b8',gold:'#ff9f45',gold2:'#ffc07a',enc:'#ff9f45',coc:'#7ad1a0',cam:'#7fb4ff',
+    'shift-l':'#1f4d38','shift-c':'#2a2f33','shift-r':'#4a331c',
+    'wk-vac-bg':'#14405c','wk-vac-txt':'#8fcdf0','wk-fes-bg':'#4c1a16','wk-fes-txt':'#f0968a','wk-baj-bg':'#4c1212','wk-baj-txt':'#f3a29a','wk-aus-bg':'#4a2d10','wk-aus-txt':'#f5b985'},
+
+  navy: {nombre:'Marino', nota:'azul oscuro',
+    bg:'#060e1a',surface:'#0d1828',surface2:'#142234',border:'#1e3050',text:'#cce0ff',text2:'#7a9ac0',gold:'#5b9bd5',gold2:'#8ac0f0',enc:'#5b9bd5',coc:'#e07b39',cam:'#4caf50',
+    'shift-l':'#0a2a4a','shift-c':'#0a1a2a','shift-r':'#1a0a3a',
+    'wk-vac-bg':'#0f3a5a','wk-vac-txt':'#8fcdf0','wk-fes-bg':'#3a1010','wk-fes-txt':'#f09a8a','wk-baj-bg':'#3a0a14','wk-baj-txt':'#f3a2ac','wk-aus-bg':'#3a2400','wk-aus-txt':'#f0b070'},
+
+  forest: {nombre:'Bosque', nota:'verde oscuro',
+    bg:'#070f09',surface:'#0e1e12',surface2:'#162a1a',border:'#1e3a22',text:'#d0f0d8',text2:'#7aaa88',gold:'#4caf50',gold2:'#80d888',enc:'#4caf50',coc:'#cddc39',cam:'#26c6da',
+    'shift-l':'#0a2a10','shift-c':'#0a1a0a','shift-r':'#1a2a0a',
+    'wk-vac-bg':'#0d3346','wk-vac-txt':'#86ccdd','wk-fes-bg':'#33140d','wk-fes-txt':'#e8998a','wk-baj-bg':'#360f0f','wk-baj-txt':'#eda49c','wk-aus-bg':'#3a2a06','wk-aus-txt':'#e5c072'},
+
+  vino: {nombre:'Vino', nota:'granate, calido',
+    bg:'#140a0c',surface:'#201015',surface2:'#2b171d',border:'#43222b',text:'#f6e7ea',text2:'#c0a0a8',gold:'#e0a33c',gold2:'#f3c76f',enc:'#e0a33c',coc:'#e8705a',cam:'#c48ae0',
+    'shift-l':'#1f4a33','shift-c':'#2b171d','shift-r':'#4a2416',
+    'wk-vac-bg':'#123a52','wk-vac-txt':'#8ccbe8','wk-fes-bg':'#54141a','wk-fes-txt':'#f5998f','wk-baj-bg':'#5c0f14','wk-baj-txt':'#f7a9a1','wk-aus-bg':'#54300f','wk-aus-txt':'#f2b97f'},
+
+  light: {nombre:'Claro', nota:'fondo blanco',
+    bg:'#f5f0e8',surface:'#ede8dc',surface2:'#e0d8c8',border:'#c8bfa8',text:'#2a2010',text2:'#6a5a3a',gold:'#8a6a1a',gold2:'#6a4a0a',enc:'#7a5500',coc:'#a04010',cam:'#1a5a8a',
+    'shift-l':'#c8e8d0','shift-c':'#e8e8d0','shift-r':'#e8d8b0',
+    'wk-vac-bg':'#cfe6f7','wk-vac-txt':'#134a70','wk-fes-bg':'#f7d7d2','wk-fes-txt':'#8a2418','wk-baj-bg':'#f7cfcf','wk-baj-txt':'#8a1a1a','wk-aus-bg':'#f8e2c6','wk-aus-txt':'#8a4a10'},
+
+  papel: {nombre:'Papel', nota:'blanco, como la hoja',
+    bg:'#ffffff',surface:'#f2f2f2',surface2:'#e7e7e7',border:'#b9b9b9',text:'#111111',text2:'#555555',gold:'#0a58ca',gold2:'#003a99',enc:'#0a58ca',coc:'#b3450f',cam:'#0f7a4a',
+    'shift-l':'#bfe8cd','shift-c':'#e7e7e7','shift-r':'#ffdfae',
+    'wk-vac-bg':'#cde4fb','wk-vac-txt':'#0a3d6b','wk-fes-bg':'#fbd5d0','wk-fes-txt':'#8c1d0f','wk-baj-bg':'#fbcccc','wk-baj-txt':'#8c0f0f','wk-aus-bg':'#fce3c2','wk-aus-txt':'#8c4a0f'}
 };
 
 function getThemeVals() {
@@ -1852,8 +1896,30 @@ function syncInputs() {
 function loadPreset(name) {
   var p = PRESETS[name]; if (!p) return;
   var root = document.documentElement;
-  Object.keys(p).forEach(function(k){ root.style.setProperty('--'+k,p[k]); });
-  syncInputs(); if (weekMode) renderTable();
+  THEME_KEYS.forEach(function(k){ if (p[k]) root.style.setProperty('--'+k, p[k]); });
+  syncInputs(); renderTable(); renderCov(); renderAusencias(); renderVacaciones();
+  pintarPresets(name);
+  toast('Tema ' + p.nombre + ' - pulsa Guardar si te quedas con el');
+}
+
+/* Los botones de los temas, con una muestra de sus colores: asi se ve
+   cual resalta mas antes de probarlo. */
+function pintarPresets(elegido) {
+  var caja = document.getElementById('preset-list'); if (!caja) return;
+  caja.innerHTML = Object.keys(PRESETS).map(function(k){
+    var p = PRESETS[k];
+    var puntos = ['gold','enc','coc','cam','shift-l'].map(function(c){
+      return '<span style="width:9px;height:9px;border-radius:50%;background:' + p[c] +
+             ';display:inline-block;border:1px solid rgba(128,128,128,.45)"></span>';
+    }).join('');
+    return '<button onclick="loadPreset(\'' + k + '\')" class="preset-btn" title="' + p.nota + '" ' +
+      'style="background:' + p.bg + ';color:' + p.gold + ';border-color:' + p.gold +
+      (k === elegido ? ';box-shadow:0 0 0 2px ' + p.gold2 : '') + '">' +
+      '<span style="display:block">' + p.nombre + '</span>' +
+      '<span style="display:flex;gap:3px;justify-content:center;margin-top:3px">' + puntos + '</span>' +
+      '<span style="display:block;font-size:.6rem;font-weight:500;opacity:.8;margin-top:2px">' + p.nota + '</span>' +
+      '</button>';
+  }).join('');
 }
 function saveTheme() {
   try { localStorage.setItem('rtheme', JSON.stringify(getThemeVals())); } catch(e){}
@@ -1872,7 +1938,7 @@ function resetTheme() {
   Object.keys(THEME_DEFAULTS).forEach(function(k){ root.style.setProperty('--'+k, THEME_DEFAULTS[k]); });
   syncInputs(); try{localStorage.removeItem('rtheme');}catch(e){} toast('Colores restablecidos');
 }
-function openTheme()  { syncInputs(); var el=document.getElementById('themeov'); if(el)el.classList.add('show'); }
+function openTheme()  { syncInputs(); pintarPresets(); var el=document.getElementById('themeov'); if(el)el.classList.add('show'); }
 function closeTheme() { var el=document.getElementById('themeov'); if(el)el.classList.remove('show'); }
 
 // ================================================================

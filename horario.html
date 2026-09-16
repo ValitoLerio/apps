@@ -137,7 +137,7 @@
   .cpair input[type=color]{width:36px;height:28px;border:2px solid var(--border);border-radius:5px;cursor:pointer;padding:0;}
   .cpair input[type=color]:hover{border-color:var(--gold);}
   .chex{font-size:.68rem;color:var(--text2);font-family:monospace;min-width:52px;}
-  .preset-btn{padding:5px 10px;border-radius:6px;border:1.5px solid;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.74rem;font-weight:600;margin:2px;}
+  .preset-btn{padding:6px 11px;border-radius:7px;border:1.5px solid;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.74rem;font-weight:600;margin:2px;text-align:center;line-height:1.25;min-width:96px;}
   .preset-btn:hover{opacity:.8;}
 
   #toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:var(--gold);color:#0f0e0b;padding:8px 18px;border-radius:16px;font-weight:700;font-size:.83rem;box-shadow:0 4px 20px rgba(0,0,0,.5);z-index:9999;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;}
@@ -420,6 +420,10 @@
 <div class="ov" id="themeov">
   <div class="modal" style="max-width:500px;width:96vw">
     <h3>Personalizar colores</h3>
+    <div style="font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);margin-bottom:4px">Temas rapidos</div>
+    <div style="font-size:.68rem;color:var(--text2);margin-bottom:8px">P&uacute;lsalos y se ven al momento en el cuadrante; el que te guste, <b>Guardar</b>. Cada bola es un color del tema: dorado, encargados, cocina, sala y el turno de ma&ntilde;ana.</div>
+    <div id="preset-list" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px"></div>
+    <div style="font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);border-top:1px solid var(--border);padding-top:10px;margin-bottom:6px">O color a color</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px">
       <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding-bottom:4px;border-bottom:1px solid var(--border)">Fondos</div>
       <div class="crow"><label>Fondo principal</label><div class="cpair"><input type="color" id="c-bg" oninput="applyTheme()"><span class="chex" id="h-bg"></span></div></div>
@@ -449,13 +453,6 @@
       <div class="crow"><label>Ausencia fondo</label><div class="cpair"><input type="color" id="c-wk-aus-bg" oninput="applyTheme()"><span class="chex" id="h-wk-aus-bg"></span></div></div>
       <div class="crow"><label>Ausencia letra</label><div class="cpair"><input type="color" id="c-wk-aus-txt" oninput="applyTheme()"><span class="chex" id="h-wk-aus-txt"></span></div></div>
     </div>
-    <div style="font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);margin-bottom:8px">Temas rapidos</div>
-    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px">
-      <button onclick="loadPreset('dark')"   class="preset-btn" style="background:#0f0e0b;color:#c9a84c;border-color:#c9a84c">Oscuro</button>
-      <button onclick="loadPreset('light')"  class="preset-btn" style="background:#f5f0e8;color:#5a4a2a;border-color:#8a6a2a">Claro</button>
-      <button onclick="loadPreset('navy')"   class="preset-btn" style="background:#0a1628;color:#5b9bd5;border-color:#5b9bd5">Marino</button>
-      <button onclick="loadPreset('forest')" class="preset-btn" style="background:#0a1a0f;color:#4caf50;border-color:#4caf50">Bosque</button>
-    </div>
     <div style="display:flex;gap:8px">
       <button class="bp" onclick="saveTheme()">Guardar</button>
       <button class="bs" onclick="resetTheme()">Restablecer</button>
@@ -468,7 +465,7 @@
 
 
 
-<script src="sync.js?v=202609170024"></script>
+<script src="sync.js?v=202609170028"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -476,7 +473,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609170024';
+    s.src = 'horario.js?v=202609170028';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
