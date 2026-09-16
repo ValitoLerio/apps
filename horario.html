@@ -13,10 +13,13 @@
     --text:#f0ece0; --text2:#b0aa98; --border:#2e2b22;
     --enc:#c9a84c; --coc:#e07b39; --cam:#5b9bd5;
     --shift-l:#1a4a2e; --shift-r:#2a1a0a; --shift-c:#1a1814;
-    --wk-vac-bg:#0f3a5a; --wk-vac-txt:#74b3e0;
-    --wk-fes-bg:#3a0f0a; --wk-fes-txt:#e87c6f;
-    --wk-baj-bg:#3a0a0a; --wk-baj-txt:#f1948a;
-    --wk-aus-bg:#3a1a00; --wk-aus-txt:#f0a070;
+    --est-trabajo:#5dca82; --est-festivo:#e87c6f; --est-vacaciones:#74b3e0;
+    --est-baja:#f1948a; --est-ausencia:#f0a070;
+    --est-trabajo-bg:rgba(93,202,130,.18); --est-trabajo-bd:rgba(93,202,130,.4); --est-trabajo-lleno:rgba(93,202,130,.3);
+    --est-festivo-bg:rgba(232,124,111,.18); --est-festivo-bd:rgba(232,124,111,.4); --est-festivo-lleno:rgba(232,124,111,.3);
+    --est-vacaciones-bg:rgba(116,179,224,.18); --est-vacaciones-bd:rgba(116,179,224,.4); --est-vacaciones-lleno:rgba(116,179,224,.3);
+    --est-baja-bg:rgba(241,148,138,.18); --est-baja-bd:rgba(241,148,138,.4); --est-baja-lleno:rgba(241,148,138,.3);
+    --est-ausencia-bg:rgba(240,160,112,.18); --est-ausencia-bd:rgba(240,160,112,.4); --est-ausencia-lleno:rgba(240,160,112,.3);
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   /* La pagina no se desplaza: se queda quieta y lo que se mueve es el
@@ -67,11 +70,13 @@
   .tb{display:inline-flex;align-items:center;gap:3px;padding:2px 5px;border-radius:4px;font-size:.73rem;font-weight:600;cursor:pointer;transition:opacity .12s;white-space:nowrap;}
   .tb:hover{opacity:.75;}
   .th{font-size:.72rem;color:var(--text2);font-weight:700;}
-  .et{background:rgba(39,174,96,.18);color:#5dca82;border:1px solid rgba(39,174,96,.3);}
-  .ef{background:rgba(192,57,43,.18);color:#e87c6f;border:1px solid rgba(192,57,43,.3);}
-  .ev{background:rgba(41,128,185,.18);color:#74b3e0;border:1px solid rgba(41,128,185,.3);}
-  .eb{background:rgba(231,76,60,.18);color:#f1948a;border:1px solid rgba(231,76,60,.35);}
-  .ea{background:rgba(230,126,34,.18);color:#f0a070;border:1px solid rgba(230,126,34,.35);}
+  /* Cada estado, un solo color: de el salen el fondo y el borde. Se
+     cambia en Colores y cambia aqui, en la semana y en el cuadrante. */
+  .et{background:var(--est-trabajo-bg);color:var(--est-trabajo);border:1px solid var(--est-trabajo-bd);}
+  .ef{background:var(--est-festivo-bg);color:var(--est-festivo);border:1px solid var(--est-festivo-bd);}
+  .ev{background:var(--est-vacaciones-bg);color:var(--est-vacaciones);border:1px solid var(--est-vacaciones-bd);}
+  .eb{background:var(--est-baja-bg);color:var(--est-baja);border:1px solid var(--est-baja-bd);}
+  .ea{background:var(--est-ausencia-bg);color:var(--est-ausencia);border:1px solid var(--est-ausencia-bd);}
   .el{background:transparent;color:var(--border);border:1px dashed var(--border);}
   .rt{font-size:.56rem;padding:0 3px;border-radius:3px;margin-left:2px;font-weight:600;}
   .re{background:rgba(201,168,76,.2);color:var(--enc);}
@@ -212,11 +217,11 @@
   <div class="si"><span class="sl">Temporada:</span><span class="sv" id="sts">-</span></div>
   <div class="si"><span class="sl">H. diarias:</span><span class="sv" id="sth">-</span></div>
   <div class="si" style="margin-left:auto;gap:4px">
-    <span style="background:rgba(39,174,96,.18);color:#5dca82;border:1px solid rgba(39,174,96,.3);padding:2px 7px;border-radius:3px;font-size:.7rem">&#9989; Trabaja</span>
-    <span style="background:rgba(192,57,43,.18);color:#e87c6f;border:1px solid rgba(192,57,43,.3);padding:2px 7px;border-radius:3px;font-size:.7rem">&#127881; Festivo</span>
-    <span style="background:rgba(41,128,185,.18);color:#74b3e0;border:1px solid rgba(41,128,185,.3);padding:2px 7px;border-radius:3px;font-size:.7rem">&#127958;&#65039; Vacaciones</span>
-    <span style="background:rgba(231,76,60,.18);color:#f1948a;border:1px solid rgba(231,76,60,.35);padding:2px 7px;border-radius:3px;font-size:.7rem">B Baja</span>
-    <span style="background:rgba(230,126,34,.18);color:#f0a070;border:1px solid rgba(230,126,34,.35);padding:2px 7px;border-radius:3px;font-size:.7rem">A Ausencia</span>
+    <span class="et" style="padding:2px 7px;border-radius:3px;font-size:.7rem">&#9989; Trabaja</span>
+    <span class="ef" style="padding:2px 7px;border-radius:3px;font-size:.7rem">&#127881; Festivo</span>
+    <span class="ev" style="padding:2px 7px;border-radius:3px;font-size:.7rem">&#127958;&#65039; Vacaciones</span>
+    <span class="eb" style="padding:2px 7px;border-radius:3px;font-size:.7rem">B Baja</span>
+    <span class="ea" style="padding:2px 7px;border-radius:3px;font-size:.7rem">A Ausencia</span>
   </div>
 </div>
 
@@ -270,7 +275,7 @@
     </div>
   </div>
   <div style="overflow-x:auto;padding:10px 14px 0">
-    <table id="hourstbl" style="border-collapse:collapse;font-size:.82rem;width:auto"></table>
+    <table id="hourstbl" style="border-collapse:collapse;font-size:.82rem;width:62%;min-width:600px;max-width:100%"></table>
   </div>
 </div>
 <!-- AUSENCIAS -->
@@ -290,7 +295,7 @@
   </div>
   <div id="aus-resumen" style="display:flex;gap:10px;padding:12px 20px 0;flex-wrap:wrap"></div>
   <div style="overflow-x:auto;padding:10px 14px 0">
-    <table id="austbl" style="border-collapse:collapse;font-size:.82rem;width:auto"></table>
+    <table id="austbl" style="border-collapse:collapse;font-size:.82rem;width:62%;min-width:600px;max-width:100%"></table>
   </div>
 </div>
 
@@ -308,10 +313,10 @@
   </div>
   <div id="vac-tipos" style="display:flex;gap:8px;padding:12px 20px 0;flex-wrap:wrap"></div>
   <div style="display:flex;gap:14px;padding:10px 20px 0;flex-wrap:wrap;font-size:.7rem;color:var(--text2)">
-    <span><span style="display:inline-block;width:16px;height:16px;border:1px solid var(--border);background:rgba(41,128,185,.28);color:#8ec8f0;text-align:center;font-weight:700;line-height:16px;font-size:.66rem;vertical-align:middle">V</span> vacaciones</span>
-    <span><span style="display:inline-block;width:16px;height:16px;border:1px solid var(--border);background:rgba(231,76,60,.24);color:#e87c6f;text-align:center;font-weight:700;line-height:16px;font-size:.66rem;vertical-align:middle">F</span> festivo</span>
-    <span><span style="display:inline-block;width:16px;height:16px;border:1px solid var(--border);background:rgba(192,57,43,.32);color:#f1948a;text-align:center;font-weight:700;line-height:16px;font-size:.66rem;vertical-align:middle">B</span> baja</span>
-    <span><span style="display:inline-block;width:16px;height:16px;border:1px solid var(--border);background:rgba(230,126,34,.26);color:#f0a070;text-align:center;font-weight:700;line-height:16px;font-size:.66rem;vertical-align:middle">A</span> ausencia</span>
+    <span><span class="ev" style="display:inline-block;width:16px;height:16px;text-align:center;font-weight:700;line-height:14px;font-size:.66rem;vertical-align:middle">V</span> vacaciones</span>
+    <span><span class="ef" style="display:inline-block;width:16px;height:16px;text-align:center;font-weight:700;line-height:14px;font-size:.66rem;vertical-align:middle">F</span> festivo</span>
+    <span><span class="eb" style="display:inline-block;width:16px;height:16px;text-align:center;font-weight:700;line-height:14px;font-size:.66rem;vertical-align:middle">B</span> baja</span>
+    <span><span class="ea" style="display:inline-block;width:16px;height:16px;text-align:center;font-weight:700;line-height:14px;font-size:.66rem;vertical-align:middle">A</span> ausencia</span>
     <span><span style="display:inline-block;width:16px;height:16px;border:1px solid var(--border);color:var(--gold);text-align:center;line-height:16px;vertical-align:middle">&bull;</span> ese d&iacute;a trabaja</span>
     <span>Pulsa otra vez, con lo mismo elegido, y se quita. Si el d&iacute;a ten&iacute;a turno, el turno se va.</span>
   </div>
@@ -423,35 +428,39 @@
     <div style="font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);margin-bottom:4px">Temas rapidos</div>
     <div style="font-size:.68rem;color:var(--text2);margin-bottom:8px">P&uacute;lsalos y se ven al momento en el cuadrante; el que te guste, <b>Guardar</b>. Cada bola es un color del tema: dorado, encargados, cocina, sala y el turno de ma&ntilde;ana.</div>
     <div id="preset-list" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px"></div>
-    <div style="font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);border-top:1px solid var(--border);padding-top:10px;margin-bottom:6px">O color a color</div>
+    <div style="font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);border-top:1px solid var(--border);padding-top:10px;margin-bottom:6px">O a mano, uno por uno</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px">
-      <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding-bottom:4px;border-bottom:1px solid var(--border)">Fondos</div>
-      <div class="crow"><label>Fondo principal</label><div class="cpair"><input type="color" id="c-bg" oninput="applyTheme()"><span class="chex" id="h-bg"></span></div></div>
-      <div class="crow"><label>Superficies</label><div class="cpair"><input type="color" id="c-surface" oninput="applyTheme()"><span class="chex" id="h-surface"></span></div></div>
-      <div class="crow"><label>Celdas / inputs</label><div class="cpair"><input type="color" id="c-surface2" oninput="applyTheme()"><span class="chex" id="h-surface2"></span></div></div>
-      <div class="crow"><label>Bordes</label><div class="cpair"><input type="color" id="c-border" oninput="applyTheme()"><span class="chex" id="h-border"></span></div></div>
-      <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding:8px 0 4px;border-bottom:1px solid var(--border)">Textos</div>
-      <div class="crow"><label>Texto principal</label><div class="cpair"><input type="color" id="c-text" oninput="applyTheme()"><span class="chex" id="h-text"></span></div></div>
-      <div class="crow"><label>Texto secundario</label><div class="cpair"><input type="color" id="c-text2" oninput="applyTheme()"><span class="chex" id="h-text2"></span></div></div>
-      <div class="crow"><label>Color dorado</label><div class="cpair"><input type="color" id="c-gold" oninput="applyTheme()"><span class="chex" id="h-gold"></span></div></div>
-      <div class="crow"><label>Color dorado 2</label><div class="cpair"><input type="color" id="c-gold2" oninput="applyTheme()"><span class="chex" id="h-gold2"></span></div></div>
-      <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding:8px 0 4px;border-bottom:1px solid var(--border)">Roles</div>
+      <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding-bottom:4px;border-bottom:1px solid var(--border)">Qu&eacute; pasa cada d&iacute;a</div>
+      <div class="crow"><label>Trabaja</label><div class="cpair"><input type="color" id="c-est-trabajo" oninput="applyTheme()"><span class="chex" id="h-est-trabajo"></span></div></div>
+      <div class="crow"><label>Festivo</label><div class="cpair"><input type="color" id="c-est-festivo" oninput="applyTheme()"><span class="chex" id="h-est-festivo"></span></div></div>
+      <div class="crow"><label>Vacaciones</label><div class="cpair"><input type="color" id="c-est-vacaciones" oninput="applyTheme()"><span class="chex" id="h-est-vacaciones"></span></div></div>
+      <div class="crow"><label>Baja</label><div class="cpair"><input type="color" id="c-est-baja" oninput="applyTheme()"><span class="chex" id="h-est-baja"></span></div></div>
+      <div class="crow"><label>Ausencia</label><div class="cpair"><input type="color" id="c-est-ausencia" oninput="applyTheme()"><span class="chex" id="h-est-ausencia"></span></div></div>
+      <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding:8px 0 4px;border-bottom:1px solid var(--border)">Oficios</div>
       <div class="crow"><label>Encargados</label><div class="cpair"><input type="color" id="c-enc" oninput="applyTheme()"><span class="chex" id="h-enc"></span></div></div>
-      <div class="crow"><label>Cocineros</label><div class="cpair"><input type="color" id="c-coc" oninput="applyTheme()"><span class="chex" id="h-coc"></span></div></div>
-      <div class="crow"><label>Camareros</label><div class="cpair"><input type="color" id="c-cam" oninput="applyTheme()"><span class="chex" id="h-cam"></span></div></div>
-      <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding:8px 0 4px;border-bottom:1px solid var(--border)">Turnos por posicion</div>
-      <div class="crow"><label>Manana (izq.)</label><div class="cpair"><input type="color" id="c-shift-l" oninput="applyTheme()"><span class="chex" id="h-shift-l"></span></div></div>
-      <div class="crow"><label>Mediodia (centro)</label><div class="cpair"><input type="color" id="c-shift-c" oninput="applyTheme()"><span class="chex" id="h-shift-c"></span></div></div>
-      <div class="crow"><label>Noche (der.)</label><div class="cpair"><input type="color" id="c-shift-r" oninput="applyTheme()"><span class="chex" id="h-shift-r"></span></div></div>
-      <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding:8px 0 4px;border-bottom:1px solid var(--border)">Vista semana - celdas especiales</div>
-      <div class="crow"><label>Vacaciones fondo</label><div class="cpair"><input type="color" id="c-wk-vac-bg" oninput="applyTheme()"><span class="chex" id="h-wk-vac-bg"></span></div></div>
-      <div class="crow"><label>Vacaciones letra</label><div class="cpair"><input type="color" id="c-wk-vac-txt" oninput="applyTheme()"><span class="chex" id="h-wk-vac-txt"></span></div></div>
-      <div class="crow"><label>Festivo fondo</label><div class="cpair"><input type="color" id="c-wk-fes-bg" oninput="applyTheme()"><span class="chex" id="h-wk-fes-bg"></span></div></div>
-      <div class="crow"><label>Festivo letra</label><div class="cpair"><input type="color" id="c-wk-fes-txt" oninput="applyTheme()"><span class="chex" id="h-wk-fes-txt"></span></div></div>
-      <div class="crow"><label>Baja fondo</label><div class="cpair"><input type="color" id="c-wk-baj-bg" oninput="applyTheme()"><span class="chex" id="h-wk-baj-bg"></span></div></div>
-      <div class="crow"><label>Baja letra</label><div class="cpair"><input type="color" id="c-wk-baj-txt" oninput="applyTheme()"><span class="chex" id="h-wk-baj-txt"></span></div></div>
-      <div class="crow"><label>Ausencia fondo</label><div class="cpair"><input type="color" id="c-wk-aus-bg" oninput="applyTheme()"><span class="chex" id="h-wk-aus-bg"></span></div></div>
-      <div class="crow"><label>Ausencia letra</label><div class="cpair"><input type="color" id="c-wk-aus-txt" oninput="applyTheme()"><span class="chex" id="h-wk-aus-txt"></span></div></div>
+      <div class="crow"><label>Cocina</label><div class="cpair"><input type="color" id="c-coc" oninput="applyTheme()"><span class="chex" id="h-coc"></span></div></div>
+      <div class="crow"><label>Sala</label><div class="cpair"><input type="color" id="c-cam" oninput="applyTheme()"><span class="chex" id="h-cam"></span></div></div>
+      <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding:8px 0 4px;border-bottom:1px solid var(--border)">Lo b&aacute;sico</div>
+      <div class="crow"><label>Fondo</label><div class="cpair"><input type="color" id="c-bg" oninput="applyTheme()"><span class="chex" id="h-bg"></span></div></div>
+      <div class="crow"><label>Letra</label><div class="cpair"><input type="color" id="c-text" oninput="applyTheme()"><span class="chex" id="h-text"></span></div></div>
+      <div style="grid-column:1/-1;margin-top:6px">
+        <button onclick="verMasColores()" id="mas-colores-btn" style="background:none;border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:5px 12px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.72rem">+ Los dem&aacute;s colores</button>
+      </div>
+      <div id="mas-colores" style="grid-column:1/-1;display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding:8px 0 4px;border-bottom:1px solid var(--border)">Fondos y letras</div>
+          <div class="crow"><label>Superficies</label><div class="cpair"><input type="color" id="c-surface" oninput="applyTheme()"><span class="chex" id="h-surface"></span></div></div>
+          <div class="crow"><label>Celdas / inputs</label><div class="cpair"><input type="color" id="c-surface2" oninput="applyTheme()"><span class="chex" id="h-surface2"></span></div></div>
+          <div class="crow"><label>Bordes</label><div class="cpair"><input type="color" id="c-border" oninput="applyTheme()"><span class="chex" id="h-border"></span></div></div>
+          <div class="crow"><label>Letra suave</label><div class="cpair"><input type="color" id="c-text2" oninput="applyTheme()"><span class="chex" id="h-text2"></span></div></div>
+          <div class="crow"><label>T&iacute;tulos</label><div class="cpair"><input type="color" id="c-gold" oninput="applyTheme()"><span class="chex" id="h-gold"></span></div></div>
+          <div class="crow"><label>T&iacute;tulos 2</label><div class="cpair"><input type="color" id="c-gold2" oninput="applyTheme()"><span class="chex" id="h-gold2"></span></div></div>
+          <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding:8px 0 4px;border-bottom:1px solid var(--border)">El bloque del turno, seg&uacute;n donde est&eacute;</div>
+          <div class="crow"><label>Ma&ntilde;ana (izq.)</label><div class="cpair"><input type="color" id="c-shift-l" oninput="applyTheme()"><span class="chex" id="h-shift-l"></span></div></div>
+          <div class="crow"><label>Tarde (centro)</label><div class="cpair"><input type="color" id="c-shift-c" oninput="applyTheme()"><span class="chex" id="h-shift-c"></span></div></div>
+          <div class="crow"><label>Noche (der.)</label><div class="cpair"><input type="color" id="c-shift-r" oninput="applyTheme()"><span class="chex" id="h-shift-r"></span></div></div>
+        </div>
+      </div>
     </div>
     <div style="display:flex;gap:8px">
       <button class="bp" onclick="saveTheme()">Guardar</button>
@@ -465,7 +474,7 @@
 
 
 
-<script src="sync.js?v=202609170101"></script>
+<script src="sync.js?v=202609170107"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -473,7 +482,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609170101';
+    s.src = 'horario.js?v=202609170107';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
