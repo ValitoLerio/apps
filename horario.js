@@ -339,16 +339,17 @@ function renderHours() {
 }
 
 function cellSt(isCur, bg) {
-  return 'background:'+(bg||(isCur?'rgba(201,168,76,.07)':'transparent'))+';padding:7px 4px;border:1px solid var(--border);text-align:center;vertical-align:middle';
+  return 'background:'+(bg||(isCur?'rgba(201,168,76,.07)':'transparent'))+';padding:4px 2px;border:1px solid var(--border);text-align:center;vertical-align:middle';
 }
 function hdCell(d, h, hl) {
-  if (!d) return '<div style="font-size:.7rem;color:#2e2b22">-</div>';
-  return '<div style="font-size:.82rem;font-weight:700;color:'+(hl?'var(--gold2)':'#a0d0a0')+'">'+d+'d</div><div style="font-size:.75rem;color:var(--text2)">'+h+'h</div>';
+  if (!d) return '<div style="font-size:.68rem;color:var(--border)">-</div>';
+  return '<div style="font-size:.76rem;font-weight:700;color:'+(hl?'var(--gold2)':'#a0d0a0')+'">'+d+'d</div><div style="font-size:.68rem;color:var(--text2)">'+h+'h</div>';
 }
 function stickyNC(s) {
-  return '<td style="background:var(--surface);position:sticky;left:0;z-index:5;padding:7px 12px;border:1px solid var(--border)">'
-       + '<span style="color:'+RCOL[s.role]+';font-weight:600;font-size:.8rem">'+s.name+'</span>'
-       + '<span class="rt r'+s.role+'" style="margin-left:3px">'+RLBL[s.role]+'</span></td>';
+  return '<td style="background:var(--surface);position:sticky;left:0;z-index:8;padding:4px 7px;border:1px solid var(--border);' +
+         'box-shadow:2px 0 0 var(--border);line-height:1.15">'
+       + '<span style="color:'+RCOL[s.role]+';font-weight:600;font-size:.72rem">'+s.name+'</span>'
+       + '<span class="rt r'+s.role+'" style="margin-left:2px">'+RLBL[s.role]+'</span></td>';
 }
 function grpSep(cols) {
   return '<tr><td colspan="'+cols+'" style="height:3px;background:var(--border);padding:0;border:none"></td></tr>';
@@ -386,12 +387,12 @@ function getWeeksOfMonth(y, m) {
 }
 
 function renderHoursMonthly(tbl, y, all) {
-  var th='<thead><tr><th style="background:var(--surface);color:var(--gold);font-family:Playfair Display,serif;font-size:.82rem;padding:9px 12px;border:1px solid var(--border);text-align:left;position:sticky;left:0;z-index:10;min-width:130px">Personal</th>';
+  var th='<thead><tr><th style="background:var(--surface);color:var(--gold);font-family:Playfair Display,serif;font-size:.74rem;padding:5px 7px;border:1px solid var(--border);text-align:left;position:sticky;left:0;z-index:10;white-space:nowrap">Personal</th>';
   MESES.forEach(function(mn,mi){
     var ic=mi===curM&&y===curY;
-    th+='<th style="background:'+(ic?'rgba(201,168,76,.18)':'var(--surface)')+';color:'+(ic?'var(--gold2)':'var(--text2)')+';padding:8px 5px;border:1px solid var(--border);text-align:center;min-width:64px;font-size:.73rem;font-weight:'+(ic?'700':'500')+'">'+mn.substring(0,3)+'</th>';
+    th+='<th style="background:'+(ic?'rgba(201,168,76,.18)':'var(--surface)')+';color:'+(ic?'var(--gold2)':'var(--text2)')+';padding:5px 3px;border:1px solid var(--border);text-align:center;font-size:.68rem;font-weight:'+(ic?'700':'500')+'">'+mn.substring(0,3)+'</th>';
   });
-  th+='<th style="background:#1a2010;color:var(--gold2);padding:8px 10px;border:1px solid var(--border);text-align:center;min-width:72px;font-size:.76rem;font-weight:700">AÑO</th></tr></thead>';
+  th+='<th style="background:#1a2010;color:var(--gold2);padding:5px 6px;border:1px solid var(--border);text-align:center;width:58px;font-size:.7rem;font-weight:700">AÑO</th></tr></thead>';
   var tb='<tbody>'; var lastR=null;
   all.forEach(function(s){
     if(s.role!==lastR){if(lastR!==null)tb+=grpSep(15);lastR=s.role;}
@@ -408,13 +409,13 @@ function renderHoursMonthly(tbl, y, all) {
 function renderHoursWeekly(tbl, y, all) {
   var weeks=getWeeksOfMonth(y,curM);
   var today=new Date();
-  var th='<thead><tr><th style="background:var(--surface);color:var(--gold);font-family:Playfair Display,serif;font-size:.82rem;padding:9px 12px;border:1px solid var(--border);text-align:left;position:sticky;left:0;z-index:10;min-width:130px">Personal — '+MESES[curM]+' '+y+'</th>';
+  var th='<thead><tr><th style="background:var(--surface);color:var(--gold);font-family:Playfair Display,serif;font-size:.74rem;padding:5px 7px;border:1px solid var(--border);text-align:left;position:sticky;left:0;z-index:10;white-space:nowrap">Personal — '+MESES[curM]+' '+y+'</th>';
   weeks.forEach(function(wk){
     var ic=wk.days.some(function(dd){return dd.d===today.getDate()&&dd.m===today.getMonth()&&dd.y===today.getFullYear();});
     var d0=wk.days[0],d1=wk.days[wk.days.length-1];
-    th+='<th style="background:'+(ic?'rgba(201,168,76,.18)':'var(--surface)')+';color:'+(ic?'var(--gold2)':'var(--text2)')+';padding:8px 5px;border:1px solid var(--border);text-align:center;min-width:72px;font-size:.73rem;font-weight:'+(ic?'700':'500')+'">'+wk.label+'<br><span style="font-size:.62rem;opacity:.7">'+d0.d+'/'+(d0.m+1)+'-'+d1.d+'/'+(d1.m+1)+'</span></th>';
+    th+='<th style="background:'+(ic?'rgba(201,168,76,.18)':'var(--surface)')+';color:'+(ic?'var(--gold2)':'var(--text2)')+';padding:5px 3px;border:1px solid var(--border);text-align:center;font-size:.68rem;font-weight:'+(ic?'700':'500')+'">'+wk.label+'<br><span style="font-size:.62rem;opacity:.7">'+d0.d+'/'+(d0.m+1)+'-'+d1.d+'/'+(d1.m+1)+'</span></th>';
   });
-  th+='<th style="background:#1a2010;color:var(--gold2);padding:8px 10px;border:1px solid var(--border);text-align:center;min-width:72px;font-size:.76rem;font-weight:700">MES</th></tr></thead>';
+  th+='<th style="background:#1a2010;color:var(--gold2);padding:5px 6px;border:1px solid var(--border);text-align:center;width:58px;font-size:.7rem;font-weight:700">MES</th></tr></thead>';
   var tb='<tbody>'; var lastR=null;
   all.forEach(function(s){
     if(s.role!==lastR){if(lastR!==null)tb+=grpSep(weeks.length+2);lastR=s.role;}
@@ -431,7 +432,7 @@ function renderHoursWeekly(tbl, y, all) {
 
 function renderHoursAnnual(tbl, y, all) {
   var th='<thead><tr>'
-    +'<th style="background:var(--surface);color:var(--gold);font-family:Playfair Display,serif;font-size:.82rem;padding:9px 12px;border:1px solid var(--border);text-align:left;position:sticky;left:0;z-index:10;min-width:130px">Personal — '+y+'</th>'
+    +'<th style="background:var(--surface);color:var(--gold);font-family:Playfair Display,serif;font-size:.74rem;padding:5px 7px;border:1px solid var(--border);text-align:left;position:sticky;left:0;z-index:10;white-space:nowrap">Personal — '+y+'</th>'
     +'<th style="background:var(--surface);color:var(--text2);padding:9px 10px;border:1px solid var(--border);text-align:center;font-size:.74rem;min-width:100px">Dias trabajados</th>'
     +'<th style="background:var(--surface);color:var(--text2);padding:9px 10px;border:1px solid var(--border);text-align:center;font-size:.74rem;min-width:100px">Horas totales</th>'
     +'<th style="background:var(--surface);color:var(--text2);padding:9px 10px;border:1px solid var(--border);text-align:center;font-size:.74rem;min-width:100px">Media h/dia</th>'
@@ -577,7 +578,7 @@ function renderAusencias(){
 
   var th = '<thead><tr>' +
     '<th style="background:var(--surface);color:var(--gold);font-family:Playfair Display,serif;font-size:.82rem;' +
-    'padding:9px 12px;border:1px solid var(--border);text-align:left;position:sticky;left:0;z-index:10;min-width:130px">Personal</th>' +
+    'padding:5px 7px;border:1px solid var(--border);text-align:left;position:sticky;left:0;z-index:10;white-space:nowrap">Personal</th>' +
     (datos.alcance === 'ano'
       ? '<th style="background:var(--surface);color:var(--text2);padding:9px 10px;border:1px solid var(--border);text-align:left;font-size:.74rem;min-width:80px">Mes</th>'
       : '') +
@@ -784,7 +785,7 @@ function renderVacaciones(){
 
   var th = '<thead><tr><th style="background:var(--surface);color:var(--gold);font-family:Playfair Display,serif;' +
     'font-size:.82rem;padding:9px 12px;border:1px solid var(--border);text-align:left;position:sticky;left:0;' +
-    'z-index:10;min-width:130px">Personal</th>';
+    'z-index:10;min-width:104px">Personal</th>';
   dias.forEach(function(dia){
     var we  = dia.dow===0||dia.dow===6;
     var tod = esHoy(dia, hoy);
@@ -875,7 +876,7 @@ function renderTable() {
   var today = new Date();
   var all   = visibleStaff();
 
-  var th = '<thead><tr><th class="nch" style="position:sticky;left:0;top:0;z-index:20;background:var(--surface);min-width:130px;text-align:center">Personal</th>';
+  var th = '<thead><tr><th class="nch" style="position:sticky;left:0;top:0;z-index:20;background:var(--surface);min-width:100px;text-align:center">Personal</th>';
   dias.forEach(function(dia){
     var we  = dia.dow===0||dia.dow===6;
     var tod = esHoy(dia, today);
