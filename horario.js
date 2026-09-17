@@ -142,6 +142,32 @@ function horasDeCelda(c) {
   if (!c) return 0;
   return (minutosDe(c.inicio, c.fin) + minutosDe(c.inicio2, c.fin2)) / 60;
 }
+/* Una regla del dia debajo del turno: de las 7:00 a las 3:00, con el
+   trozo pintado donde se trabaja. El de manana deja la raya a la
+   izquierda, el de noche a la derecha y el partido saca dos trozos: se
+   ve de un vistazo quien entra antes y cuanto dura cada turno, sin leer
+   una sola hora. */
+function barraHoras(c, color) {
+  var ini0 = 7*60, largo = 20*60;          // de las 07:00 a las 03:00
+  function trozo(a, b) {
+    if (!a || !b) return '';
+    var A = parseInt(a.split(':')[0])*60 + parseInt(a.split(':')[1]);
+    var B = parseInt(b.split(':')[0])*60 + parseInt(b.split(':')[1]);
+    if (A < ini0) A += 1440;               // el que entra de madrugada
+    if (B <= A)   B += 1440;               // el que sale de madrugada
+    var x = (A - ini0) / largo, w = (B - A) / largo;
+    if (x < 0) { w += x; x = 0; }
+    if (x >= 1 || w <= 0) return '';
+    if (x + w > 1) w = 1 - x;
+    return '<i style="position:absolute;top:0;bottom:0;left:' + (x*100).toFixed(1) + '%;width:' +
+           (w*100).toFixed(1) + '%;background:' + color + ';border-radius:2px"></i>';
+  }
+  var dentro = trozo(c.inicio, c.fin) + trozo(c.inicio2, c.fin2);
+  if (!dentro) return '';
+  return '<div title="el dia entero, de las 7:00 a las 3:00" style="position:relative;width:92%;height:5px;' +
+         'margin:2px auto 0;background:rgba(128,128,128,.16);border-radius:2px">' + dentro + '</div>';
+}
+
 function textoTurno(c) {
   if (!c || !c.inicio) return '';
   return fmtH(c.inicio)+'-'+fmtH(c.fin) + (esPartido(c) ? ' / '+fmtH(c.inicio2)+'-'+fmtH(c.fin2) : '');
@@ -945,12 +971,20 @@ function renderTable() {
         var pad   = align==='flex-start' ? 'margin-left:-2px' : align==='flex-end' ? 'margin-right:-2px' : '';
         var radius= align==='flex-start' ? 'border-radius:0 5px 5px 0' : align==='flex-end' ? 'border-radius:5px 0 0 5px' : 'border-radius:5px';
         var bgCol = shiftBg(align);
-        inn = '<div style="width:100%;display:flex;justify-content:'+align+';'+pad+'">'
-            + '<span class="tb '+cls+'" style="'+radius+';background:'+bgCol+';color:'+letraSobre(bgCol)+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'
+        /* El bloque ocupa dos tercios de la celda y se pega al lado que
+           le toca, con dos rayas finas partiendo el dia en tres: asi se
+           ve de un golpe si es de manana (izquierda), de tarde (centro)
+           o de noche (derecha), sin leer la hora. */
+        var rayaM = function(x){ return '<div style="position:absolute;top:3px;bottom:3px;left:'+x+
+                    '%;width:1px;background:rgba(128,128,128,.16)"></div>'; };
+        inn = '<div style="position:relative;width:100%;display:flex;justify-content:'+align+';'+pad+'">'
+            + rayaM(33.33) + rayaM(66.66)
+            + '<span class="tb '+cls+'" style="position:relative;min-width:58%;justify-content:center;'+radius+';background:'+bgCol+';color:'+letraSobre(bgCol)+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'
             + '<span class="th">'+fmtC(cell.inicio)+'-'+fmtC(cell.fin)
             + (esPartido(cell) ? '<br>'+fmtC(cell.inicio2)+'-'+fmtC(cell.fin2) : '')
-            + '</span></span></div>';
-        if (cell.nota) inn += '<div style="width:100%;display:flex;justify-content:'+align+';'+pad+'"><span style="font-size:.6rem;color:var(--text2);max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+cell.nota+'</span></div>';
+            + '</span></span></div>'
+            + barraHoras(cell, 'var(--est-trabajo)');
+        if (cell.nota) inn += '<div style="width:100%;display:flex;justify-content:'+align+';'+pad+'"><span style="font-size:.6rem;color:var(--text2);max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+cell.nota+'</span></div>';
       } else if (est !== 'libre') {
         var lbl = est==='baja'?'B':est==='ausencia'?'A':EICO[est]||est;
         inn = '<span class="tb '+cls+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'+lbl+'</span>';
@@ -1052,7 +1086,9 @@ function renderWeekTable() {
                   ? '<div style="font-size:.82rem;font-weight:700;color:'+letraFloja(wbgCol)+'">/ '+fmtC(cell.inicio2)+'-'+fmtC(cell.fin2)+'</div>'
                   : '')
               + (cell.nota?'<div style="font-size:.62rem;color:'+letraFloja(wbgCol)+';margin-left:2px">'+cell.nota+'</div>':'')
-              + '</div></div>';
+              + '</div>'
+              + '<div style="position:absolute;left:8%;right:8%;bottom:4px">' + barraHoras(cell, 'var(--est-trabajo)') + '</div>'
+              + '</div>';
       } else if (est === 'vacaciones') { inner = 'VAC'; }
       else if (est === 'festivo')      { inner = 'FES'; }
       else if (est === 'baja')         { inner = 'BAJ'; }
