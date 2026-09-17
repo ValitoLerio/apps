@@ -365,7 +365,7 @@ function cellSt(isCur, bg) {
 }
 function hdCell(d, h, hl) {
   if (!d) return '<div style="font-size:.76rem;color:var(--border)">-</div>';
-  return '<div style="font-size:.85rem;font-weight:700;color:'+(hl?'var(--gold2)':'#a0d0a0')+'">'+d+'d</div><div style="font-size:.76rem;color:var(--text2)">'+h+'h</div>';
+  return '<div style="font-size:.85rem;font-weight:700;color:'+(hl?'var(--gold2)':'var(--est-trabajo)')+'">'+d+'d</div><div style="font-size:.76rem;color:var(--text2)">'+h+'h</div>';
 }
 function stickyNC(s) {
   return '<td style="background:var(--surface);position:sticky;left:0;z-index:8;padding:7px 11px;border:1px solid var(--border);' +
@@ -414,7 +414,7 @@ function renderHoursMonthly(tbl, y, all) {
     var ic=mi===curM&&y===curY;
     th+='<th style="background:'+(ic?'rgba(201,168,76,.18)':'var(--surface)')+';color:'+(ic?'var(--gold2)':'var(--text2)')+';padding:8px 7px;border:1px solid var(--border);text-align:center;font-size:.76rem;font-weight:'+(ic?'700':'500')+'">'+mn.substring(0,3)+'</th>';
   });
-  th+='<th style="background:#1a2010;color:var(--gold2);padding:8px 10px;border:1px solid var(--border);text-align:center;width:72px;font-size:.78rem;font-weight:700">AÑO</th></tr></thead>';
+  th+='<th style="background:var(--total-bg);color:var(--gold2);padding:8px 10px;border:1px solid var(--border);text-align:center;width:72px;font-size:.78rem;font-weight:700">AÑO</th></tr></thead>';
   var tb='<tbody>'; var lastR=null;
   all.forEach(function(s){
     if(s.role!==lastR){if(lastR!==null)tb+=grpSep(15);lastR=s.role;}
@@ -423,7 +423,7 @@ function renderHoursMonthly(tbl, y, all) {
       var r=calcStaffHours(s.id,y,mi); yH+=r.h; yD+=r.d;
       tb+='<td style="'+cellSt(mi===curM&&y===curY)+'">'+hdCell(r.d,r.h,mi===curM&&y===curY)+'</td>';
     });
-    tb+='<td style="background:#1a2010;padding:7px 10px;border:1px solid var(--border);text-align:center;vertical-align:middle"><div style="font-size:.9rem;font-weight:900;color:var(--gold2)">'+yD+'d</div><div style="font-size:.8rem;font-weight:700;color:#a0d080">'+Math.round(yH*10)/10+'h</div></td></tr>';
+    tb+='<td style="background:var(--total-bg);padding:7px 10px;border:1px solid var(--border);text-align:center;vertical-align:middle"><div style="font-size:.9rem;font-weight:900;color:var(--gold2)">'+yD+'d</div><div style="font-size:.8rem;font-weight:700;color:var(--est-trabajo)">'+Math.round(yH*10)/10+'h</div></td></tr>';
   });
   tb+='</tbody>'; tbl.innerHTML=th+tb;
 }
@@ -437,7 +437,7 @@ function renderHoursWeekly(tbl, y, all) {
     var d0=wk.days[0],d1=wk.days[wk.days.length-1];
     th+='<th style="background:'+(ic?'rgba(201,168,76,.18)':'var(--surface)')+';color:'+(ic?'var(--gold2)':'var(--text2)')+';padding:8px 7px;border:1px solid var(--border);text-align:center;font-size:.76rem;font-weight:'+(ic?'700':'500')+'">'+wk.label+'<br><span style="font-size:.62rem;opacity:.7">'+d0.d+'/'+(d0.m+1)+'-'+d1.d+'/'+(d1.m+1)+'</span></th>';
   });
-  th+='<th style="background:#1a2010;color:var(--gold2);padding:8px 10px;border:1px solid var(--border);text-align:center;width:72px;font-size:.78rem;font-weight:700">MES</th></tr></thead>';
+  th+='<th style="background:var(--total-bg);color:var(--gold2);padding:8px 10px;border:1px solid var(--border);text-align:center;width:72px;font-size:.78rem;font-weight:700">MES</th></tr></thead>';
   var tb='<tbody>'; var lastR=null;
   all.forEach(function(s){
     if(s.role!==lastR){if(lastR!==null)tb+=grpSep(weeks.length+2);lastR=s.role;}
@@ -447,7 +447,7 @@ function renderHoursWeekly(tbl, y, all) {
       var r=calcStaffWeek(s.id,wk);
       tb+='<td style="'+cellSt(ic)+'">'+hdCell(r.d,r.h,ic)+'</td>';
     });
-    tb+='<td style="background:#1a2010;padding:7px 10px;border:1px solid var(--border);text-align:center;vertical-align:middle"><div style="font-size:.9rem;font-weight:900;color:var(--gold2)">'+mRes.d+'d</div><div style="font-size:.8rem;font-weight:700;color:#a0d080">'+mRes.h+'h</div></td></tr>';
+    tb+='<td style="background:var(--total-bg);padding:7px 10px;border:1px solid var(--border);text-align:center;vertical-align:middle"><div style="font-size:.9rem;font-weight:900;color:var(--gold2)">'+mRes.d+'d</div><div style="font-size:.8rem;font-weight:700;color:var(--est-trabajo)">'+mRes.h+'h</div></td></tr>';
   });
   tb+='</tbody>'; tbl.innerHTML=th+tb;
 }
@@ -467,7 +467,7 @@ function renderHoursAnnual(tbl, y, all) {
     var avgD=yD>0?Math.round((yH/yD)*10)/10:0, avgW=Math.round((yH/52)*10)/10;
     tb+='<tr>'+stickyNC(s)
       +'<td style="'+cellSt(false)+'"><span style="font-size:.95rem;font-weight:700;color:var(--gold2)">'+yD+'</span></td>'
-      +'<td style="'+cellSt(false)+'"><span style="font-size:.95rem;font-weight:700;color:#a0d080">'+yH+'h</span></td>'
+      +'<td style="'+cellSt(false)+'"><span style="font-size:.95rem;font-weight:700;color:var(--est-trabajo)">'+yH+'h</span></td>'
       +'<td style="'+cellSt(false)+'"><span style="font-size:.88rem;color:var(--text2)">'+avgD+'h</span></td>'
       +'<td style="'+cellSt(false)+'"><span style="font-size:.88rem;color:var(--text2)">'+avgW+'h</span></td>'
       +'</tr>';
@@ -608,7 +608,7 @@ function renderAusencias(){
       return '<th style="background:var(--surface);color:var(--text2);padding:9px 10px;border:1px solid var(--border);' +
              'text-align:left;font-size:.74rem;min-width:120px">' + AUS_TIPOS[k].lbl + '</th>';
     }).join('') +
-    '<th style="background:#1a2010;color:var(--gold2);padding:9px 10px;border:1px solid var(--border);' +
+    '<th style="background:var(--total-bg);color:var(--gold2);padding:9px 10px;border:1px solid var(--border);' +
     'text-align:center;font-size:.74rem;min-width:70px">Días</th></tr></thead>';
 
   var columnas = tipos.length + (datos.alcance === 'ano' ? 2 : 1) + 1;
@@ -634,7 +634,7 @@ function renderAusencias(){
                : '<span style="color:var(--border)">·</span>') +
              '</td>';
     }).join('');
-    html += '<td style="background:#1a2010;padding:7px 10px;border:1px solid var(--border);text-align:center">' +
+    html += '<td style="background:var(--total-bg);padding:7px 10px;border:1px solid var(--border);text-align:center">' +
             (total
               ? '<span style="font-size:.9rem;font-weight:700;color:var(--gold2)">' + total + '</span>'
               : '<span style="color:var(--border)">·</span>') + '</td>';
@@ -816,7 +816,7 @@ function renderVacaciones(){
           'text-align:center;min-width:34px;font-size:.66rem;white-space:nowrap">' + DC[dia.dow] +
           '<br><span style="font-size:.82rem;font-weight:700">' + etiquetaDia(dia, curM) + '</span></th>';
   });
-  th += '<th style="background:#1a2010;color:var(--gold2);padding:6px 10px;border:1px solid var(--border);' +
+  th += '<th style="background:var(--total-bg);color:var(--gold2);padding:6px 10px;border:1px solid var(--border);' +
         'text-align:center;min-width:74px;font-size:.72rem;font-weight:700">' + VAC_EST[vacTipo].lbl +
         '<br><span style="font-size:.64rem;font-weight:500;color:var(--text2)">mes / a&ntilde;o</span></th></tr></thead>';
 
@@ -859,7 +859,7 @@ function renderVacaciones(){
           '<span style="color:' + RCOL[s.role] + ';font-weight:600;font-size:.8rem">' + esc(s.name) + '</span>' +
           '<span class="rt r' + s.role + '" style="margin-left:3px">' + RLBL[s.role] + '</span></td>' +
           celdas +
-          '<td style="background:#1a2010;padding:4px 9px;border:1px solid var(--border);text-align:center" ' +
+          '<td style="background:var(--total-bg);padding:4px 9px;border:1px solid var(--border);text-align:center" ' +
           'title="En este mes: ' + desglose + '">' +
           '<div style="font-size:.9rem;font-weight:900;color:' + VAC_EST[vacTipo].puro + '">' + enElMes + 'd</div>' +
           '<div style="font-size:.64rem;color:var(--text2);white-space:nowrap">' + ano + ' en ' + curY +
@@ -1906,6 +1906,12 @@ function derivarEstados() {
   var raiz  = document.documentElement;
   var fondo = cssVar('--bg', THEME_DEFAULTS.bg);
   var temaClaro = claridad(fondo) > .5;
+  /* La columna de los totales lleva un velo del color de los titulos
+     sobre el fondo de la pagina: en oscuro sale un dorado apagado, en
+     claro un crema. Antes era un verde de noche escrito a fuego, y con
+     el tema claro los numeros no se veian. */
+  raiz.style.setProperty('--total-bg',
+    conAlfa(cssVar('--gold', THEME_DEFAULTS.gold), temaClaro ? .22 : .14));
   ESTADOS.forEach(function(k){
     var col = cssVar('--'+k, THEME_DEFAULTS[k]);
     var bg, bd, lleno, txt;
