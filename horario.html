@@ -75,7 +75,8 @@
   .ci{display:flex;flex-direction:column;align-items:center;gap:1px;min-height:34px;justify-content:center;padding:2px 0;width:100%;}
   .tb{display:inline-flex;align-items:center;gap:3px;padding:2px 5px;border-radius:4px;font-size:.73rem;font-weight:600;cursor:pointer;transition:opacity .12s;white-space:nowrap;}
   .tb:hover{opacity:.75;}
-  .th{font-size:.72rem;color:var(--text2);font-weight:700;}
+  /* La hora hereda el color del bloque, que se calcula para que se lea. */
+  .th{font-size:.72rem;color:inherit;font-weight:700;}
   /* Cada estado, un solo color: de el salen el fondo y el borde. Se
      cambia en Colores y cambia aqui, en la semana y en el cuadrante. */
   .et{background:var(--est-trabajo-bg);color:var(--est-trabajo-txt);border:1px solid var(--est-trabajo-bd);}
@@ -482,7 +483,7 @@
 
 
 
-<script src="sync.js?v=202609171026"></script>
+<script src="sync.js?v=202609171031"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -490,7 +491,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609171026';
+    s.src = 'horario.js?v=202609171031';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

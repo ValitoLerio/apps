@@ -159,6 +159,20 @@ function cssVar(name, fallback) {
   return v || fallback;
 }
 
+/* La letra que se lee sobre un fondo: negra si el fondo es claro,
+   blanca si es oscuro. Los bloques de los turnos los pinta cada uno a
+   su gusto en Colores, asi que el color de la letra no puede estar
+   escrito a fuego: con un verde menta y una letra casi blanca no se lee
+   nada. */
+function letraSobre(fondo) {
+  return claridad(fondo) > .55 ? '#141414' : '#f4f4f0';
+}
+/* La segunda linea -la hora de salida, el segundo tramo, la nota- va del
+   mismo color pero mas floja. */
+function letraFloja(fondo) {
+  return conAlfa(letraSobre(fondo), .72);
+}
+
 function shiftBg(align) {
   if (align === 'flex-start') return cssVar('--shift-l','#1a4a2e');
   if (align === 'flex-end')   return cssVar('--shift-r','#2a1a0a');
@@ -932,7 +946,7 @@ function renderTable() {
         var radius= align==='flex-start' ? 'border-radius:0 5px 5px 0' : align==='flex-end' ? 'border-radius:5px 0 0 5px' : 'border-radius:5px';
         var bgCol = shiftBg(align);
         inn = '<div style="width:100%;display:flex;justify-content:'+align+';'+pad+'">'
-            + '<span class="tb '+cls+'" style="'+radius+';background:'+bgCol+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'
+            + '<span class="tb '+cls+'" style="'+radius+';background:'+bgCol+';color:'+letraSobre(bgCol)+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'
             + '<span class="th">'+fmtC(cell.inicio)+'-'+fmtC(cell.fin)
             + (esPartido(cell) ? '<br>'+fmtC(cell.inicio2)+'-'+fmtC(cell.fin2) : '')
             + '</span></span></div>';
@@ -981,13 +995,13 @@ function renderWeekTable() {
   var fmt   = function(d){ return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear(); };
   var end   = new Date(weekStart); end.setDate(end.getDate()+6);
 
-  var th = '<thead><tr><th style="background:#111;color:var(--gold);font-size:.72rem;padding:5px 8px;border:1px solid #2a2820;text-align:left;width:96px;min-width:96px">Personal</th>';
+  var th = '<thead><tr><th style="background:var(--surface);color:var(--gold);font-size:.72rem;padding:5px 8px;border:1px solid var(--border);text-align:left;width:96px;min-width:96px">Personal</th>';
   dias.forEach(function(dd){
     var dow = dd.getDay(); var we = dow===0||dow===6;
     var tod = dd.toDateString()===today.toDateString();
-    var bg  = tod?'rgba(201,168,76,.22)':(we?'#1e1c14':'#141210');
-    var col = tod?'var(--gold2)':(we?'var(--gold)':'#ccc');
-    th += '<th style="background:'+bg+';color:'+col+';padding:6px 4px;border:1px solid #2a2820;border-bottom:3px solid '+(we?'var(--gold)':'#444')+';text-align:center;min-width:140px">'
+    var bg  = tod?'rgba(201,168,76,.22)':(we?'var(--surface2)':'var(--surface)');
+    var col = tod?'var(--gold2)':(we?'var(--gold)':'var(--text2)');
+    th += '<th style="background:'+bg+';color:'+col+';padding:6px 4px;border:1px solid var(--border);border-bottom:3px solid '+(we?'var(--gold)':'var(--border)')+';text-align:center;min-width:140px">'
         + '<div style="font-weight:900;font-size:1rem;letter-spacing:.04em">'+DC_FULL[dow].substring(0,3)+'</div>'
         + '<div style="font-size:.78rem;opacity:.85;margin-top:2px">'+dd.getDate()+'/'+(dd.getMonth()+1)+'</div>'
         + '</th>';
@@ -998,11 +1012,11 @@ function renderWeekTable() {
   var lastR = null;
   all.forEach(function(s, si){
     if (s.role !== lastR) {
-      if (si > 0) tb += '<tr><td colspan="8" style="height:2px;background:#333;padding:0;border:none"></td></tr>';
+      if (si > 0) tb += '<tr><td colspan="8" style="height:2px;background:var(--border);padding:0;border:none"></td></tr>';
       lastR = s.role;
     }
     tb += '<tr>';
-    tb += '<td style="background:#111;position:sticky;left:0;z-index:8;padding:3px 8px;border:1px solid #2a2820;width:96px;min-width:96px;box-shadow:2px 0 0 #2a2820">'
+    tb += '<td style="background:var(--surface);position:sticky;left:0;z-index:8;padding:3px 8px;border:1px solid var(--border);width:96px;min-width:96px;box-shadow:2px 0 0 var(--border)">'
         + '<span style="color:'+RCOL[s.role]+';font-weight:700;font-size:.76rem;line-height:1.15;white-space:nowrap">'+s.name+'</span>'
         + '</td>';
     dias.forEach(function(dd){
@@ -1032,18 +1046,18 @@ function renderWeekTable() {
               + raya(33.33) + raya(66.66)
               + '<div title="' + textoTurno(cell) + '" style="position:relative;display:inline-flex;align-items:center;justify-content:center;gap:3px;'
               +   'min-width:42%;'+wradius+';background:'+wbgCol+';padding:4px 9px;box-shadow:0 1px 3px rgba(0,0,0,.35)">'
-              + '<div style="font-size:.92rem;font-weight:900;color:#e0ffe0;white-space:nowrap">'+fmtC(cell.inicio)+'</div>'
-              + '<div style="font-size:.82rem;font-weight:700;color:#8ac898">-'+fmtC(cell.fin)+'</div>'
+              + '<div style="font-size:.92rem;font-weight:900;color:'+letraSobre(wbgCol)+';white-space:nowrap">'+fmtC(cell.inicio)+'</div>'
+              + '<div style="font-size:.82rem;font-weight:700;color:'+letraFloja(wbgCol)+'">-'+fmtC(cell.fin)+'</div>'
               + (esPartido(cell)
-                  ? '<div style="font-size:.82rem;font-weight:700;color:#8ac898">/ '+fmtC(cell.inicio2)+'-'+fmtC(cell.fin2)+'</div>'
+                  ? '<div style="font-size:.82rem;font-weight:700;color:'+letraFloja(wbgCol)+'">/ '+fmtC(cell.inicio2)+'-'+fmtC(cell.fin2)+'</div>'
                   : '')
-              + (cell.nota?'<div style="font-size:.62rem;color:#6a9a78;margin-left:2px">'+cell.nota+'</div>':'')
+              + (cell.nota?'<div style="font-size:.62rem;color:'+letraFloja(wbgCol)+';margin-left:2px">'+cell.nota+'</div>':'')
               + '</div></div>';
       } else if (est === 'vacaciones') { inner = 'VAC'; }
       else if (est === 'festivo')      { inner = 'FES'; }
       else if (est === 'baja')         { inner = 'BAJ'; }
       else if (est === 'ausencia')     { inner = 'AUS'; }
-      else { inner = '<div style="color:#333;font-size:.9rem">-</div>'; }
+      else { inner = '<div style="color:var(--border);font-size:.9rem">-</div>'; }
 
       var fullCell = '';
       var pinta = function(clave, letra){
@@ -1057,7 +1071,7 @@ function renderWeekTable() {
       if (p) { fullCell = p.fondo; inner = p.dentro; }
 
       var wrapAlign = est==='trabajo' ? '' : 'justify-content:center;';
-      tb += '<td onclick="openCell(\''+s.id+'\','+d+',event,'+m+','+y+')" style="'+fullCell+'border:1px solid #3e3c30;border-bottom:2px solid #555240;padding:0;vertical-align:middle;cursor:pointer;text-align:center" onmouseover="this.style.filter=\'brightness(1.3)\'" onmouseout="this.style.filter=\'none\'">'
+      tb += '<td onclick="openCell(\''+s.id+'\','+d+',event,'+m+','+y+')" style="'+fullCell+'border:1px solid var(--border);border-bottom:2px solid var(--border);padding:0;vertical-align:middle;cursor:pointer;text-align:center" onmouseover="this.style.filter=\'brightness(1.3)\'" onmouseout="this.style.filter=\'none\'">'
           + (est==='trabajo' && cell && cell.inicio
               ? inner
               : '<div style="width:100%;height:40px;display:flex;align-items:center;'+wrapAlign+'">'+inner+'</div>')
@@ -1068,7 +1082,7 @@ function renderWeekTable() {
   tb += '</tbody>';
 
   area.innerHTML =
-    '<div style="padding:5px 10px;background:#0d0d0b;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2a2820">'
+    '<div style="padding:5px 10px;background:var(--surface);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)">'
     + '<span style="font-family:\'Playfair Display\',serif;font-size:.85rem;color:var(--gold2)">Horario - '+MESES[curM]+' '+curY+'</span>'
     + '<span style="font-size:.63rem;color:var(--text2);margin-left:14px">'
     +   '<span style="color:'+cssVar('--shift-l','#1a4a2e')+';font-weight:900">&#9608;</span> izquierda: ma&ntilde;ana &nbsp; '
@@ -1079,7 +1093,7 @@ function renderWeekTable() {
     + '</div>'
     + '<div id="wk-scaler" style="overflow:hidden;width:100%">'
     + '<div id="wk-inner" style="transform-origin:top left">'
-    + '<table id="wk-tbl" style="border-collapse:collapse;table-layout:auto;font-family:\'DM Sans\',sans-serif;background:#0f0e0b;white-space:nowrap">'+th+tb+'</table>'
+    + '<table id="wk-tbl" style="border-collapse:collapse;table-layout:auto;font-family:\'DM Sans\',sans-serif;background:var(--bg);white-space:nowrap">'+th+tb+'</table>'
     + '</div></div>';
 
   setTimeout(function(){
