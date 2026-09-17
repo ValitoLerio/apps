@@ -62,7 +62,8 @@
   .schedule-area{overflow:auto;background:var(--bg);max-height:calc(100vh - 150px);}
   .sched{border-collapse:collapse;min-width:100%;font-size:.79rem;}
   .sched th{background:var(--surface);position:sticky;top:0;z-index:10;padding:5px 3px;font-weight:500;color:var(--text2);border:1px solid var(--border);text-align:center;white-space:nowrap;}
-  .sched th.dh{font-size:.66rem;min-width:76px;}
+  /* El ancho de cada dia lo elige el boton "Ancho" de arriba. */
+  .sched th.dh{font-size:.7rem;min-width:var(--dia-ancho,98px);}
   .sched th.dh.we{background:#1e1c14;color:var(--gold);}
   .sched th.dh.tod{background:rgba(201,168,76,.15);color:var(--gold2);}
   /* La columna de los nombres va pegada a la izquierda y por encima de
@@ -189,6 +190,7 @@
   <button class="sb i" id="bi" onclick="setSeason('invierno')">&#10052;&#65039; Invierno</button>
   <button class="tbtn" style="border-color:#5b9bd5;color:#5b9bd5" onclick="openAddModal()">+ Personal</button>
   <button class="tbtn" id="bwk" style="border-color:#27ae60;color:#27ae60" onclick="toggleWeekMode()">&#128197; Vista semana</button>
+  <button class="tbtn" id="banch" style="border-color:var(--gold);color:var(--gold)" onclick="cambiarAncho()" title="Lo ancho que es cada d&iacute;a en el cuadrante del mes">&#8596; Ancho</button>
   <button class="tbtn" style="border-color:#25d366;color:#4ee383" onclick="abrirSemanaWA()" title="Mandar el horario de una semana">&#128241; WhatsApp</button>
   <button class="tbtn" style="border-color:var(--gold);color:var(--gold)" onclick="openTheme()">&#127912; Colores</button>
   <button class="tbtn" style="border-color:#27ae60;color:#6dbb85" onclick="exportarHorario()" title="Descargar una copia">&#11015;&#65039; Copia</button>
@@ -483,7 +485,7 @@
 
 
 
-<script src="sync.js?v=202609171232"></script>
+<script src="sync.js?v=202609171236"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -491,7 +493,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609171232';
+    s.src = 'horario.js?v=202609171236';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

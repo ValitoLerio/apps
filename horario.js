@@ -164,7 +164,7 @@ function barraHoras(c, color) {
   }
   var dentro = trozo(c.inicio, c.fin) + trozo(c.inicio2, c.fin2);
   if (!dentro) return '';
-  return '<div title="el dia entero, de las 7:00 a las 3:00" style="position:relative;width:92%;height:5px;' +
+  return '<div title="el dia entero, de las 7:00 a las 3:00" style="position:relative;width:92%;height:6px;' +
          'margin:2px auto 0;background:rgba(128,128,128,.16);border-radius:2px">' + dentro + '</div>';
 }
 
@@ -230,6 +230,8 @@ function load() {
   } catch(e){}
   try { var d=localStorage.getItem('rhid');   if(d){var p=JSON.parse(d);if(typeof p==='object')hidden=p;}} catch(e){}
   try { var d=localStorage.getItem('rvac');   if(d){var p=JSON.parse(d);if(typeof p==='object')vac=p;}   } catch(e){}
+  try { var d=localStorage.getItem('rancho');
+        if (d && ANCHOS.some(function(x){ return x.id === d; })) anchoDia = d; } catch(e){}
 }
 
 // ================================================================
@@ -247,6 +249,35 @@ function sc(sid, day, data) {
   if (!sched[curY][curM][sid]) sched[curY][curM][sid] = {};
   sched[curY][curM][sid][day] = data;
   save();
+}
+
+// ================================================================
+// LO ANCHO QUE ES CADA DIA
+// ================================================================
+// Cuanto mas ancho, mas se nota si el turno esta a la izquierda, al
+// medio o a la derecha; cuanto mas estrecho, mas dias caben de una vez.
+// El boton de arriba va pasando por los cuatro anchos y se queda con el
+// que se deje puesto.
+var ANCHOS = [
+  {id:'justo',   lbl:'Justo',   px:64},
+  {id:'normal',  lbl:'Normal',  px:82},
+  {id:'ancho',   lbl:'Ancho',   px:98},
+  {id:'deveras', lbl:'Muy ancho', px:126}
+];
+var anchoDia = 'ancho';
+function aplicarAncho() {
+  var a = ANCHOS.filter(function(x){ return x.id === anchoDia; })[0] || ANCHOS[2];
+  document.documentElement.style.setProperty('--dia-ancho', a.px + 'px');
+  var b = document.getElementById('banch');
+  if (b) b.innerHTML = '\u2194 ' + a.lbl;
+}
+function cambiarAncho() {
+  var i = 0;
+  ANCHOS.forEach(function(x, k){ if (x.id === anchoDia) i = k; });
+  anchoDia = ANCHOS[(i + 1) % ANCHOS.length].id;
+  try { localStorage.setItem('rancho', anchoDia); } catch(e){}
+  aplicarAncho();
+  toast('Dias ' + (ANCHOS.filter(function(x){ return x.id===anchoDia; })[0].lbl).toLowerCase());
 }
 
 // ================================================================
@@ -979,7 +1010,7 @@ function renderTable() {
                     '%;width:1px;background:rgba(128,128,128,.16)"></div>'; };
         inn = '<div style="position:relative;width:100%;display:flex;justify-content:'+align+';'+pad+'">'
             + rayaM(33.33) + rayaM(66.66)
-            + '<span class="tb '+cls+'" style="position:relative;min-width:58%;justify-content:center;'+radius+';background:'+bgCol+';color:'+letraSobre(bgCol)+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'
+            + '<span class="tb '+cls+'" style="position:relative;min-width:62%;justify-content:center;'+radius+';background:'+bgCol+';color:'+letraSobre(bgCol)+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'
             + '<span class="th">'+fmtC(cell.inicio)+'-'+fmtC(cell.fin)
             + (esPartido(cell) ? '<br>'+fmtC(cell.inicio2)+'-'+fmtC(cell.fin2) : '')
             + '</span></span></div>'
@@ -2124,7 +2155,7 @@ function closeTheme() { var el=document.getElementById('themeov'); if(el)el.clas
 // INIT
 // ================================================================
 function iniciarHorario(){
-  load(); loadTheme();
+  load(); loadTheme(); aplicarAncho();
   // Las vacaciones que quedaran en el cajon viejo pasan al horario.
   var pasadas = migrarVacacionesViejas();
   // Se abre por el mes al que pertenece hoy, que ya no es el del
