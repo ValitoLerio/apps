@@ -2166,58 +2166,75 @@ function verCoche(main){
     return '<span class="chapa ok">quedan '+d+' d</span>';
   }
 
+  /* Un punto rojo en la pastilla del vehiculo al que le toca algo: se
+     ve cual hay que mirar sin abrirlo. */
+  function urge(x){
+    return [diasHasta(x.seguro&&x.seguro.caduca), diasHasta(x.itv&&x.itv.caduca)]
+      .some(function(d){ return d!==null && d<=45; });
+  }
+
   main.innerHTML=
     cabecera(coches.length>1 ? "Vehículos" : "Coche",
-      "El seguro y la ITV con sus fechas, la gasolina y lo que se lleva el taller. "+
-      (coches.length>1 ? "Cada vehículo lleva sus cuentas por separado." : ""),
-      (activo?'<button class="btn" id="editCoche">Datos del vehículo</button>':"")+
-      '<button class="btn" id="nuevoCoche">+ Otro vehículo</button>'+
-      (activo?'<button class="btn" id="nuevoRepo">Anotar gasolina</button>'+
-              '<button class="btn fuerte" id="nuevaRev">Anotar taller</button>':""))+
+      (activo
+        ? "El seguro y la ITV con sus fechas, la gasolina y lo que se lleva el taller."
+        : "Pon tu primer vehículo: el modelo, la matrícula, el seguro y la ITV."),
+      (activo?'<button class="btn" id="nuevoRepo">&#9981; Gasolina</button>'+
+              '<button class="btn fuerte" id="nuevaRev">&#128295; Taller</button>':""))+
 
-    /* Cada vehículo con su equis al lado: buscar cómo borrar uno dentro
-       de su ficha no se le ocurre a nadie. */
+    /* Los vehiculos, en fila. El lapiz y la equis salen solo en el que
+       estas mirando: asi no se borra otro sin querer y la fila queda
+       limpia. */
     (coches.length
-      ? '<div class="filtros" style="margin-bottom:16px">'+
+      ? '<div class="vehic">'+
         coches.map(function(x){
           var puesto=(activo&&x.id===activo.id);
-          return '<div class="grupo">'+
-            '<button data-coche="'+esc(x.id)+'" aria-pressed="'+puesto+'">'+
-              esc(nombreCoche(x))+
-              (x.matricula&&x.modelo
-                ? ' <span style="color:var(--muted);font-size:11.5px">'+esc(x.matricula)+'</span>'
-                : "")+'</button>'+
-            '<button data-cochedel="'+esc(x.id)+'" title="Borrar '+esc(nombreCoche(x))+'" '+
-              'style="color:var(--malo);padding:6px 10px">✕</button>'+
-          '</div>';
-        }).join("")+'</div>'
-      : "")+
+          return '<button class="v1" data-coche="'+esc(x.id)+'" aria-pressed="'+puesto+'">'+
+            (urge(x)?'<span class="punto" title="El seguro o la ITV están a punto"></span>':"")+
+            esc(nombreCoche(x))+
+            (x.matricula?'<span class="mat">'+esc(x.matricula)+'</span>':"")+
+            (puesto
+              ? '<span class="acc" data-cocheedit="'+esc(x.id)+'" title="Datos del vehículo" '+
+                'role="button">&#9998;</span>'+
+                '<span class="acc malo" data-cochedel="'+esc(x.id)+'" title="Borrar este vehículo" '+
+                'role="button">&#10005;</span>'
+              : "")+
+          '</button>';
+        }).join("")+
+        '<button class="mas" id="nuevoCoche">+ vehículo</button>'+
+        '</div>'
+      : '<div class="vehic"><button class="mas" id="nuevoCoche">+ Poner un vehículo</button></div>')+
 
     (!activo
-      ? '<div class="vacio"><strong>Todavía no hay ningún vehículo</strong>'+
-        'Dale a «Otro vehículo» y pon su modelo, la matrícula, el seguro y la ITV.</div>'
+      ? '<div class="tarjeta"><div class="vacio"><strong>Todavía no hay ningún vehículo</strong>'+
+        'Dale a «Poner un vehículo» y apunta el modelo, la matrícula, el seguro y la ITV. '+
+        'Después podrás anotar la gasolina y el taller.</div></div>'
       : "")+
 
+    /* Las fechas primero: son lo unico de esta pantalla que hay que
+       hacer a tiempo. El gasto viene detras. */
     (!activo ? "" :
     '<div class="cifras">'+
+      '<div class="cifra"><div class="k">Seguro</div><div class="v" style="font-size:17px">'+
+        (c.seguro&&c.seguro.caduca?esc(dmy(c.seguro.caduca)):"—")+'</div>'+
+        '<div class="n">'+chapaFecha(c.seguro&&c.seguro.caduca)+
+        (c.seguro&&c.seguro.compania?' <span style="color:var(--muted)">'+esc(c.seguro.compania)+'</span>':"")+
+        '</div></div>'+
+      '<div class="cifra"><div class="k">ITV</div><div class="v" style="font-size:17px">'+
+        (c.itv&&c.itv.caduca?esc(dmy(c.itv.caduca)):"—")+'</div>'+
+        '<div class="n">'+chapaFecha(c.itv&&c.itv.caduca)+'</div></div>'+
       '<div class="cifra"><div class="k">Gasolina '+anio+'</div><div class="v acento">'+eur(gasolinaAno)+'</div>'+
         '<div class="n">'+plural(repos.filter(function(r){return (r.fecha||"").slice(0,4)===anio;}).length,
           "repostaje","repostajes")+'</div></div>'+
       '<div class="cifra"><div class="k">Taller '+anio+'</div><div class="v">'+eur(tallerAno)+'</div>'+
         '<div class="n">piezas y mano de obra</div></div>'+
-      '<div class="cifra"><div class="k">Seguro</div><div class="v" style="font-size:15px">'+
-        (c.seguro&&c.seguro.caduca?esc(dmy(c.seguro.caduca)):"—")+'</div>'+
-        '<div class="n">'+chapaFecha(c.seguro&&c.seguro.caduca)+'</div></div>'+
-      '<div class="cifra"><div class="k">ITV</div><div class="v" style="font-size:15px">'+
-        (c.itv&&c.itv.caduca?esc(dmy(c.itv.caduca)):"—")+'</div>'+
-        '<div class="n">'+chapaFecha(c.itv&&c.itv.caduca)+'</div></div>'+
     '</div>'+
 
     '<div class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab">'+
-      '<h2>Taller</h2><span class="pista">Cada visita con sus piezas y la mano de obra</span></div>'+
+      '<h2>&#128295; Taller</h2><span class="pista">Cada visita con sus piezas y la mano de obra</span></div>'+
       '<div class="tabla-caja" id="tablaRev"></div></div>'+
 
-    '<div class="tarjeta"><div class="tarjeta-cab"><h2>Gasolina</h2></div>'+
+    '<div class="tarjeta"><div class="tarjeta-cab"><h2>&#9981; Gasolina</h2>'+
+      '<span class="pista">Con los kilómetros, sale el consumo</span></div>'+
       '<div class="tabla-caja" id="tablaRepo"></div></div>');
 
   main.querySelectorAll("[data-coche]").forEach(function(b){
@@ -2228,31 +2245,43 @@ function verCoche(main){
       e.stopPropagation(); borrarCoche(b.getAttribute("data-cochedel"));
     });
   });
+  main.querySelectorAll("[data-cocheedit]").forEach(function(b){
+    b.addEventListener("click", function(e){
+      e.stopPropagation(); editarCoche(b.getAttribute("data-cocheedit"));
+    });
+  });
   document.getElementById("nuevoCoche").addEventListener("click", function(){ editarCoche(null); });
   if(!activo) return;
-  document.getElementById("editCoche").addEventListener("click", function(){ editarCoche(activo.id); });
   document.getElementById("nuevoRepo").addEventListener("click", function(){ editarRepostaje(null); });
   document.getElementById("nuevaRev").addEventListener("click", function(){ editarRevision(null); });
 
   var cajaRev=document.getElementById("tablaRev");
   cajaRev.innerHTML = !revs.length
-    ? '<div class="vacio">Ninguna visita al taller anotada.</div>'
-    : '<table><thead><tr><th>Fecha</th><th>Taller</th><th>Motivo</th><th>Piezas</th>'+
-      '<th class="num">Piezas</th><th class="num">Mano de obra</th><th class="num">Total</th><th></th></tr></thead><tbody>'+
+    ? '<div class="vacio"><strong>Ninguna visita al taller</strong>'+
+      'Cuando lo lleves, dale al botón «Taller» de ahí arriba y apunta las piezas y la mano de obra.</div>'
+    : '<table><thead><tr><th>Fecha</th><th>Taller</th><th>Motivo</th><th>Qué piezas</th>'+
+      '<th class="num">Piezas €</th><th class="num">Mano de obra</th><th class="num">Total</th><th></th></tr></thead><tbody>'+
       revs.map(function(r){
         var piezas=(r.piezas||[]);
         var totalPiezas=r2(piezas.reduce(function(s,p){ return s+(+p.precio||0); },0));
+        var coste=costeRevision(r);
         return "<tr><td>"+esc(dmy(r.fecha))+"</td><td>"+esc(r.taller||"—")+"</td>"+
           "<td>"+esc(r.motivo||"—")+"</td>"+
           '<td style="font-size:12.5px;color:var(--muted)">'+
             (piezas.length?esc(piezas.map(function(p){ return p.nombre; }).join(", ")):"—")+"</td>"+
-          '<td class="num">'+eur(totalPiezas)+"</td>"+
-          '<td class="num">'+eur(r.manoObra)+"</td>"+
-          '<td class="num"><strong>'+eur(costeRevision(r))+"</strong></td>"+
+          '<td class="num">'+(totalPiezas?eur(totalPiezas):'<span style="color:var(--muted)">—</span>')+"</td>"+
+          '<td class="num">'+(+r.manoObra?eur(r.manoObra):'<span style="color:var(--muted)">—</span>')+"</td>"+
+          /* Sin precio no cuadra el ano: se dice, como en la compra. */
+          '<td class="num">'+(coste>0.004
+              ? '<strong>'+eur(coste)+'</strong>'
+              : '<span class="chapa malo" title="Dale a Editar y ponle lo que costó">sin precio</span>')+"</td>"+
           '<td><div class="acciones-fila">'+
             '<button class="btn suave sm" data-redit="'+r.id+'">Editar</button>'+
             '<button class="btn suave sm malo" data-rdel="'+r.id+'">Borrar</button></div></td></tr>';
-      }).join("")+"</tbody></table>";
+      }).join("")+"</tbody>"+
+      '<tfoot><tr><td colspan="6">'+plural(revs.length,"visita","visitas")+' de este vehículo</td>'+
+      '<td class="num">'+eur(r2(revs.reduce(function(t,r){ return t+costeRevision(r); },0)))+'</td><td></td></tr></tfoot>'+
+      "</table>";
 
   cajaRev.querySelectorAll("[data-redit]").forEach(function(b){
     b.addEventListener("click", function(){ editarRevision(b.getAttribute("data-redit")); });
@@ -2268,20 +2297,43 @@ function verCoche(main){
 
   var cajaRepo=document.getElementById("tablaRepo");
   cajaRepo.innerHTML = !repos.length
-    ? '<div class="vacio">Sin repostajes anotados.</div>'
-    : '<table><thead><tr><th>Fecha</th><th>Estación</th><th class="num">Litros</th>'+
-      '<th class="num">Importe</th><th class="num">€/litro</th><th class="num">Km</th><th></th></tr></thead><tbody>'+
-      repos.map(function(r){
-        var porLitro=(+r.litros>0)?r2((+r.importe||0)/(+r.litros)):null;
-        return "<tr><td>"+esc(dmy(r.fecha))+"</td><td>"+esc(r.estacion||"—")+"</td>"+
-          '<td class="num">'+num(r.litros,2)+"</td>"+
-          '<td class="num"><strong>'+eur(r.importe)+"</strong></td>"+
-          '<td class="num">'+(porLitro!=null?num(porLitro,3)+" €":"—")+"</td>"+
-          '<td class="num">'+(r.km?num(r.km):"—")+"</td>"+
-          '<td><div class="acciones-fila">'+
-            '<button class="btn suave sm" data-gedit="'+r.id+'">Editar</button>'+
-            '<button class="btn suave sm malo" data-gdel="'+r.id+'">Borrar</button></div></td></tr>';
-      }).join("")+"</tbody></table>";
+    ? '<div class="vacio"><strong>Sin repostajes</strong>'+
+      'Dale al botón «Gasolina» de ahí arriba. Si apuntas los kilómetros, la app te saca el consumo.</div>'
+    : (function(){
+        /* El consumo sale de dos repostajes seguidos: los litros de este
+           por los kilometros que se han hecho desde el anterior. Sin los
+           kilometros apuntados no hay consumo, y se deja en blanco. */
+        var viejoANuevo=repos.slice().reverse();
+        var consumo={};
+        for(var i=1;i<viejoANuevo.length;i++){
+          var a=viejoANuevo[i-1], b=viejoANuevo[i];
+          var km=(+b.km||0)-(+a.km||0);
+          if(km>0 && +b.litros>0) consumo[b.id]=r2((+b.litros)*100/km);
+        }
+        return '<table><thead><tr><th>Fecha</th><th>Estación</th><th class="num">Litros</th>'+
+          '<th class="num">Importe</th><th class="num">€/litro</th><th class="num">Km</th>'+
+          '<th class="num">L/100</th><th></th></tr></thead><tbody>'+
+          repos.map(function(r){
+            var porLitro=(+r.litros>0)?r2((+r.importe||0)/(+r.litros)):null;
+            return "<tr><td>"+esc(dmy(r.fecha))+"</td><td>"+esc(r.estacion||"—")+"</td>"+
+              '<td class="num">'+num(r.litros,2)+"</td>"+
+              '<td class="num">'+(+r.importe
+                  ? '<strong>'+eur(r.importe)+'</strong>'
+                  : '<span class="chapa malo" title="Dale a Editar y ponle lo que costó">sin precio</span>')+"</td>"+
+              '<td class="num">'+(porLitro!=null?num(porLitro,3)+" €":"—")+"</td>"+
+              '<td class="num">'+(r.km?num(r.km):'<span style="color:var(--muted)">—</span>')+"</td>"+
+              '<td class="num">'+(consumo[r.id]!=null
+                  ? '<strong>'+num(consumo[r.id],1)+'</strong>'
+                  : '<span style="color:var(--muted)">—</span>')+"</td>"+
+              '<td><div class="acciones-fila">'+
+                '<button class="btn suave sm" data-gedit="'+r.id+'">Editar</button>'+
+                '<button class="btn suave sm malo" data-gdel="'+r.id+'">Borrar</button></div></td></tr>';
+          }).join("")+"</tbody>"+
+          '<tfoot><tr><td colspan="2">'+plural(repos.length,"repostaje","repostajes")+'</td>'+
+          '<td class="num">'+num(suma(repos,"litros"),2)+'</td>'+
+          '<td class="num">'+eur(suma(repos,"importe"))+'</td><td colspan="4"></td></tr></tfoot>'+
+          "</table>";
+      })();
 
   cajaRepo.querySelectorAll("[data-gedit]").forEach(function(b){
     b.addEventListener("click", function(){ editarRepostaje(b.getAttribute("data-gedit")); });

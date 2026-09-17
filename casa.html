@@ -152,6 +152,28 @@ tfoot td{border-top:1px solid var(--linea);border-bottom:0;font-weight:600;backg
 .l-cant{width:62px;text-align:center;padding:5px 4px;font-variant-numeric:tabular-nums}
 
 /* ── Lo que se puede plegar ──────────────────────────────────── */
+/* ── Los vehiculos, en fila ────────────────────────────────────
+   Antes iban con la clase de otra app, que aqui no existe: salian
+   apilados uno debajo de otro y con la equis de borrar pegada al
+   nombre. Ahora son pastillas en fila, y el lapiz y la equis solo
+   salen en el que estas mirando. */
+.vehic{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.vehic .v1{display:inline-flex;align-items:center;gap:7px;background:var(--sup);
+           border:1px solid var(--linea);border-radius:999px;padding:7px 14px;cursor:pointer;
+           font-weight:600;font-size:14px;color:var(--tinta2);white-space:nowrap}
+.vehic .v1:hover{border-color:var(--muted)}
+.vehic .v1[aria-pressed="true"]{background:var(--acento-suave);border-color:var(--acento-linea);
+           color:var(--acento);box-shadow:0 1px 2px rgba(15,22,24,.06)}
+.vehic .v1 .mat{font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;color:var(--muted)}
+.vehic .v1[aria-pressed="true"] .mat{color:var(--acento)}
+.vehic .v1 .punto{width:7px;height:7px;border-radius:50%;background:var(--malo);flex:0 0 auto}
+.vehic .v1 .acc{padding:1px 5px;border-radius:6px;color:var(--muted);font-size:12px;line-height:1.2}
+.vehic .v1 .acc:hover{background:var(--sup2);color:var(--tinta)}
+.vehic .v1 .acc.malo:hover{background:var(--malo-suave);color:var(--malo)}
+.vehic .mas{border:1px dashed var(--linea);background:transparent;color:var(--muted);
+           border-radius:999px;padding:7px 14px;cursor:pointer;font-size:14px;font-weight:500}
+.vehic .mas:hover{border-color:var(--acento);color:var(--acento)}
+
 .plegable{background:var(--sup);border:1px solid var(--linea);border-radius:var(--radio);
           box-shadow:var(--sombra);overflow:hidden}
 .plegable>summary{cursor:pointer;padding:13px 16px;font-weight:600;font-size:15px;
@@ -220,7 +242,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609172321"></script>
+<script src="sync.js?v=202609172324"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -228,7 +250,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('casa').then(function(){
     var s = document.createElement('script');
-    s.src = 'casa.js?v=202609172321';
+    s.src = 'casa.js?v=202609172324';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar casa.js. Recarga la pagina.'; };
     document.body.appendChild(s);
