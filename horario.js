@@ -986,6 +986,9 @@ function renderTable() {
     }
     tb += '<tr><td class="nc"><div style="display:flex;align-items:center;justify-content:center;gap:2px" class="nc-row">'
        +  '<div style="text-align:center;line-height:1.15"><span style="color:'+RCOL[s.role]+';font-weight:600;font-size:.74rem">'+s.name+'</span><span class="rt r'+s.role+'">'+RLBL[s.role]+'</span></div>'
+       +  (fijoDe(s.id)
+             ? '<button onclick="rellenarMes(\''+s.id+'\')" class="hide-btn" title="Rellenar el mes con su turno fijo">&#9776;</button>'
+             : '')
        +  '<button onclick="toggleHide(\''+s.id+'\')" class="hide-btn" title="Ocultar">O</button>'
        +  '</div></td>';
     dias.forEach(function(dia){
@@ -1824,6 +1827,58 @@ function moverPersona(id, paso) {
   save(); renderCamList(); renderAll();
 }
 
+// ================================================================
+// EL TURNO FIJO DE CADA UNO
+// ================================================================
+// Hay gente que hace siempre lo mismo: Tamara entra a las siete todos
+// los dias y libra los viernes. Eso se guarda con la persona
+// -fijo:{ini,fin,libra}- y con un boton se vuelca al mes que estes
+// mirando. Solo rellena los dias que esten vacios: lo que ya hayas
+// puesto a mano no se toca, y luego se puede cambiar dia a dia como
+// siempre.
+function personaDe(id) {
+  return staff().filter(function(x){ return x.id === id; })[0] || null;
+}
+function fijoDe(id) {
+  var p = personaDe(id);
+  return (p && p.fijo) || null;
+}
+/* Guarda un dato del turno fijo. El dia que libra va de 0 (domingo) a 6
+   (sabado), o vacio si no libra ninguno en concreto. */
+function setFijo(id, campo, valor) {
+  var p = personaDe(id); if (!p) return;
+  p.fijo = p.fijo || {ini:'', fin:'', libra:''};
+  p.fijo[campo] = valor;
+  /* Al escribir la entrada, la salida se rellena sola con las horas que
+     le tocan por su oficio y la temporada, si no habia ninguna. */
+  if (campo === 'ini' && valor && !p.fijo.fin) {
+    var t = valor.split(':');
+    var tot = parseInt(t[0])*60 + parseInt(t[1]) + tgtH(id)*60;
+    var h = Math.floor(tot/60) % 24, m = tot % 60;
+    p.fijo.fin = (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
+  }
+  if (!p.fijo.ini && !p.fijo.fin && p.fijo.libra === '') delete p.fijo;
+  save(); renderCamList();
+}
+
+/* Vuelca el turno fijo en los dias vacios del mes que se esta viendo. */
+function rellenarMes(id) {
+  var f = fijoDe(id); if (!f) return;
+  var p = personaDe(id);
+  var puestos = 0, libres = 0;
+  diasDelMes(curY, curM).forEach(function(dia){
+    var hay = ((((sched[dia.y]||{})[dia.m]||{})[id])||{})[dia.d];
+    if (hay && hay.estado && hay.estado !== 'libre') return;    // ya hay algo
+    var sM = curM, sY = curY; curM = dia.m; curY = dia.y;
+    if (f.libra !== '' && dia.dow === +f.libra) { sc(id, dia.d, {estado:'festivo', nota:''}); libres++; }
+    else if (f.ini && f.fin)                    { sc(id, dia.d, {estado:'trabajo', inicio:f.ini, fin:f.fin, nota:''}); puestos++; }
+    curM = sM; curY = sY;
+  });
+  renderAll();
+  toast(p.name + ': ' + puestos + ' dias de ' + fmtH(f.ini) + '-' + fmtH(f.fin) +
+        (libres ? ' y ' + libres + ' de fiesta' : '') + ' en ' + MESES[curM]);
+}
+
 function delCam(id) {
   ENC = ENC.filter(function(c){ return c.id!==id; });
   COC = COC.filter(function(c){ return c.id!==id; });
@@ -1848,15 +1903,31 @@ function renderCamList() {
            + 'color:'+(apagada?'#3a3530':'var(--text2)')+';border-radius:5px;padding:3px 7px;'
            + 'cursor:'+(apagada?'default':'pointer')+';font-size:.75rem;line-height:1">'+signo+'</button>';
     }
-    return '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;background:var(--surface2);border-radius:6px;margin-bottom:4px;border:1px solid var(--border)">'
+    var f = c.fijo || {ini:'', fin:'', libra:''};
+    var dias = ['Domingo','Lunes','Martes','Miercoles','Jueves','Viernes','Sabado'];
+    var opciones = '<option value="">no libra fijo</option>' + dias.map(function(d,i){
+      return '<option value="'+i+'"'+(String(f.libra)===String(i)?' selected':'')+'>libra '+d.toLowerCase()+'</option>';
+    }).join('');
+    var tieneFijo = !!(f.ini && f.fin);
+    return '<div style="padding:6px 8px;background:var(--surface2);border-radius:6px;margin-bottom:4px;border:1px solid var(--border)">'
+         + '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px">'
          + '<span style="font-size:.85rem;color:'+RCOL[c.role]+'">'+c.name
          + '<span class="rt r'+c.role+'" style="margin-left:5px">'+RLBL[c.role]+'</span></span>'
          + '<span style="display:flex;gap:4px;align-items:center">'
          + flecha(-1, '&#9650;', esPrimero, 'Subirlo en la lista')
          + flecha( 1, '&#9660;', esUltimo,  'Bajarlo en la lista')
          + '<button onclick="delCam(\''+c.id+'\')" style="background:rgba(192,57,43,.2);border:1px solid rgba(192,57,43,.4);color:#e87c6f;border-radius:5px;padding:3px 8px;cursor:pointer;font-size:.75rem;font-family:\'DM Sans\',sans-serif">X Eliminar</button>'
-         + '</span>'
-         + '</div>';
+         + '</span></div>'
+         + '<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:5px;font-size:.7rem;color:var(--text2)">'
+         + '<span>Siempre</span>'
+         + '<input type="time" value="'+(f.ini||'')+'" onchange="setFijo(\''+c.id+'\',\'ini\',this.value)" style="font-size:.72rem;padding:2px 4px;width:78px">'
+         + '<span>a</span>'
+         + '<input type="time" value="'+(f.fin||'')+'" onchange="setFijo(\''+c.id+'\',\'fin\',this.value)" style="font-size:.72rem;padding:2px 4px;width:78px">'
+         + '<select onchange="setFijo(\''+c.id+'\',\'libra\',this.value)" style="font-size:.72rem;padding:2px 4px">'+opciones+'</select>'
+         + (tieneFijo
+             ? '<button onclick="rellenarMes(\''+c.id+'\')" title="Poner su turno fijo en los dias vacios del mes que estas viendo" style="background:rgba(39,174,96,.18);border:1px solid rgba(39,174,96,.45);color:var(--est-trabajo);border-radius:5px;padding:2px 8px;cursor:pointer;font-size:.72rem;font-family:\'DM Sans\',sans-serif">Rellenar el mes</button>'
+             : '<span style="opacity:.7">pon la hora y saldra el boton de rellenar</span>')
+         + '</div></div>';
   }).join('')
     + '<div style="font-size:.7rem;color:var(--text2);padding:6px 4px 0">Las flechas colocan a cada uno '
     + 'donde quieras: el cuadrante sale en este mismo orden. Cada persona se mueve entre las de su '

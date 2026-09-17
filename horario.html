@@ -383,9 +383,9 @@
 
 <!-- MODAL ADD CAMARERO -->
 <div class="ov" id="addov">
-  <div class="modal" style="max-width:360px;width:95vw">
+  <div class="modal" style="max-width:440px;width:95vw">
     <h3>Personal del restaurante</h3>
-    <div id="camlist" style="margin-bottom:12px;max-height:220px;overflow-y:auto"></div>
+    <div id="camlist" style="margin-bottom:12px;max-height:320px;overflow-y:auto"></div>
     <div style="font-size:.78rem;color:var(--text2);margin-bottom:7px">Anadir persona:</div>
     <div style="display:flex;gap:7px;margin-bottom:10px">
       <input type="text" id="nn" placeholder="Nombre" onkeydown="if(event.key==='Enter')doAdd()" style="flex:1;margin-bottom:0">
@@ -485,7 +485,7 @@
 
 
 
-<script src="sync.js?v=202609171236"></script>
+<script src="sync.js?v=202609171242"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -493,7 +493,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609171236';
+    s.src = 'horario.js?v=202609171242';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
