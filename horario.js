@@ -280,6 +280,27 @@ function updateWeekLabel() {
 }
 
 // ================================================================
+// LAS CABECERAS, PEGADAS
+// ================================================================
+// Cada cuadrante de abajo lleva su barra con el titulo y el mes. Al
+// subir la tabla se iba y ya no sabias en que mes estabas. Ahora se
+// queda pegada arriba del cuerpo mientras estas en ese cuadrante, y la
+// siguiente la empuja al llegar. (La fila de los dias no se puede pegar
+// aqui: cada tabla vive dentro de su caja de desplazamiento lateral, y
+// pegarla ahi la dejaria flotando encima de sus propias filas. En el
+// cuadrante del mes, que tiene su propio desplazamiento, si se pega.)
+var SECCIONES_PEGADAS = ['cov','hours-section','ausencias-section','vac-section'];
+function pegarCabeceras() {
+  SECCIONES_PEGADAS.forEach(function(id){
+    var sec = document.getElementById(id); if (!sec) return;
+    var barra = sec.firstElementChild; if (!barra) return;
+    barra.style.position = 'sticky';
+    barra.style.top      = '0';
+    barra.style.zIndex   = '30';
+  });
+}
+
+// ================================================================
 // RENDER ALL
 // ================================================================
 // El mes que se esta mirando, tal cual se escribe en la chapa de cada
@@ -300,6 +321,7 @@ function renderAll() {
   var hyr = document.getElementById('hours-year-sel');
   if (hyr) hyr.value = curY;
   renderNav(); renderTable(); renderStats(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
+  pegarCabeceras();
 }
 
 // ================================================================
@@ -721,7 +743,7 @@ function marcarDiaVac(sid, y, m, d){
   }
   // Se repinta todo, que esto ya es el horario: el mes, la semana, la
   // cobertura, las horas y el recuento de ausencias.
-  renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
+  renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones(); pegarCabeceras();
 }
 
 // ----------------------------------------------------------------
@@ -1167,7 +1189,7 @@ function openCell(sid, day, event, mo, yr) {
     var donde = etiquetaDia({y:curY, m:curM, d:day}, savedM);
     sc(sid, day, Object.assign({}, clip));
     curM = savedM; curY = savedY;
-    renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
+    renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones(); pegarCabeceras(); pegarCabeceras();
     toast('Turno pegado en el '+donde);
     return;
   }
@@ -1297,7 +1319,7 @@ function aplicarEstado(est) {
   var previo = gc(active.sid, active.day) || {};
   sc(active.sid, active.day, {estado: est, nota: previo.nota || ''});
   curM = savedM; curY = savedY;
-  closePopup(); renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
+  closePopup(); renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones(); pegarCabeceras();
   var comoSeLlama = {festivo:'Festivo', vacaciones:'Vacaciones', baja:'Baja', ausencia:'Ausencia'};
   toast((comoSeLlama[est] || est) + ' · día ' + dia);
 }
@@ -1358,7 +1380,7 @@ function saveCell() {
   if (active.mo !== undefined) { curM = active.mo; curY = active.yr; }
   sc(active.sid, active.day, data);
   curM = savedM; curY = savedY;
-  closePopup(); renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
+  closePopup(); renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones(); pegarCabeceras();
 }
 
 /* Vacia el dia y cierra: un solo toque, sin elegir "Libre" ni Guardar. */
@@ -1370,7 +1392,7 @@ function borrarCelda() {
   if (mes[active.sid]) delete mes[active.sid][active.day];
   save();
   curM = savedM; curY = savedY;
-  closePopup(); renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
+  closePopup(); renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones(); pegarCabeceras();
   toast('Día vaciado');
 }
 
@@ -1678,7 +1700,7 @@ function toggleHide(sid) {
   var s = staff().find(function(x){ return x.id===sid; });
   if (hidden[sid]) { delete hidden[sid]; toast(s.name+' visible'); }
   else             { hidden[sid]=true;   toast(s.name+' oculto'); }
-  save(); renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
+  save(); renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones(); pegarCabeceras();
 }
 
 // ================================================================
@@ -2064,4 +2086,5 @@ function iniciarHorario(){
   if (pasadas) toast(pasadas + ' dias de vacaciones pasados al horario');
   if (staff().length === 0) openAddModal();
 }
+window.addEventListener('resize', function(){ pegarCabeceras(); });
 iniciarHorario();
