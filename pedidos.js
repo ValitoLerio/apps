@@ -742,10 +742,11 @@ function verPedido(main){
               "cada proveedor lleva el suyo.")
         : "Ve apuntando aquí lo que haga falta según lo veas. El día del pedido, "+
           "sale repartido por proveedor.",
-      /* Si van todos al mismo móvil, no tiene sentido ir de uno en uno:
-         se mandan todos juntos en un mensaje y él reenvía cada trozo. */
-      (grupos.length>1 && miMovil()
-        ? '<button class="btn wa" id="pd_todo">📱 Mandármelos todos</button>' : "")+
+      /* Un solo sitio para mandarlos todos: dentro se elige si va el
+         mensaje entero a su movil o si se le manda a cada empresa la
+         suya, de una en una. */
+      (grupos.length>1
+        ? '<button class="btn wa" id="pd_todo">📱 Mandarlos todos</button>' : "")+
       (grupos.length ? '<button class="btn malo" id="pd_vaciar">Vaciar el pedido</button>' : ""))+
 
     '<div class="apuntar">'+
@@ -1118,21 +1119,35 @@ function mandarTodos(){
       '<button class="btn suave" data-cerrar>✕</button></div>'+
     '<div class="dlg-cuerpo">'+
       '<div class="parte" id="elPedido">'+esc(texto)+'</div>'+
-      '<p class="nota" style="margin:14px 0 8px">Va entero a tu móvil, <strong>+'+esc(tel)+
-        '</strong>. Luego reenvías a cada uno lo suyo: aquí abajo tienes el trozo de cada '+
-        'proveedor para copiarlo suelto.</p>'+
-      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+      (tel
+        ? '<p class="nota" style="margin:14px 0 8px">El botón verde manda el mensaje entero a tu móvil, '+
+          '<strong>+'+esc(tel)+'</strong>. O manda a cada empresa la suya, de una en una:</p>'
+        : '<p class="nota" style="margin:14px 0 8px">Manda a cada empresa la suya, de una en una. '+
+          '(Si te pones tu móvil en Ajustes, también puedes mandártelos todos de golpe.)</p>')+
+      '<div style="display:grid;gap:6px">'+
         grupos.map(function(g,i){
-          return '<button class="btn suave sm" data-copiauno="'+i+'">Copiar el de '+
-                 esc(g.proveedor)+'</button>';
+          var suyo=telWhatsApp(g.proveedor);
+          var soloFijo=esSoloFijo(g.proveedor);
+          return '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap" data-fila="'+i+'">'+
+            '<span style="min-width:120px;font-weight:600;font-size:13.5px">'+esc(g.proveedor)+'</span>'+
+            (suyo
+              ? '<a class="btn wa sm" href="'+esc(enlaceWhatsApp(suyo, textoPedido(g.proveedor, false)))+'" '+
+                'target="_blank" rel="noopener" style="text-decoration:none" data-mandauno="'+i+'">'+
+                '📱 Mandar a '+esc(g.proveedor)+(soloFijo?' (fijo)':'')+'</a>'
+              : '<span class="nota" style="margin:0">sin teléfono: ponlo en Teléfonos</span>')+
+            '<button class="btn suave sm" data-copiauno="'+i+'">Copiar</button>'+
+            '<span class="nota" style="margin:0;display:none" data-hecho="'+i+'">✓ mandado</span>'+
+          '</div>';
         }).join("")+
       '</div>'+
     '</div>'+
     '<div class="dlg-pie">'+
       '<button class="btn" id="pd_copiar">Copiar todo</button>'+
       '<button class="btn" id="pd_hecho">Darlos por mandados</button>'+
-      '<a class="btn wa" href="'+esc(enlaceWhatsApp(tel, texto))+'" target="_blank" '+
-        'rel="noopener" style="text-decoration:none">Abrir WhatsApp</a>'+
+      (tel
+        ? '<a class="btn wa" href="'+esc(enlaceWhatsApp(tel, texto))+'" target="_blank" '+
+          'rel="noopener" style="text-decoration:none">Mandármelos a mí</a>'
+        : "")+
     '</div>';
   document.body.appendChild(d);
   d.showModal();
@@ -1151,6 +1166,16 @@ function mandarTodos(){
     b.addEventListener("click", function(){
       var g=grupos[+b.getAttribute("data-copiauno")];
       copiar(textoPedido(g.proveedor), "Copiado el de "+g.proveedor);
+    });
+  });
+  /* Con seis proveedores es facil perder la cuenta de a quien le has
+     dado ya: el que se abre se queda marcado. */
+  d.querySelectorAll("[data-mandauno]").forEach(function(a){
+    a.addEventListener("click", function(){
+      var i=a.getAttribute("data-mandauno");
+      var marca=d.querySelector('[data-hecho="'+i+'"]');
+      if(marca) marca.style.display="inline";
+      a.classList.add("suave");
     });
   });
 
