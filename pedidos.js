@@ -294,6 +294,8 @@ function cambiarUnidad(id, campoNuevo){
 /* La casilla que le toca a un producto cuando no se dice otra cosa: la
    caja si viene en cajas, y si no, la de su unidad. */
 function campoNatural(p){
+  /* Lo primero, lo que diga su ficha en "Como se pide". */
+  if(p && p.pedirEn && modoDe(p.pedirEn)) return p.pedirEn;
   if((+(p&&p.udsCaja)||0)>0) return "cajas";
   var u=unidadDe(p);
   return u==="kg" ? "kg" : u==="L" ? "litros" : "uds";
@@ -1713,11 +1715,17 @@ function editarProducto(p){
       '<div class="campo"><label class="lbl" for="ep_uds">Unidades por caja</label>'+
         '<input type="number" id="ep_uds" min="0" step="0.1" '+
         'value="'+(p.udsCaja!=null?esc(p.udsCaja):"")+'" placeholder="sueltas"></div>'+
-      '<div class="campo"><label class="lbl" for="ep_ud">Cómo se pide</label>'+
+      '<div class="campo"><label class="lbl" for="ep_ud">El precio es por</label>'+
         '<select id="ep_ud">'+
-        [["","en unidades"],["kg","en kilos"],["L","en litros"]]
+        [["","unidad"],["kg","kilo"],["L","litro"]]
           .map(function(o){
             return '<option value="'+o[0]+'"'+(unidadDe(p)===o[0]?" selected":"")+'>'+o[1]+'</option>';
+          }).join("")+'</select></div>'+
+      '<div class="campo"><label class="lbl" for="ep_pedir">Cómo se pide</label>'+
+        '<select id="ep_pedir">'+
+        [["cajas","por cajas"],["kg","en kilos"],["litros","en litros"],["uds","en unidades"]]
+          .map(function(o){
+            return '<option value="'+o[0]+'"'+(campoNatural(p)===o[0]?" selected":"")+'>'+o[1]+'</option>';
           }).join("")+'</select></div>'+
     '</div>'+
     '<div class="rejilla" style="margin-top:12px">'+
@@ -1750,12 +1758,20 @@ function editarProducto(p){
       p.fecha=valor("ep_fecha");
       p.diario=document.getElementById("ep_diario").checked;
       p.ud=valor("ep_ud");
+      p.pedirEn=valor("ep_pedir");
+      /* Pedirlo por cajas sin decir cuantas trae deja el importe corto:
+         la caja sin unidades no tiene precio. Se guarda igual, pero el
+         aviso lo dice al final, que si no lo tapa el "Guardado". */
+      var faltaCaja=(p.pedirEn==="cajas" && !(+p.udsCaja>0));
       /* La fecha sólo se pone sola si cambió el precio y él no la tocó. */
       if(ahora!==antes && !document.getElementById("ep_fecha").dataset.tocada) p.fecha=hoyISO();
       p.precio=ahora;
       if(!p.id){ p.id=uid(); libro.productos.push(p); }
       guardar(); pintar();
-      avisar(nuevo?"Producto añadido":"Guardado: "+p.nombre);
+      if(faltaCaja)
+        avisar("Guardado, pero lo pides por cajas y no dice cuantas unidades trae: el importe saldra corto.", true);
+      else
+        avisar(nuevo?"Producto añadido":"Guardado: "+p.nombre);
     },
     {aceptar:nuevo?"Añadir":"Guardar", alAbrir:function(){
       var fecha=document.getElementById("ep_fecha");
