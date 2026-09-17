@@ -740,10 +740,28 @@ function ultimoSuper(){
   return (libro.supermercados[0]||{}).id||"";
 }
 
+/* Qué cajones de la compra deja abiertos. Se guarda con los datos, así
+   que lo que dejes puesto aquí lo encuentras igual en el móvil.
+
+   De salida, lo abierto es lo que se usa yendo a comprar: la lista de
+   lo que falta y la tabla de dónde sale más barato cada cosa. Las
+   compras del mes -que son las de después, para cuadrar el gasto- van
+   plegadas. */
+function plegados(){
+  var a = libro.ajustes || (libro.ajustes = {});
+  if (!a.abiertos) a.abiertos = {compras:false, precios:true};
+  return a.abiertos;
+}
+function recordarPlegado(cual, abierto){
+  plegados()[cual] = !!abierto;
+  guardar();
+}
+
 function verCompra(main){
   var comprasMes=delMes(libro.compras, ui.mes);
   var gastado=r2(comprasMes.reduce(function(s,c){ return s+totalCompra(c); },0));
   var hayPrecios=(libro.precios||[]).length>0;
+  var abre=plegados();
 
   main.innerHTML=
     cabecera("Compra",
@@ -764,20 +782,28 @@ function verCompra(main){
       '<span class="pista">Escríbelo y dale a Intro</span></div>'+
       '<div class="tarjeta-cuerpo" id="listaCompra"></div></div>'+
 
-    '<div class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab">'+
-      '<h2>Compras de '+esc(mesLargo(ui.mes))+'</h2></div>'+
-      '<div class="tabla-caja" id="listaCompras"></div></div>'+
-
-    /* La tabla de precios es lo que menos se toca y lo que más ocupa:
-       va plegada, y se abre sola mientras no haya ningún precio, que es
-       cuando hace falta ver de qué va. */
-    '<details class="plegable"'+(hayPrecios?"":" open")+'>'+
-      '<summary>Los precios de cada sitio</summary>'+
+    /* Dónde comprar cada cosa: es la que se mira ANTES de ir, así que
+       va abierta. */
+    '<details class="plegable" style="margin-bottom:16px" data-pliegue="precios"'+
+      (abre.precios||!hayPrecios?" open":"")+'>'+
+      '<summary>Dónde comprar cada cosa · el precio en cada sitio</summary>'+
       '<div class="tabla-caja" id="comparador"></div>'+
+    '</details>'+
+
+    /* Las compras del mes son de después, para cuadrar el gasto: van
+       plegadas mientras no se pidan. */
+    '<details class="plegable" data-pliegue="compras"'+(abre.compras?" open":"")+'>'+
+      '<summary>Compras de '+esc(mesLargo(ui.mes))+' &middot; '+comprasMes.length+' &middot; '+eur(gastado)+'</summary>'+
+      '<div class="tabla-caja" id="listaCompras"></div>'+
     '</details>';
 
   engancharMes("c_mes");
   document.getElementById("nuevaCompra").addEventListener("click", function(){ editarCompra(null); });
+  main.querySelectorAll("[data-pliegue]").forEach(function(det){
+    det.addEventListener("toggle", function(){
+      recordarPlegado(det.getAttribute("data-pliegue"), det.open);
+    });
+  });
 
   pintarLista();
   pintarComparador();
