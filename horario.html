@@ -13,6 +13,7 @@
     --text:#f0ece0; --text2:#b0aa98; --border:#2e2b22;
     --enc:#c9a84c; --coc:#e07b39; --cam:#5b9bd5;
     --shift-l:#1a4a2e; --shift-r:#2a1a0a; --shift-c:#1a1814;
+    --mes-bar:#14120f; --mes-txt:#d8d2c2;
     --est-trabajo:#5dca82; --est-festivo:#e87c6f; --est-vacaciones:#74b3e0;
     --est-baja:#c48ae0; --est-ausencia:#f0a070;
     --est-trabajo-bg:rgba(93,202,130,.18); --est-trabajo-bd:rgba(93,202,130,.4); --est-trabajo-lleno:rgba(93,202,130,.3); --est-trabajo-txt:#5dca82;
@@ -46,8 +47,10 @@
   .tbtn{padding:3px 9px;border-radius:14px;border:1.5px solid;font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:500;cursor:pointer;background:transparent;transition:all .15s;white-space:nowrap;}
 
   /* MONTH NAV */
-  .mnav{display:flex;background:var(--surface);border-bottom:1px solid var(--border);padding:0 12px;overflow-x:auto;}
-  .mb{background:transparent;border:none;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:500;padding:8px 9px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all .13s;text-transform:uppercase;letter-spacing:.05em;}
+  /* La fila de los meses tiene color propio -fondo y letra- y se cambia
+     en Colores, en "La barra de los meses". */
+  .mnav{display:flex;background:var(--mes-bar);border-bottom:1px solid var(--border);padding:0 12px;overflow-x:auto;}
+  .mb{background:transparent;border:none;color:var(--mes-txt);font-family:'DM Sans',sans-serif;font-size:.74rem;font-weight:600;padding:8px 9px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all .13s;text-transform:uppercase;letter-spacing:.05em;}
   .mb:hover{color:var(--gold2);} .mb.on{color:var(--gold2);border-bottom-color:var(--gold2);}
 
   /* SCHEDULE */
@@ -443,6 +446,8 @@
       <div style="grid-column:1/-1;font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);padding:8px 0 4px;border-bottom:1px solid var(--border)">Lo b&aacute;sico</div>
       <div class="crow"><label>Fondo</label><div class="cpair"><input type="color" id="c-bg" oninput="applyTheme()"><span class="chex" id="h-bg"></span></div></div>
       <div class="crow"><label>Letra</label><div class="cpair"><input type="color" id="c-text" oninput="applyTheme()"><span class="chex" id="h-text"></span></div></div>
+      <div class="crow"><label>Barra de los meses</label><div class="cpair"><input type="color" id="c-mes-bar" oninput="applyTheme()"><span class="chex" id="h-mes-bar"></span></div></div>
+      <div class="crow"><label>Letra de los meses</label><div class="cpair"><input type="color" id="c-mes-txt" oninput="applyTheme()"><span class="chex" id="h-mes-txt"></span></div></div>
       <div style="grid-column:1/-1;margin-top:6px">
         <button onclick="verMasColores()" id="mas-colores-btn" style="background:none;border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:5px 12px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.72rem">+ Los dem&aacute;s colores</button>
       </div>
@@ -474,7 +479,7 @@
 
 
 
-<script src="sync.js?v=202609171007"></script>
+<script src="sync.js?v=202609171017"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -482,7 +487,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609171007';
+    s.src = 'horario.js?v=202609171017';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

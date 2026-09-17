@@ -1857,10 +1857,11 @@ function importarHorario(ev){
    cambia en todas partes: en el cuadrante del mes, en el de la semana,
    en el de vacaciones, en el recuento y en la ventana de editar. */
 var ESTADOS = ['est-trabajo','est-festivo','est-vacaciones','est-baja','est-ausencia'];
-var THEME_KEYS = ['bg','surface','surface2','border','text','text2','gold','gold2','enc','coc','cam','shift-l','shift-c','shift-r'].concat(ESTADOS);
+var THEME_KEYS = ['bg','surface','surface2','border','text','text2','gold','gold2','mes-bar','mes-txt','enc','coc','cam','shift-l','shift-c','shift-r'].concat(ESTADOS);
 var THEME_DEFAULTS = {
   bg:'#0f0e0b', surface:'#1a1814', surface2:'#232017', border:'#2e2b22',
   text:'#f0ece0', text2:'#b0aa98', gold:'#c9a84c', gold2:'#e8c96d',
+  'mes-bar':'#14120f', 'mes-txt':'#d8d2c2',
   enc:'#c9a84c', coc:'#e07b39', cam:'#5b9bd5',
   'shift-l':'#1a4a2e', 'shift-c':'#1a1814', 'shift-r':'#2a1a0a',
   'est-trabajo':'#5dca82', 'est-festivo':'#e87c6f', 'est-vacaciones':'#74b3e0',
@@ -1927,47 +1928,47 @@ function derivarEstados() {
    lee en los botones: dicen cuanto resalta cada uno. */
 var PRESETS = {
   dark: {nombre:'Oscuro', nota:'el de siempre',
-    bg:'#0f0e0b',surface:'#1a1814',surface2:'#232017',border:'#2e2b22',text:'#f0ece0',text2:'#b0aa98',gold:'#c9a84c',gold2:'#e8c96d',enc:'#c9a84c',coc:'#e07b39',cam:'#5b9bd5',
+    bg:'#0f0e0b',surface:'#1a1814',surface2:'#232017',border:'#2e2b22',text:'#f0ece0',text2:'#b0aa98',gold:'#c9a84c',gold2:'#e8c96d','mes-bar':'#14120f','mes-txt':'#d8d2c2',enc:'#c9a84c',coc:'#e07b39',cam:'#5b9bd5',
     'shift-l':'#1a4a2e','shift-c':'#1a1814','shift-r':'#2a1a0a',
     'est-trabajo':'#5dca82','est-festivo':'#e87c6f','est-vacaciones':'#74b3e0','est-baja':'#c48ae0','est-ausencia':'#f0a070'},
 
   contraste: {nombre:'Contraste', nota:'el que mas resalta',
-    bg:'#000000',surface:'#101010',surface2:'#1c1c1c',border:'#4a4a4a',text:'#ffffff',text2:'#d0d0d0',gold:'#ffd400',gold2:'#ffe866',enc:'#ffd400',coc:'#ff8a2b',cam:'#4fc3ff',
+    bg:'#000000',surface:'#101010',surface2:'#1c1c1c',border:'#4a4a4a',text:'#ffffff',text2:'#d0d0d0',gold:'#ffd400',gold2:'#ffe866','mes-bar':'#000000','mes-txt':'#ffffff',enc:'#ffd400',coc:'#ff8a2b',cam:'#4fc3ff',
     'shift-l':'#0b6b34','shift-c':'#2b2b2b','shift-r':'#6b3a00',
     'est-trabajo':'#39ff88','est-festivo':'#ff6b5a','est-vacaciones':'#4fc3ff','est-baja':'#d98aff','est-ausencia':'#ffb15c'},
 
   neon: {nombre:'Neon', nota:'colores muy vivos',
-    bg:'#0a0a12',surface:'#14142a',surface2:'#1d1d3a',border:'#3a3a6a',text:'#f2f2ff',text2:'#a9a9d8',gold:'#00e5ff',gold2:'#7bf5ff',enc:'#00e5ff',coc:'#ff4fd8',cam:'#9dff3c',
+    bg:'#0a0a12',surface:'#14142a',surface2:'#1d1d3a',border:'#3a3a6a',text:'#f2f2ff',text2:'#a9a9d8',gold:'#00e5ff',gold2:'#7bf5ff','mes-bar':'#07070f','mes-txt':'#dcdcff',enc:'#00e5ff',coc:'#ff4fd8',cam:'#9dff3c',
     'shift-l':'#0a5a4a','shift-c':'#2a2a4a','shift-r':'#4a1a5a',
     'est-trabajo':'#9dff3c','est-festivo':'#ff4fd8','est-vacaciones':'#00e5ff','est-baja':'#c77dff','est-ausencia':'#ffd24a'},
 
   pizarra: {nombre:'Pizarra', nota:'gris, sin dorados',
-    bg:'#16181a',surface:'#202427',surface2:'#2a2f33',border:'#3c4348',text:'#eef2f4',text2:'#a8b2b8',gold:'#ff9f45',gold2:'#ffc07a',enc:'#ff9f45',coc:'#7ad1a0',cam:'#7fb4ff',
+    bg:'#16181a',surface:'#202427',surface2:'#2a2f33',border:'#3c4348',text:'#eef2f4',text2:'#a8b2b8',gold:'#ff9f45',gold2:'#ffc07a','mes-bar':'#101315','mes-txt':'#dbe3e8',enc:'#ff9f45',coc:'#7ad1a0',cam:'#7fb4ff',
     'shift-l':'#1f4d38','shift-c':'#2a2f33','shift-r':'#4a331c',
     'est-trabajo':'#7ad1a0','est-festivo':'#f0968a','est-vacaciones':'#8fcdf0','est-baja':'#c39ae0','est-ausencia':'#f5b985'},
 
   navy: {nombre:'Marino', nota:'azul oscuro',
-    bg:'#060e1a',surface:'#0d1828',surface2:'#142234',border:'#1e3050',text:'#cce0ff',text2:'#7a9ac0',gold:'#5b9bd5',gold2:'#8ac0f0',enc:'#5b9bd5',coc:'#e07b39',cam:'#4caf50',
+    bg:'#060e1a',surface:'#0d1828',surface2:'#142234',border:'#1e3050',text:'#cce0ff',text2:'#7a9ac0',gold:'#5b9bd5',gold2:'#8ac0f0','mes-bar':'#03070f','mes-txt':'#bcd6f5',enc:'#5b9bd5',coc:'#e07b39',cam:'#4caf50',
     'shift-l':'#0a2a4a','shift-c':'#0a1a2a','shift-r':'#1a0a3a',
     'est-trabajo':'#6ad39a','est-festivo':'#f09a8a','est-vacaciones':'#8fcdf0','est-baja':'#b79af0','est-ausencia':'#f0b070'},
 
   forest: {nombre:'Bosque', nota:'verde oscuro',
-    bg:'#070f09',surface:'#0e1e12',surface2:'#162a1a',border:'#1e3a22',text:'#d0f0d8',text2:'#7aaa88',gold:'#4caf50',gold2:'#80d888',enc:'#4caf50',coc:'#cddc39',cam:'#26c6da',
+    bg:'#070f09',surface:'#0e1e12',surface2:'#162a1a',border:'#1e3a22',text:'#d0f0d8',text2:'#7aaa88',gold:'#4caf50',gold2:'#80d888','mes-bar':'#040804','mes-txt':'#c2e8cb',enc:'#4caf50',coc:'#cddc39',cam:'#26c6da',
     'shift-l':'#0a2a10','shift-c':'#0a1a0a','shift-r':'#1a2a0a',
     'est-trabajo':'#7fe08a','est-festivo':'#e8998a','est-vacaciones':'#86ccdd','est-baja':'#b69ae8','est-ausencia':'#e5c072'},
 
   vino: {nombre:'Vino', nota:'granate, calido',
-    bg:'#140a0c',surface:'#201015',surface2:'#2b171d',border:'#43222b',text:'#f6e7ea',text2:'#c0a0a8',gold:'#e0a33c',gold2:'#f3c76f',enc:'#e0a33c',coc:'#e8705a',cam:'#c48ae0',
+    bg:'#140a0c',surface:'#201015',surface2:'#2b171d',border:'#43222b',text:'#f6e7ea',text2:'#c0a0a8',gold:'#e0a33c',gold2:'#f3c76f','mes-bar':'#0d0507','mes-txt':'#ecd9dd',enc:'#e0a33c',coc:'#e8705a',cam:'#c48ae0',
     'shift-l':'#1f4a33','shift-c':'#2b171d','shift-r':'#4a2416',
     'est-trabajo':'#7fd4a0','est-festivo':'#f5998f','est-vacaciones':'#8ccbe8','est-baja':'#cf9be8','est-ausencia':'#f2b97f'},
 
   light: {nombre:'Claro', nota:'fondo blanco',
-    bg:'#f5f0e8',surface:'#ede8dc',surface2:'#e0d8c8',border:'#c8bfa8',text:'#2a2010',text2:'#6a5a3a',gold:'#8a6a1a',gold2:'#6a4a0a',enc:'#7a5500',coc:'#a04010',cam:'#1a5a8a',
+    bg:'#f5f0e8',surface:'#ede8dc',surface2:'#e0d8c8',border:'#c8bfa8',text:'#2a2010',text2:'#6a5a3a',gold:'#8a6a1a',gold2:'#6a4a0a','mes-bar':'#ded6c4','mes-txt':'#2a2010',enc:'#7a5500',coc:'#a04010',cam:'#1a5a8a',
     'shift-l':'#c8e8d0','shift-c':'#e8e8d0','shift-r':'#e8d8b0',
     'est-trabajo':'#12703f','est-festivo':'#8a2418','est-vacaciones':'#134a70','est-baja':'#5e2a8a','est-ausencia':'#8a4a10'},
 
   papel: {nombre:'Papel', nota:'blanco, como la hoja',
-    bg:'#ffffff',surface:'#f2f2f2',surface2:'#e7e7e7',border:'#b9b9b9',text:'#111111',text2:'#555555',gold:'#0a58ca',gold2:'#003a99',enc:'#0a58ca',coc:'#b3450f',cam:'#0f7a4a',
+    bg:'#ffffff',surface:'#f2f2f2',surface2:'#e7e7e7',border:'#b9b9b9',text:'#111111',text2:'#555555',gold:'#0a58ca',gold2:'#003a99','mes-bar':'#dcdcdc','mes-txt':'#111111',enc:'#0a58ca',coc:'#b3450f',cam:'#0f7a4a',
     'shift-l':'#bfe8cd','shift-c':'#e7e7e7','shift-r':'#ffdfae',
     'est-trabajo':'#0f7a4a','est-festivo':'#8c1d0f','est-vacaciones':'#0a3d6b','est-baja':'#5b2a8c','est-ausencia':'#8c4a0f'}
 };
