@@ -1093,7 +1093,7 @@ function renderWeekTable() {
     + '</div>'
     + '<div id="wk-scaler" style="overflow:hidden;width:100%">'
     + '<div id="wk-inner" style="transform-origin:top left">'
-    + '<table id="wk-tbl" style="border-collapse:collapse;table-layout:auto;font-family:\'DM Sans\',sans-serif;background:var(--bg);white-space:nowrap">'+th+tb+'</table>'
+    + '<table id="wk-tbl" style="border-collapse:collapse;table-layout:auto;width:100%;font-family:\'DM Sans\',sans-serif;background:var(--bg);white-space:nowrap">'+th+tb+'</table>'
     + '</div></div>';
 
   setTimeout(function(){
