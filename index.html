@@ -16,7 +16,6 @@
     --comanda:#e0919c; --comanda-tenue:#33202499;
     --casa:#7fc4e8; --casa-tenue:#152c3899;
     --caja:#a99ae0; --caja-tenue:#221f3a99;
-    --coleccion:#e0b464; --coleccion-tenue:#2f251599;
     --patrimonio:#63c9c0; --patrimonio-tenue:#12302d99;
     --pedidos:#b0c96b; --pedidos-tenue:#242b1499;
     --vacaciones:#e59ad0; --vacaciones-tenue:#2e162699;
@@ -36,7 +35,6 @@
       --comanda:#7b2d3b; --comanda-tenue:#f3e6e8;
       --casa:#1f5673; --casa-tenue:#e0ebf1;
       --caja:#5b4a9e; --caja-tenue:#e7e4f3;
-    --coleccion:#7c5518; --coleccion-tenue:#f3e8d5;
     --patrimonio:#12655e; --patrimonio-tenue:#dcecea;
     --patrimonio:#12655e; --patrimonio-tenue:#dcecea;
     --pedidos:#4f6321; --pedidos-tenue:#e8eed7;
@@ -54,7 +52,6 @@
     --comanda:#7b2d3b; --comanda-tenue:#f3e6e8;
     --casa:#1f5673; --casa-tenue:#e0ebf1;
     --caja:#5b4a9e; --caja-tenue:#e7e4f3;
-    --coleccion:#7c5518; --coleccion-tenue:#f3e8d5;
     --alerta:#96331f; --alerta-tenue:#f7e2de;
     --sombra:0 16px 34px -26px rgba(15,22,24,.5);
   }
@@ -166,7 +163,6 @@
   .p-comanda{--tono:var(--comanda)}
   .p-casa{--tono:var(--casa)}
   .p-caja{--tono:var(--caja)}
-  .p-coleccion{--tono:var(--coleccion)}
   .p-patrimonio{--tono:var(--patrimonio)}
   .p-pedidos{--tono:var(--pedidos)}
   .p-vacaciones{--tono:var(--vacaciones)}
@@ -495,22 +491,6 @@
         <div class="entrar">Abrir <span class="flecha">&rarr;</span></div>
       </a>
 
-      <a class="puerta p-coleccion" data-app="coleccion" href="coleccion.html">
-        <span class="rotulo">Colección</span>
-        <h2>Monedas y billetes</h2>
-        <p class="que">El álbum: lo de España, los euros y el resto del mundo.</p>
-        <div class="cifra">
-          <span class="n" id="d-col-piezas">—</span>
-          <span class="u">piezas en el álbum</span>
-        </div>
-        <div class="tira">
-          <div class="celda"><span class="k">Monedas</span><span class="v" id="d-col-monedas">—</span></div>
-          <div class="celda"><span class="k">Billetes</span><span class="v" id="d-col-billetes">—</span></div>
-          <div class="celda"><span class="k">Me faltan</span><span class="v" id="d-col-faltan">—</span></div>
-        </div>
-        <div class="entrar">Abrir <span class="flecha">→</span></div>
-      </a>
-
       <a class="puerta p-patrimonio" data-app="patrimonio" href="patrimonio.html">
         <span class="rotulo">Patrimonio</span>
         <h2>Lo que tengo</h2>
@@ -551,7 +531,7 @@
 
 </div>
 
-<script src="sync.js?v=202609171242"></script>
+<script src="sync.js?v=202609171804"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
@@ -858,12 +838,12 @@
 
   // ── Candados ───────────────────────────────────────────
   var TARJETAS = {piso:'.p-piso', horario:'.p-resto', comanda:'.p-comanda',
-                  casa:'.p-casa', caja:'.p-caja', coleccion:'.p-coleccion',
+                  casa:'.p-casa', caja:'.p-caja',
                   patrimonio:'.p-patrimonio', pedidos:'.p-pedidos',
                   vacaciones:'.p-vacaciones'};
   var NOMBRES  = {piso:'Piso Soldeu', horario:'Horario Restaurante',
                   comanda:'Comanda', casa:'Casa', caja:'Caja',
-                  coleccion:'Colección', patrimonio:'Patrimonio', pedidos:'Pedidos',
+                  patrimonio:'Patrimonio', pedidos:'Pedidos',
                   vacaciones:'Vacaciones'};
   var seguridad = {};
 
@@ -895,7 +875,6 @@
       comanda: ['d-pendiente','d-empresas','d-servicios','d-facturas'],
       casa:    ['d-casa-mes','d-casa-fijos','d-casa-compra','d-casa-avisos'],
       caja:    ['d-caja-mes','d-caja-amarilla','d-caja-dias','d-caja-hoy'],
-      coleccion: ['d-col-piezas','d-col-monedas','d-col-billetes','d-col-faltan'],
       patrimonio: ['d-pat-neto','d-pat-valor','d-pat-deuda','d-pat-plus'],
       pedidos: ['d-ped-productos','d-ped-pedido','d-ped-prov','d-ped-viejos'],
       vacaciones: ['d-vac-total','d-vac-gente','d-vac-gastos','d-vac-cuadre']
@@ -1097,22 +1076,6 @@
     pon('d-caja-hoy',      deHoy ? euros((+deHoy.visa||0)+(+deHoy.efectivo||0)) : 'sin cerrar');
   }
 
-  function resumenColeccion(seccion){
-    var libro = leer(seccion['coleccion.libro.v1'], {});
-    var piezas = libro.piezas || [];
-    var tengo = piezas.filter(function(p){ return p.tengo !== false; });
-    function cuantas(p){ return Math.max(1, +p.cantidad || 1); }
-    var suma = function(lista){
-      return lista.reduce(function(s,p){ return s + cuantas(p); }, 0);
-    };
-    var monedas  = suma(tengo.filter(function(p){ return p.tipo !== 'billete'; }));
-    var billetes = suma(tengo.filter(function(p){ return p.tipo === 'billete'; }));
-
-    pon('d-col-piezas',   String(monedas + billetes));
-    pon('d-col-monedas',  String(monedas));
-    pon('d-col-billetes', String(billetes));
-    pon('d-col-faltan',   String(piezas.length - tengo.length) );
-  }
 
   /* Del escritorio interesa lo que hay pendiente de pedir y cuantos
      precios llevan mas de un ano sin tocarse, que es lo que se pudre. */
@@ -1216,14 +1179,13 @@
       var seg = datos.seguridad || {};
       seguridad = {piso: !!seg.piso, horario: !!seg.horario,
                    comanda: !!seg.comanda, casa: !!seg.casa, caja: !!seg.caja,
-                   coleccion: !!seg.coleccion, patrimonio: !!seg.patrimonio,
+                   patrimonio: !!seg.patrimonio,
                    pedidos: !!seg.pedidos};
       resumenPiso(datos.piso || {});
       resumenHorario(datos.horario || {});
       resumenComanda(datos.comanda || {});
       resumenCasa(datos.casa || {});
       resumenCaja(datos.caja || {});
-      resumenColeccion(datos.coleccion || {});
       resumenPatrimonio(datos.patrimonio || {});
       resumenPedidos(datos.pedidos || {});
       resumenVacaciones(datos.vacaciones || {});
