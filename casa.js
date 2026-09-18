@@ -2695,6 +2695,16 @@ function borrarCoche(id){
     }, {aceptar:"Borrar", malo:true});
 }
 
+/* La pista bajo el concepto: sólo estorba cuando no viene a cuento */
+function pistaDeVehiculos(tipo){
+  var t=String(tipo||"").toLowerCase();
+  if(!/coche|moto|veh|parking|gasolina/.test(t)) return "";
+  var coches=losCoches();
+  if(coches.length<2) return "";
+  return "Tienes "+plural(coches.length,"vehículo","vehículos")+": "+
+         coches.map(nombreCoche).join(", ")+". Pon cuál es en el concepto.";
+}
+
 function editarRepostaje(id){
   var r=id?(libro.repostajes||[]).filter(function(x){return x.id===id;})[0]
           :{id:uid(), fecha:hoyISO(), litros:0, importe:0, km:0, estacion:""};
@@ -2812,6 +2822,17 @@ var TIPOS_FIJOS_DE_SALIDA=[
   "Seguro de vida","Seguro de salud","Alarma",
   "Gimnasio","Mantenimiento caldera","Gestoría","Otro"
 ];
+/* De algunos recibos se tiene más de uno el mismo mes: dos coches, dos
+   motos, dos parkings. Su botón no se esconde al apuntar el primero, y
+   dice cuántos llevas puestos. */
+var TIPOS_QUE_SE_REPITEN=[
+  "seguro del coche","seguro de la moto","parking","alquiler",
+  "móviles","moviles","seguro de vida","seguro de salud","gimnasio","otro"
+];
+function seRepite(tipo){
+  return TIPOS_QUE_SE_REPITEN.indexOf(String(tipo||"").toLowerCase())>=0;
+}
+
 function tiposFijos(){
   var a=libro.ajustes || (libro.ajustes={});
   if(!Array.isArray(a.tiposFijos) || !a.tiposFijos.length)
@@ -2863,9 +2884,14 @@ function verFijos(main){
        el mes pasado tenias unos cuantos, se traen todos de una. */
     (function(){
       var puestos={};
-      mes.forEach(function(f){ puestos[(f.tipo||"").toLowerCase()]=true; });
+      mes.forEach(function(f){
+        var k=(f.tipo||"").toLowerCase();
+        puestos[k]=(puestos[k]||0)+1;
+      });
       var faltan=tiposFijos().filter(function(t){
-        return t!=="Otro" && !puestos[t.toLowerCase()]; });
+        if(t==="Otro") return false;
+        return seRepite(t) || !puestos[t.toLowerCase()];
+      });
       var delAnterior=delMes(libro.fijos, mesAnterior);
       var porTraer=delAnterior.filter(function(f){ return !puestos[(f.tipo||"").toLowerCase()]; });
       return '<div class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab">'+
@@ -2879,11 +2905,16 @@ function verFijos(main){
         '<div class="tarjeta-cuerpo">'+
           (faltan.length
             ? '<div class="quienes">'+faltan.map(function(t){
+                var ya=puestos[t.toLowerCase()]||0;
                 return '<button class="quien-chip" data-ftipo="'+esc(t)+'" '+
-                  'title="Anotar el recibo de '+esc(t)+' de este mes">+ '+esc(t)+'</button>';
+                  'title="'+(ya?"Ya tienes "+plural(ya,"uno","puestos")+" este mes. Puedes anotar otro."
+                              :"Anotar el recibo de "+esc(t)+" de este mes")+'">+ '+esc(t)+
+                  (ya?' <span style="opacity:.6">· '+ya+'</span>':"")+'</button>';
               }).join("")+'</div>'+
               '<p class="nota" style="margin:10px 0 0">Pulsa uno y solo tienes que poner el importe. '+
-              'Los que ya están apuntados este mes no salen.</p>'
+              'Los que ya están apuntados este mes no salen, salvo los que se pueden tener '+
+              'repetidos —los seguros de los vehículos, el parking…—, que llevan al lado '+
+              'cuántos has puesto ya.</p>'
             : '<p class="nota" style="margin:0">Este mes ya están todos los de tu lista. '+
               'Si te falta alguno, dale a «Editar la lista».</p>')+
         '</div></div>';
@@ -2964,7 +2995,14 @@ function editarFijo(id, tipoPuesto){
           .map(function(t){ return '<option'+(f.tipo===t?" selected":"")+">"+esc(t)+"</option>"; }).join("")+
       '</select></div>'+
       '<div class="campo"><label class="lbl" for="fx_conc">Concepto</label>'+
-        '<input id="fx_conc" value="'+esc(f.concepto)+'" placeholder="FEDA, Andorra Telecom…"></div>'+
+        '<input id="fx_conc" list="listaVehiculos" value="'+esc(f.concepto)+'" '+
+        'placeholder="FEDA, Andorra Telecom…">'+
+        /* Con varios vehículos, el concepto es lo que distingue un seguro
+           de otro: se ofrecen los nombres que ya tiene dados de alta. */
+        '<datalist id="listaVehiculos">'+
+          losCoches().map(function(c){ return '<option value="'+esc(nombreCoche(c))+'">'; }).join("")+
+        '</datalist>'+
+        '<span class="nota" id="fx_pista" style="margin:4px 0 0"></span></div>'+
       '<div class="campo"><label class="lbl" for="fx_fecha">Fecha</label>'+
         '<input type="date" id="fx_fecha" value="'+esc(f.fecha)+'"></div>'+
       '<div class="campo"><label class="lbl" for="fx_imp">Importe (€)</label>'+
@@ -2973,12 +3011,24 @@ function editarFijo(id, tipoPuesto){
     function(){
       f.tipo=valor("fx_tipo");
       f.concepto=valor("fx_conc")||f.tipo;
+      if(seRepite(f.tipo) && !valor("fx_conc") && losCoches().length>1){
+        avisar("Ponle el concepto: con varios vehículos, es lo que los distingue.", true);
+        return true;
+      }
       f.fecha=valor("fx_fecha")||hoyISO();
       f.importe=numero("fx_imp");
       if(!f.importe){ avisar("Pon el importe.", true); return true; }
       if(!id) libro.fijos.push(f);
       guardar(); pintar(); avisar(id?"Recibo actualizado":"Recibo anotado");
     });
+
+  /* La pista de los vehículos, según el tipo elegido */
+  function refrescarPista(){
+    var p=document.getElementById("fx_pista");
+    if(p) p.textContent=pistaDeVehiculos(valor("fx_tipo"));
+  }
+  document.getElementById("fx_tipo").addEventListener("change", refrescarPista);
+  refrescarPista();
 }
 
 function repetirFijo(id){
