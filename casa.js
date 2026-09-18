@@ -786,7 +786,9 @@ function verCompra(main){
        mas barato. Es la que se lleva encima. */
     '<div class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab">'+
       '<h2>La compra, almacén por almacén</h2>'+
-      '<span class="pista">Cada cosa donde está más barata</span></div>'+
+      '<span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+        '<span class="pista">Cada cosa donde está más barata</span>'+
+        '<button class="btn sm" id="masAlmacen">+ Almacén</button></span></div>'+
       '<div class="tarjeta-cuerpo" id="reparto"></div></div>'+
 
     /* Dónde comprar cada cosa: es la que se mira ANTES de ir, así que
@@ -806,6 +808,7 @@ function verCompra(main){
 
   engancharMes("c_mes");
   document.getElementById("nuevaCompra").addEventListener("click", function(){ editarCompra(null); });
+  document.getElementById("masAlmacen").addEventListener("click", function(){ editarSuper(null); });
   main.querySelectorAll("[data-pliegue]").forEach(function(det){
     det.addEventListener("toggle", function(){
       recordarPlegado(det.getAttribute("data-pliegue"), det.open);
@@ -921,8 +924,12 @@ function pintarReparto(){
   var caja=document.getElementById("reparto"); if(!caja) return;
   var r=repartoPorAlmacen();
   if(!r.grupos.length && !r.sinPrecio.length){
-    caja.innerHTML='<div class="vacio">La lista está vacía: apunta arriba lo que falte '+
-      'y aquí sale repartido por almacén.</div>';
+    caja.innerHTML='<div class="vacio"><strong>La lista está vacía</strong>'+
+      'Apunta arriba lo que falte y aquí sale repartido por almacén.'+
+      ((libro.supermercados||[]).length
+        ? ''
+        : ' Y con «+ Almacén» das de alta los sitios donde compras.')+
+      '</div>';
     return;
   }
   if(!r.grupos.length){
@@ -934,8 +941,13 @@ function pintarReparto(){
   caja.innerHTML=
     '<div class="alm">'+
       r.grupos.map(function(g,i){
+        var sp=(libro.supermercados||[]).filter(function(x){ return x.id===g.superId; })[0]||{};
         return '<div class="tienda">'+
-          '<header><h3>'+esc(nombreSuper(g.superId))+
+          '<header><h3><button class="btn suave sm" data-salm="'+esc(g.superId)+'" '+
+            'title="Cambiar el nombre o dónde está" style="padding:1px 5px;font-size:inherit;'+
+            'font-family:inherit;font-weight:600">'+esc(nombreSuper(g.superId))+'</button>'+
+            (sp.sitio?'<span style="font-family:var(--texto);font-weight:400;font-size:11.5px;'+
+              'color:var(--muted)">'+esc(sp.sitio)+'</span>':"")+
             (i===0&&r.grupos.length>1?' <span class="chapa acento">lo más gordo</span>':"")+
             '</h3><span class="tot">'+eur(g.total)+'</span></header>'+
           '<ul>'+g.items.map(function(x){
@@ -965,6 +977,10 @@ function pintarReparto(){
               '): no hace falta dar la vuelta.')
         : "")+
       (r.sinPrecio.length?' Lo de «sin precio» no está contado.':"")+'</p>';
+
+  caja.querySelectorAll("[data-salm]").forEach(function(b){
+    b.addEventListener("click", function(){ editarSuper(b.getAttribute("data-salm")); });
+  });
 }
 
 function filaLista(it){
@@ -1209,10 +1225,10 @@ function editarPrecio(productoId, superId){
 function editarSuper(id){
   var s=id?(libro.supermercados||[]).filter(function(x){return x.id===id;})[0]
           :{id:uid(), nombre:"", sitio:""};
-  abrirVentana(id?"Editar supermercado":"Nuevo supermercado",
+  abrirVentana(id?"Editar almacén":"Almacén nuevo",
     '<div class="rejilla">'+
       '<div class="campo"><label class="lbl" for="s_nom">Nombre</label>'+
-        '<input id="s_nom" value="'+esc(s.nombre)+'" placeholder="Mercadona, Andorrà…"></div>'+
+        '<input id="s_nom" class="grande" value="'+esc(s.nombre)+'" placeholder="Mercadona, Andorrà, Punt de Neu…"></div>'+
       '<div class="campo"><label class="lbl" for="s_sitio">Dónde está</label>'+
         '<input id="s_sitio" value="'+esc(s.sitio||"")+'" placeholder="Escaldes, La Seu…"></div>'+
     '</div>',
@@ -1221,7 +1237,7 @@ function editarSuper(id){
       if(!n){ avisar("Ponle nombre.", true); return true; }
       s.nombre=n; s.sitio=valor("s_sitio");
       if(!id) libro.supermercados.push(s);
-      guardar(); pintar(); avisar(id?"Supermercado actualizado":"Supermercado añadido");
+      guardar(); pintar(); avisar(id?"Almacén actualizado":"Almacén añadido: ya sale en la compra");
     });
 }
 
