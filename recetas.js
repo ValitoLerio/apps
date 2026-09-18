@@ -47,6 +47,33 @@ var ALERGENOS = {
 var ORDEN_ALERGENOS = ["gluten","crustaceos","huevo","pescado","cacahuete","soja","lacteos",
                        "frutosSec","apio","mostaza","sesamo","sulfitos","altramuces","moluscos"];
 
+/* Cómo encaja el plato en una dieta. Son etiquetas, no una ciencia: las
+   pone quien escribe la receta y se filtran por ellas. */
+var DIETAS = {
+  vegetariana: {nombre:"Vegetariana",  icono:"🥗"},
+  vegana:      {nombre:"Vegana",       icono:"🌱"},
+  sinGluten:   {nombre:"Sin gluten",   icono:"🚫🌾"},
+  sinLactosa:  {nombre:"Sin lactosa",  icono:"🚫🥛"},
+  ligero:      {nombre:"Ligero",       icono:"🪶"}
+};
+var ORDEN_DIETAS = ["vegetariana","vegana","sinGluten","sinLactosa","ligero"];
+
+function dietasDe(r){
+  return (r && Array.isArray(r.dieta)) ? r.dieta.filter(function(d){ return DIETAS[d]; }) : [];
+}
+
+/* Los valores de una ración. Son aproximados y la app lo dice: sirven
+   para comparar platos entre sí, no para una analítica. */
+function nutricionDe(r){
+  var n=(r && r.nutricion) || {};
+  return {kcal:+n.kcal||0, hidratos:+n.hidratos||0,
+          proteinas:+n.proteinas||0, grasas:+n.grasas||0};
+}
+function tieneNutricion(r){
+  var n=nutricionDe(r);
+  return n.kcal>0 || n.hidratos>0 || n.proteinas>0 || n.grasas>0;
+}
+
 function alergenosDe(r){
   return (r && Array.isArray(r.alergenos)) ? r.alergenos.filter(function(a){ return ALERGENOS[a]; }) : [];
 }
@@ -391,7 +418,7 @@ function ingredienteDeTexto(t){
 }
 
 var libro = null;
-var ui = { vista:"hoy", dia:null, tipo:"todos", busca:"", receta:null,
+var ui = { vista:"hoy", dia:null, tipo:"todos", dieta:"", busca:"", receta:null,
            raciones:null, paso:0, hechos:{} };
 
 /* ══════════════════════════════════════════════════════════════
@@ -618,6 +645,36 @@ function verHoy(){
       ["primero","segundo","postre"].map(function(t){ return platoDelMenu(t, m, fecha); }).join("")+
     '</div>'+
 
+    /* Lo que suma el menú entero: cada vez preguntan más, y con los tres
+       platos por separado no se sabe. */
+    (function(){
+      var t={kcal:0, hidratos:0, proteinas:0, grasas:0}, hay=false, faltan=[];
+      ["primero","segundo","postre"].forEach(function(k){
+        var r=recetaDe(m[k]); if(!r) return;
+        if(tieneNutricion(r)){
+          hay=true;
+          var n=nutricionDe(r);
+          t.kcal+=n.kcal; t.hidratos+=n.hidratos;
+          t.proteinas+=n.proteinas; t.grasas+=n.grasas;
+        } else faltan.push(r.nombre);
+      });
+      if(!hay) return "";
+      return '<div class="cifras" style="margin-top:16px">'+
+        '<div class="cifra"><div class="k">Calorías del menú</div>'+
+          '<div class="v acento">'+num(t.kcal,0)+'</div><div class="n">kcal por comensal</div></div>'+
+        '<div class="cifra"><div class="k">Hidratos</div>'+
+          '<div class="v">'+num(t.hidratos,0)+' g</div></div>'+
+        '<div class="cifra"><div class="k">Proteínas</div>'+
+          '<div class="v">'+num(t.proteinas,0)+' g</div></div>'+
+        '<div class="cifra"><div class="k">Grasas</div>'+
+          '<div class="v">'+num(t.grasas,0)+' g</div></div>'+
+      '</div>'+
+      (faltan.length
+        ? '<p class="nota" style="margin:-8px 0 0">Sin contar '+esc(faltan.join(" ni "))+
+          ', que no '+(faltan.length===1?"tiene":"tienen")+' valores puestos.</p>'
+        : "");
+    })()+
+
     /* Los alérgenos del menú entero: es lo que hay que saber decir
        cuando preguntan en la mesa, sin ir plato por plato. */
     (function(){
@@ -836,6 +893,7 @@ function verRecetario(){
   var t=ui.busca.trim().toLowerCase();
   var lista=recetas().filter(function(r){
     if(ui.tipo!=="todos" && r.tipo!==ui.tipo) return false;
+    if(ui.dieta && dietasDe(r).indexOf(ui.dieta)<0) return false;
     if(!t) return true;
     return (r.nombre+" "+(r.notas||"")+" "+
             (r.ingredientes||[]).map(function(i){ return i.que; }).join(" ")).toLowerCase().indexOf(t)>=0;
@@ -858,6 +916,20 @@ function verRecetario(){
       '</div>'+
       '<input class="buscador" id="r_busca" placeholder="Buscar por nombre o ingrediente…" '+
         'value="'+esc(ui.busca)+'">'+
+    '</div>'+
+
+    /* Segunda fila: las dietas. Aparte de los tipos, porque se cruzan:
+       se puede querer un primero vegetariano. */
+    '<div class="filtros" style="margin-top:-6px">'+
+      '<div class="grupo">'+
+        [""].concat(ORDEN_DIETAS).map(function(k){
+          var etiqueta = k==="" ? "Cualquiera" : DIETAS[k].icono+" "+DIETAS[k].nombre;
+          var n = k==="" ? recetas().length
+                         : recetas().filter(function(r){ return dietasDe(r).indexOf(k)>=0; }).length;
+          return '<button data-dieta="'+k+'" aria-pressed="'+(ui.dieta===k)+'">'+
+                 esc(etiqueta)+(n?' <span style="opacity:.6">'+n+'</span>':"")+'</button>';
+        }).join("")+
+      '</div>'+
     '</div>'+
 
     (lista.length
@@ -883,6 +955,9 @@ function verRecetario(){
   main.querySelectorAll("[data-tipo]").forEach(function(b){
     b.addEventListener("click", function(){ ui.tipo=b.dataset.tipo; pintar(); });
   });
+  main.querySelectorAll("[data-dieta]").forEach(function(b){
+    b.addEventListener("click", function(){ ui.dieta=b.dataset.dieta; pintar(); });
+  });
   var busca=document.getElementById("r_busca");
   busca.addEventListener("input", function(){ ui.busca=busca.value; verRecetario();
     var v=document.getElementById("r_busca"); if(v){ v.focus(); v.selectionStart=v.value.length; } });
@@ -905,6 +980,11 @@ function fichaReceta(r){
       (ultima?'<span class="chapa neutra">'+esc(haceCuanto(ultima))+'</span>'
              :'<span class="chapa ok">nueva</span>')+
       ((+r.veces||0)>0?'<span class="chapa neutra">'+plural(+r.veces,"vez","veces")+'</span>':"")+
+      (tieneNutricion(r)
+        ? '<span class="chapa neutra" title="Por ración">'+num(nutricionDe(r).kcal,0)+' kcal</span>'
+        : "")+
+      dietasDe(r).filter(function(d){ return d==="vegetariana"||d==="vegana"; })
+        .map(function(d){ return '<span class="chapa ok">'+DIETAS[d].icono+'</span>'; }).join("")+
       (alergenosDe(r).length
         ? '<span class="chapa aviso" title="'+
           esc(alergenosDe(r).map(function(a){ return ALERGENOS[a].nombre; }).join(", "))+'">'+
@@ -939,6 +1019,32 @@ function verReceta(){
 
     '<div class="rejilla" style="grid-template-columns:minmax(240px,1fr) minmax(280px,2fr);'+
       'align-items:start;gap:16px">'+
+
+      (tieneNutricion(r) || dietasDe(r).length
+        ? '<div class="tarjeta"><div class="tarjeta-cab"><h2>Por ración</h2>'+
+          '<span class="pista">Aproximado</span></div>'+
+          '<div class="tarjeta-cuerpo">'+
+            (tieneNutricion(r)
+              ? '<table><tbody>'+
+                [["Calorías", num(nutricionDe(r).kcal,0)+" kcal"],
+                 ["Hidratos", num(nutricionDe(r).hidratos,0)+" g"],
+                 ["Proteínas", num(nutricionDe(r).proteinas,0)+" g"],
+                 ["Grasas", num(nutricionDe(r).grasas,0)+" g"]].map(function(f){
+                   return '<tr><td>'+esc(f[0])+'</td><td class="num">'+esc(f[1])+'</td></tr>';
+                 }).join("")+'</tbody></table>'
+              : "")+
+            (dietasDe(r).length
+              ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">'+
+                dietasDe(r).map(function(d){
+                  return '<span class="chapa ok">'+DIETAS[d].icono+' '+esc(DIETAS[d].nombre)+'</span>';
+                }).join("")+'</div>'
+              : "")+
+            (tieneNutricion(r)
+              ? '<p class="nota" style="margin:10px 0 0">Cifras aproximadas, para comparar '+
+                'platos y poder contestar a quien pregunte.</p>'
+              : "")+
+          '</div></div>'
+        : "")+
 
       '<div class="tarjeta"><div class="tarjeta-cab"><h2>Alérgenos</h2></div>'+
         '<div class="tarjeta-cuerpo" style="display:flex;flex-wrap:wrap;gap:6px">'+
@@ -1126,6 +1232,35 @@ function editarReceta(id){
       'de uno en uno en la cocina. Cuanto más corto, mejor se lee con las manos ocupadas.</span></div>'+
 
     '<div class="campo" style="margin-bottom:12px">'+
+      '<label class="lbl">Para qué dietas vale</label>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:4px">'+
+        ORDEN_DIETAS.map(function(k){
+          return '<label style="display:flex;gap:6px;align-items:center;cursor:pointer;font-size:13px">'+
+            '<input type="checkbox" class="e_dieta" value="'+k+'" style="width:auto"'+
+            (dietasDe(r).indexOf(k)>=0?" checked":"")+'>'+
+            '<span>'+DIETAS[k].icono+' '+esc(DIETAS[k].nombre)+'</span></label>';
+        }).join("")+
+      '</div></div>'+
+
+    '<p class="nota" style="margin:16px 0 8px">Por ración, más o menos</p>'+
+    '<div class="rejilla" style="margin-bottom:4px">'+
+      '<div class="campo"><label class="lbl" for="e_kcal">Calorías (kcal)</label>'+
+        '<input type="number" id="e_kcal" min="0" step="1" value="'+
+        esc(nutricionDe(r).kcal||"")+'"></div>'+
+      '<div class="campo"><label class="lbl" for="e_hc">Hidratos (g)</label>'+
+        '<input type="number" id="e_hc" min="0" step="1" value="'+
+        esc(nutricionDe(r).hidratos||"")+'"></div>'+
+      '<div class="campo"><label class="lbl" for="e_prot">Proteínas (g)</label>'+
+        '<input type="number" id="e_prot" min="0" step="1" value="'+
+        esc(nutricionDe(r).proteinas||"")+'"></div>'+
+      '<div class="campo"><label class="lbl" for="e_gra">Grasas (g)</label>'+
+        '<input type="number" id="e_gra" min="0" step="1" value="'+
+        esc(nutricionDe(r).grasas||"")+'"></div>'+
+    '</div>'+
+    '<p class="nota" style="margin:0 0 12px">Son cifras aproximadas, para comparar unos '+
+    'platos con otros y poder decirle algo a quien lo pregunte. No son un análisis.</p>'+
+
+    '<div class="campo" style="margin-bottom:12px">'+
       '<label class="lbl">Alérgenos</label>'+
       '<div style="display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:4px">'+
         ORDEN_ALERGENOS.map(function(k){
@@ -1157,6 +1292,10 @@ function editarReceta(id){
       r.notas=(document.getElementById("e_notas").value||"").trim();
       r.alergenos=Array.prototype.slice.call(document.querySelectorAll(".e_alg:checked"))
                     .map(function(x){ return x.value; });
+      r.dieta=Array.prototype.slice.call(document.querySelectorAll(".e_dieta:checked"))
+                .map(function(x){ return x.value; });
+      r.nutricion={kcal:numero("e_kcal"), hidratos:numero("e_hc"),
+                   proteinas:numero("e_prot"), grasas:numero("e_gra")};
       if(nueva) libro.recetas.push(r);
       guardar(); pintar();
       avisar(nueva?"Receta guardada":"Receta actualizada");
