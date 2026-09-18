@@ -64,6 +64,332 @@ var VACIO = {
   ajustes: { raciones: 4, avisarDias: 21 }
 };
 
+/* Maneras de hacer un mismo plato. Al escribir el nombre de una receta,
+   la app mira aquí y ofrece las que conoce: se elige una y se rellenan
+   los ingredientes y los pasos, que es lo pesado de escribir.
+
+   Las claves son lo que se teclea; cada plato lleva sus formas. */
+var VARIANTES = {
+  "lentejas": [
+    {sub:"con chorizo", tipo:"primero", raciones:10, tiempo:"1 h 30 min",
+     alergenos:[],
+     ing:["1|kg|lentejas","2||cebollas","3||zanahorias","2||patatas","400|g|chorizo",
+          "200|g|panceta","4||dientes de ajo","2||hojas de laurel",
+          "1|cucharada|pimentón dulce","|aceite de oliva","|sal"],
+     pasos:["Pochar la cebolla picada a fuego suave 15 minutos",
+       "Añadir el ajo laminado y el chorizo y la panceta en trozos",
+       "Apartar del fuego y echar el pimentón, removiendo deprisa",
+       "Volver al fuego, añadir las lentejas y el laurel",
+       "Cubrir con agua tres dedos por encima",
+       "Cocer 40 minutos destapado a fuego bajo",
+       "Añadir la zanahoria y la patata cascada; 20 minutos más",
+       "Probar de sal al final y dejar reposar"],
+     notas:"La sal al final: puesta antes, la piel se endurece y no se abren."},
+    {sub:"con verduras", tipo:"primero", raciones:10, tiempo:"1 h 20 min",
+     alergenos:[],
+     ing:["1|kg|lentejas","2||cebollas","3||zanahorias","2||patatas","1||puerro",
+          "1||pimiento rojo","4||dientes de ajo","2||hojas de laurel",
+          "1|cucharada|pimentón dulce","|aceite de oliva","|sal"],
+     pasos:["Picar la cebolla, el puerro y el pimiento pequeños",
+       "Pocharlos a fuego suave 20 minutos, sin que cojan color",
+       "Añadir el ajo laminado y dar unas vueltas",
+       "Fuera del fuego, el pimentón",
+       "Añadir las lentejas y el laurel y cubrir de agua",
+       "Cocer 40 minutos y añadir zanahoria y patata cascada",
+       "20 minutos más y probar de sal"],
+     notas:"Sin carne aguantan mejor de un día para otro."},
+    {sub:"estofadas con costilla", tipo:"primero", raciones:10, tiempo:"2 h",
+     alergenos:["sulfitos"],
+     ing:["1|kg|lentejas","1,5|kg|costilla de cerdo","2||cebollas","3||zanahorias",
+          "200|ml|vino blanco","4||dientes de ajo","2||hojas de laurel",
+          "1|cucharada|pimentón dulce","|aceite de oliva","|sal"],
+     pasos:["Dorar la costilla troceada a fuego fuerte y reservar",
+       "Pochar la cebolla y la zanahoria en esa grasa",
+       "Fuera del fuego, el pimentón; volver y mojar con el vino",
+       "Dejar evaporar el alcohol",
+       "Volver la costilla, añadir lentejas, laurel y agua",
+       "Cocer 1 hora y cuarto a fuego muy suave",
+       "Probar de sal y dejar reposar media hora antes de servir"],
+     notas:"La costilla dorada primero es lo que le da el fondo al caldo."}
+  ],
+
+  "merluza": [
+    {sub:"a la plancha con ajada", tipo:"segundo", raciones:10, tiempo:"25 min",
+     alergenos:["pescado","sulfitos"],
+     ing:["10||lomos de merluza","8||dientes de ajo","1|cucharada|pimentón dulce",
+          "3|cucharadas|vinagre de vino","150|ml|aceite de oliva","|perejil","|sal"],
+     pasos:["Secar muy bien los lomos con papel","Salar y esperar 5 minutos",
+       "Plancha muy fuerte: 3 minutos la piel, 2 el otro lado",
+       "Dorar los ajos laminados en el aceite",
+       "Fuera del fuego, el pimentón, y luego el vinagre con cuidado",
+       "Volcar la ajada caliente por encima"],
+     notas:"La plancha humeando antes de poner el primer lomo."},
+    {sub:"en salsa verde", tipo:"segundo", raciones:10, tiempo:"35 min",
+     alergenos:["pescado","gluten","sulfitos"],
+     ing:["10||lomos de merluza","300|g|almejas","6||dientes de ajo",
+          "50|g|harina","200|ml|vino blanco","500|ml|fumet","|perejil",
+          "|aceite de oliva","|sal"],
+     pasos:["Purgar las almejas en agua con sal media hora",
+       "Dorar el ajo picado a fuego suave, sin que tome color",
+       "Añadir la harina y cocerla un minuto",
+       "Mojar con el vino y el fumet, removiendo para que ligue",
+       "Poner los lomos con la piel hacia arriba y las almejas",
+       "Mover la cazuela en vaivén 8 minutos, sin remover",
+       "Perejil picado al final"],
+     notas:"El vaivén de la cazuela es lo que liga la salsa. Removiendo se rompe el pescado."},
+    {sub:"al horno con patatas", tipo:"segundo", raciones:10, tiempo:"50 min",
+     alergenos:["pescado","sulfitos"],
+     ing:["10||lomos de merluza","2|kg|patatas","2||cebollas","200|ml|vino blanco",
+          "6||dientes de ajo","|perejil","|aceite de oliva","|sal"],
+     pasos:["Cortar la patata en rodajas finas y la cebolla en juliana",
+       "Hacerlas en la bandeja del horno a 190° durante 25 minutos",
+       "Poner los lomos encima, salados",
+       "Regar con el vino, el aceite y el ajo picado",
+       "Horno 12 minutos más",
+       "Perejil por encima al sacar"],
+     notas:"La patata debajo recoge el jugo y es lo mejor del plato."}
+  ],
+
+  "pollo": [
+    {sub:"al ajillo", tipo:"segundo", raciones:10, tiempo:"45 min",
+     alergenos:["sulfitos"],
+     ing:["3|kg|pollo troceado","2||cabezas de ajo","250|ml|vino blanco",
+          "2||hojas de laurel","|perejil","|aceite de oliva","|sal y pimienta"],
+     pasos:["Salpimentar y dejar reposar 10 minutos",
+       "Dorar a fuego fuerte por tandas, sin amontonar",
+       "Bajar el fuego y echar los ajos enteros pelados",
+       "Cuando estén dorados, mojar con el vino",
+       "Laurel y 20 minutos a fuego medio","Perejil al final"],
+     notas:"Por tandas: amontonado suelta agua y no dora."},
+    {sub:"al horno con limón", tipo:"segundo", raciones:10, tiempo:"1 h 10 min",
+     alergenos:["sulfitos"],
+     ing:["20||muslos de pollo","1,5|kg|patatas","3||limones","2||cabezas de ajo",
+          "250|ml|vino blanco","|romero","|aceite de oliva","|sal y pimienta"],
+     pasos:["Salpimentar los muslos, mejor la víspera",
+       "Patata en rodajas gruesas de cama en la bandeja",
+       "Muslos encima con la piel hacia arriba",
+       "Ajos sin pelar, limón en rodajas y romero",
+       "Regar con el vino y aceite","Horno 200° 50 minutos",
+       "220° los últimos 10 para que la piel quede crujiente"],
+     notas:""},
+    {sub:"en pepitoria", tipo:"segundo", raciones:10, tiempo:"1 h 15 min",
+     alergenos:["frutosSec","huevo","sulfitos"],
+     ing:["3|kg|pollo troceado","2||cebollas","150|g|almendra cruda","4||huevos",
+          "250|ml|vino blanco","1|l|caldo de pollo","|azafrán","6||dientes de ajo",
+          "|aceite de oliva","|sal"],
+     pasos:["Dorar el pollo salpimentado y reservar",
+       "Pochar la cebolla picada en la misma cazuela",
+       "Freír aparte las almendras y los ajos, sin quemarlos",
+       "Cocer los huevos 10 minutos y separar las yemas",
+       "Majar almendra, ajo, yemas y azafrán con un poco de caldo",
+       "Volver el pollo, mojar con vino y caldo, cocer 40 minutos",
+       "Añadir el majado y cocer 10 minutos más"],
+     notas:"El majado al final: si entra pronto se agarra al fondo."}
+  ],
+
+  "bacalao": [
+    {sub:"con tomate", tipo:"segundo", raciones:10, tiempo:"45 min", alergenos:["pescado"],
+     ing:["10||lomos de bacalao desalado","2|kg|tomate triturado","2||cebollas",
+          "2||pimientos rojos","1|cucharadita|azúcar","3||dientes de ajo",
+          "|aceite de oliva","|sal"],
+     pasos:["Escurrir y secar los lomos","Pochar cebolla y pimiento 20 minutos",
+       "Añadir el ajo laminado","Echar el tomate y el azúcar; 25 minutos",
+       "Probar de sal: el bacalao ya sala",
+       "Poner los lomos con la piel arriba, tapar y 8 minutos",
+       "Mover la cazuela, no remover"],
+     notas:""},
+    {sub:"al pil-pil", tipo:"segundo", raciones:10, tiempo:"40 min", alergenos:["pescado"],
+     ing:["10||lomos de bacalao desalado","300|ml|aceite de oliva suave",
+          "10||dientes de ajo","2||guindillas","|sal"],
+     pasos:["Confitar los ajos laminados y la guindilla a fuego muy suave",
+       "Sacarlos y reservar","Poner los lomos con la piel hacia abajo",
+       "Confitar 8 minutos a fuego muy bajo, que no llegue a freír",
+       "Sacar el bacalao y templar el aceite",
+       "Ligar el aceite con la gelatina que ha soltado, moviendo en círculos",
+       "Volver el bacalao a la salsa ligada"],
+     notas:"El aceite templado, nunca caliente: si quema, la salsa se corta."},
+    {sub:"a la vizcaína", tipo:"segundo", raciones:10, tiempo:"1 h",
+     alergenos:["pescado","sulfitos"],
+     ing:["10||lomos de bacalao desalado","8||pimientos choriceros","3||cebollas",
+          "100|g|pan frito","200|ml|vino blanco","4||dientes de ajo",
+          "|aceite de oliva","|sal"],
+     pasos:["Hidratar los choriceros en agua caliente una hora y sacar la carne",
+       "Pochar la cebolla muy despacio, 40 minutos, que se deshaga",
+       "Añadir el ajo, la carne de choricero y el pan frito",
+       "Mojar con el vino y cocer 15 minutos",
+       "Triturar y pasar por el chino",
+       "Calentar los lomos en la salsa 8 minutos, moviendo la cazuela"],
+     notas:"La cebolla muy despacio: ahí está todo el plato."}
+  ],
+
+  "arroz": [
+    {sub:"paella de pollo y verduras", tipo:"primero", raciones:10, tiempo:"55 min",
+     alergenos:["apio"],
+     ing:["1|kg|arroz redondo","1,5|kg|pollo troceado","500|g|judía verde plana",
+          "300|g|alcachofas","2||tomates","2,5|l|caldo de pollo",
+          "1|cucharada|pimentón dulce","|azafrán","|aceite de oliva","|sal"],
+     pasos:["Dorar bien el pollo salado","Sofreír la verdura al lado",
+       "Tomate rallado y dejar que se sofría","Fuera del fuego, el pimentón",
+       "Caldo caliente con azafrán, 10 minutos",
+       "Arroz en lluvia, repartir y no tocar más",
+       "18 minutos: 8 fuertes y 10 suaves","Tapar con un paño 5 minutos"],
+     notas:"Repartido el arroz, no se remueve más."},
+    {sub:"caldoso con costilla", tipo:"primero", raciones:10, tiempo:"50 min",
+     alergenos:["apio","sulfitos"],
+     ing:["800|g|arroz redondo","1,5|kg|costilla de cerdo","2||cebollas",
+          "1||pimiento rojo","3,5|l|caldo","2||tomates","100|ml|vino blanco",
+          "|pimentón dulce","|aceite de oliva","|sal"],
+     pasos:["Dorar la costilla troceada y reservar",
+       "Pochar cebolla y pimiento picados","Tomate rallado y sofreír",
+       "Fuera del fuego el pimentón; mojar con vino",
+       "Volver la costilla y el caldo caliente",
+       "Cocer 20 minutos y echar el arroz",
+       "18 minutos más; tiene que quedar caldoso, no seco",
+       "Servir enseguida, que sigue bebiendo caldo"],
+     notas:"Se sirve al momento: en cinco minutos se lo bebe todo."},
+    {sub:"a la cubana", tipo:"primero", raciones:10, tiempo:"30 min", alergenos:["huevo"],
+     ing:["1|kg|arroz redondo","10||huevos","1|kg|tomate frito","10||plátanos",
+          "4||dientes de ajo","|aceite de oliva","|sal"],
+     pasos:["Cocer el arroz con los ajos enteros, 16 minutos",
+       "Escurrir y refrescar","Calentar el tomate frito",
+       "Freír los plátanos abiertos a lo largo",
+       "Freír los huevos con puntilla",
+       "Montar: arroz en molde, tomate, plátano y huevo"],
+     notas:""}
+  ],
+
+  "tortilla": [
+    {sub:"de patatas", tipo:"segundo", raciones:10, tiempo:"50 min", alergenos:["huevo"],
+     ing:["3|kg|patatas","20||huevos","2||cebollas","|aceite de oliva","|sal"],
+     pasos:["Patata en láminas finas, no muy regulares",
+       "Confitar a fuego medio en abundante aceite","Cebolla en juliana a media fritura",
+       "Escurrir muy bien y salar en caliente","Batir los huevos y mezclar",
+       "Reposar la mezcla 10 minutos","Cuajar 4 minutos por lado"],
+     notas:"Reposar antes de cuajar: la patata bebe el huevo y liga."},
+    {sub:"de calabacín y cebolla", tipo:"segundo", raciones:10, tiempo:"40 min",
+     alergenos:["huevo"],
+     ing:["2|kg|calabacines","20||huevos","3||cebollas","|aceite de oliva","|sal"],
+     pasos:["Calabacín en láminas finas, con piel","Pochar con la cebolla a fuego medio",
+       "Escurrir bien el aceite, que suelta mucha agua","Salar en caliente",
+       "Batir los huevos y mezclar","Cuajar a fuego medio 4 minutos por lado"],
+     notas:"Escurrir de verdad: el calabacín es agua y aguará la tortilla."}
+  ],
+
+  "flan": [
+    {sub:"de huevo", tipo:"postre", raciones:10, tiempo:"1 h + frío",
+     alergenos:["huevo","lacteos"],
+     ing:["20||huevos","3|l|leche","600|g|azúcar","1||rama de canela",
+          "1||piel de limón","200|g|azúcar para el caramelo"],
+     pasos:["Caramelo sin remover y forrar los moldes",
+       "Infusionar la leche con canela y limón","Batir huevos con azúcar sin montar",
+       "Añadir la leche templada en hilo","Colar y llenar los moldes",
+       "Baño maría a 160°, 45 minutos","Enfriar 4 horas antes de desmoldar"],
+     notas:"Sin montar los huevos: el aire deja agujeros."},
+    {sub:"de queso", tipo:"postre", raciones:10, tiempo:"1 h + frío",
+     alergenos:["huevo","lacteos"],
+     ing:["1|kg|queso crema","14||huevos","2|l|leche","500|g|azúcar",
+          "200|g|azúcar para el caramelo"],
+     pasos:["Caramelo en los moldes","Batir el queso con el azúcar hasta que quede liso",
+       "Añadir los huevos de uno en uno","Incorporar la leche templada",
+       "Colar y llenar","Baño maría a 160°, 50 minutos","Enfriar 4 horas"],
+     notas:""}
+  ],
+
+  "crema": [
+    {sub:"de calabacín", tipo:"primero", raciones:10, tiempo:"40 min",
+     alergenos:["lacteos","apio"],
+     ing:["2|kg|calabacines","2||cebollas","2||patatas","1,5|l|caldo de verduras",
+          "200|ml|nata para cocinar","|aceite de oliva","|sal"],
+     pasos:["Trocear el calabacín sin pelar","Pochar la cebolla",
+       "Añadir la patata y rehogar","Echar el calabacín y cubrir de caldo",
+       "20 minutos","Triturar fino","Nata, sal y un hervor corto"],
+     notas:""},
+    {sub:"de calabaza", tipo:"primero", raciones:10, tiempo:"45 min",
+     alergenos:["lacteos","apio"],
+     ing:["2,5|kg|calabaza","2||cebollas","2||zanahorias","2||patatas",
+          "1,5|l|caldo de verduras","200|ml|nata","|aceite de oliva","|sal","|pimienta"],
+     pasos:["Pelar la calabaza y trocearla","Pochar cebolla y zanahoria",
+       "Añadir patata y calabaza","Cubrir de caldo y cocer 25 minutos",
+       "Triturar muy fino","Nata y pimienta al final"],
+     notas:"Asar la calabaza antes al horno concentra el sabor si hay tiempo."},
+    {sub:"de puerros (vichyssoise)", tipo:"primero", raciones:10, tiempo:"45 min + frío",
+     alergenos:["lacteos"],
+     ing:["2|kg|puerros","1,5|kg|patatas","2||cebollas","1,5|l|caldo de ave",
+          "400|ml|nata","100|g|mantequilla","|sal y pimienta blanca"],
+     pasos:["Usar sólo la parte blanca del puerro, en rodajas",
+       "Sudar con la mantequilla sin que coja color, 15 minutos",
+       "Añadir patata y caldo","Cocer 25 minutos","Triturar y colar",
+       "Añadir la nata y rectificar","Enfriar; se sirve fría"],
+     notas:"Sin que coja color: si se dora, deja de ser blanca."}
+  ],
+
+  "macarrones": [
+    {sub:"a la boloñesa", tipo:"primero", raciones:10, tiempo:"45 min",
+     alergenos:["gluten","lacteos","apio","sulfitos"],
+     ing:["1|kg|macarrones","800|g|carne picada mixta","2||cebollas","2||zanahorias",
+          "1|kg|tomate triturado","150|ml|vino tinto","3||dientes de ajo",
+          "200|g|queso rallado","|orégano","|aceite de oliva","|sal"],
+     pasos:["Picar muy fina la verdura","Pochar 15 minutos",
+       "Dorar la carne deshaciéndola","Vino y dejar evaporar",
+       "Tomate y orégano, 30 minutos","Cocer la pasta un minuto menos",
+       "Mezclar y queso por encima"],
+     notas:"La salsa gana de un día para otro."},
+    {sub:"gratinados con bechamel", tipo:"primero", raciones:10, tiempo:"50 min",
+     alergenos:["gluten","lacteos"],
+     ing:["1|kg|macarrones","1,5|l|bechamel","500|g|jamón cocido","250|g|queso rallado",
+          "800|g|tomate frito","|nuez moscada","|sal"],
+     pasos:["Cocer la pasta un minuto menos de lo que diga el paquete",
+       "Mezclar con el tomate y el jamón en dados",
+       "Volcar en la bandeja","Cubrir con la bechamel y el queso",
+       "Gratinar 12 minutos"],
+     notas:"Un minuto menos: se termina de hacer en el horno."}
+  ],
+
+  "albóndigas": [
+    {sub:"en salsa de tomate", tipo:"segundo", raciones:10, tiempo:"1 h",
+     alergenos:["gluten","huevo","lacteos","sulfitos"],
+     ing:["1,5|kg|carne picada mixta","2||huevos","150|g|pan rallado","150|ml|leche",
+          "3||cebollas","1|kg|tomate triturado","200|ml|vino blanco","200|g|harina",
+          "3||dientes de ajo","|perejil","|aceite de oliva","|sal"],
+     pasos:["Remojar el pan rallado en la leche","Mezclar carne, huevo, ajo y perejil",
+       "Reposar 20 minutos en cámara","Bolear y enharinar",
+       "Freír sólo para dorar","Pochar cebolla, añadir tomate y vino",
+       "Cocer la salsa 20 minutos y triturarla",
+       "Albóndigas dentro, 15 minutos a fuego suave"],
+     notas:"Se terminan en la salsa: fritas del todo salen secas."},
+    {sub:"con guisantes y almendras", tipo:"segundo", raciones:10, tiempo:"1 h 10 min",
+     alergenos:["gluten","huevo","lacteos","frutosSec","sulfitos"],
+     ing:["1,5|kg|carne picada mixta","2||huevos","150|g|pan rallado","150|ml|leche",
+          "600|g|guisantes","100|g|almendra cruda","2||cebollas","200|ml|vino blanco",
+          "1|l|caldo","200|g|harina","|aceite de oliva","|sal"],
+     pasos:["Hacer y freír las albóndigas como siempre",
+       "Pochar la cebolla muy picada","Majar la almendra frita con ajo y perejil",
+       "Mojar con vino y caldo","Echar las albóndigas y cocer 20 minutos",
+       "Añadir los guisantes y el majado, 8 minutos más"],
+     notas:"Los guisantes al final, que si no se deshacen."}
+  ]
+};
+
+/* Busca formas de hacer lo que se está escribiendo. Basta con que el
+   nombre contenga la palabra: «lentejas de la casa» encuentra las
+   lentejas. */
+function variantesPara(nombre){
+  var t=String(nombre||"").trim().toLowerCase();
+  if(t.length<3) return null;
+  var claves=Object.keys(VARIANTES);
+  for(var i=0;i<claves.length;i++){
+    if(t.indexOf(claves[i])>=0) return {clave:claves[i], formas:VARIANTES[claves[i]]};
+  }
+  return null;
+}
+
+/* «400|g|lentejas» o «|sal» para lo que va al gusto */
+function ingredienteDeTexto(t){
+  var p=String(t).split("|");
+  if(p.length===2) return {cantidad:"", unidad:"", que:p[1]};
+  return {cantidad:p[0].replace(",","."), unidad:p[1], que:p[2]};
+}
+
 var libro = null;
 var ui = { vista:"hoy", dia:null, tipo:"todos", busca:"", receta:null,
            raciones:null, paso:0, hechos:{} };
@@ -755,7 +1081,9 @@ function editarReceta(id){
   var d=abrirVentana(nueva?"Nueva receta":"Editar "+r.nombre,
     '<div class="rejilla" style="margin-bottom:12px">'+
       '<div class="campo" style="grid-column:1/-1"><label class="lbl" for="e_nom">Nombre</label>'+
-        '<input id="e_nom" value="'+esc(r.nombre)+'" placeholder="Lentejas de la casa"></div>'+
+        '<input id="e_nom" value="'+esc(r.nombre)+'" placeholder="Lentejas de la casa" '+
+        'autocomplete="off">'+
+        '<div id="e_formas" style="margin-top:6px"></div></div>'+
       '<div class="campo"><label class="lbl" for="e_tipo">Qué es</label><select id="e_tipo">'+
         ORDEN_TIPOS.map(function(k){
           return '<option value="'+k+'"'+(r.tipo===k?" selected":"")+'>'+
@@ -821,6 +1149,60 @@ function editarReceta(id){
     },
     {aceptar:nueva?"Guardar receta":"Guardar",
      extra: nueva ? "" : '<button class="btn malo" id="e_borrar">Borrar</button>'});
+
+  /* Al escribir el nombre, las maneras de hacerlo que la app conoce.
+     Se elige una y se rellenan ingredientes y pasos, que es lo pesado. */
+  var campoNombre=document.getElementById("e_nom");
+  var cajaFormas=document.getElementById("e_formas");
+
+  function rellenarCon(f){
+    document.getElementById("e_tipo").value=f.tipo;
+    document.getElementById("e_rac").value=f.raciones;
+    document.getElementById("e_tiempo").value=f.tiempo||"";
+    document.getElementById("e_ing").value=
+      f.ing.map(function(x){
+        var i=ingredienteDeTexto(x);
+        return [i.cantidad, i.unidad, i.que].filter(function(y){ return y!==""; }).join(" ");
+      }).join("\n");
+    document.getElementById("e_pasos").value=f.pasos.join("\n");
+    document.getElementById("e_notas").value=f.notas||"";
+    document.querySelectorAll(".e_alg").forEach(function(c){
+      c.checked = (f.alergenos||[]).indexOf(c.value)>=0;
+    });
+    avisar("Puesta la receta: cámbiala a tu gusto");
+    pintarFormas();
+  }
+
+  function pintarFormas(){
+    var hay=variantesPara(campoNombre.value);
+    if(!hay){ cajaFormas.innerHTML=""; return; }
+    var lleno = (document.getElementById("e_ing").value||"").trim() ||
+                (document.getElementById("e_pasos").value||"").trim();
+    cajaFormas.innerHTML=
+      '<div class="nota" style="margin:0 0 5px">'+
+        (lleno ? 'También sé hacerlo de estas formas. Al elegir una se cambia lo que hay escrito:'
+               : 'Sé hacerlo de '+(hay.formas.length===1?"una forma":hay.formas.length+" formas")+
+                 '. Elige una y te lo pongo, y luego lo cambias a tu gusto:')+
+      '</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        hay.formas.map(function(f,i){
+          return '<button type="button" class="btn sm" data-forma="'+i+'">'+
+                 esc(f.sub)+'</button>';
+        }).join("")+
+      '</div>';
+    cajaFormas.querySelectorAll("[data-forma]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var f=hay.formas[+b.dataset.forma];
+        if(!lleno){ rellenarCon(f); return; }
+        confirmar("Cambiar lo escrito",
+          '<p style="margin:0">Se van a sustituir los ingredientes y los pasos que hay '+
+          'ahora por los de <strong>'+esc(f.sub)+'</strong>.</p>',
+          function(){ rellenarCon(f); }, {aceptar:"Sustituir", malo:true});
+      });
+    });
+  }
+  campoNombre.addEventListener("input", pintarFormas);
+  pintarFormas();
 
   var borrar=document.getElementById("e_borrar");
   if(borrar) borrar.addEventListener("click", function(){
