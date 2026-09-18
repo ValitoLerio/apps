@@ -768,6 +768,7 @@ function verCompra(main){
       "Apunta lo que falta en casa y, al volver del súper, lo que has comprado. "+
       "No hay que dar de alta nada: se escribe el nombre y ya.",
       selectorMes("c_mes")+
+      '<button class="btn" id="dictar">🎤 Dictar precios</button>'+
       '<button class="btn fuerte" id="nuevaCompra">Anotar compra</button>')+
 
     '<div class="cifras">'+
@@ -808,6 +809,7 @@ function verCompra(main){
 
   engancharMes("c_mes");
   document.getElementById("nuevaCompra").addEventListener("click", function(){ editarCompra(null); });
+  document.getElementById("dictar").addEventListener("click", abrirDictado);
   document.getElementById("masAlmacen").addEventListener("click", function(){ editarSuper(null); });
   main.querySelectorAll("[data-pliegue]").forEach(function(det){
     det.addEventListener("toggle", function(){
@@ -918,6 +920,314 @@ function repartoPorAlmacen(){
   });
   return {grupos:lista, sinPrecio:sinPrecio, total:totalReparto, unica:unica,
           ahorro:(unica? r2(unica.total-totalReparto) : 0)};
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DICTAR PRECIOS EN EL SUPERMERCADO
+   ══════════════════════════════════════════════════════════════
+   En el pasillo, con el carro en una mano, escribir no es opción. Se
+   dice «Mercadona coca cola pack de 3 2,40» y la app lo reparte: de qué
+   almacén, qué producto, qué formato y qué precio.
+
+   Nada se guarda al vuelo: lo entendido se enseña, se corrige lo que
+   haga falta y se guarda cuando se dice. Una frase mal oída no puede
+   colarse en los precios sin que se vea.
+   ══════════════════════════════════════════════════════════════ */
+
+var UNIDADES_DICHAS = [
+  ["l",  /(\d+[.,]?\d*)\s*(?:l|lt|litros?)\b/],
+  ["ml", /(\d+[.,]?\d*)\s*(?:ml|mililitros?)\b/],
+  ["kg", /(\d+[.,]?\d*)\s*(?:kg|kilos?|kilogramos?)\b/],
+  ["g",  /(\d+[.,]?\d*)\s*(?:g|gr|gramos?)\b/]
+];
+
+function sinTildes(t){
+  return String(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+}
+function escaparRe(t){ return String(t).replace(/[.*+?^${}()|[\]\\]/g,"\\$&"); }
+
+/* Cuántas piezas trae el formato. Un pack de tres latas no se puede
+   comparar con una lata suelta: hace falta saber que son tres para
+   sacar lo que cuesta cada una. */
+function piezasDelFormato(formato){
+  var f=sinTildes(formato);
+  var m = f.match(/pack\s*(?:de)?\s*(\d+)/) ||
+          f.match(/(\d+)\s*(?:x|uds?|unidades?|latas?|botellas?|briks?|bricks?|botes?|piezas?)\b/) ||
+          f.match(/^(\d+)\s*$/);
+  var n = m ? parseInt(m[1],10) : 1;
+  return (n>1 && n<200) ? n : 1;
+}
+
+/* Convierte lo dicho en sus cuatro trozos. Lo que no se reconoce se
+   deja vacío y se pide a mano: adivinar aquí es meter un precio
+   equivocado en el comparador. */
+function entenderDictado(frase){
+  var texto=" "+String(frase||"").trim().replace(/\s+/g," ")+" ";
+  var plano=sinTildes(texto);
+  var linea={frase:String(frase||"").trim(), superId:"", superNuevo:"",
+             producto:"", formato:"", precio:null};
+
+  /* 1. El almacén, si nombra uno de los tuyos */
+  (libro.supermercados||[]).forEach(function(sm){
+    var nom=sinTildes(sm.nombre);
+    if(!nom || linea.superId) return;
+    var i=plano.indexOf(nom);
+    if(i<0) return;
+    linea.superId=sm.id;
+    plano=plano.slice(0,i)+" "+plano.slice(i+nom.length);
+    texto=texto.replace(new RegExp(escaparRe(sm.nombre),"i")," ");
+  });
+
+  /* 2. El precio: «2,40», «2 con 40», «2 euros 40», «3 euros» */
+  var m =
+      plano.match(/(\d+)\s*(?:con|coma|euros?\s*(?:con)?)\s*(\d{1,2})\b/) ||
+      plano.match(/(\d+)[.,](\d{1,2})\b/);
+  if(m){
+    linea.precio=r2(parseFloat(m[1]+"."+(m[2].length===1?m[2]+"0":m[2])));
+  } else {
+    m = plano.match(/(\d+)\s*(?:€|euros?)/);
+    if(m) linea.precio=r2(parseFloat(m[1]));
+  }
+  if(m){ texto=texto.replace(new RegExp(escaparRe(m[0]),"i")," "); plano=plano.replace(m[0]," "); }
+
+  /* 3. El formato: primero el pack, que es lo que más despista */
+  /* «pack de 3 latas», «pack de 6», «3 latas»: el envase, si lo dice,
+     entra en el mismo bocado para que no se quede suelto en el nombre. */
+  var mPack = plano.match(/pack\s*(?:de)?\s*(\d+)\s*(latas?|botellas?|briks?|bricks?|botes?|uds?|unidades?)?/) ||
+              plano.match(/(\d+)\s*(latas?|botellas?|briks?|bricks?|botes?|uds?|unidades?)\b/);
+  if(mPack){
+    var cuantas=mPack[1];
+    var envase=(mPack[2]||"unidades").replace(/s$/,"");
+    linea.formato="pack de "+cuantas+" "+envase+(+cuantas>1?"s":"");
+    texto=texto.replace(new RegExp(escaparRe(mPack[0]),"i")," ");
+    plano=plano.replace(mPack[0]," ");
+  }
+  for(var i=0;i<UNIDADES_DICHAS.length;i++){
+    var u=plano.match(UNIDADES_DICHAS[i][1]);
+    if(u){
+      var medida=u[1].replace(".",",")+" "+UNIDADES_DICHAS[i][0];
+      linea.formato = linea.formato ? linea.formato+" de "+medida : medida;
+      texto=texto.replace(new RegExp(escaparRe(u[0]),"i")," ");
+      plano=plano.replace(u[0]," ");
+      break;
+    }
+  }
+
+  /* 4. Lo que queda es el producto */
+  /* Quita la palabra suelta que queda colgando al final —«de», «a»,
+     «euros»— pero exigiendo un espacio delante: sin él se comía la
+     última letra y «leche entera» acababa siendo «leche enter». */
+  linea.producto=texto.replace(/\s+(?:€|euros?|a|de|en|el|la|por)\s*$/i," ")
+                      .replace(/\s+/g," ").trim();
+  return linea;
+}
+
+function productoParecido(nombre, formato){
+  var n=sinTildes(nombre), f=sinTildes(formato);
+  var iguales=(libro.productos||[]).filter(function(p){ return sinTildes(p.nombre)===n; });
+  if(!iguales.length) return null;
+  if(!f) return iguales[0];
+  return iguales.filter(function(p){ return sinTildes(p.formato)===f; })[0] || null;
+}
+
+function abrirDictado(){
+  var Reconocedor = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var lineas=[], escuchando=false, motor=null;
+
+  var d=abrirVentana("Dictar precios",
+    '<p class="nota" style="margin:0 0 12px">Di el almacén, el producto, el formato y el precio. '+
+    'Por ejemplo: <em>«Mercadona coca cola pack de 3 latas 2,40»</em>. '+
+    'Una cosa por frase, con una pausa entre ellas.</p>'+
+    (Reconocedor
+      ? '<div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">'+
+        '<button type="button" class="btn fuerte" id="dic_boton">🎤 Empezar a escuchar</button>'+
+        '<span class="nota" id="dic_estado" style="margin:0">Parado</span></div>'
+      : '<div class="aviso-caja" style="margin-bottom:12px">Este navegador no sabe escuchar. '+
+        'En el móvil ábrelo con <strong>Chrome</strong>; en el iPhone, Safari no lo hace. '+
+        'Mientras tanto, escribe la frase aquí abajo: se reparte igual.</div>')+
+
+    '<div class="campo" style="margin-bottom:12px">'+
+      '<label class="lbl" for="dic_texto">O escríbelo y dale a Intro</label>'+
+      '<input id="dic_texto" placeholder="Mercadona coca cola pack de 3 latas 2,40" '+
+      'autocomplete="off"></div>'+
+    '<div id="dic_lista"></div>',
+
+    function(){
+      var buenas=lineas.filter(function(l){
+        return (l.superId||l.superNuevo) && l.producto && l.precio>0; });
+      if(!buenas.length){ avisar("No hay ninguna línea completa que guardar.", true); return true; }
+
+      var nuevosProd=0, nuevosSuper=0, precios=0;
+      buenas.forEach(function(l){
+        var superId=l.superId;
+        if(!superId && l.superNuevo){
+          var sm={id:uid(), nombre:l.superNuevo, sitio:""};
+          libro.supermercados.push(sm); superId=sm.id; nuevosSuper++;
+        }
+        var prod=productoParecido(l.producto, l.formato);
+        var piezas=piezasDelFormato(l.formato);
+        if(!prod){
+          prod={id:uid(), nombre:l.producto, marca:"", formato:l.formato||"",
+                unidades:piezas>1?piezas:""};
+          libro.productos.push(prod); nuevosProd++;
+        } else if(piezas>1 && !unidadesDe(prod)){
+          /* Si ya existía sin decir cuántas trae, se apunta ahora: es lo
+             que deja comparar un pack con una unidad suelta. */
+          prod.unidades=piezas;
+        }
+        ponerPrecio(prod.id, superId, l.precio);
+        precios++;
+      });
+      guardar(); pintar();
+      avisar(plural(precios,"precio guardado","precios guardados")+
+             (nuevosProd?" · "+plural(nuevosProd,"producto nuevo","productos nuevos"):"")+
+             (nuevosSuper?" · "+plural(nuevosSuper,"almacén nuevo","almacenes nuevos"):""));
+    },
+    {aceptar:"Guardar"});
+
+  var cajaLista=document.getElementById("dic_lista");
+
+  function pintarLineas(){
+    if(!lineas.length){
+      cajaLista.innerHTML='<p class="nota" style="margin:0">Lo que vaya entendiendo sale aquí '+
+        'para que lo repases antes de guardar.</p>';
+      return;
+    }
+    /* Agrupadas por almacén: es como se compra y como lo dicta él. */
+    var grupos=[], porClave={};
+    lineas.forEach(function(l, i){
+      var clave = l.superId || ("nuevo:"+sinTildes(l.superNuevo||"")) || "sin";
+      if(!l.superId && !l.superNuevo) clave="sin";
+      if(!porClave[clave]){
+        var sm=(libro.supermercados||[]).filter(function(x){ return x.id===l.superId; })[0];
+        porClave[clave]={titulo: sm ? sm.nombre
+                                    : (l.superNuevo || "Falta decir de dónde"),
+                         nuevo: !sm && !!l.superNuevo, filas:[]};
+        grupos.push(porClave[clave]);
+      }
+      porClave[clave].filas.push({l:l, i:i});
+    });
+
+    cajaLista.innerHTML=grupos.map(function(g){
+      var suma=r2(g.filas.reduce(function(t,f){ return t+(+f.l.precio||0); },0));
+      return '<div style="margin-bottom:14px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:baseline;'+
+          'gap:10px;margin-bottom:6px">'+
+          '<strong>'+esc(g.titulo)+
+            (g.nuevo?' <span class="nota" style="margin:0">· nuevo</span>':"")+'</strong>'+
+          '<span class="nota" style="margin:0">'+plural(g.filas.length,"cosa","cosas")+
+            (suma>0?' · '+eur(suma):"")+'</span>'+
+        '</div>'+
+        g.filas.map(function(f){ return fichaDictada(f.l, f.i); }).join("")+
+      '</div>';
+    }).join("");
+
+    engancharDictado();
+  }
+
+  function fichaDictada(l, i){
+    return (function(l, i){
+      var falta=[];
+      if(!l.superId && !l.superNuevo) falta.push("el almacén");
+      if(!l.producto)   falta.push("el producto");
+      if(!(l.precio>0)) falta.push("el precio");
+      var piezas=piezasDelFormato(l.formato);
+      return '<div style="border:1px solid '+(falta.length?"var(--aviso)":"var(--linea)")+';'+
+        'border-radius:10px;padding:9px 11px;margin-bottom:8px">'+
+        '<div style="display:flex;gap:8px;align-items:center;justify-content:space-between">'+
+          '<span class="nota" style="margin:0;font-style:italic">«'+esc(l.frase)+'»</span>'+
+          '<button type="button" class="btn suave sm malo" data-dicdel="'+i+'" '+
+          'style="padding:0 6px">✕</button></div>'+
+        '<div class="rejilla3" style="margin-top:8px">'+
+          '<div class="campo"><label class="lbl">Almacén</label>'+
+            '<select data-dic="'+i+'|superId">'+
+              '<option value="">— nuevo, escríbelo —</option>'+
+              (libro.supermercados||[]).map(function(sm){
+                return '<option value="'+esc(sm.id)+'"'+(l.superId===sm.id?" selected":"")+'>'+
+                       esc(sm.nombre)+'</option>'; }).join("")+
+            '</select>'+
+            (l.superId?"":'<input data-dic="'+i+'|superNuevo" placeholder="Nombre del almacén" '+
+              'value="'+esc(l.superNuevo)+'" style="margin-top:5px">')+
+          '</div>'+
+          '<div class="campo"><label class="lbl">Producto</label>'+
+            '<input data-dic="'+i+'|producto" value="'+esc(l.producto)+'"></div>'+
+          '<div class="campo"><label class="lbl">Formato</label>'+
+            '<input data-dic="'+i+'|formato" value="'+esc(l.formato)+'"></div>'+
+          '<div class="campo"><label class="lbl">Precio (€)</label>'+
+            '<input type="number" step="0.01" data-dic="'+i+'|precio" '+
+            'value="'+esc(l.precio==null?"":l.precio)+'"></div>'+
+        '</div>'+
+        (piezas>1 && l.precio>0
+          ? '<p class="nota" style="margin:6px 0 0">Son '+piezas+': sale a <strong>'+
+            eur(r2(l.precio/piezas))+'</strong> cada una.</p>'
+          : "")+
+        (falta.length
+          ? '<p class="nota" style="margin:6px 0 0;color:var(--aviso)">Falta '+falta.join(" y ")+
+            ': esta línea no se guarda hasta que lo pongas.</p>'
+          : "")+
+      '</div>';
+    })(l, i);
+  }
+
+  function engancharDictado(){
+    cajaLista.querySelectorAll("[data-dic]").forEach(function(x){
+      x.addEventListener("change", function(){
+        var p=x.getAttribute("data-dic").split("|");
+        var l=lineas[+p[0]]; if(!l) return;
+        l[p[1]] = (p[1]==="precio") ? (x.value===""?null:r2(+x.value||0)) : x.value.trim();
+        pintarLineas();
+      });
+    });
+    cajaLista.querySelectorAll("[data-dicdel]").forEach(function(b){
+      b.addEventListener("click", function(){
+        lineas.splice(+b.getAttribute("data-dicdel"),1); pintarLineas();
+      });
+    });
+  }
+
+  function anadirFrase(frase){
+    if(!String(frase||"").trim()) return;
+    lineas.push(entenderDictado(frase));
+    pintarLineas();
+  }
+
+  document.getElementById("dic_texto").addEventListener("keydown", function(e){
+    if(e.key!=="Enter") return;
+    e.preventDefault(); e.stopPropagation();
+    anadirFrase(this.value); this.value="";
+  });
+
+  var boton=document.getElementById("dic_boton");
+  if(boton){
+    var estado=document.getElementById("dic_estado");
+    boton.addEventListener("click", function(){
+      if(escuchando){ if(motor) motor.stop(); return; }
+      motor=new Reconocedor();
+      motor.lang="es-ES"; motor.continuous=true; motor.interimResults=false;
+      motor.onstart=function(){
+        escuchando=true; boton.textContent="⏹ Parar";
+        estado.textContent="Escuchando… di una cosa y haz una pausa.";
+      };
+      motor.onresult=function(ev){
+        for(var i=ev.resultIndex;i<ev.results.length;i++){
+          if(ev.results[i].isFinal) anadirFrase(ev.results[i][0].transcript);
+        }
+      };
+      motor.onerror=function(ev){
+        estado.textContent = ev.error==="not-allowed"
+          ? "No me has dado permiso para el micrófono."
+          : "No he podido escuchar ("+ev.error+").";
+      };
+      motor.onend=function(){
+        escuchando=false; boton.textContent="🎤 Empezar a escuchar";
+        if(estado.textContent.indexOf("Escuchando")===0) estado.textContent="Parado";
+      };
+      try{ motor.start(); }catch(e){ estado.textContent="No he podido encender el micrófono."; }
+    });
+    d.addEventListener("close", function(){ if(motor) try{ motor.stop(); }catch(e){} });
+  }
+
+  pintarLineas();
 }
 
 function pintarReparto(){
