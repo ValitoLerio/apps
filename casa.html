@@ -133,6 +133,13 @@ input[type=checkbox]{width:auto;min-width:0;accent-color:var(--acento);margin:0}
 .nota{font-size:12.5px;color:var(--muted);margin:0 0 12px;max-width:72ch}
 
 .tabla-caja{overflow-x:auto}
+/* El comparador puede tener muchas filas. Su caja se queda con una
+   altura y hace ella el desplazamiento: así la fila de los almacenes se
+   pega arriba y no se pierde de vista al bajar por la lista. Pegada a la
+   página no funcionaría, porque la caja ya es su propio contenedor de
+   desplazamiento y la cabecera se pegaría a ella, no a la pantalla. */
+#comparador{max-height:min(70vh,620px);overflow:auto}
+#comparador thead th{position:sticky;top:0;z-index:2;background:var(--sup)}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;
    color:var(--muted);font-weight:500;padding:9px 10px;border-bottom:1px solid var(--linea);
@@ -270,7 +277,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609181731"></script>
+<script src="sync.js?v=202609181736"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -278,7 +285,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('casa').then(function(){
     var s = document.createElement('script');
-    s.src = 'casa.js?v=202609181731';
+    s.src = 'casa.js?v=202609181736';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar casa.js. Recarga la pagina.'; };
     document.body.appendChild(s);
