@@ -967,16 +967,45 @@ function entenderDictado(frase){
   var linea={frase:String(frase||"").trim(), superId:"", superNuevo:"",
              producto:"", formato:"", precio:null};
 
-  /* 1. El almacén, si nombra uno de los tuyos */
+  /* 1. El almacén. El micrófono nunca escribe estos nombres como están
+     guardados: dice «carrefour» por «Carrefur», «pirineos» por
+     «Pirinees», «eleclerc» por «elecler». Así que se comparan palabra a
+     palabra y basta con que empiecen igual: cinco letras compartidas es
+     mucha casualidad para ser otro sitio. Gana el que más palabras
+     acierte, y las acertadas se quitan del nombre del producto. */
+  var dichas = plano.split(/[^a-z0-9]+/).filter(Boolean);
+  function seParecen(a, b){
+    if(a===b) return true;
+    if(a.length<4 || b.length<4) return false;
+    var n=Math.min(5, a.length, b.length);
+    return a.slice(0,n)===b.slice(0,n);
+  }
+  var ganador=null;
   (libro.supermercados||[]).forEach(function(sm){
-    var nom=sinTildes(sm.nombre);
-    if(!nom || linea.superId) return;
-    var i=plano.indexOf(nom);
-    if(i<0) return;
-    linea.superId=sm.id;
-    plano=plano.slice(0,i)+" "+plano.slice(i+nom.length);
-    texto=texto.replace(new RegExp(escaparRe(sm.nombre),"i")," ");
+    var suyas=sinTildes(sm.nombre).split(/[^a-z0-9]+/).filter(Boolean);
+    var acertadas=[], puntos=0;
+    suyas.forEach(function(w){
+      dichas.forEach(function(dicha){
+        if(acertadas.indexOf(dicha)>=0) return;
+        if(seParecen(w, dicha) || (w.length<=2 && w===dicha)){
+          acertadas.push(dicha);
+          puntos += Math.max(w.length, dicha.length);
+        }
+      });
+    });
+    /* Una palabra de dos letras sola no nombra a nadie */
+    var buenas=acertadas.filter(function(x){ return x.length>=3; });
+    if(!buenas.length) return;
+    if(!ganador || puntos>ganador.puntos) ganador={sm:sm, acertadas:acertadas, puntos:puntos};
   });
+  if(ganador){
+    linea.superId=ganador.sm.id;
+    ganador.acertadas.forEach(function(w){
+      var re=new RegExp("(^|[^a-z0-9])"+escaparRe(w)+"[a-z0-9]*", "i");
+      plano=plano.replace(re, " ");
+      texto=texto.replace(re, " ");
+    });
+  }
 
   /* 2. El precio: «2,40», «2 con 40», «2 euros 40», «3 euros» */
   var m =
@@ -1033,6 +1062,10 @@ function productoParecido(nombre, formato){
 function abrirDictado(){
   var Reconocedor = window.SpeechRecognition || window.webkitSpeechRecognition;
   var lineas=[], escuchando=false, motor=null;
+  /* El navegador corta la escucha en cuanto callas un rato. Con esto se
+     vuelve a encender solo mientras el micro siga pedido: si no, parece
+     que no oye cuando lo que ha pasado es que se apagó. */
+  var queremosOir=false;
 
   var d=abrirVentana("Dictar precios",
     '<p class="nota" style="margin:0 0 12px">Di el almacén, el producto, el formato y el precio. '+
@@ -1041,7 +1074,9 @@ function abrirDictado(){
     (Reconocedor
       ? '<div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">'+
         '<button type="button" class="btn fuerte" id="dic_boton">🎤 Empezar a escuchar</button>'+
-        '<span class="nota" id="dic_estado" style="margin:0">Parado</span></div>'
+        '<span class="nota" id="dic_estado" style="margin:0">Parado</span></div>'+
+        '<div id="dic_eco" class="nota" style="margin:0 0 10px;min-height:1.2em;font-style:italic;'+
+        'color:var(--acento)"></div>'
       : '<div class="aviso-caja" style="margin-bottom:12px">Este navegador no sabe escuchar. '+
         'En el móvil ábrelo con <strong>Chrome</strong>; en el iPhone, Safari no lo hace. '+
         'Mientras tanto, escribe la frase aquí abajo: se reparte igual.</div>')+
@@ -1134,8 +1169,12 @@ function abrirDictado(){
       var piezas=piezasDelFormato(l.formato);
       return '<div style="border:1px solid '+(falta.length?"var(--aviso)":"var(--linea)")+';'+
         'border-radius:10px;padding:9px 11px;margin-bottom:8px">'+
-        '<div style="display:flex;gap:8px;align-items:center;justify-content:space-between">'+
-          '<span class="nota" style="margin:0;font-style:italic">«'+esc(l.frase)+'»</span>'+
+        /* La frase se puede corregir: si oyó «coca gola», se arregla ahí
+           y se vuelve a repartir, en vez de ir campo por campo. */
+        '<div style="display:flex;gap:6px;align-items:center">'+
+          '<input data-dicfrase="'+i+'" value="'+esc(l.frase)+'" '+
+          'title="Corrige lo que oyó mal y pulsa Intro" '+
+          'style="flex:1;font-style:italic;font-size:12.5px;padding:4px 8px">'+
           '<button type="button" class="btn suave sm malo" data-dicdel="'+i+'" '+
           'style="padding:0 6px">✕</button></div>'+
         '<div class="rejilla3" style="margin-top:8px">'+
@@ -1183,6 +1222,15 @@ function abrirDictado(){
         lineas.splice(+b.getAttribute("data-dicdel"),1); pintarLineas();
       });
     });
+    cajaLista.querySelectorAll("[data-dicfrase]").forEach(function(x){
+      x.addEventListener("keydown", function(e){
+        if(e.key!=="Enter") return;
+        e.preventDefault(); e.stopPropagation();
+        var i=+x.getAttribute("data-dicfrase");
+        lineas[i]=entenderDictado(x.value);
+        pintarLineas();
+      });
+    });
   }
 
   function anadirFrase(frase){
@@ -1201,30 +1249,52 @@ function abrirDictado(){
   if(boton){
     var estado=document.getElementById("dic_estado");
     boton.addEventListener("click", function(){
-      if(escuchando){ if(motor) motor.stop(); return; }
+      if(escuchando){ queremosOir=false; if(motor) motor.stop(); return; }
       motor=new Reconocedor();
-      motor.lang="es-ES"; motor.continuous=true; motor.interimResults=false;
+      motor.lang="es-ES"; motor.continuous=true;
+      /* Enseñar lo que va oyendo, aunque no esté cerrado: así se ve si
+         te está cogiendo o si estás hablando al aire. */
+      motor.interimResults=true;
+      motor.maxAlternatives=3;
       motor.onstart=function(){
         escuchando=true; boton.textContent="⏹ Parar";
         estado.textContent="Escuchando… di una cosa y haz una pausa.";
       };
       motor.onresult=function(ev){
+        var enCurso="";
         for(var i=ev.resultIndex;i<ev.results.length;i++){
           if(ev.results[i].isFinal) anadirFrase(ev.results[i][0].transcript);
+          else enCurso += ev.results[i][0].transcript;
         }
+        var eco=document.getElementById("dic_eco");
+        if(eco) eco.textContent = enCurso ? "…"+enCurso : "";
       };
       motor.onerror=function(ev){
+        if(ev.error==="no-speech") return;          /* un silencio no es un fallo */
+        queremosOir = (ev.error==="aborted");
         estado.textContent = ev.error==="not-allowed"
           ? "No me has dado permiso para el micrófono."
-          : "No he podido escuchar ("+ev.error+").";
+          : ev.error==="audio-capture"
+            ? "No encuentro micrófono."
+            : "No he podido escuchar ("+ev.error+").";
       };
       motor.onend=function(){
+        var eco=document.getElementById("dic_eco"); if(eco) eco.textContent="";
+        /* Se ha callado, no se ha acabado: mientras el micro siga pedido
+           se vuelve a encender. */
+        if(queremosOir){
+          try{ motor.start(); return; }catch(e){}
+        }
         escuchando=false; boton.textContent="🎤 Empezar a escuchar";
         if(estado.textContent.indexOf("Escuchando")===0) estado.textContent="Parado";
       };
+      queremosOir=true;
       try{ motor.start(); }catch(e){ estado.textContent="No he podido encender el micrófono."; }
     });
-    d.addEventListener("close", function(){ if(motor) try{ motor.stop(); }catch(e){} });
+    d.addEventListener("close", function(){
+      queremosOir=false;
+      if(motor) try{ motor.stop(); }catch(e){}
+    });
   }
 
   pintarLineas();
