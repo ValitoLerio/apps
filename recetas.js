@@ -520,6 +520,7 @@ function cargar(){
   if(!libro.ajustes) libro.ajustes={};
   if(!libro.ajustes.raciones)   libro.ajustes.raciones=4;
   if(!libro.ajustes.avisarDias) libro.ajustes.avisarDias=21;
+  if(!libro.despensa) libro.despensa=[];
 }
 function guardar(){ localStorage.setItem(CLAVE, JSON.stringify(libro)); }
 
@@ -591,6 +592,7 @@ function pintar(){
         '<span class="sub">El recetario de trabajo</span></div>'+
       boton("hoy","Hoy", null)+
       boton("recetario","Recetario", recetas().length)+
+      boton("tengo","Con lo que tengo", (libro.despensa||[]).length||null)+
       boton("semana","La semana", null)+
       boton("ajustes","Ajustes", null)+
       '<div class="pie-rail">'+
@@ -609,6 +611,7 @@ function pintar(){
   if(ui.receta)                   verReceta();
   else if(ui.vista==="hoy")       verHoy();
   else if(ui.vista==="recetario") verRecetario();
+  else if(ui.vista==="tengo")     verDespensa();
   else if(ui.vista==="semana")    verSemana();
   else                            verAjustes();
 }
@@ -903,6 +906,7 @@ function verRecetario(){
     cabecera("Recetario",
       "Cada receta con sus ingredientes y sus pasos. Busca también por ingrediente: "+
       "escribe «merluza» y salen todas las que la llevan.",
+      '<button class="btn" id="pegarReceta">📋 Pegar una receta</button>'+
       '<button class="btn fuerte" id="nuevaReceta">+ Nueva receta</button>')+
 
     '<div class="filtros">'+
@@ -952,6 +956,7 @@ function verRecetario(){
         '</div>');
 
   document.getElementById("nuevaReceta").addEventListener("click", function(){ editarReceta(null); });
+  document.getElementById("pegarReceta").addEventListener("click", pegarReceta);
   main.querySelectorAll("[data-tipo]").forEach(function(b){
     b.addEventListener("click", function(){ ui.tipo=b.dataset.tipo; pintar(); });
   });
@@ -970,6 +975,7 @@ function fichaReceta(r){
   var ultima=ultimaVez(r.id);
   var info=TIPOS[r.tipo]||TIPOS.base;
   return '<button class="receta" data-abrir="'+esc(r.id)+'">'+
+    (r.foto?'<span class="foto"><img src="'+esc(r.foto)+'" alt=""></span>':"")+
     '<span class="chapa acento" style="align-self:flex-start">'+info.icono+' '+esc(info.corto)+'</span>'+
     '<span class="nom">'+esc(r.nombre)+'</span>'+
     '<span class="meta">'+
@@ -1008,6 +1014,9 @@ function verReceta(){
 
   main.innerHTML=
     '<button class="btn suave sm" id="volver" style="margin-bottom:12px">← Recetario</button>'+
+    (r.foto?'<img src="'+esc(r.foto)+'" alt="" style="width:100%;max-width:480px;'+
+      'max-height:300px;object-fit:cover;border-radius:var(--radio);display:block;'+
+      'margin-bottom:14px;border:1px solid var(--linea)">':"")+
     cabecera(r.nombre,
       info.icono+' '+esc(info.nombre)+
       (r.tiempo?' · '+esc(r.tiempo):"")+
@@ -1191,6 +1200,195 @@ function leerIngrediente(linea){
   return {cantidad:m[1].replace(",","."), unidad:unidad, que:que.trim()};
 }
 
+/* ══════════════════════════════════════════════════════════════
+   PEGAR UNA RECETA
+   ══════════════════════════════════════════════════════════════
+   Una receta copiada de donde sea —un mensaje, una web, un papel
+   transcrito— viene en un bloque de texto. Aquí se reparte en nombre,
+   ingredientes y pasos, y se enseña repartida para corregir lo que
+   haga falta antes de guardarla.
+   ══════════════════════════════════════════════════════════════ */
+
+var MARCA_ING  = /^\s*(ingredientes?|ingredients|necesitas|lista de la compra)\s*[:.]?\s*$/i;
+var MARCA_PASO = /^\s*(elaboraci[óo]n|preparaci[óo]n|pasos|modo de (hacerlo|preparaci[óo]n)|instrucciones|c[óo]mo se hace|procedimiento)\s*[:.]?\s*$/i;
+var MARCA_OTRA = /^\s*(notas?|consejos?|trucos?|para|raciones|tiempo|dificultad)\s*[:.]/i;
+
+/* Una línea suena a ingrediente si empieza por cantidad, o es corta y no
+   tiene forma de frase. Una de paso es larga o empieza por verbo. */
+function pareceIngrediente(l){
+  var t=l.trim();
+  if(!t) return false;
+  if(/^[\-•·*]\s*/.test(t)) return true;
+  if(/^\d+([.,]\d+)?\s*(g|gr|kg|ml|l|cl|ud|uds|unidades?|dientes?|cucharad|pizca|hojas?|ramas?|latas?|vasos?|tazas?|manojos?|sobres?)?\b/i.test(t)) return true;
+  if(/^(un|una|unos|unas|medio|media)\b/i.test(t) && t.length<48) return true;
+  return t.length<=38 && t.split(/\s+/).length<=5 && !/[.:;]$/.test(t);
+}
+
+function limpiarLinea(l){
+  return l.replace(/^\s*[\-•·*]\s*/,"")          /* viñetas */
+          .replace(/^\s*\d+\s*[.)\-]\s+/,"")     /* «1. », «2) » */
+          .replace(/\s+/g," ").trim();
+}
+
+function leerRecetaPegada(texto){
+  var lineas=String(texto||"").split(/\r?\n/).map(function(x){ return x.trim(); });
+  var res={nombre:"", ingredientes:[], pasos:[], notas:""};
+
+  /* Si trae los rótulos de siempre, se hace caso a ellos */
+  var iIng=-1, iPaso=-1;
+  lineas.forEach(function(l,i){
+    if(iIng<0  && MARCA_ING.test(l))  iIng=i;
+    if(iPaso<0 && MARCA_PASO.test(l)) iPaso=i;
+  });
+
+  var cabecera, bloqueIng, bloquePasos;
+  if(iIng>=0 && iPaso>iIng){
+    cabecera    = lineas.slice(0, iIng);
+    bloqueIng   = lineas.slice(iIng+1, iPaso);
+    bloquePasos = lineas.slice(iPaso+1);
+  } else if(iIng>=0){
+    cabecera  = lineas.slice(0, iIng);
+    var resto = lineas.slice(iIng+1).filter(Boolean);
+    /* Sin rótulo de pasos: se corta donde dejan de parecer ingredientes */
+    var corte=resto.length;
+    for(var i=0;i<resto.length;i++){
+      if(!pareceIngrediente(resto[i])){ corte=i; break; }
+    }
+    bloqueIng=resto.slice(0,corte); bloquePasos=resto.slice(corte);
+  } else {
+    cabecera=lineas.slice(0,1);
+    var cuerpo=lineas.slice(1).filter(Boolean);
+    bloqueIng=[]; bloquePasos=[];
+    var yaEnPasos=false;
+    cuerpo.forEach(function(l){
+      if(!yaEnPasos && pareceIngrediente(l)) bloqueIng.push(l);
+      else { yaEnPasos=true; bloquePasos.push(l); }
+    });
+  }
+
+  res.nombre=(cabecera.filter(Boolean)[0]||"").replace(/^receta de\s+/i,"").trim();
+
+  bloqueIng.filter(Boolean).forEach(function(l){
+    if(MARCA_OTRA.test(l)){ res.notas+=(res.notas?"\n":"")+l; return; }
+    res.ingredientes.push(limpiarLinea(l));
+  });
+
+  /* Los pasos a veces vienen en un solo párrafo: se parten por frases */
+  var pasos=[];
+  bloquePasos.filter(Boolean).forEach(function(l){
+    if(MARCA_OTRA.test(l)){ res.notas+=(res.notas?"\n":"")+l; return; }
+    var limpio=limpiarLinea(l);
+    if(limpio.length>200 && /\.\s/.test(limpio)){
+      limpio.split(/(?<=\.)\s+/).forEach(function(f){
+        var t=f.replace(/\.$/,"").trim();
+        if(t.length>3) pasos.push(t);
+      });
+    } else if(limpio) pasos.push(limpio.replace(/\.$/,""));
+  });
+  res.pasos=pasos;
+  return res;
+}
+
+function pegarReceta(){
+  var leido=null;
+
+  var d=abrirVentana("Pegar una receta",
+    '<p class="nota" style="margin:0 0 10px">Pega aquí la receta tal y como la tengas '+
+    '—de un mensaje, de una web, de donde sea— y la reparto en nombre, ingredientes y '+
+    'pasos. Luego lo repasas antes de guardarla.</p>'+
+    '<textarea id="pg_texto" rows="9" placeholder="Lentejas de la abuela&#10;&#10;Ingredientes:&#10;'+
+    '- 400 g de lentejas&#10;- 2 cebollas&#10;&#10;Elaboración:&#10;1. Pochar la cebolla…"></textarea>'+
+    '<div id="pg_previo" style="margin-top:14px"></div>',
+    function(){
+      if(!leido || !leido.nombre){ avisar("Pega una receta y dale un nombre.", true); return true; }
+      if(!leido.ingredientes.length && !leido.pasos.length){
+        avisar("No he sacado ni ingredientes ni pasos. Repásalo.", true); return true;
+      }
+      var r={id:uid(), nombre:leido.nombre,
+             tipo:valor("pg_tipo")||"primero",
+             raciones:Math.max(1,Math.round(numero("pg_rac")))||libro.ajustes.raciones||4,
+             tiempo:"",
+             ingredientes:leido.ingredientes.map(leerIngrediente).filter(Boolean),
+             pasos:leido.pasos.slice(), notas:leido.notas||"",
+             alergenos:[], dieta:[], nutricion:{}, veces:0, ultima:""};
+      libro.recetas.push(r);
+      guardar();
+      ui.receta=r.id; ui.vista="recetario";
+      pintar();
+      avisar("Guardada. Repasa alérgenos y dieta en Editar.");
+    }, {aceptar:"Guardar en el recetario"});
+
+  var caja=document.getElementById("pg_texto");
+  var previo=document.getElementById("pg_previo");
+
+  function repartir(){
+    leido=leerRecetaPegada(caja.value);
+    if(!caja.value.trim()){ previo.innerHTML=""; return; }
+    previo.innerHTML=
+      '<div class="rejilla" style="margin-bottom:10px">'+
+        '<div class="campo"><label class="lbl" for="pg_nom">Nombre</label>'+
+          '<input id="pg_nom" value="'+esc(leido.nombre)+'"></div>'+
+        '<div class="campo"><label class="lbl" for="pg_tipo">Qué es</label>'+
+          '<select id="pg_tipo">'+ORDEN_TIPOS.map(function(k){
+            return '<option value="'+k+'">'+TIPOS[k].icono+' '+esc(TIPOS[k].nombre)+'</option>';
+          }).join("")+'</select></div>'+
+        '<div class="campo"><label class="lbl" for="pg_rac">Raciones</label>'+
+          '<input type="number" id="pg_rac" min="1" value="'+(libro.ajustes.raciones||4)+'"></div>'+
+      '</div>'+
+      '<div class="rejilla" style="grid-template-columns:1fr 1fr">'+
+        '<div><div class="lbl" style="margin-bottom:4px">'+
+          plural(leido.ingredientes.length,"ingrediente","ingredientes")+'</div>'+
+          '<textarea id="pg_ing" rows="7">'+esc(leido.ingredientes.join("\n"))+'</textarea></div>'+
+        '<div><div class="lbl" style="margin-bottom:4px">'+
+          plural(leido.pasos.length,"paso","pasos")+'</div>'+
+          '<textarea id="pg_pasos" rows="7">'+esc(leido.pasos.join("\n"))+'</textarea></div>'+
+      '</div>'+
+      (leido.notas?'<p class="nota" style="margin:8px 0 0">Además he apartado esto como nota: '+
+        esc(leido.notas)+'</p>':"")+
+      '<p class="nota" style="margin:8px 0 0">Si algo ha caído donde no toca, muévelo aquí '+
+      'mismo: una cosa por línea.</p>';
+
+    /* Lo que corrija a mano manda sobre lo que yo haya repartido */
+    document.getElementById("pg_nom").addEventListener("input", function(){
+      leido.nombre=this.value.trim();
+    });
+    ["pg_ing","pg_pasos"].forEach(function(id){
+      document.getElementById(id).addEventListener("input", function(){
+        var l=this.value.split("\n").map(function(x){ return x.trim(); }).filter(Boolean);
+        if(id==="pg_ing") leido.ingredientes=l; else leido.pasos=l;
+      });
+    });
+  }
+
+  caja.addEventListener("input", repartir);
+  caja.addEventListener("paste", function(){ setTimeout(repartir, 30); });
+}
+
+/* La foto se guarda reducida: el recetario entero viaja a GitHub en cada
+   cambio, y con 500 recetas una foto de móvil por cada una lo haría
+   impracticable. 420 px basta para saber qué plato es. */
+function encogerFoto(archivo, listo){
+  var lector=new FileReader();
+  lector.onload=function(){
+    var img=new Image();
+    img.onload=function(){
+      var max=420, ancho=img.width, alto=img.height;
+      if(ancho>alto && ancho>max){ alto=Math.round(alto*max/ancho); ancho=max; }
+      else if(alto>=ancho && alto>max){ ancho=Math.round(ancho*max/alto); alto=max; }
+      var cv=document.createElement("canvas");
+      cv.width=ancho; cv.height=alto;
+      var cx=cv.getContext("2d");
+      cx.fillStyle="#fff"; cx.fillRect(0,0,ancho,alto);
+      cx.drawImage(img,0,0,ancho,alto);
+      listo(cv.toDataURL("image/jpeg", 0.7));
+    };
+    img.onerror=function(){ avisar("No he podido leer esa imagen.", true); };
+    img.src=lector.result;
+  };
+  lector.onerror=function(){ avisar("No he podido leer ese archivo.", true); };
+  lector.readAsDataURL(archivo);
+}
+
 function editarReceta(id){
   var nueva=!id;
   var r = id ? recetaDe(id)
@@ -1274,6 +1472,18 @@ function editarReceta(id){
       'Se enseñan en la ficha y, juntos, en el menú del día: es lo que hay que poder decir '+
       'si alguien pregunta.</span></div>'+
 
+    '<div class="campo" style="margin-bottom:12px"><label class="lbl">Foto del plato</label>'+
+      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+        '<img id="e_previa" alt="" style="width:84px;height:84px;object-fit:cover;'+
+          'border-radius:8px;background:var(--sup2);border:1px solid var(--linea);'+
+          (r.foto?'" src="'+esc(r.foto):'display:none')+'">'+
+        '<input type="file" id="e_foto" accept="image/*" style="width:auto;flex:1;min-width:150px">'+
+        (r.foto?'<button type="button" class="btn suave" id="e_quitarFoto">Quitar</button>':"")+
+      '</div>'+
+      '<span class="nota" style="margin:6px 0 0">Se guarda reducida a 420 px. En el móvil '+
+      'te abre la cámara: una foto del plato montado ayuda más que tres líneas de nota.</span>'+
+    '</div>'+
+
     '<div class="campo"><label class="lbl" for="e_notas">Notas</label>'+
       '<textarea id="e_notas" rows="3" placeholder="Sale mejor con el caldo del día anterior…">'+
       esc(r.notas||"")+'</textarea></div>',
@@ -1296,6 +1506,7 @@ function editarReceta(id){
                 .map(function(x){ return x.value; });
       r.nutricion={kcal:numero("e_kcal"), hidratos:numero("e_hc"),
                    proteinas:numero("e_prot"), grasas:numero("e_gra")};
+      if(fotoPendiente!==undefined) r.foto=fotoPendiente;
       if(nueva) libro.recetas.push(r);
       guardar(); pintar();
       avisar(nueva?"Receta guardada":"Receta actualizada");
@@ -1305,6 +1516,25 @@ function editarReceta(id){
 
   /* Al escribir el nombre, las maneras de hacerlo que la app conoce.
      Se elige una y se rellenan ingredientes y pasos, que es lo pesado. */
+  /* La foto nueva vive aquí hasta que se guarde: así se puede quitar
+     sin tocar la receta si al final se cancela. */
+  var fotoPendiente;
+  var quitarF=document.getElementById("e_quitarFoto");
+  if(quitarF) quitarF.addEventListener("click", function(){
+    fotoPendiente=null;
+    document.getElementById("e_previa").style.display="none";
+    quitarF.remove();
+  });
+  document.getElementById("e_foto").addEventListener("change", function(){
+    var f=this.files && this.files[0];
+    if(!f) return;
+    encogerFoto(f, function(dataUrl){
+      fotoPendiente=dataUrl;
+      var pv=document.getElementById("e_previa");
+      pv.src=dataUrl; pv.style.display="";
+    });
+  });
+
   var campoNombre=document.getElementById("e_nom");
   var cajaFormas=document.getElementById("e_formas");
 
@@ -1326,12 +1556,65 @@ function editarReceta(id){
     pintarFormas();
   }
 
+  /* Las que ya tienes y se parecen a lo que estás escribiendo: si la
+     receta ya existe no hace falta volver a escribirla, y si se parece
+     sirve de punto de partida. */
+  function parecidasEn(nombre){
+    var t=String(nombre||"").trim().toLowerCase();
+    if(t.length<3) return [];
+    return recetas().filter(function(x){
+      if(id && x.id===id) return false;
+      var n=(x.nombre||"").toLowerCase();
+      return n.indexOf(t)>=0 || t.indexOf(n)>=0;
+    }).slice(0,6);
+  }
+
+  function copiarDe(otra){
+    document.getElementById("e_tipo").value=otra.tipo||"primero";
+    document.getElementById("e_rac").value=otra.raciones||10;
+    document.getElementById("e_tiempo").value=otra.tiempo||"";
+    document.getElementById("e_ing").value=textoIngredientes(otra);
+    document.getElementById("e_pasos").value=(otra.pasos||[]).join("\n");
+    document.getElementById("e_notas").value=otra.notas||"";
+    document.querySelectorAll(".e_alg").forEach(function(c){
+      c.checked=alergenosDe(otra).indexOf(c.value)>=0; });
+    document.querySelectorAll(".e_dieta").forEach(function(c){
+      c.checked=dietasDe(otra).indexOf(c.value)>=0; });
+    var n=nutricionDe(otra);
+    document.getElementById("e_kcal").value=n.kcal||"";
+    document.getElementById("e_hc").value=n.hidratos||"";
+    document.getElementById("e_prot").value=n.proteinas||"";
+    document.getElementById("e_gra").value=n.grasas||"";
+    avisar("Copiada de «"+otra.nombre+"». Cámbiala a tu gusto.");
+    pintarFormas();
+  }
+
   function pintarFormas(){
     var hay=variantesPara(campoNombre.value);
-    if(!hay){ cajaFormas.innerHTML=""; return; }
+    var mias=parecidasEn(campoNombre.value);
+
+    /* Lo que ya tiene va primero: no tiene sentido escribir dos veces
+       la misma receta. */
+    var htmlMias = mias.length
+      ? '<div class="nota" style="margin:0 0 5px">Ya tienes '+
+        (mias.length===1?"una parecida":"estas parecidas")+
+        '. Pulsa para copiarla y cambiar lo que quieras:</div>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'+
+          mias.map(function(x,i){
+            return '<button type="button" class="btn sm" data-mia="'+i+'">'+
+              esc(x.nombre)+' <span style="opacity:.6">'+esc(TIPOS[x.tipo].corto)+'</span></button>';
+          }).join("")+
+        '</div>'
+      : "";
+
+    if(!hay){
+      cajaFormas.innerHTML=htmlMias;
+      engancharMias(mias);
+      return;
+    }
     var lleno = (document.getElementById("e_ing").value||"").trim() ||
                 (document.getElementById("e_pasos").value||"").trim();
-    cajaFormas.innerHTML=
+    cajaFormas.innerHTML=htmlMias+
       '<div class="nota" style="margin:0 0 5px">'+
         (lleno ? 'También sé hacerlo de estas formas. Al elegir una se cambia lo que hay escrito:'
                : 'Sé hacerlo de '+(hay.formas.length===1?"una forma":hay.formas.length+" formas")+
@@ -1343,6 +1626,7 @@ function editarReceta(id){
                  esc(f.sub)+'</button>';
         }).join("")+
       '</div>';
+    engancharMias(mias);
     cajaFormas.querySelectorAll("[data-forma]").forEach(function(b){
       b.addEventListener("click", function(){
         var f=hay.formas[+b.dataset.forma];
@@ -1354,6 +1638,20 @@ function editarReceta(id){
       });
     });
   }
+  function engancharMias(mias){
+    cajaFormas.querySelectorAll("[data-mia]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var otra=mias[+b.dataset.mia];
+        var lleno=(document.getElementById("e_ing").value||"").trim() ||
+                  (document.getElementById("e_pasos").value||"").trim();
+        if(!lleno){ copiarDe(otra); return; }
+        confirmar("Copiar «"+otra.nombre+"»",
+          '<p style="margin:0">Se sustituye lo que hay escrito por esa receta.</p>',
+          function(){ copiarDe(otra); }, {aceptar:"Copiar", malo:true});
+      });
+    });
+  }
+
   campoNombre.addEventListener("input", pintarFormas);
   pintarFormas();
 
@@ -1383,6 +1681,218 @@ function editarReceta(id){
 /* ══════════════════════════════════════════════════════════════
    LA SEMANA
    ══════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════
+   CON LO QUE TENGO
+   ════════════════════════════════════════════════════════════
+   Se apunta lo que hay en la cámara y salen las recetas que salen con
+   eso, empezando por las que no necesitan nada más. La sal, el aceite,
+   el agua y la pimienta se dan por hechos: nadie los apunta. */
+
+var BASICOS = ["sal","pimienta","aceite","agua","azucar","vinagre"];
+
+function sinTildes(t){
+  return String(t||"").toLowerCase()
+    .replace(/[\u00e1\u00e0\u00e4\u00e2]/g,"a").replace(/[\u00e9\u00e8\u00eb\u00ea]/g,"e")
+    .replace(/[\u00ed\u00ec\u00ef\u00ee]/g,"i").replace(/[\u00f3\u00f2\u00f6\u00f4]/g,"o")
+    .replace(/[\u00fa\u00f9\u00fc\u00fb]/g,"u").replace(/\u00f1/g,"n");
+}
+/* «tomates» y «tomate» son lo mismo cuando se busca en la cámara. */
+function singular(p){
+  /* En castellano lo que acaba en vocal hace el plural con «s» —tomate,
+     tomates— y lo que acaba en consonante con «es» —pimentón, pimentones.
+     Por eso no vale quitar «es» siempre: dejaba «tomat» y «dient». */
+  if(p.length>4 && /es$/.test(p) && /[lnrsdzj]$/.test(p.slice(0,-2))) return p.slice(0,-2);
+  if(p.length>3 && /s$/.test(p))  return p.slice(0,-1);
+  return p;
+}
+/* Ni la medida ni la forma son el producto: en «dientes de ajo» lo que
+   hay en la cámara es el ajo. */
+var PALABRAS_VACIAS = ["con","sin","del","los","las","una","uno","para","picado","picada",
+  "picados","picadas","fresco","fresca","frescos","frescas","diente","dientes","rama","ramas",
+  "hoja","hojas","lata","latas","manojo","manojos","pizca","pizcas","chorro","chorros",
+  "punado","punados","sobre","sobres","vaso","vasos","taza","tazas","cucharada","cucharadas",
+  "cucharadita","cucharaditas","trozo","trozos","loncha","lonchas","gusto","opcional"]
+  .map(function(w){ return singular(w); });
+
+function palabrasDe(t){
+  return sinTildes(t).split(/[^a-z0-9]+/)
+    .map(singular)   /* primero al singular: la lista de abajo está en singular */
+    .filter(function(w){ return w.length>2 && PALABRAS_VACIAS.indexOf(w)<0; });
+}
+/* Un ingrediente está cubierto si alguna palabra suya coincide con algo
+   de la cámara: «pechuga de pollo» lo cubre «pollo». */
+function ingredienteCubierto(ing, tengo){
+  var suyas=palabrasDe(ing.que||"");
+  if(!suyas.length) return true;
+  for(var i=0;i<suyas.length;i++){
+    if(BASICOS.indexOf(suyas[i])>=0) return true;
+    for(var j=0;j<tengo.length;j++) if(tengo[j].indexOf(suyas[i])>=0) return true;
+  }
+  return false;
+}
+function loQueFalta(r, tengo){
+  return (r.ingredientes||[]).filter(function(i){ return !ingredienteCubierto(i, tengo); })
+           .map(function(i){ return i.que; });
+}
+/* Los ingredientes que más se repiten en el recetario, para apuntarlos
+   de un toque en vez de escribirlos. */
+function sugerenciasDespensa(){
+  var cuenta={};
+  recetas().forEach(function(r){
+    (r.ingredientes||[]).forEach(function(i){
+      var p=palabrasDe(i.que||"")[0];
+      if(!p || BASICOS.indexOf(p)>=0) return;
+      cuenta[p]=(cuenta[p]||0)+1;
+    });
+  });
+  var ya=(libro.despensa||[]).map(function(x){ return singular(sinTildes(x)); });
+  return Object.keys(cuenta)
+    .filter(function(p){ return ya.indexOf(p)<0; })
+    .sort(function(a,b){ return cuenta[b]-cuenta[a]; })
+    .slice(0,16);
+}
+function ponerEnDespensa(texto){
+  var t=String(texto||"").trim();
+  if(!t) return false;
+  var partes = t.split(/[,;\n]+/).map(function(x){ return x.trim(); }).filter(Boolean);
+  var ya=(libro.despensa||[]).map(function(x){ return sinTildes(x); });
+  var puesto=false;
+  partes.forEach(function(p){
+    if(ya.indexOf(sinTildes(p))>=0) return;
+    libro.despensa.push(p); ya.push(sinTildes(p)); puesto=true;
+  });
+  if(puesto) guardar();
+  return puesto;
+}
+function fichaConFalta(r, falta){
+  var chapa = falta.length
+    ? '<span class="chapa aviso" title="'+esc(falta.join(", "))+'">Falta '+
+      esc(falta.slice(0,3).join(", "))+(falta.length>3?" y "+plural(falta.length-3,"cosa m\u00e1s","cosas m\u00e1s"):"")+'</span>'
+    : '<span class="chapa ok">Lo tienes todo</span>';
+  return fichaReceta(r).replace(/<\/span><\/button>$/, chapa+'</span></button>');
+}
+
+function verDespensa(){
+  var main=document.getElementById("main");
+  var lo=(libro.despensa||[]);
+  var tengo=lo.map(function(x){ return singular(sinTildes(x)); }).filter(Boolean);
+
+  var calculadas = tengo.length ? recetas().map(function(r){
+      var falta=loQueFalta(r, tengo);
+      var total=(r.ingredientes||[]).length||1;
+      return {r:r, falta:falta, parte:(total-falta.length)/total};
+    }).filter(function(x){
+      /* algo suyo tiene que estar en la cámara: si no, es una receta cualquiera */
+      return x.parte>0 && (x.r.ingredientes||[]).length>0;
+    }).sort(function(a,b){
+      if(a.falta.length!==b.falta.length) return a.falta.length-b.falta.length;
+      if(b.parte!==a.parte) return b.parte-a.parte;
+      return a.r.nombre.localeCompare(b.r.nombre,"es");
+    }) : [];
+
+  if(ui.tipoTengo && ui.tipoTengo!=="todos")
+    calculadas=calculadas.filter(function(x){ return x.r.tipo===ui.tipoTengo; });
+
+  var yaSale  = calculadas.filter(function(x){ return x.falta.length===0; });
+  var casi    = calculadas.filter(function(x){ return x.falta.length>0 && x.falta.length<=2; }).slice(0,24);
+  var lejos   = calculadas.filter(function(x){ return x.falta.length>2; }).slice(0,12);
+
+  function tabla(titulo, cuantas, grupo){
+    if(!grupo.length) return "";
+    return '<div class="grupoTipo">'+esc(titulo)+'<span>'+cuantas+'</span></div>'+
+           '<div class="fichas" style="margin-bottom:22px">'+
+           grupo.map(function(x){ return fichaConFalta(x.r, x.falta); }).join("")+'</div>';
+  }
+
+  main.innerHTML=
+    cabecera("Con lo que tengo",
+      "Apunta lo que hay en la c\u00e1mara y te digo qu\u00e9 sale. La sal, el aceite, el agua, "+
+      "el az\u00facar, el vinagre y la pimienta se dan por hechos.",
+      lo.length?'<button class="btn malo" id="d_vaciar">Vaciar la lista</button>':"")+
+
+    '<div class="tarjeta" style="margin-bottom:16px">'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">'+
+        '<div class="campo" style="flex:1;min-width:200px;margin:0">'+
+          '<label class="lbl" for="d_nuevo">Qu\u00e9 tengo</label>'+
+          '<input id="d_nuevo" placeholder="pollo, garbanzos, pimiento rojo\u2026" autocomplete="off">'+
+        '</div>'+
+        '<button class="btn fuerte" id="d_add">A\u00f1adir</button>'+
+      '</div>'+
+      '<span class="nota" style="margin:6px 0 0">Uno detr\u00e1s de otro o separados por comas. '+
+      'Se queda guardado hasta que lo vac\u00edes.</span>'+
+
+      (lo.length
+        ? '<div class="grupo" style="margin-top:10px;flex-wrap:wrap">'+
+            lo.map(function(x,i){
+              return '<button data-quitar="'+i+'" title="Quitar">'+esc(x)+' \u00d7</button>';
+            }).join("")+
+          '</div>'
+        : "")+
+
+      (sugerenciasDespensa().length
+        ? '<span class="nota" style="margin:12px 0 4px">De lo que m\u00e1s usas:</span>'+
+          '<div class="grupo" style="flex-wrap:wrap">'+
+            sugerenciasDespensa().map(function(p){
+              return '<button data-poner="'+esc(p)+'">+ '+esc(p)+'</button>';
+            }).join("")+'</div>'
+        : "")+
+    '</div>'+
+
+    (lo.length
+      ? '<div class="filtros"><div class="grupo">'+
+          ['todos'].concat(ORDEN_TIPOS).map(function(k){
+            var etiqueta = k==="todos" ? "Todas" : TIPOS[k].nombre+"s";
+            return '<button data-tt="'+k+'" aria-pressed="'+((ui.tipoTengo||"todos")===k)+'">'+
+                   esc(etiqueta)+'</button>';
+          }).join("")+
+        '</div></div>'
+      : "")+
+
+    (!lo.length
+      ? '<div class="vacio"><strong>Todav\u00eda no has apuntado nada</strong>'+
+        'Escribe lo que tengas en la c\u00e1mara \u2014o toca lo de abajo\u2014 y salen las recetas que puedes hacer hoy.</div>'
+      : (yaSale.length||casi.length||lejos.length
+          ? tabla("\u2705 Sale ya, sin comprar nada", plural(yaSale.length,"receta","recetas"), yaSale)+
+            tabla("\ud83d\uded2 Con una cosa m\u00e1s o dos", plural(casi.length,"receta","recetas"), casi)+
+            tabla("\ud83d\udd0e De lo que m\u00e1s se acerca", plural(lejos.length,"receta","recetas"), lejos)
+          : '<div class="vacio"><strong>Con eso no me sale nada</strong>'+
+            'Apunta alguna cosa m\u00e1s y vuelve a mirar.</div>'));
+
+  var campo=document.getElementById("d_nuevo");
+  function meter(){
+    if(ponerEnDespensa(campo.value)) verDespensa();
+    else { campo.value=""; campo.focus(); }
+  }
+  document.getElementById("d_add").addEventListener("click", meter);
+  campo.addEventListener("keydown", function(e){
+    if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); meter(); }
+  });
+  campo.focus();
+
+  var vaciar=document.getElementById("d_vaciar");
+  if(vaciar) vaciar.addEventListener("click", function(){
+    confirmar("Vaciar la lista",
+      "<p>Se borra lo que tienes apuntado ("+plural(lo.length,"cosa","cosas")+"). "+
+      "Las recetas no se tocan.</p>",
+      function(){ libro.despensa=[]; guardar(); verDespensa(); },
+      {aceptar:"Vaciar", malo:true});
+  });
+  main.querySelectorAll("[data-quitar]").forEach(function(b){
+    b.addEventListener("click", function(){
+      libro.despensa.splice(+b.dataset.quitar,1); guardar(); verDespensa();
+    });
+  });
+  main.querySelectorAll("[data-poner]").forEach(function(b){
+    b.addEventListener("click", function(){ ponerEnDespensa(b.dataset.poner); verDespensa(); });
+  });
+  main.querySelectorAll("[data-tt]").forEach(function(b){
+    b.addEventListener("click", function(){ ui.tipoTengo=b.dataset.tt; verDespensa(); });
+  });
+  main.querySelectorAll("[data-abrir]").forEach(function(b){
+    b.addEventListener("click", function(){ ui.receta=b.dataset.abrir; ui.paso=0; ui.hechos={}; pintar(); });
+  });
+}
+
 function verSemana(){
   var main=document.getElementById("main");
   var base=new Date((ui.dia||hoyISO())+"T12:00:00");

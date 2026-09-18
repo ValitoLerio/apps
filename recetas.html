@@ -139,6 +139,14 @@ textarea{resize:vertical;min-height:70px;line-height:1.6}
         box-shadow:var(--sombra);padding:13px 15px;text-align:left;cursor:pointer;
         color:inherit;font:inherit;display:flex;flex-direction:column;gap:5px}
 .receta:hover{border-color:var(--acento-linea)}
+/* La foto ocupa el ancho de la ficha, arriba del todo */
+.receta{padding:0;overflow:hidden}
+.receta>*:not(.foto){margin-left:15px;margin-right:15px}
+.receta>.chapa:first-of-type{margin-top:13px}
+.receta>.pie{margin-bottom:13px}
+.receta .foto{display:block;margin:0;aspect-ratio:16/10;background:var(--sup2);
+              border-bottom:1px solid var(--linea-suave)}
+.receta .foto img{width:100%;height:100%;object-fit:cover;display:block}
 .receta .nom{font-family:var(--titulo);font-size:17px;font-weight:600;line-height:1.2}
 .receta .meta{font-size:12px;color:var(--muted)}
 .receta .pie{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
@@ -230,7 +238,7 @@ dialog::backdrop{background:rgba(20,14,11,.55)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609182256"></script>
+<script src="sync.js?v=202609182310"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -238,7 +246,7 @@ dialog::backdrop{background:rgba(20,14,11,.55)}
 
   Sync.iniciar('recetas').then(function(){
     var s = document.createElement('script');
-    s.src = 'recetas.js?v=202609182256';
+    s.src = 'recetas.js?v=202609182310';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar recetas.js. Recarga la pagina.'; };
     document.body.appendChild(s);
