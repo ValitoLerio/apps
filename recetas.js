@@ -1029,10 +1029,16 @@ function verRecetario(){
                      '<div class="fichas" style="margin-bottom:22px">'+
                      suyas.map(fichaReceta).join("")+'</div>';
             }).join(""))
-      : '<div class="vacio"><strong>'+
-        (recetas().length?"Nada con esa búsqueda":"Todavía no hay recetas")+'</strong>'+
-        (recetas().length?"Prueba con otra palabra.":"Dale a «Nueva receta» y empieza por la que más hagas.")+
-        '</div>');
+      : (ui.tipo==="base" && !ui.busca
+          ? '<div class="vacio"><strong>Todavía no tienes ninguna base</strong>'+
+            'Una base es lo que no se sirve solo pero entra en otros platos: bechamel, sofrito, '+
+            'caldo de pollo, fumet, salsa de tomate, crema pastelera, masa de croquetas. Se apunta '+
+            'una vez, no sale nunca en el menú del día, y en las recetas que la llevan aparece el '+
+            'botón «cómo se hace» para abrirla sin repetir los pasos en cada plato.</div>'
+          : '<div class="vacio"><strong>'+
+            (recetas().length?"Nada con esa búsqueda":"Todavía no hay recetas")+'</strong>'+
+            (recetas().length?"Prueba con otra palabra.":"Dale a «Nueva receta» y empieza por la que más hagas.")+
+            '</div>'));
 
   document.getElementById("nuevaReceta").addEventListener("click", function(){ editarReceta(null); });
   document.getElementById("pegarReceta").addEventListener("click", pegarReceta);
@@ -1048,6 +1054,23 @@ function verRecetario(){
   main.querySelectorAll("[data-abrir]").forEach(function(b){
     b.addEventListener("click", function(){ ui.receta=b.dataset.abrir; ui.paso=0; ui.hechos={}; pintar(); });
   });
+}
+
+/* Una base —bechamel, sofrito, caldo— es una receta que no se sirve
+   sola pero entra en otras. Cuando un ingrediente se llama como una
+   base del recetario, se enseña con enlace: se abre y se ve cómo se
+   hace, sin repetir los pasos en cada plato. */
+function baseQueSeLlama(texto){
+  var claves=palabrasDe(texto||"");
+  if(!claves.length) return null;
+  var suyas=delTipo("base");
+  for(var i=0;i<suyas.length;i++){
+    var n=palabrasDe(suyas[i].nombre||"");
+    if(!n.length) continue;
+    var cabe=n.every(function(x){ return claves.indexOf(x)>=0; });
+    if(cabe) return suyas[i];
+  }
+  return null;
 }
 
 function fichaReceta(r){
@@ -1150,7 +1173,10 @@ function verReceta(){
           ((r.ingredientes||[]).length
             ? '<table><tbody>'+(r.ingredientes||[]).map(function(ing){
                 var c=escalar(ing, raciones, base);
-                return '<tr><td>'+esc(ing.que)+'</td>'+
+                var suya=baseQueSeLlama(ing.que);
+                return '<tr><td>'+esc(ing.que)+
+                  (suya?' <button class="btn suave sm" data-base="'+esc(suya.id)+'" '+
+                        'style="padding:1px 7px">cómo se hace</button>':"")+'</td>'+
                   '<td class="num">'+(c?esc(c)+" "+esc(ing.unidad||""):'<span style="color:var(--muted)">al gusto</span>')+
                   '</td></tr>';
               }).join("")+'</tbody></table>'
@@ -1176,6 +1202,11 @@ function verReceta(){
     ui.receta=null; ui.raciones=null; pintar();
   });
   document.getElementById("cocinar").addEventListener("click", function(){ abrirCocina(r.id); });
+  main.querySelectorAll("[data-base]").forEach(function(b){
+    b.addEventListener("click", function(){
+      ui.receta=b.dataset.base; ui.raciones=null; ui.paso=0; ui.hechos={}; pintar();
+    });
+  });
   document.getElementById("editar").addEventListener("click", function(){ editarReceta(r.id); });
   document.getElementById("hechaHoy").addEventListener("click", function(){
     marcarHecha(r.id, hoyISO()); pintar(); avisar("Apuntada: hecha hoy");
@@ -1276,7 +1307,8 @@ function leerIngrediente(linea){
   var unidadesConocidas=/^(g|gr|gramos?|kg|kilos?|l|lt|litros?|ml|cl|ud|uds|unidades?|cucharadas?|cdas?|cucharaditas?|pizcas?|dientes?|latas?|manojos?|hojas?|ramas?|vasos?|tazas?)$/i;
   var unidad=(m[2]&&unidadesConocidas.test(m[2])) ? m[2] : "";
   var que = unidad ? m[3] : ((m[2]?m[2]+" ":"")+m[3]);
-  return {cantidad:m[1].replace(",","."), unidad:unidad, que:que.trim()};
+  return {cantidad:m[1].replace(",","."), unidad:unidad,
+          que:que.trim().replace(/^de\s+/i,"")};
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -1288,8 +1320,10 @@ function leerIngrediente(linea){
    haga falta antes de guardarla.
    ══════════════════════════════════════════════════════════════ */
 
-var MARCA_ING  = /^\s*(ingredientes?|ingredients|necesitas|lista de la compra)\s*[:.]?\s*$/i;
-var MARCA_PASO = /^\s*(elaboraci[óo]n|preparaci[óo]n|pasos|modo de (hacerlo|preparaci[óo]n)|instrucciones|c[óo]mo se hace|procedimiento)\s*[:.]?\s*$/i;
+var CANTIDAD_AL_PRINCIPIO = /^\s*[\-\u2022\u00b7*]?\s*\d+([.,]\d+)?\s*(g|gr|kg|ml|l|cl|ud|uds|unidades?|dientes?|cucharad\w*|pizcas?|hojas?|ramas?|latas?|vasos?|tazas?|sobres?|manojos?)\b/i;
+
+var MARCA_ING  = /^\s*(ingredientes?|ingredients|necesitas|lista de la compra)\b[^.!?]{0,40}$/i;
+var MARCA_PASO = /^\s*(elaboraci[óo]n|preparaci[óo]n|pasos|modo de (hacerlo|preparaci[óo]n)|instrucciones|c[óo]mo se hace|procedimiento)\b[^.!?]{0,40}$/i;
 var MARCA_OTRA = /^\s*(notas?|consejos?|trucos?|para|raciones|tiempo|dificultad)\s*[:.]/i;
 
 /* Una línea suena a ingrediente si empieza por cantidad, o es corta y no
@@ -1303,10 +1337,36 @@ function pareceIngrediente(l){
   return t.length<=38 && t.split(/\s+/).length<=5 && !/[.:;]$/.test(t);
 }
 
+function esRuido(l){
+  var t=String(l||"").trim();
+  return !t || /^\d{1,2}[.)]?$/.test(t) || /^(paso\s*\d+|fuente|receta de)\b/i.test(t);
+}
 function limpiarLinea(l){
   return l.replace(/^\s*[\-•·*]\s*/,"")          /* viñetas */
           .replace(/^\s*\d+\s*[.)\-]\s+/,"")     /* «1. », «2) » */
           .replace(/\s+/g," ").trim();
+}
+
+/* El nombre del plato es un título, no un párrafo. Muchas webs empiezan
+   con una presentación entera —«Los caracoles a la catalana son un guiso
+   tradicional…»— y eso no puede quedarse de nombre: se busca la primera
+   línea que parezca título y, si no hay, se corta la frase por donde
+   empieza la explicación. */
+function nombreDeCabecera(cabecera){
+  var lineas=(cabecera||[]).filter(Boolean)
+    .map(function(l){ return limpiarLinea(l).replace(/^receta de\s+/i,"").trim(); });
+  if(!lineas.length) return "";
+  var titulo=null;
+  for(var i=0;i<lineas.length;i++){
+    if(lineas[i].length<=60 && !/[.;:]\s/.test(lineas[i])){ titulo=lineas[i]; break; }
+  }
+  var t=titulo || lineas[0];
+  t=t.split(/\s+(?:son|es|era|eran|consiste|consisten)\s+(?:un|una|uno|unos|unas|el|la|los|las)\b/i)[0];
+  t=t.split(/[.;:]/)[0].trim();
+  t=t.replace(/\s*\([^)]*\)\s*$/,"").trim();          /* «(cargols a la catalana)» */
+  if(t.length>60) t=t.slice(0,60).replace(/\s+\S*$/,"")+"…";
+  t=t.replace(/^(?:los|las|el|la)\s+(?=\S+\s)/i,"");   /* «Los caracoles…» → «caracoles…» */
+  return t.charAt(0).toUpperCase()+t.slice(1).replace(/[,\s]+$/,"");
 }
 
 function leerRecetaPegada(texto){
@@ -1338,14 +1398,22 @@ function leerRecetaPegada(texto){
     cabecera=lineas.slice(0,1);
     var cuerpo=lineas.slice(1).filter(Boolean);
     bloqueIng=[]; bloquePasos=[];
+    /* Sin rótulos: manda la pinta de cada línea. Una vez empiezan los
+       pasos sólo vuelve a contar como ingrediente lo que empieza por
+       cantidad —«200 g de harina»—, que no se confunde con nada. */
     var yaEnPasos=false;
     cuerpo.forEach(function(l){
-      if(!yaEnPasos && pareceIngrediente(l)) bloqueIng.push(l);
-      else { yaEnPasos=true; bloquePasos.push(l); }
+      if(!yaEnPasos && pareceIngrediente(l)){ bloqueIng.push(l); return; }
+      if(yaEnPasos && (CANTIDAD_AL_PRINCIPIO.test(l) ||
+         (/^\s*\d/.test(l) && l.length<=40 && !/[.:;]$/.test(l)))){ bloqueIng.push(l); return; }
+      yaEnPasos=true; bloquePasos.push(l);
     });
   }
 
-  res.nombre=(cabecera.filter(Boolean)[0]||"").replace(/^receta de\s+/i,"").trim();
+  res.nombre=nombreDeCabecera(cabecera);
+
+  bloqueIng=bloqueIng.filter(function(l){ return !esRuido(l); });
+  bloquePasos=bloquePasos.filter(function(l){ return !esRuido(l); });
 
   bloqueIng.filter(Boolean).forEach(function(l){
     if(MARCA_OTRA.test(l)){ res.notas+=(res.notas?"\n":"")+l; return; }
@@ -1357,7 +1425,7 @@ function leerRecetaPegada(texto){
   bloquePasos.filter(Boolean).forEach(function(l){
     if(MARCA_OTRA.test(l)){ res.notas+=(res.notas?"\n":"")+l; return; }
     var limpio=limpiarLinea(l);
-    if(limpio.length>200 && /\.\s/.test(limpio)){
+    if(limpio.length>90 && /\.\s/.test(limpio)){
       limpio.split(/(?<=\.)\s+/).forEach(function(f){
         var t=f.replace(/\.$/,"").trim();
         if(t.length>3) pasos.push(t);
