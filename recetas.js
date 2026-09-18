@@ -750,9 +750,10 @@ function elegirPlato(tipo, fecha){
   var caja=document.getElementById("el_lista");
 
   function pintarOpciones(){
+    /* Sólo las de ese tipo: un postre no se pone de segundo. Si hace
+       falta, se cambia el tipo en la ficha de la receta. */
     var t=busca.value.trim().toLowerCase();
     var suyas=recetas().filter(function(r){ return r.tipo===tipo; });
-    var otras=recetas().filter(function(r){ return r.tipo!==tipo; });
     function filtra(l){
       if(!t) return l;
       return l.filter(function(r){
@@ -774,11 +775,12 @@ function elegirPlato(tipo, fecha){
         }).join("");
     }
     var htmlSuyas=bloque(TIPOS[tipo].nombre+"s", filtra(suyas));
-    var htmlOtras=bloque("De otros tipos", filtra(otras));
-    caja.innerHTML = (htmlSuyas||htmlOtras)
-      ? htmlSuyas+htmlOtras
-      : '<p class="nota" style="margin:0">No tienes ninguna receta que encaje. '+
-        'Dala de alta en el Recetario.</p>';
+    caja.innerHTML = htmlSuyas ||
+      '<p class="nota" style="margin:0">'+
+      (suyas.length
+        ? 'Ninguno de tus '+esc(TIPOS[tipo].nombre.toLowerCase())+'s se llama así.'
+        : 'Todavía no tienes ningún '+esc(TIPOS[tipo].nombre.toLowerCase())+'. '+
+          'Dalo de alta en el Recetario.')+'</p>';
     caja.querySelectorAll("[data-pick]").forEach(function(b){
       b.addEventListener("click", function(){ elegido=b.dataset.pick; pintarOpciones(); });
     });
