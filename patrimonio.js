@@ -464,6 +464,97 @@ function graficoLinea(puntos, W){
     '</svg>';
 }
 
+/* La misma línea, pero una por bien: la de arriba enseña el total y
+   esconde quién sube y quién baja. Aquí cada bien lleva su color, el
+   mismo del resto de la app, y su valor se dibuja escalonado: entre dos
+   apuntes un piso no sube poco a poco, vale lo que valía hasta que lo
+   vuelves a tasar. */
+function graficoLineasPorBien(bienes, W){
+  var conHistoria=bienes.filter(function(b){ return valoresOrdenados(b).length>=1; });
+  if(!conHistoria.length) return '';
+
+  /* Todas las fechas en las que cambia algo */
+  var fechas={};
+  conHistoria.forEach(function(b){
+    if(b.fecha) fechas[b.fecha]=1;
+    valoresOrdenados(b).forEach(function(v){ fechas[v.f]=1; });
+  });
+  var eje=Object.keys(fechas).sort();
+  if(eje.length<2) return '';
+
+  /* Lo que valía cada bien en cada fecha del eje */
+  function valorEn(b, f){
+    var vs=valoresOrdenados(b), ultimo=null;
+    for(var i=0;i<vs.length;i++){ if(String(vs[i].f)<=f) ultimo=vs[i].v; else break; }
+    if(ultimo!=null) return ultimo;
+    /* Antes del primer apunte no había nada que enseñar */
+    return (b.fecha && f>=b.fecha) ? (coste(b)||0) : null;
+  }
+
+  var estrecho = W < 460;
+  var H = estrecho?215:245;
+  var ML = estrecho?54:66, MR=14, MT=16, MB=28;
+  var ax=W-ML-MR, ay=H-MT-MB;
+
+  var t0=Date.parse(eje[0]+"T00:00:00");
+  var t1=Date.parse(eje[eje.length-1]+"T00:00:00");
+  var span=Math.max(1, t1-t0);
+
+  var tope=0;
+  conHistoria.forEach(function(b){
+    eje.forEach(function(f){ var v=valorEn(b,f); if(v!=null) tope=Math.max(tope,v); });
+  });
+  if(tope<=0) return '';
+  tope=escalaBonita(tope);
+
+  function X(f){ return ML + ((Date.parse(f+"T00:00:00")-t0)/span)*ax; }
+  function Y(v){ return MT + ay - (v/tope)*ay; }
+
+  var rejilla="", n=4;
+  for(var i=0;i<=n;i++){
+    var vv=tope*i/n, y=Y(vv);
+    rejilla+='<line x1="'+ML+'" y1="'+y.toFixed(1)+'" x2="'+(W-MR)+'" y2="'+y.toFixed(1)+'" '+
+             'stroke="var(--linea)" stroke-width="1"/>'+
+             '<text x="'+(ML-9)+'" y="'+(y+4).toFixed(1)+'" text-anchor="end" font-size="11" '+
+             'fill="var(--muted)" font-family="var(--mono)">'+num(vv)+'</text>';
+  }
+
+  var trazos=conHistoria.map(function(b){
+    var col=colorDe(b), d="", previo=null;
+    eje.forEach(function(f){
+      var v=valorEn(b,f);
+      if(v==null) return;
+      var x=X(f), y=Y(v);
+      if(previo===null) d+="M"+x.toFixed(1)+" "+y.toFixed(1);
+      else d+=" L"+x.toFixed(1)+" "+Y(previo).toFixed(1)+" L"+x.toFixed(1)+" "+y.toFixed(1);
+      previo=v;
+    });
+    if(!d) return "";
+    var marcas=valoresOrdenados(b).map(function(p){
+      return '<circle cx="'+X(p.f).toFixed(1)+'" cy="'+Y(p.v).toFixed(1)+'" r="3.5" '+
+             'fill="'+col+'" stroke="var(--sup)" stroke-width="1.5"><title>'+
+             esc(b.nombre)+" · "+esc(fechaCorta(p.f))+" · "+esc(eur(p.v))+'</title></circle>';
+    }).join("");
+    return '<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2" '+
+           'stroke-linejoin="round" stroke-linecap="round"/>'+marcas;
+  }).join("");
+
+  var ejeX='<text x="'+X(eje[0]).toFixed(1)+'" y="'+(H-8)+'" font-size="11" fill="var(--muted)" '+
+           'font-family="var(--mono)">'+mesLargo(eje[0])+'</text>'+
+           '<text x="'+X(eje[eje.length-1]).toFixed(1)+'" y="'+(H-8)+'" text-anchor="end" '+
+           'font-size="11" fill="var(--muted)" font-family="var(--mono)">'+
+           mesLargo(eje[eje.length-1])+'</text>';
+
+  var leyenda='<div class="ejes">'+conHistoria.map(function(b){
+    return '<div class="fila"><span class="muestra" style="background:'+colorDe(b)+'"></span>'+
+           esc(b.nombre)+' <span style="color:var(--muted)">· '+esc(eur(valorHoy(b)))+'</span></div>';
+  }).join("")+'</div>';
+
+  return '<svg viewBox="0 0 '+W+' '+H+'" role="img" '+
+      'aria-label="Valor de cada bien a lo largo del tiempo">'+rejilla+trazos+ejeX+'</svg>'+
+      leyenda;
+}
+
 /* Un tope redondo para que las etiquetas del eje no salgan con decimales
    raros: 137.400 sube a 150.000. */
 function escalaBonita(v){
@@ -475,6 +566,31 @@ function escalaBonita(v){
 /* Dibuja la línea dentro de su caja, ya medida, y vuelve a dibujarla si
    la caja cambia de ancho: al girar el móvil, al plegarse el carril o al
    arrastrar la ventana. */
+/* El de bien a bien se dibuja igual: midiendo su caja y rehaciéndose
+   cuando cambia de ancho. */
+function dibujarLineasPorBien(){
+  var caja=document.getElementById("lienzoBienes");
+  if(!caja) return;
+  function pinta(){
+    var ancho=Math.round(caja.clientWidth) || 720;
+    var svg=graficoLineasPorBien(todos(), ancho);
+    caja.innerHTML = svg ||
+      '<div class="vacio"><strong>Todavía no hay nada que dibujar</strong>'+
+      'Apunta lo que vale cada bien en dos fechas y aquí verás su línea.</div>';
+  }
+  pinta();
+  if(!caja._vigilada && window.ResizeObserver){
+    caja._vigilada=true;
+    var ultimo=caja.clientWidth;
+    new ResizeObserver(function(){
+      var c=document.getElementById("lienzoBienes");
+      if(!c || Math.abs(c.clientWidth-ultimo)<20) return;
+      ultimo=c.clientWidth;
+      pinta();
+    }).observe(caja);
+  }
+}
+
 function dibujarLinea(puntos){
   var caja=document.getElementById("lienzoLinea");
   if(!caja) return;
@@ -640,14 +756,24 @@ function pintarResumen(){
       '</div>' : '')+
 
     (t.renta>0?
-      '<div class="cifras">'+
-        cifra("Alquiler al año", eur(t.renta), alquilados.length+
-              (alquilados.length===1?" bien alquilado":" bienes alquilados"))+
-        cifra("Gastos al año", eur(t.gastos), "comunidad, seguros, impuestos")+
-        cifra("Hipoteca al año", t.cuotas?eur(t.cuotas):"—", "lo que pagas de cuotas")+
-        cifra("Al mes en el bolsillo", eurFirma(t.flujo), "alquiler menos gastos y cuota",
-              t.flujo>0?"ok":t.flujo<0?"malo":"")+
-      '</div>' : '')+
+      (function(){
+        /* Con cuentas y carteras dando intereses, «alquiler» se queda
+           corto: se dice ingresos y se nombra de dónde vienen. */
+        var queRentan=todos().filter(function(b){
+          return !esVivienda(b) && (+b.renta||0)>0; });
+        var soloAlquiler=queRentan.every(esLadrillo);
+        return '<div class="cifras">'+
+          cifra("Ingresos al mes", eur(r2(t.renta/12)),
+                queRentan.map(function(b){ return b.nombre; }).join(" · "), "acento")+
+          cifra(soloAlquiler?"Alquiler al año":"Ingresos al año", eur(t.renta),
+                plural(queRentan.length, soloAlquiler?"bien alquilado":"que rinde",
+                                         soloAlquiler?"bienes alquilados":"que rinden"))+
+          cifra("Gastos al año", eur(t.gastos), "comunidad, seguros, comisiones")+
+          cifra("Hipoteca al año", t.cuotas?eur(t.cuotas):"—", "lo que pagas de cuotas")+
+          cifra("Al mes en el bolsillo", eurFirma(t.flujo), "ingresos menos gastos y cuota",
+                t.flujo>0?"ok":t.flujo<0?"malo":"")+
+        '</div>';
+      })() : '')+
 
     (reparto.length>1?
       '<div class="tarjeta"><div class="tarjeta-cab"><h2>De dónde sale el patrimonio</h2>'+
@@ -886,6 +1012,8 @@ function borrarBien(b){
 /* ══════════════════════════════════════════════════════════════
    AÑADIR Y EDITAR
    ══════════════════════════════════════════════════════════════ */
+function plural(n, uno, varios){ return n+" "+(n===1?uno:varios); }
+
 function campo(id, etiqueta, tipo, val, extra){
   return '<div class="campo"><label class="lbl" for="'+id+'" id="lb_'+id+'">'+esc(etiqueta)+'</label>'+
     '<input id="'+id+'" type="'+tipo+'"'+(extra||"")+' value="'+
@@ -938,7 +1066,9 @@ function formulario(bien, tipoNuevo, usoNuevo){
       campo("f_interes","Interés (%)","number",h.interes,' step="0.01" min="0"')+
     '</div></div>'+
 
-    '<div class="bloque solo-ladrillo"><h4 id="h_renta">Si está alquilado</h4><div class="rejilla">'+
+    /* Una cuenta o una cartera también dan dinero al mes —intereses, un
+       dividendo—, así que este bloque ya no es sólo del ladrillo. */
+    '<div class="bloque"><h4 id="h_renta">Si está alquilado</h4><div class="rejilla">'+
       campo("f_renta","Alquiler al mes (€)","number",b.renta,' step="1" min="0"')+
       campo("f_gasto","Gastos al año (€)","number",b.gastoAnual,' step="1" min="0"')+
     '</div><p class="nota" id="n_renta" style="margin:10px 0 0">Los gastos del año son la '+
@@ -971,8 +1101,10 @@ function formulario(bien, tipoNuevo, usoNuevo){
     destino.mejoras    = ladrillo?numero("f_mejoras"):0;
     /* En el piso donde vives no entra alquiler: si lo marcas así, la
        cifra que hubiera apuntada se va. */
-    destino.renta      = ladrillo&&destino.uso!=="vivo" ? numero("f_renta") : 0;
-    destino.gastoAnual = ladrillo?numero("f_gasto"):0;
+    /* En el piso donde vives no entra alquiler: si lo marcas así, la
+       cifra que hubiera apuntada se va. En lo demás, lo que dé al mes. */
+    destino.renta      = (ladrillo && destino.uso==="vivo") ? 0 : numero("f_renta");
+    destino.gastoAnual = numero("f_gasto");
     destino.hipoteca   = ladrillo
       ? {pendiente:numero("f_hip"), cuota:numero("f_cuota"), interes:numero("f_interes")}
       : {};
@@ -1007,13 +1139,22 @@ function formulario(bien, tipoNuevo, usoNuevo){
        alquiler y pasa a preguntar lo que te cuesta tenerlo. */
     var vivo = ladrillo && document.getElementById("f_uso").value==="vivo";
     document.getElementById("h_renta").textContent =
-      vivo ? "Lo que me cuesta tenerlo" : "Si está alquilado";
+      vivo ? "Lo que me cuesta tenerlo"
+           : ladrillo ? "Si está alquilado" : "Lo que me da al mes";
+    document.getElementById("lb_f_renta").textContent =
+      ladrillo ? "Alquiler al mes (€)" : "Ingreso al mes (€)";
+    document.getElementById("lb_f_gasto").textContent =
+      ladrillo ? "Gastos al año (€)" : "Comisiones al año (€)";
     document.getElementById("f_renta").closest(".campo").style.display = vivo?"none":"";
     document.getElementById("n_renta").textContent = vivo
       ? "Donde vives no entra alquiler, así que aquí sólo va lo que te cuesta tenerlo: "+
         "la comunidad, el seguro y los impuestos. La cuota de la hipoteca va arriba."
-      : "Los gastos del año son la comunidad, el seguro y los impuestos: lo que pagas "+
-        "por tenerlo, sin contar la hipoteca.";
+      : ladrillo
+        ? "Los gastos del año son la comunidad, el seguro y los impuestos: lo que pagas "+
+          "por tenerlo, sin contar la hipoteca."
+        : "Lo que te entra al mes de forma regular: intereses, un dividendo, un alquiler "+
+          "cobrado aparte. Si lo que gana se queda dentro y no lo sacas, no lo pongas aquí: "+
+          "eso ya sube el valor de la cuenta.";
   }
   document.getElementById("f_tipo").addEventListener("change", ajustar);
   document.getElementById("f_uso").addEventListener("change", ajustar);
@@ -1111,6 +1252,10 @@ function pintarEvolucion(){
     '<div class="vacio"><strong>Todavía no hay línea que dibujar</strong>'+
     'Apunta lo que vale un bien en dos fechas distintas y aquí verás cómo se ha movido.</div>';
 
+  /* La misma historia, bien a bien: el total sube y baja, pero no dice
+     cuál de ellos lo mueve. */
+  var porBien = '<div class="lienzo" id="lienzoBienes"></div>';
+
   var filas=apuntes.map(function(a){
     return '<tr><td><span class="punto-t" style="background:'+colorDe(a.b)+'"></span>'+
       esc(a.b.nombre)+'</td>'+
@@ -1140,8 +1285,13 @@ function pintarEvolucion(){
       '<button class="btn fuerte" id="b_valor">Apuntar valor</button>')+
 
     '<div class="tarjeta"><div class="tarjeta-cab"><h2>Valor de los bienes</h2>'+
-      '<span class="pista">Sin descontar la hipoteca</span></div>'+
+      '<span class="pista">Todos juntos, sin descontar la hipoteca</span></div>'+
       '<div class="tarjeta-cuerpo">'+grafico+'</div></div>'+
+
+    '<div class="tarjeta" style="margin-top:16px"><div class="tarjeta-cab">'+
+      '<h2>Bien a bien</h2>'+
+      '<span class="pista">Una línea por cada uno, con su color</span></div>'+
+      '<div class="tarjeta-cuerpo">'+porBien+'</div></div>'+
 
     (recorrido?
     '<div class="tarjeta"><div class="tarjeta-cab"><h2>De cuánto a cuánto</h2>'+
@@ -1160,6 +1310,7 @@ function pintarEvolucion(){
     '</div>';
 
   if(hayLinea) dibujarLinea(puntos);
+  dibujarLineasPorBien();
 
   document.getElementById("b_valor").addEventListener("click", elegirBienYValor);
   main.querySelectorAll("[data-quitar]").forEach(function(x){
