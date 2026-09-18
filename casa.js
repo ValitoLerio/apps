@@ -1560,17 +1560,35 @@ function sumaRecibos(v){
    que pagarlo de una vez: se va escribiendo lo que lleva abonado cada
    uno, y la cuenta dice lo que falta. Los recibos de antes, que solo
    tenian el visto de "pagado", siguen contando enteros. */
+/* Cada recibo se va cobrando a plazos: la CASS suele pagar de una vez,
+   pero el complementario llega en varias veces. Por eso los abonos son
+   una lista y no dos casillas: con dos casillas, cuando llegaba el
+   segundo plazo no había dónde apuntarlo. */
+function abonosDe(r){
+  if(Array.isArray(r.abonos)) return r.abonos;
+  /* Los recibos de antes traían un importe de cada uno: se leen como dos
+     abonos, sin tocar lo guardado hasta que se edite algo. */
+  var l=[];
+  if((+r.cass||0)>0.004) l.push({q:"cass", imp:r2(+r.cass)});
+  if((+r.seg ||0)>0.004) l.push({q:"seg",  imp:r2(+r.seg)});
+  return l;
+}
+function sumaAbonos(r, quien){
+  return r2(abonosDe(r).reduce(function(t,a){
+    return (!quien || a.q===quien) ? t+(+a.imp||0) : t;
+  }, 0));
+}
 function cobradoDeRecibo(r){
-  var c=+r.cass||0, g=+r.seg||0;
-  if(c>0.004 || g>0.004) return r2(c+g);
+  var total=sumaAbonos(r);
+  if(total>0.004) return total;
   return r.pagado ? r2(+r.imp||0) : 0;
 }
 function faltaDeRecibo(r){ return r2((+r.imp||0)-cobradoDeRecibo(r)); }
 function cassRecibos(v){
-  return r2(recibosDe(v).reduce(function(t,r){ return t+(+r.cass||0); }, 0));
+  return r2(recibosDe(v).reduce(function(t,r){ return t+sumaAbonos(r,"cass"); }, 0));
 }
 function segRecibos(v){
-  return r2(recibosDe(v).reduce(function(t,r){ return t+(+r.seg||0); }, 0));
+  return r2(recibosDe(v).reduce(function(t,r){ return t+sumaAbonos(r,"seg"); }, 0));
 }
 function cobradoRecibos(v){
   return r2(recibosDe(v).reduce(function(t,r){ return t+cobradoDeRecibo(r); }, 0));
@@ -1602,7 +1620,8 @@ function filaDeRecibos(v){
   var filas=l.map(function(r, i){
     var cobrado=cobradoDeRecibo(r), pendiente=faltaDeRecibo(r);
     var cerrado=(+r.imp||0)>0.004 && pendiente<=0.004;
-    return '<div style="display:flex;gap:5px;align-items:center;padding:4px 9px;border-radius:12px;'+
+    return '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;'+
+      'padding:5px 10px;border-radius:12px;'+
       'border:1px solid '+(cerrado?"var(--ok)":"var(--linea)")+';background:'+
       (cerrado?"var(--ok-suave)":"var(--sup)")+'">'+
       '<input class="rec-n mono" data-rec="'+esc(v.id)+'|'+i+'|n" value="'+esc(r.n||"")+'" '+
@@ -1610,11 +1629,24 @@ function filaDeRecibos(v){
         'style="width:108px;padding:3px 7px;font-size:12px;background:var(--sup);'+
         'border:1px solid var(--linea)">'+
       '<span style="font-size:11px;color:var(--muted)">pagaste</span>'+
-      caja("rec-imp num", i, "imp", r.imp, 74, "Lo que pone ese recibo") +
-      '<span style="font-size:11px;color:var(--muted)">CASS</span>'+
-      caja("rec-imp num", i, "cass", r.cass, 70, "Lo que te ha abonado la CASS de este recibo") +
-      '<span style="font-size:11px;color:var(--muted)">compl.</span>'+
-      caja("rec-imp num", i, "seg", r.seg, 70, "Lo que te ha abonado el seguro complementario") +
+      caja("rec-imp num", i, "imp", r.imp, 86, "Lo que pone ese recibo") +
+      /* Un hueco por abono: la CASS suele pagar de una vez y el
+         complementario a plazos, así que caben los que hagan falta. */
+      abonosDe(r).map(function(a, j){
+        return '<span style="display:inline-flex;align-items:center;gap:4px;'+
+          'background:var(--sup2);border-radius:9px;padding:2px 3px 2px 7px">'+
+          '<span style="font-size:11px;color:var(--muted)">'+(a.q==="cass"?"CASS":"compl.")+'</span>'+
+          '<input class="rec-imp num" type="number" step="0.01" '+
+          'data-abono="'+esc(v.id)+'|'+i+'|'+j+'" value="'+esc(a.imp===0?"":(a.imp||""))+'" '+
+          'placeholder="0,00" style="width:78px;padding:3px 7px;font-size:12px;'+
+          'background:var(--sup);border:1px solid var(--linea)">'+
+          '<button class="btn suave sm malo" data-abonodel="'+esc(v.id)+'|'+i+'|'+j+'" '+
+          'title="Quitar este abono" style="padding:0 4px">✕</button></span>';
+      }).join("")+
+      '<button class="btn suave sm" data-abonomas="'+esc(v.id)+'|'+i+'|cass" '+
+        'title="Otro abono de la CASS" style="padding:2px 7px;font-size:11.5px">+ CASS</button>'+
+      '<button class="btn suave sm" data-abonomas="'+esc(v.id)+'|'+i+'|seg" '+
+        'title="Otro abono del complementario" style="padding:2px 7px;font-size:11.5px">+ compl.</button>'+
       '<span style="font-size:11.5px;white-space:nowrap;color:'+
         (cerrado?"var(--ok)":"var(--muted)")+'">'+
         (cerrado ? "✓" : ((+r.imp||0)>0.004 ? "faltan "+eur(pendiente) : "")) + '</span>'+
@@ -1670,7 +1702,7 @@ function verMedico(main){
         '<div class="n">consultas y farmacia</div></div>'+
       '<div class="cifra"><div class="k">Devuelto</div><div class="v" style="color:var(--ok)">'+eur(devuelto)+'</div>'+
         '<div class="n">CASS y seguro</div></div>'+
-      '<div class="cifra"><div class="k">Te deben</div><div class="v malo">'+eur(pendiente)+'</div>'+
+      '<div class="cifra"><div class="k">Falta de cobrar</div><div class="v malo">'+eur(pendiente)+'</div>'+
         '<div class="n">'+((pendCons>0.004||pendFarm>0.004)
           ? eur(pendCons)+' de consultas · '+eur(pendFarm)+' de farmacia'
           : "visitas sin cerrar")+'</div></div>'+
@@ -1693,7 +1725,7 @@ function verMedico(main){
     '<th style="white-space:nowrap;min-width:150px">Nº recibo</th>'+
     '<th class="num">Consulta</th><th class="num">Farmacia</th>'+
     '<th class="num">CASS</th>'+
-    '<th class="num">Seguro compl.</th><th class="num">Te deben</th>'+
+    '<th class="num">Seguro compl.</th><th class="num">Falta de cobrar</th>'+
     '<th>Estado</th><th></th></tr></thead><tbody>'+
     visitas.map(function(v){
       var queda=pendienteMedico(v);
@@ -1792,24 +1824,66 @@ function verMedico(main){
     x.addEventListener(evento, function(){
       var p=x.getAttribute("data-rec").split("|");
       var v=visitaDe(p[0]); if(!v) return;
-      var l=recibosDe(v).slice().map(function(r){
-        return {n:r.n, imp:r.imp, cass:r.cass, seg:r.seg, pagado:!!r.pagado}; });
+      var l=recibosDe(v).map(function(r){
+        return {n:r.n, imp:r.imp, pagado:!!r.pagado,
+                abonos:abonosDe(r).map(function(a){ return {q:a.q, imp:a.imp}; })}; });
       var i=+p[1]; if(!l[i]) return;
       if(p[2]==="n")          l[i].n=x.value.trim();
       else if(p[2]==="imp")   l[i].imp=r2(+x.value||0);
-      else if(p[2]==="cass")  l[i].cass=(x.value==="")?"":r2(+x.value||0);
-      else if(p[2]==="seg")   l[i].seg =(x.value==="")?"":r2(+x.value||0);
       else                    l[i].pagado=x.checked;
       fijarRecibos(v, l);
       pintar();
     });
   });
+  /* Copia de los recibos con sus abonos, para tocarla sin miedo */
+  function copiaRecibos(v){
+    return recibosDe(v).map(function(r){
+      return {n:r.n, imp:r.imp, pagado:!!r.pagado,
+              abonos:abonosDe(r).map(function(a){ return {q:a.q, imp:a.imp}; })};
+    });
+  }
+
+  caja.querySelectorAll("[data-abono]").forEach(function(x){
+    x.addEventListener("change", function(){
+      var p=x.getAttribute("data-abono").split("|");
+      var v=visitaDe(p[0]); if(!v) return;
+      var l=copiaRecibos(v);
+      var r=l[+p[1]]; if(!r) return;
+      var a=r.abonos[+p[2]]; if(!a) return;
+      a.imp=(x.value==="")?"":r2(+x.value||0);
+      fijarRecibos(v, l);
+      pintar();
+    });
+  });
+  caja.querySelectorAll("[data-abonomas]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var p=b.getAttribute("data-abonomas").split("|");
+      var v=visitaDe(p[0]); if(!v) return;
+      var l=copiaRecibos(v);
+      var r=l[+p[1]]; if(!r) return;
+      r.abonos.push({q:p[2], imp:""});
+      ui.abonoFoco=p[0]+"|"+p[1]+"|"+(r.abonos.length-1);
+      fijarRecibos(v, l);
+      pintar();
+    });
+  });
+  caja.querySelectorAll("[data-abonodel]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var p=b.getAttribute("data-abonodel").split("|");
+      var v=visitaDe(p[0]); if(!v) return;
+      var l=copiaRecibos(v);
+      var r=l[+p[1]]; if(!r) return;
+      r.abonos.splice(+p[2], 1);
+      fijarRecibos(v, l);
+      pintar();
+    });
+  });
+
   caja.querySelectorAll("[data-recmas]").forEach(function(b){
     b.addEventListener("click", function(){
       var v=visitaDe(b.getAttribute("data-recmas")); if(!v) return;
-      var l=recibosDe(v).slice().map(function(r){
-        return {n:r.n, imp:r.imp, cass:r.cass, seg:r.seg, pagado:!!r.pagado}; });
-      l.push({n:"", imp:"", cass:"", seg:"", pagado:false});
+      var l=copiaRecibos(v);
+      l.push({n:"", imp:"", abonos:[], pagado:false});
       ui.recFoco=v.id+"|"+(l.length-1);
       fijarRecibos(v, l);
       pintar();
@@ -1819,13 +1893,41 @@ function verMedico(main){
     b.addEventListener("click", function(){
       var p=b.getAttribute("data-recdel").split("|");
       var v=visitaDe(p[0]); if(!v) return;
-      var l=recibosDe(v).slice().map(function(r){
-        return {n:r.n, imp:r.imp, cass:r.cass, seg:r.seg, pagado:!!r.pagado}; });
+      var l=copiaRecibos(v);
       l.splice(+p[1], 1);
       fijarRecibos(v, l);
       pintar();
     });
   });
+  /* La tabla de visitas es más ancha que la pantalla y se desplaza a lo
+     ancho. La fila de recibos se queda pegada al borde izquierdo y con el
+     ancho de lo que se ve: si no, sus botones —el de quitar el recibo el
+     primero— se quedaban fuera, a la derecha, y no había forma de
+     llegar a ellos sin arrastrar la tabla entera. */
+  function ajustarFilasRecibos(){
+    var ancho=caja.clientWidth-26;
+    if(ancho<240) return;
+    caja.querySelectorAll(".fila-recibos > td > div").forEach(function(d){
+      d.style.position="sticky";
+      d.style.left="0";
+      d.style.width=ancho+"px";
+    });
+  }
+  ajustarFilasRecibos();
+  if(!caja.dataset.ajusta){
+    caja.dataset.ajusta="1";
+    window.addEventListener("resize", function(){
+      var vivo=document.getElementById("tablaMedico");
+      if(vivo===caja) ajustarFilasRecibos();
+    });
+  }
+
+  /* El abono recién añadido se queda con el cursor dentro */
+  if(ui.abonoFoco){
+    var fa=caja.querySelector('[data-abono="'+ui.abonoFoco+'"]');
+    ui.abonoFoco=null;
+    if(fa){ fa.focus(); return; }
+  }
   /* El recibo recién añadido se queda con el cursor dentro. */
   if(ui.recFoco){
     var foco=caja.querySelector('[data-rec="'+ui.recFoco+'|n"]');
@@ -2278,8 +2380,8 @@ function editarVisita(id){
         faltaYa>0.004
           ? (cobradoYa>0.004
               ? 'Te han pagado <strong>'+eur(cobradoYa)+'</strong> de los '+eur(puestoTu)+
-                ' que pusiste: te deben <strong>'+eur(faltaYa)+'</strong>. '
-              : 'Todavía no te han devuelto nada: te deben los <strong>'+eur(puestoTu)+
+                ' que pusiste: falta de cobrar <strong>'+eur(faltaYa)+'</strong>. '
+              : 'Todavía no te han devuelto nada: falta de cobrar los <strong>'+eur(puestoTu)+
                 '</strong> que pusiste. ')+
             '<span style="color:var(--muted)">Los recibos que te vayan pagando se marcan en la '+
             'pantalla, debajo de la visita.</span>'
@@ -2289,7 +2391,7 @@ function editarVisita(id){
     /* Sin recibos apuntados y sin marcar a nadie, no ha pagado nadie:
        decir «cuadra» ahí era decir que ya estaba cobrado. */
     document.getElementById("v_calculo").innerHTML=
-      total>0.004 ? 'En total te deben <strong>'+eur(total)+'</strong>'+
+      total>0.004 ? 'En total falta de cobrar <strong>'+eur(total)+'</strong>'+
         (cons>0 && farm>0 && r2(quedaC+quedaF)>0.004
           ? ' ('+eur(quedaC)+' de la consulta y '+eur(quedaF)+' de la farmacia)' : "")+
         (faltaPagos>0.004 ? ', contando '+eur(faltaPagos)+' que prometieron y no llegaron' : "")+'.'
