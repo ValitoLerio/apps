@@ -861,7 +861,19 @@ function verRecetario(){
     '</div>'+
 
     (lista.length
-      ? '<div class="fichas">'+lista.map(fichaReceta).join("")+'</div>'
+      ? (ui.tipo!=="todos"
+          /* Con un tipo elegido no hace falta separar nada */
+          ? '<div class="fichas">'+lista.map(fichaReceta).join("")+'</div>'
+          /* En «Todas», por su orden de menú: primero, segundo y postre.
+             Alfabético todo junto mezclaba el flan con las albóndigas. */
+          : ORDEN_TIPOS.map(function(t){
+              var suyas=lista.filter(function(r){ return r.tipo===t; });
+              if(!suyas.length) return "";
+              return '<div class="grupoTipo">'+TIPOS[t].icono+' '+esc(TIPOS[t].nombre)+'s'+
+                     '<span>'+plural(suyas.length,"receta","recetas")+'</span></div>'+
+                     '<div class="fichas" style="margin-bottom:22px">'+
+                     suyas.map(fichaReceta).join("")+'</div>';
+            }).join(""))
       : '<div class="vacio"><strong>'+
         (recetas().length?"Nada con esa búsqueda":"Todavía no hay recetas")+'</strong>'+
         (recetas().length?"Prueba con otra palabra.":"Dale a «Nueva receta» y empieza por la que más hagas.")+
