@@ -1543,20 +1543,37 @@ function recibosDe(v){
   if(v && Array.isArray(v.recibos)) return v.recibos;
   var l=[];
   if((+v.consulta||0)>0.004)
-    l.push({n:v.recibo||"Consulta", imp:r2(+v.consulta||0), pagado:papelTachado(v,"consulta")});
+    l.push({n:v.recibo||"Consulta", imp:r2(+v.consulta||0), cass:"", seg:"", pagado:papelTachado(v,"consulta")});
   tiquesDe(v).forEach(function(t,i){
-    l.push({n:t.n||("Tique "+(i+1)), imp:r2(+t.imp||0), pagado:papelTachado(v, t.n||("tique"+(i+1)))});
+    l.push({n:t.n||("Tique "+(i+1)), imp:r2(+t.imp||0), cass:"", seg:"",
+            pagado:papelTachado(v, t.n||("tique"+(i+1)))});
   });
   if(!tiquesDe(v).length && (+v.medicinas||0)>0.004)
-    l.push({n:"Farmacia", imp:r2(+v.medicinas||0), pagado:papelTachado(v,"farmacia")});
+    l.push({n:"Farmacia", imp:r2(+v.medicinas||0), cass:"", seg:"", pagado:papelTachado(v,"farmacia")});
   return l;
 }
 function sumaRecibos(v){
   return r2(recibosDe(v).reduce(function(t,r){ return t+(+r.imp||0); }, 0));
 }
+/* De cada recibo devuelven dos: primero la CASS y despues el
+   complementario, cada uno lo suyo y cuando le parece. Y no tienen por
+   que pagarlo de una vez: se va escribiendo lo que lleva abonado cada
+   uno, y la cuenta dice lo que falta. Los recibos de antes, que solo
+   tenian el visto de "pagado", siguen contando enteros. */
+function cobradoDeRecibo(r){
+  var c=+r.cass||0, g=+r.seg||0;
+  if(c>0.004 || g>0.004) return r2(c+g);
+  return r.pagado ? r2(+r.imp||0) : 0;
+}
+function faltaDeRecibo(r){ return r2((+r.imp||0)-cobradoDeRecibo(r)); }
+function cassRecibos(v){
+  return r2(recibosDe(v).reduce(function(t,r){ return t+(+r.cass||0); }, 0));
+}
+function segRecibos(v){
+  return r2(recibosDe(v).reduce(function(t,r){ return t+(+r.seg||0); }, 0));
+}
 function cobradoRecibos(v){
-  return r2(recibosDe(v).filter(function(r){ return r.pagado; })
-            .reduce(function(t,r){ return t+(+r.imp||0); }, 0));
+  return r2(recibosDe(v).reduce(function(t,r){ return t+cobradoDeRecibo(r); }, 0));
 }
 /* Lo que falta no es lo que sumen los recibos apuntados —esos son los
    que te han pagado—, sino lo que pusiste tú menos lo que te han
@@ -1565,50 +1582,66 @@ function cobradoRecibos(v){
 function faltaRecibos(v){ return r2(pagadoDeLaVisita(v)-cobradoRecibos(v)); }
 function usaRecibos(v){ return !!(v && Array.isArray(v.recibos) && v.recibos.length); }
 
-/* La fila de los recibos, pegada a su visita: se escribe ahí mismo. */
+/* La fila de los recibos, pegada a su visita: se escribe ahi mismo.
+
+   Cada recibo, su linea: el numero, lo que pagaste, lo que te ha
+   abonado la CASS y lo que te ha abonado el complementario. Las dos
+   casillas se van subiendo segun llega el dinero -pagan a plazos y en
+   dias distintos-, y al lado sale lo que le falta a ESE recibo. */
 function filaDeRecibos(v){
   var l=recibosDe(v);
-  var total=pagadoDeLaVisita(v);          /* lo que pusiste tú */
+  var total=pagadoDeLaVisita(v);          /* lo que pusiste tu */
   var puesto=cobradoRecibos(v);           /* lo que te han devuelto ya */
   var falta=r2(total-puesto);
+  var caja=function(clase, i, campo, valor, ancho, pista){
+    return '<input class="'+clase+'" type="number" min="0" step="0.01" '+
+      'data-rec="'+esc(v.id)+'|'+i+'|'+campo+'" value="'+esc(valor===0?"":(valor||""))+'" '+
+      'placeholder="0,00" title="'+pista+'" style="width:'+ancho+'px;padding:3px 7px;'+
+      'font-size:12px;background:var(--sup);border:1px solid var(--linea)">';
+  };
   var filas=l.map(function(r, i){
-    var pagado=!!r.pagado;
-    return '<div style="display:flex;gap:5px;align-items:center;padding:3px 8px;border-radius:20px;'+
-      'border:1px solid '+(pagado?"var(--ok)":"var(--linea)")+';background:'+
-      (pagado?"var(--ok-suave)":"var(--sup)")+'">'+
+    var cobrado=cobradoDeRecibo(r), pendiente=faltaDeRecibo(r);
+    var cerrado=(+r.imp||0)>0.004 && pendiente<=0.004;
+    return '<div style="display:flex;gap:5px;align-items:center;padding:4px 9px;border-radius:12px;'+
+      'border:1px solid '+(cerrado?"var(--ok)":"var(--linea)")+';background:'+
+      (cerrado?"var(--ok-suave)":"var(--sup)")+'">'+
       '<input class="rec-n mono" data-rec="'+esc(v.id)+'|'+i+'|n" value="'+esc(r.n||"")+'" '+
-      'placeholder="Nº recibo" title="Escribe aquí el número del recibo" '+
-      'style="width:112px;padding:3px 7px;font-size:12px;background:var(--sup);'+
-      'border:1px solid var(--linea)">'+
-      '<input class="rec-imp num" type="number" min="0" step="0.01" data-rec="'+esc(v.id)+'|'+i+'|imp" '+
-      'value="'+esc(r.imp||"")+'" placeholder="0,00" title="Lo que pone ese recibo" '+
-      'style="width:82px;padding:3px 7px;font-size:12px;background:var(--sup);'+
-      'border:1px solid var(--linea)">'+
-      '<label class="marca-check" style="margin:0;gap:4px;font-size:11.5px;white-space:nowrap">'+
-        '<input type="checkbox" data-rec="'+esc(v.id)+'|'+i+'|pagado"'+(pagado?" checked":"")+'>'+
-        '<span>pagado</span></label>'+
+        'placeholder="Nº recibo" title="El número del recibo o de la factura" '+
+        'style="width:108px;padding:3px 7px;font-size:12px;background:var(--sup);'+
+        'border:1px solid var(--linea)">'+
+      '<span style="font-size:11px;color:var(--muted)">pagaste</span>'+
+      caja("rec-imp num", i, "imp", r.imp, 74, "Lo que pone ese recibo") +
+      '<span style="font-size:11px;color:var(--muted)">CASS</span>'+
+      caja("rec-imp num", i, "cass", r.cass, 70, "Lo que te ha abonado la CASS de este recibo") +
+      '<span style="font-size:11px;color:var(--muted)">compl.</span>'+
+      caja("rec-imp num", i, "seg", r.seg, 70, "Lo que te ha abonado el seguro complementario") +
+      '<span style="font-size:11.5px;white-space:nowrap;color:'+
+        (cerrado?"var(--ok)":"var(--muted)")+'">'+
+        (cerrado ? "✓" : ((+r.imp||0)>0.004 ? "faltan "+eur(pendiente) : "")) + '</span>'+
       '<button class="btn suave sm malo" data-recdel="'+esc(v.id)+'|'+i+'" title="Quitar este recibo" '+
-      'style="padding:0 5px">✕</button>'+
+        'style="padding:0 5px">✕</button>'+
       '</div>';
   }).join("");
+  var cass=cassRecibos(v), seg=segRecibos(v);
   return '<tr class="fila-recibos"><td colspan="12" style="padding:6px 10px 12px;'+
     'border-bottom:1px solid var(--linea)">'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+
       '<span style="font-size:11px;color:var(--muted);text-transform:uppercase;'+
-      'letter-spacing:.07em;margin-right:2px">Recibos que te pagan '+
-      '<span style="text-transform:none;letter-spacing:0">— escribe el nº, el importe, '+
-      'y marca «pagado» cuando te lo abonen</span></span>'+
+      'letter-spacing:.07em;margin-right:2px">Recibos '+
+      '<span style="text-transform:none;letter-spacing:0">— lo que pagaste y lo que te va '+
+      'abonando cada uno</span></span>'+
       filas+
       '<button class="btn suave sm" data-recmas="'+esc(v.id)+'" style="padding:2px 9px">+ Recibo</button>'+
       (l.length
         ? '<span style="font-size:12px;color:'+(falta>0.004?"var(--muted)":"var(--ok)")+';margin-left:6px">'+
+          'CASS '+eur(cass)+' · compl. '+eur(seg)+' · '+
           (falta>0.004
-            ? 'te han pagado '+eur(puesto)+' de '+eur(total)+' · faltan <strong>'+eur(falta)+'</strong>'
+            ? 'faltan <strong>'+eur(falta)+'</strong> de '+eur(total)
             : falta<-0.004
-              ? 'te han pagado '+eur(puesto)+', '+eur(Math.abs(falta))+' más de lo que pusiste'
-              : 'todo pagado ✓')+'</span>'
-        : '<span style="font-size:12px;color:var(--muted);margin-left:6px">Escribe aquí cada recibo '+
-          'con su importe y márcalo cuando te lo paguen.</span>')+
+              ? 'te han devuelto '+eur(Math.abs(falta))+' de más'
+              : 'todo devuelto ✓')+'</span>'
+        : '<span style="font-size:12px;color:var(--muted);margin-left:6px">Escribe cada factura con '+
+          'lo que pagaste, y ve poniendo lo que te abona la CASS y el complementario.</span>')+
     '</div></td></tr>';
 }
 
@@ -1684,8 +1717,25 @@ function verMedico(main){
             esc(v.farmacia)+'</div>':"")+
           (tiquesDe(v).length>1?'<div style="color:var(--muted);font-size:11px;font-weight:400">'+
             tiquesDe(v).length+' tiques</div>':"")+"</td>"+
-        '<td class="num">'+eur(cassTotal(v))+pieDelCobro(v,"cass")+"</td>"+
-        '<td class="num">'+eur(seguroTotal(v))+pieDelCobro(v,"seguro")+"</td>"+
+        /* Con los recibos escritos, estas dos columnas dicen lo que ha
+           abonado cada uno de verdad; lo que se esperaba de ellos va
+           debajo, en pequeño. */
+        '<td class="num">'+(usaRecibos(v)
+          ? (cassRecibos(v)>0.004
+              ? eur(cassRecibos(v))
+              : '<span style="color:var(--aviso)">sin cobrar</span>')+
+            (cassTotal(v)>0.004
+              ? '<div style="color:var(--muted);font-size:11px;font-weight:400">de '+
+                eur(cassTotal(v))+' previstos</div>' : "")
+          : eur(cassTotal(v))+pieDelCobro(v,"cass"))+"</td>"+
+        '<td class="num">'+(usaRecibos(v)
+          ? (segRecibos(v)>0.004
+              ? eur(segRecibos(v))
+              : '<span style="color:var(--aviso)">sin cobrar</span>')+
+            (seguroTotal(v)>0.004
+              ? '<div style="color:var(--muted);font-size:11px;font-weight:400">de '+
+                eur(seguroTotal(v))+' previstos</div>' : "")
+          : eur(seguroTotal(v))+pieDelCobro(v,"seguro"))+"</td>"+
         '<td class="num"><strong>'+eur(queda)+"</strong>"+
           /* Con los cobros apuntados uno a uno, lo que dice algo es
              cuántos papeles siguen sin quedar a cero. */
@@ -1693,10 +1743,13 @@ function verMedico(main){
             /* Con los recibos escritos, lo que dice algo es cuántos van
                pagados de los que hay. */
             if(usaRecibos(v)){
-              var pag=v.recibos.filter(function(r){ return r.pagado; }).length;
+              /* Un recibo esta cerrado cuando entre la CASS y el
+                 complementario han cubierto lo que pagaste por el. */
+              var pag=v.recibos.filter(function(r){
+                return (+r.imp||0)>0.004 && faltaDeRecibo(r)<=0.004; }).length;
               return '<div style="color:var(--muted);font-size:11px;font-weight:400">'+
-                     'cobrado '+eur(cobradoRecibos(v))+' de '+eur(pagadoDeLaVisita(v))+
-                     ' · '+pag+' de '+v.recibos.length+' recibos</div>';
+                     'te han devuelto '+eur(cobradoRecibos(v))+' de '+eur(pagadoDeLaVisita(v))+
+                     ' · '+pag+' de '+v.recibos.length+' recibos cerrados</div>';
             }
             var sin=papelesSinSaldar(v);
             if(llevaRecibos(v))
@@ -1739,10 +1792,13 @@ function verMedico(main){
     x.addEventListener(evento, function(){
       var p=x.getAttribute("data-rec").split("|");
       var v=visitaDe(p[0]); if(!v) return;
-      var l=recibosDe(v).slice().map(function(r){ return {n:r.n, imp:r.imp, pagado:!!r.pagado}; });
+      var l=recibosDe(v).slice().map(function(r){
+        return {n:r.n, imp:r.imp, cass:r.cass, seg:r.seg, pagado:!!r.pagado}; });
       var i=+p[1]; if(!l[i]) return;
       if(p[2]==="n")          l[i].n=x.value.trim();
       else if(p[2]==="imp")   l[i].imp=r2(+x.value||0);
+      else if(p[2]==="cass")  l[i].cass=(x.value==="")?"":r2(+x.value||0);
+      else if(p[2]==="seg")   l[i].seg =(x.value==="")?"":r2(+x.value||0);
       else                    l[i].pagado=x.checked;
       fijarRecibos(v, l);
       pintar();
@@ -1751,8 +1807,9 @@ function verMedico(main){
   caja.querySelectorAll("[data-recmas]").forEach(function(b){
     b.addEventListener("click", function(){
       var v=visitaDe(b.getAttribute("data-recmas")); if(!v) return;
-      var l=recibosDe(v).slice().map(function(r){ return {n:r.n, imp:r.imp, pagado:!!r.pagado}; });
-      l.push({n:"", imp:"", pagado:false});
+      var l=recibosDe(v).slice().map(function(r){
+        return {n:r.n, imp:r.imp, cass:r.cass, seg:r.seg, pagado:!!r.pagado}; });
+      l.push({n:"", imp:"", cass:"", seg:"", pagado:false});
       ui.recFoco=v.id+"|"+(l.length-1);
       fijarRecibos(v, l);
       pintar();
@@ -1762,7 +1819,8 @@ function verMedico(main){
     b.addEventListener("click", function(){
       var p=b.getAttribute("data-recdel").split("|");
       var v=visitaDe(p[0]); if(!v) return;
-      var l=recibosDe(v).slice().map(function(r){ return {n:r.n, imp:r.imp, pagado:!!r.pagado}; });
+      var l=recibosDe(v).slice().map(function(r){
+        return {n:r.n, imp:r.imp, cass:r.cass, seg:r.seg, pagado:!!r.pagado}; });
       l.splice(+p[1], 1);
       fijarRecibos(v, l);
       pintar();
