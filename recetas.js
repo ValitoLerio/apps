@@ -1,0 +1,899 @@
+/* ══════════════════════════════════════════════════════════════════
+   RECETAS — el recetario de trabajo
+   ══════════════════════════════════════════════════════════════════
+   Pensado para la cocina, no para la estantería:
+
+     Hoy        el menú del día montado: primero, segundo y postre
+     Recetas    cada una con sus ingredientes y sus pasos
+     Cocinar    un paso cada vez, en letra grande, sin perder el sitio
+
+   Cada receta guarda el día que se hizo por última vez y cuántas veces
+   se ha hecho. Al montar un menú avisa si eso se sirvió hace poco, que
+   es lo que de verdad se olvida cuando llevas la semana encima.
+
+   Las cantidades se guardan para unas raciones y se recalculan solas
+   para las que hagan falta.
+   ══════════════════════════════════════════════════════════════════ */
+(function(){
+
+var CLAVE = "recetas.libro.v1";
+
+var TIPOS = {
+  primero: {nombre:"Primero", corto:"1º",     icono:"🥣"},
+  segundo: {nombre:"Segundo", corto:"2º",     icono:"🍖"},
+  postre:  {nombre:"Postre",  corto:"Postre", icono:"🍮"},
+  base:    {nombre:"Base",    corto:"Base",   icono:"🧂"}
+};
+var ORDEN_TIPOS = ["primero","segundo","postre","base"];
+
+var VACIO = {
+  recetas: [],
+  menus:   [],                      /* {fecha, primero, segundo, postre, nota} */
+  ajustes: { raciones: 4, avisarDias: 21 }
+};
+
+var libro = null;
+var ui = { vista:"hoy", dia:null, tipo:"todos", busca:"", receta:null,
+           raciones:null, paso:0, hechos:{} };
+
+/* ══════════════════════════════════════════════════════════════
+   UTILIDADES
+   ══════════════════════════════════════════════════════════════ */
+function r2(n){ return Math.round((+n||0)*100)/100; }
+function uid(){ return Math.random().toString(36).slice(2)+Date.now().toString(36); }
+function esc(t){
+  return String(t==null?"":t).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  });
+}
+function num(n, dec){
+  var v=+n||0;
+  if(dec==null) dec = (Math.abs(v-Math.round(v))<0.005) ? 0 : 2;
+  return v.toLocaleString("es-ES",{minimumFractionDigits:dec, maximumFractionDigits:dec});
+}
+function plural(n, uno, varios){ return n+" "+(n===1?uno:varios); }
+function hoyISO(){
+  var d=new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function dmy(f){
+  if(!f) return "";
+  var p=String(f).split("-");
+  return p[2]+"/"+p[1]+"/"+p[0];
+}
+function diaLargo(f){
+  if(!f) return "";
+  var d=new Date(f+"T12:00:00");
+  return d.toLocaleDateString("es-ES",{weekday:"long", day:"numeric", month:"long"});
+}
+function diasDesde(f){
+  if(!f) return null;
+  var a=new Date(f+"T12:00:00"), b=new Date(hoyISO()+"T12:00:00");
+  return Math.round((b-a)/86400000);
+}
+function haceCuanto(f){
+  var d=diasDesde(f);
+  if(d==null) return "nunca";
+  if(d<=0) return "hoy";
+  if(d===1) return "ayer";
+  if(d<7)  return "hace "+d+" días";
+  if(d<31) return "hace "+Math.round(d/7)+" semanas";
+  if(d<365) return "hace "+Math.round(d/30)+" meses";
+  return "hace más de un año";
+}
+function valor(id){ var e=document.getElementById(id); return e?e.value.trim():""; }
+function numero(id){ var e=document.getElementById(id); return e?(+e.value||0):0; }
+
+function avisar(texto, malo){
+  var v=document.getElementById("avisoFlot"); if(v) v.remove();
+  var d=document.createElement("div");
+  d.id="avisoFlot"; d.className="aviso-flotante"+(malo?" malo":"");
+  d.textContent=texto;
+  document.body.appendChild(d);
+  setTimeout(function(){ if(d.parentNode) d.remove(); }, 3200);
+}
+
+function abrirVentana(titulo, cuerpoHTML, alGuardar, opciones){
+  opciones=opciones||{};
+  var vieja=document.getElementById("dlg"); if(vieja) vieja.remove();
+  var d=document.createElement("dialog"); d.id="dlg";
+  d.innerHTML='<div class="dlg-cab"><h3>'+esc(titulo)+'</h3>'+
+              '<button class="btn suave" data-x>Cerrar</button></div>'+
+              '<div class="dlg-cuerpo">'+cuerpoHTML+'</div>'+
+              '<div class="dlg-pie">'+(opciones.extra||"")+
+              '<button class="btn" data-x>Cancelar</button>'+
+              '<button class="btn '+(opciones.malo?"malo":"fuerte")+'" data-ok>'+
+              esc(opciones.aceptar||"Guardar")+'</button></div>';
+  document.body.appendChild(d);
+  d.querySelectorAll("[data-x]").forEach(function(b){
+    b.addEventListener("click", function(){ d.close(); d.remove(); });
+  });
+  d.querySelector("[data-ok]").addEventListener("click", function(){
+    if(alGuardar()===true) return;
+    d.close(); d.remove();
+  });
+  d.showModal();
+  var primero=d.querySelector("input,select,textarea"); if(primero) primero.focus();
+  return d;
+}
+function confirmar(titulo, cuerpo, alAceptar, opciones){
+  opciones=opciones||{};
+  abrirVentana(titulo, cuerpo, function(){ alAceptar(); },
+               {aceptar:opciones.aceptar||"Aceptar", malo:opciones.malo});
+}
+
+/* ══════════════════════════════════════════════════════════════
+   GUARDAR Y CARGAR
+   ══════════════════════════════════════════════════════════════ */
+function cargar(){
+  try{
+    var crudo=localStorage.getItem(CLAVE);
+    libro = crudo ? JSON.parse(crudo) : JSON.parse(JSON.stringify(VACIO));
+  }catch(e){ libro=JSON.parse(JSON.stringify(VACIO)); }
+  if(!libro.recetas) libro.recetas=[];
+  if(!libro.menus)   libro.menus=[];
+  if(!libro.ajustes) libro.ajustes={};
+  if(!libro.ajustes.raciones)   libro.ajustes.raciones=4;
+  if(!libro.ajustes.avisarDias) libro.ajustes.avisarDias=21;
+}
+function guardar(){ localStorage.setItem(CLAVE, JSON.stringify(libro)); }
+
+/* ══════════════════════════════════════════════════════════════
+   LAS RECETAS
+   ══════════════════════════════════════════════════════════════ */
+function recetas(){ return libro.recetas||[]; }
+function recetaDe(id){
+  return recetas().filter(function(r){ return r.id===id; })[0] || null;
+}
+function delTipo(t){ return recetas().filter(function(r){ return r.tipo===t; }); }
+
+/* Las cantidades se guardan para las raciones de la receta y se estiran
+   para las que se vayan a hacer. Lo que no lleva número —«sal», «un
+   chorro de aceite»— se queda como está: multiplicar eso no significa
+   nada. */
+function escalarNum(ing, raciones, base){
+  var c = +ing.cantidad;
+  if(ing.cantidad==="" || ing.cantidad==null || isNaN(c)) return null;
+  var factor = (base>0 && raciones>0) ? raciones/base : 1;
+  return r2(c*factor);
+}
+/* Para enseñarla. Aparte del número, porque escrita con coma decimal ya
+   no vale para sumar: media ración de leche se perdía por el camino. */
+function escalar(ing, raciones, base){
+  var v=escalarNum(ing, raciones, base);
+  return v==null ? "" : num(v);
+}
+
+function menuDe(fecha){
+  return (libro.menus||[]).filter(function(m){ return m.fecha===fecha; })[0] || null;
+}
+function fijarMenu(fecha, cambios){
+  var m=menuDe(fecha);
+  if(!m){ m={fecha:fecha}; libro.menus.push(m); }
+  Object.keys(cambios).forEach(function(k){ m[k]=cambios[k]; });
+  guardar();
+}
+
+/* Cuándo se sirvió por última vez, mirando los menús ya montados y lo
+   que diga la receta. Sirve para no repetir plato sin darse cuenta. */
+function ultimaVez(recetaId, antesDe){
+  var r=recetaDe(recetaId);
+  var fechas=[];
+  if(r && r.ultima) fechas.push(r.ultima);
+  (libro.menus||[]).forEach(function(m){
+    if(antesDe && m.fecha>=antesDe) return;
+    ORDEN_TIPOS.forEach(function(t){ if(m[t]===recetaId) fechas.push(m.fecha); });
+  });
+  fechas.sort();
+  return fechas.length ? fechas[fechas.length-1] : null;
+}
+
+function marcarHecha(recetaId, fecha){
+  var r=recetaDe(recetaId); if(!r) return;
+  r.ultima=fecha||hoyISO();
+  r.veces=(+r.veces||0)+1;
+  guardar();
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ARMAZÓN
+   ══════════════════════════════════════════════════════════════ */
+function pintar(){
+  var root=document.getElementById("root");
+  root.innerHTML=
+    '<nav class="rail">'+
+      '<div class="marca"><span class="nom">Recetas</span>'+
+        '<span class="sub">El recetario de trabajo</span></div>'+
+      boton("hoy","Hoy", null)+
+      boton("recetario","Recetario", recetas().length)+
+      boton("semana","La semana", null)+
+      boton("ajustes","Ajustes", null)+
+      '<div class="pie-rail">'+
+        '<span style="font-size:11px;color:var(--muted)">Guardado en GitHub</span>'+
+        '<a href="index.html">← Escritorio</a>'+
+      '</div>'+
+    '</nav>'+
+    '<main id="main"></main>';
+
+  root.querySelectorAll("[data-vista]").forEach(function(b){
+    b.addEventListener("click", function(){
+      ui.vista=b.dataset.vista; ui.receta=null; ui.busca=""; pintar();
+    });
+  });
+
+  if(ui.receta)                   verReceta();
+  else if(ui.vista==="hoy")       verHoy();
+  else if(ui.vista==="recetario") verRecetario();
+  else if(ui.vista==="semana")    verSemana();
+  else                            verAjustes();
+}
+
+function boton(vista, texto, cuenta){
+  return '<button class="nav" data-vista="'+vista+'"'+
+         (ui.vista===vista?' aria-current="true"':'')+'>'+
+         '<span>'+esc(texto)+'</span>'+
+         (cuenta!=null?'<span class="cuenta">'+cuenta+'</span>':'')+'</button>';
+}
+
+function cabecera(titulo, texto, botones){
+  return '<div class="cabecera"><div><h1>'+esc(titulo)+'</h1>'+
+         '<p>'+texto+'</p></div>'+
+         '<div style="display:flex;gap:8px;flex-wrap:wrap">'+(botones||"")+'</div></div>';
+}
+
+/* ══════════════════════════════════════════════════════════════
+   HOY: EL MENÚ DEL DÍA
+   ══════════════════════════════════════════════════════════════ */
+function verHoy(){
+  var main=document.getElementById("main");
+  var fecha=ui.dia||hoyISO();
+  var m=menuDe(fecha)||{};
+
+  main.innerHTML=
+    cabecera("Menú de "+diaLargo(fecha),
+      "Monta el menú y cocínalo paso a paso. Al darle a «hecho» queda apuntada la fecha, "+
+      "y la próxima vez que lo pongas te dirá cuánto hace que se sirvió.",
+      '<input type="date" id="h_fecha" value="'+esc(fecha)+'" style="width:auto">'+
+      '<button class="btn" id="h_compra">Lo que hace falta</button>')+
+
+    '<div class="rejilla" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px">'+
+      ["primero","segundo","postre"].map(function(t){ return platoDelMenu(t, m, fecha); }).join("")+
+    '</div>'+
+
+    '<div class="tarjeta" style="margin-top:16px"><div class="tarjeta-cab">'+
+      '<h2>Nota del día</h2><span class="pista">Lo que quieras recordar</span></div>'+
+      '<div class="tarjeta-cuerpo">'+
+        '<input id="h_nota" value="'+esc(m.nota||"")+'" '+
+        'placeholder="Vienen 40, la mitad sin gluten…"></div></div>';
+
+  document.getElementById("h_fecha").addEventListener("change", function(){
+    ui.dia=this.value||hoyISO(); pintar();
+  });
+  document.getElementById("h_nota").addEventListener("change", function(){
+    fijarMenu(fecha, {nota:this.value.trim()}); avisar("Nota guardada");
+  });
+  document.getElementById("h_compra").addEventListener("click", function(){ verLoQueHaceFalta(fecha); });
+
+  main.querySelectorAll("[data-elegir]").forEach(function(b){
+    b.addEventListener("click", function(){ elegirPlato(b.dataset.elegir, fecha); });
+  });
+  main.querySelectorAll("[data-quitar]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var cambio={}; cambio[b.dataset.quitar]=""; fijarMenu(fecha, cambio); pintar();
+    });
+  });
+  main.querySelectorAll("[data-cocinar]").forEach(function(b){
+    b.addEventListener("click", function(){ abrirCocina(b.dataset.cocinar); });
+  });
+  main.querySelectorAll("[data-hecho]").forEach(function(b){
+    b.addEventListener("click", function(){
+      marcarHecha(b.dataset.hecho, fecha);
+      pintar(); avisar("Apuntado: hecho el "+dmy(fecha));
+    });
+  });
+}
+
+function platoDelMenu(tipo, m, fecha){
+  var info=TIPOS[tipo];
+  var r=recetaDe(m[tipo]);
+  if(!r){
+    return '<div class="tarjeta"><div class="tarjeta-cab"><h2>'+info.icono+' '+esc(info.nombre)+'</h2></div>'+
+      '<div class="tarjeta-cuerpo">'+
+        '<div class="vacio" style="padding:22px 12px"><strong>Sin elegir</strong>'+
+        'Pulsa y busca entre tus recetas.</div>'+
+        '<button class="btn fuerte" data-elegir="'+tipo+'" style="margin-top:12px;width:100%">'+
+        'Elegir '+esc(info.nombre.toLowerCase())+'</button>'+
+      '</div></div>';
+  }
+
+  var ultima=ultimaVez(r.id, fecha);
+  var dias=ultima?Math.round((new Date(fecha+"T12:00:00")-new Date(ultima+"T12:00:00"))/86400000):null;
+  var repetido = dias!=null && dias>=0 && dias < (+libro.ajustes.avisarDias||21);
+
+  return '<div class="tarjeta"><div class="tarjeta-cab"><h2>'+info.icono+' '+esc(info.nombre)+'</h2>'+
+    '<button class="btn suave sm malo" data-quitar="'+tipo+'" title="Quitarlo del menú">✕</button></div>'+
+    '<div class="tarjeta-cuerpo">'+
+      '<div style="font-family:var(--titulo);font-size:19px;font-weight:600;line-height:1.2">'+
+        esc(r.nombre)+'</div>'+
+      '<div class="nota" style="margin:6px 0 0">'+
+        (r.tiempo?esc(r.tiempo)+' · ':"")+
+        plural(+r.pasos?r.pasos.length:(r.pasos||[]).length,"paso","pasos")+' · '+
+        plural((r.ingredientes||[]).length,"ingrediente","ingredientes")+'</div>'+
+      (ultima
+        ? '<div style="margin-top:8px"><span class="chapa '+(repetido?"aviso":"neutra")+'">'+
+          (repetido?"⚠︎ ":"")+'Servido '+haceCuanto(ultima)+'</span></div>'
+        : '<div style="margin-top:8px"><span class="chapa ok">Nunca servido</span></div>')+
+      (repetido
+        ? '<p class="nota" style="margin:8px 0 0;color:var(--aviso)">'+
+          (dias===0 ? 'Ya se ha servido hoy.'
+           : dias===1 ? 'Se sirvió ayer.'
+           : 'Hace sólo '+dias+' días que se sirvió.')+
+          ' Si no quieres repetir tan pronto, cámbialo.</p>'
+        : "")+
+      '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'+
+        '<button class="btn fuerte" data-cocinar="'+r.id+'">Cocinar</button>'+
+        '<button class="btn" data-hecho="'+r.id+'">Hecho</button>'+
+        '<button class="btn suave sm" data-elegir="'+tipo+'">Cambiar</button>'+
+      '</div>'+
+    '</div></div>';
+}
+
+/* Elegir un plato: buscador sobre las recetas de ese tipo, y las de
+   cualquier tipo por si un primero sirve de segundo. */
+function elegirPlato(tipo, fecha){
+  var elegido="";
+  var d=abrirVentana("Elegir "+TIPOS[tipo].nombre.toLowerCase(),
+    '<div class="campo" style="margin-bottom:10px">'+
+      '<label class="lbl" for="el_busca">Buscar en tus recetas</label>'+
+      '<input id="el_busca" placeholder="lentejas, merluza, flan…" autocomplete="off"></div>'+
+    '<div id="el_lista"></div>',
+    function(){
+      if(!elegido){ avisar("Elige una receta.", true); return true; }
+      var cambio={}; cambio[tipo]=elegido;
+      fijarMenu(fecha, cambio);
+      pintar(); avisar(TIPOS[tipo].nombre+": "+recetaDe(elegido).nombre);
+    }, {aceptar:"Ponerlo en el menú"});
+
+  var busca=document.getElementById("el_busca");
+  var caja=document.getElementById("el_lista");
+
+  function pintarOpciones(){
+    var t=busca.value.trim().toLowerCase();
+    var suyas=recetas().filter(function(r){ return r.tipo===tipo; });
+    var otras=recetas().filter(function(r){ return r.tipo!==tipo; });
+    function filtra(l){
+      if(!t) return l;
+      return l.filter(function(r){
+        return (r.nombre+" "+(r.notas||"")).toLowerCase().indexOf(t)>=0; });
+    }
+    function bloque(titulo, lista){
+      if(!lista.length) return "";
+      return '<div class="lbl" style="margin:10px 0 6px">'+esc(titulo)+'</div>'+
+        lista.slice(0,14).map(function(r){
+          var ultima=ultimaVez(r.id, fecha);
+          return '<button type="button" data-pick="'+esc(r.id)+'" '+
+            'style="display:block;width:100%;text-align:left;border:1px solid '+
+            (elegido===r.id?"var(--acento)":"var(--linea)")+';background:'+
+            (elegido===r.id?"var(--acento-suave)":"transparent")+';border-radius:8px;'+
+            'padding:8px 11px;margin-bottom:6px;cursor:pointer;font:inherit;color:inherit">'+
+            '<strong>'+esc(r.nombre)+'</strong>'+
+            '<span style="color:var(--muted);font-size:12px"> · '+
+            (ultima?"servido "+haceCuanto(ultima):"nunca servido")+'</span></button>';
+        }).join("");
+    }
+    var htmlSuyas=bloque(TIPOS[tipo].nombre+"s", filtra(suyas));
+    var htmlOtras=bloque("De otros tipos", filtra(otras));
+    caja.innerHTML = (htmlSuyas||htmlOtras)
+      ? htmlSuyas+htmlOtras
+      : '<p class="nota" style="margin:0">No tienes ninguna receta que encaje. '+
+        'Dala de alta en el Recetario.</p>';
+    caja.querySelectorAll("[data-pick]").forEach(function(b){
+      b.addEventListener("click", function(){ elegido=b.dataset.pick; pintarOpciones(); });
+    });
+  }
+  busca.addEventListener("input", pintarOpciones);
+  busca.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); } });
+  pintarOpciones();
+}
+
+/* Todo lo que hay que tener para el menú del día, junto y sumado por
+   ingrediente: es la lista que se lleva a la cámara. */
+function verLoQueHaceFalta(fecha){
+  var m=menuDe(fecha)||{};
+  var raciones=ui.raciones||libro.ajustes.raciones||4;
+  var juntos={};
+  var platos=[];
+
+  ORDEN_TIPOS.forEach(function(t){
+    var r=recetaDe(m[t]); if(!r) return;
+    platos.push(r.nombre);
+    (r.ingredientes||[]).forEach(function(ing){
+      var clave=(ing.que||"").trim().toLowerCase()+"|"+(ing.unidad||"").trim().toLowerCase();
+      if(!juntos[clave]) juntos[clave]={que:ing.que, unidad:ing.unidad, cantidad:0, suelto:[]};
+      var c=escalarNum(ing, raciones, +r.raciones||raciones);
+      if(c==null) juntos[clave].suelto.push(r.nombre);
+      else juntos[clave].cantidad=r2(juntos[clave].cantidad+c);
+    });
+  });
+
+  var claves=Object.keys(juntos);
+  abrirVentana("Lo que hace falta · "+diaLargo(fecha),
+    (platos.length
+      ? '<p class="nota" style="margin:0 0 12px">Para <strong>'+plural(raciones,"ración","raciones")+
+        '</strong> de '+esc(platos.join(", "))+'. Las cantidades salen ya estiradas.</p>'+
+        '<div class="tabla-caja"><table><tbody>'+
+        claves.sort().map(function(k){
+          var i=juntos[k];
+          return '<tr><td>'+esc(i.que)+
+            (i.suelto.length?'<div class="nota" style="margin:0">al gusto, en '+
+              esc(i.suelto.join(" y "))+'</div>':"")+'</td>'+
+            '<td class="num">'+(i.cantidad>0?num(i.cantidad)+" "+esc(i.unidad||""):"—")+'</td></tr>';
+        }).join("")+'</tbody></table></div>'
+      : '<div class="vacio"><strong>El menú está vacío</strong>'+
+        'Elige al menos un plato y aquí verás todo lo que hace falta.</div>'),
+    function(){}, {aceptar:"Cerrar"});
+}
+
+/* ══════════════════════════════════════════════════════════════
+   EL RECETARIO
+   ══════════════════════════════════════════════════════════════ */
+function verRecetario(){
+  var main=document.getElementById("main");
+  var t=ui.busca.trim().toLowerCase();
+  var lista=recetas().filter(function(r){
+    if(ui.tipo!=="todos" && r.tipo!==ui.tipo) return false;
+    if(!t) return true;
+    return (r.nombre+" "+(r.notas||"")+" "+
+            (r.ingredientes||[]).map(function(i){ return i.que; }).join(" ")).toLowerCase().indexOf(t)>=0;
+  }).sort(function(a,b){ return a.nombre.localeCompare(b.nombre,"es"); });
+
+  main.innerHTML=
+    cabecera("Recetario",
+      "Cada receta con sus ingredientes y sus pasos. Busca también por ingrediente: "+
+      "escribe «merluza» y salen todas las que la llevan.",
+      '<button class="btn fuerte" id="nuevaReceta">+ Nueva receta</button>')+
+
+    '<div class="filtros">'+
+      '<div class="grupo">'+
+        ['todos'].concat(ORDEN_TIPOS).map(function(k){
+          var etiqueta = k==="todos" ? "Todas" : TIPOS[k].nombre+"s";
+          var n = k==="todos" ? recetas().length : delTipo(k).length;
+          return '<button data-tipo="'+k+'" aria-pressed="'+(ui.tipo===k)+'">'+
+                 esc(etiqueta)+(n?' <span style="opacity:.6">'+n+'</span>':"")+'</button>';
+        }).join("")+
+      '</div>'+
+      '<input class="buscador" id="r_busca" placeholder="Buscar por nombre o ingrediente…" '+
+        'value="'+esc(ui.busca)+'">'+
+    '</div>'+
+
+    (lista.length
+      ? '<div class="fichas">'+lista.map(fichaReceta).join("")+'</div>'
+      : '<div class="vacio"><strong>'+
+        (recetas().length?"Nada con esa búsqueda":"Todavía no hay recetas")+'</strong>'+
+        (recetas().length?"Prueba con otra palabra.":"Dale a «Nueva receta» y empieza por la que más hagas.")+
+        '</div>');
+
+  document.getElementById("nuevaReceta").addEventListener("click", function(){ editarReceta(null); });
+  main.querySelectorAll("[data-tipo]").forEach(function(b){
+    b.addEventListener("click", function(){ ui.tipo=b.dataset.tipo; pintar(); });
+  });
+  var busca=document.getElementById("r_busca");
+  busca.addEventListener("input", function(){ ui.busca=busca.value; verRecetario();
+    var v=document.getElementById("r_busca"); if(v){ v.focus(); v.selectionStart=v.value.length; } });
+  main.querySelectorAll("[data-abrir]").forEach(function(b){
+    b.addEventListener("click", function(){ ui.receta=b.dataset.abrir; ui.paso=0; ui.hechos={}; pintar(); });
+  });
+}
+
+function fichaReceta(r){
+  var ultima=ultimaVez(r.id);
+  var info=TIPOS[r.tipo]||TIPOS.base;
+  return '<button class="receta" data-abrir="'+esc(r.id)+'">'+
+    '<span class="chapa acento" style="align-self:flex-start">'+info.icono+' '+esc(info.corto)+'</span>'+
+    '<span class="nom">'+esc(r.nombre)+'</span>'+
+    '<span class="meta">'+
+      (r.raciones?plural(+r.raciones,"ración","raciones"):"sin raciones")+
+      (r.tiempo?' · '+esc(r.tiempo):"")+'</span>'+
+    '<span class="pie">'+
+      '<span class="chapa neutra">'+plural((r.pasos||[]).length,"paso","pasos")+'</span>'+
+      (ultima?'<span class="chapa neutra">'+esc(haceCuanto(ultima))+'</span>'
+             :'<span class="chapa ok">nueva</span>')+
+      ((+r.veces||0)>0?'<span class="chapa neutra">'+plural(+r.veces,"vez","veces")+'</span>':"")+
+    '</span></button>';
+}
+
+/* ══════════════════════════════════════════════════════════════
+   UNA RECETA
+   ══════════════════════════════════════════════════════════════ */
+function verReceta(){
+  var main=document.getElementById("main");
+  var r=recetaDe(ui.receta);
+  if(!r){ ui.receta=null; return pintar(); }
+
+  var base=+r.raciones||libro.ajustes.raciones||4;
+  var raciones=ui.raciones||base;
+  var ultima=ultimaVez(r.id);
+  var info=TIPOS[r.tipo]||TIPOS.base;
+
+  main.innerHTML=
+    '<button class="btn suave sm" id="volver" style="margin-bottom:12px">← Recetario</button>'+
+    cabecera(r.nombre,
+      info.icono+' '+esc(info.nombre)+
+      (r.tiempo?' · '+esc(r.tiempo):"")+
+      ' · '+(ultima?"hecha "+esc(haceCuanto(ultima)):"nunca la has hecho")+
+      ((+r.veces||0)>0?' · '+plural(+r.veces,"vez","veces"):""),
+      '<button class="btn fuerte" id="cocinar">Cocinar paso a paso</button>'+
+      '<button class="btn" id="hechaHoy">Hecha hoy</button>'+
+      '<button class="btn" id="editar">Editar</button>')+
+
+    '<div class="rejilla" style="grid-template-columns:minmax(240px,1fr) minmax(280px,2fr);'+
+      'align-items:start;gap:16px">'+
+
+      '<div class="tarjeta"><div class="tarjeta-cab"><h2>Ingredientes</h2></div>'+
+        '<div class="tarjeta-cuerpo">'+
+          '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">'+
+            '<label class="lbl" for="r_rac" style="margin:0">Para</label>'+
+            '<input type="number" id="r_rac" min="1" step="1" value="'+raciones+'" '+
+              'style="width:80px">'+
+            '<span class="nota" style="margin:0">raciones'+
+              (raciones!==base?' · la receta es de '+base:"")+'</span>'+
+          '</div>'+
+          ((r.ingredientes||[]).length
+            ? '<table><tbody>'+(r.ingredientes||[]).map(function(ing){
+                var c=escalar(ing, raciones, base);
+                return '<tr><td>'+esc(ing.que)+'</td>'+
+                  '<td class="num">'+(c?esc(c)+" "+esc(ing.unidad||""):'<span style="color:var(--muted)">al gusto</span>')+
+                  '</td></tr>';
+              }).join("")+'</tbody></table>'
+            : '<p class="nota" style="margin:0">Sin ingredientes apuntados.</p>')+
+        '</div></div>'+
+
+      '<div class="tarjeta"><div class="tarjeta-cab"><h2>Paso a paso</h2>'+
+        '<span class="pista">Pulsa uno para tacharlo</span></div>'+
+        '<div class="tarjeta-cuerpo">'+
+          ((r.pasos||[]).length
+            ? '<div class="pasos">'+(r.pasos||[]).map(function(p,i){
+                return '<div class="paso'+(ui.hechos[i]?" hecho":"")+'" data-paso="'+i+'" '+
+                  'style="cursor:pointer"><div class="n"></div><div class="t">'+esc(p)+'</div></div>';
+              }).join("")+'</div>'
+            : '<p class="nota" style="margin:0">Sin pasos apuntados. Dale a Editar y escríbelos, '+
+              'uno por línea.</p>')+
+          (r.notas?'<p class="nota" style="margin:14px 0 0;white-space:pre-wrap;'+
+            'border-top:1px solid var(--linea-suave);padding-top:12px">'+esc(r.notas)+'</p>':"")+
+        '</div></div>'+
+    '</div>';
+
+  document.getElementById("volver").addEventListener("click", function(){
+    ui.receta=null; ui.raciones=null; pintar();
+  });
+  document.getElementById("cocinar").addEventListener("click", function(){ abrirCocina(r.id); });
+  document.getElementById("editar").addEventListener("click", function(){ editarReceta(r.id); });
+  document.getElementById("hechaHoy").addEventListener("click", function(){
+    marcarHecha(r.id, hoyISO()); pintar(); avisar("Apuntada: hecha hoy");
+  });
+  document.getElementById("r_rac").addEventListener("input", function(){
+    ui.raciones=Math.max(1, Math.round(+this.value||base)); verReceta();
+    var v=document.getElementById("r_rac"); if(v) v.focus();
+  });
+  main.querySelectorAll("[data-paso]").forEach(function(p){
+    p.addEventListener("click", function(){
+      var i=p.dataset.paso;
+      ui.hechos[i]=!ui.hechos[i];
+      p.classList.toggle("hecho", !!ui.hechos[i]);
+    });
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   COCINAR: UN PASO CADA VEZ
+   ══════════════════════════════════════════════════════════════
+   En la cocina no se lee una lista: se lee un paso, se hace, y se pasa
+   al siguiente. Letra grande y dos botones, que las manos están
+   ocupadas y a veces mojadas.
+   ══════════════════════════════════════════════════════════════ */
+function abrirCocina(recetaId){
+  var r=recetaDe(recetaId);
+  if(!r){ avisar("No encuentro esa receta.", true); return; }
+  var pasos=(r.pasos||[]);
+  if(!pasos.length){ avisar("Esa receta no tiene pasos escritos.", true); return; }
+
+  var i=0;
+  var capa=document.createElement("div");
+  capa.className="cocina";
+  document.body.appendChild(capa);
+
+  function pinta(){
+    capa.innerHTML=
+      '<div class="arriba">'+
+        '<div><div style="font-family:var(--titulo);font-size:18px">'+esc(r.nombre)+'</div>'+
+        '<div class="cuenta">Paso '+(i+1)+' de '+pasos.length+
+          (r.tiempo?' · '+esc(r.tiempo):"")+'</div></div>'+
+        '<button class="btn" data-salir>Salir</button>'+
+      '</div>'+
+      '<div class="barra"><i style="width:'+((i+1)/pasos.length*100).toFixed(1)+'%"></i></div>'+
+      '<div class="texto">'+esc(pasos[i])+'</div>'+
+      '<div class="abajo">'+
+        '<button class="btn grande" data-antes'+(i===0?" disabled":"")+'>← Anterior</button>'+
+        (i<pasos.length-1
+          ? '<button class="btn grande fuerte" data-siguiente>Siguiente →</button>'
+          : '<button class="btn grande fuerte" data-acabar>Terminado ✓</button>')+
+      '</div>';
+
+    capa.querySelector("[data-salir]").addEventListener("click", cerrar);
+    var antes=capa.querySelector("[data-antes]");
+    if(antes) antes.addEventListener("click", function(){ if(i>0){ i--; pinta(); } });
+    var sig=capa.querySelector("[data-siguiente]");
+    if(sig) sig.addEventListener("click", function(){ if(i<pasos.length-1){ i++; pinta(); } });
+    var fin=capa.querySelector("[data-acabar]");
+    if(fin) fin.addEventListener("click", function(){
+      marcarHecha(r.id, hoyISO());
+      cerrar(); pintar(); avisar(r.nombre+": hecha y apuntada");
+    });
+  }
+
+  function teclas(e){
+    if(e.key==="ArrowRight" && i<pasos.length-1){ i++; pinta(); }
+    else if(e.key==="ArrowLeft" && i>0){ i--; pinta(); }
+    else if(e.key==="Escape") cerrar();
+  }
+  function cerrar(){
+    document.removeEventListener("keydown", teclas);
+    capa.remove();
+  }
+  document.addEventListener("keydown", teclas);
+  pinta();
+}
+
+/* ══════════════════════════════════════════════════════════════
+   EDITAR UNA RECETA
+   ══════════════════════════════════════════════════════════════
+   Los ingredientes y los pasos se escriben en texto corrido, una cosa
+   por línea: es lo más rápido de teclear y lo más fácil de pegar desde
+   donde los tengas ahora.
+   ══════════════════════════════════════════════════════════════ */
+function textoIngredientes(r){
+  return (r.ingredientes||[]).map(function(i){
+    return [i.cantidad, i.unidad, i.que].filter(function(x){ return x!=="" && x!=null; }).join(" ");
+  }).join("\n");
+}
+
+/* «200 g harina», «2 cebollas», «sal». Lo que no empieza por número se
+   queda entero como nombre: es un ingrediente al gusto. */
+function leerIngrediente(linea){
+  var t=String(linea||"").trim();
+  if(!t) return null;
+  var m=t.match(/^(\d+[.,]?\d*)\s*([a-zA-ZñÑ]+)?\s+(.*)$/);
+  if(!m) return {cantidad:"", unidad:"", que:t};
+  var unidadesConocidas=/^(g|gr|gramos?|kg|kilos?|l|lt|litros?|ml|cl|ud|uds|unidades?|cucharadas?|cdas?|cucharaditas?|pizcas?|dientes?|latas?|manojos?|hojas?|ramas?|vasos?|tazas?)$/i;
+  var unidad=(m[2]&&unidadesConocidas.test(m[2])) ? m[2] : "";
+  var que = unidad ? m[3] : ((m[2]?m[2]+" ":"")+m[3]);
+  return {cantidad:m[1].replace(",","."), unidad:unidad, que:que.trim()};
+}
+
+function editarReceta(id){
+  var nueva=!id;
+  var r = id ? recetaDe(id)
+             : {id:uid(), nombre:"", tipo:"primero", raciones:libro.ajustes.raciones||4,
+                tiempo:"", ingredientes:[], pasos:[], notas:"", veces:0, ultima:""};
+  if(!r) return;
+
+  var d=abrirVentana(nueva?"Nueva receta":"Editar "+r.nombre,
+    '<div class="rejilla" style="margin-bottom:12px">'+
+      '<div class="campo" style="grid-column:1/-1"><label class="lbl" for="e_nom">Nombre</label>'+
+        '<input id="e_nom" value="'+esc(r.nombre)+'" placeholder="Lentejas de la casa"></div>'+
+      '<div class="campo"><label class="lbl" for="e_tipo">Qué es</label><select id="e_tipo">'+
+        ORDEN_TIPOS.map(function(k){
+          return '<option value="'+k+'"'+(r.tipo===k?" selected":"")+'>'+
+                 TIPOS[k].icono+' '+esc(TIPOS[k].nombre)+'</option>'; }).join("")+
+      '</select></div>'+
+      '<div class="campo"><label class="lbl" for="e_rac">Raciones</label>'+
+        '<input type="number" id="e_rac" min="1" step="1" value="'+esc(r.raciones||"")+'"></div>'+
+      '<div class="campo"><label class="lbl" for="e_tiempo">Cuánto lleva</label>'+
+        '<input id="e_tiempo" value="'+esc(r.tiempo||"")+'" placeholder="45 min, 2 h…"></div>'+
+    '</div>'+
+
+    '<div class="campo" style="margin-bottom:12px">'+
+      '<label class="lbl" for="e_ing">Ingredientes · uno por línea</label>'+
+      '<textarea id="e_ing" rows="7" placeholder="400 g lentejas&#10;2 cebollas&#10;1 chorizo&#10;sal">'+
+      esc(textoIngredientes(r))+'</textarea>'+
+      '<span class="nota" style="margin:5px 0 0">Empieza por la cantidad y la unidad: '+
+      '<span class="mono">400 g lentejas</span>. Lo que no lleve número se queda como '+
+      '«al gusto» y no se multiplica al cambiar las raciones.</span></div>'+
+
+    '<div class="campo" style="margin-bottom:12px">'+
+      '<label class="lbl" for="e_pasos">Pasos · uno por línea</label>'+
+      '<textarea id="e_pasos" rows="9" placeholder="Poner las lentejas en remojo la víspera&#10;'+
+      'Pochar la cebolla a fuego suave&#10;Añadir el chorizo y dorarlo">'+
+      esc((r.pasos||[]).join("\n"))+'</textarea>'+
+      '<span class="nota" style="margin:5px 0 0">Cada línea es un paso de los que luego salen '+
+      'de uno en uno en la cocina. Cuanto más corto, mejor se lee con las manos ocupadas.</span></div>'+
+
+    '<div class="campo"><label class="lbl" for="e_notas">Notas</label>'+
+      '<textarea id="e_notas" rows="3" placeholder="Sale mejor con el caldo del día anterior…">'+
+      esc(r.notas||"")+'</textarea></div>',
+
+    function(){
+      var nombre=valor("e_nom");
+      if(!nombre){ avisar("Ponle nombre a la receta.", true); return true; }
+      r.nombre=nombre;
+      r.tipo=valor("e_tipo")||"primero";
+      r.raciones=Math.max(1, Math.round(numero("e_rac")))||libro.ajustes.raciones||4;
+      r.tiempo=valor("e_tiempo");
+      r.ingredientes=(document.getElementById("e_ing").value||"").split("\n")
+                       .map(leerIngrediente).filter(Boolean);
+      r.pasos=(document.getElementById("e_pasos").value||"").split("\n")
+                .map(function(x){ return x.trim(); }).filter(Boolean);
+      r.notas=(document.getElementById("e_notas").value||"").trim();
+      if(nueva) libro.recetas.push(r);
+      guardar(); pintar();
+      avisar(nueva?"Receta guardada":"Receta actualizada");
+    },
+    {aceptar:nueva?"Guardar receta":"Guardar",
+     extra: nueva ? "" : '<button class="btn malo" id="e_borrar">Borrar</button>'});
+
+  var borrar=document.getElementById("e_borrar");
+  if(borrar) borrar.addEventListener("click", function(){
+    d.close(); d.remove();
+    confirmar("Borrar "+r.nombre,
+      '<p style="margin:0 0 10px">Se va la receta con sus ingredientes y sus pasos.</p>'+
+      (function(){
+        var enMenus=(libro.menus||[]).filter(function(m){
+          return ORDEN_TIPOS.some(function(t){ return m[t]===r.id; }); }).length;
+        return enMenus
+          ? '<p class="nota" style="margin:0">Está puesta en '+plural(enMenus,"menú","menús")+
+            ': esos días se quedarán con ese hueco vacío.</p>'
+          : '<p class="nota" style="margin:0">No está en ningún menú.</p>';
+      })(),
+      function(){
+        libro.recetas=recetas().filter(function(x){ return x.id!==r.id; });
+        (libro.menus||[]).forEach(function(m){
+          ORDEN_TIPOS.forEach(function(t){ if(m[t]===r.id) m[t]=""; });
+        });
+        ui.receta=null; guardar(); pintar(); avisar("Receta borrada");
+      }, {aceptar:"Borrar", malo:true});
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LA SEMANA
+   ══════════════════════════════════════════════════════════════ */
+function verSemana(){
+  var main=document.getElementById("main");
+  var base=new Date((ui.dia||hoyISO())+"T12:00:00");
+  /* De lunes a domingo, que es como se piensa la semana */
+  var lunes=new Date(base);
+  lunes.setDate(lunes.getDate() - ((lunes.getDay()+6)%7));
+
+  var dias=[];
+  for(var i=0;i<7;i++){
+    var d=new Date(lunes); d.setDate(lunes.getDate()+i);
+    dias.push(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+
+              String(d.getDate()).padStart(2,"0"));
+  }
+
+  main.innerHTML=
+    cabecera("La semana",
+      "De un vistazo, qué hay cada día. Pulsa un día para montarlo.",
+      '<button class="btn" id="s_antes">← Semana anterior</button>'+
+      '<button class="btn" id="s_hoy">Esta semana</button>'+
+      '<button class="btn" id="s_luego">Siguiente →</button>')+
+
+    '<div class="tarjeta"><div class="tabla-caja"><table><thead><tr>'+
+      '<th>Día</th><th>🥣 Primero</th><th>🍖 Segundo</th><th>🍮 Postre</th><th>Nota</th>'+
+      '</tr></thead><tbody>'+
+      dias.map(function(f){
+        var m=menuDe(f)||{};
+        var esHoy=(f===hoyISO());
+        function celda(t){
+          var r=recetaDe(m[t]);
+          if(!r) return '<td style="color:var(--muted)">—</td>';
+          var ultima=ultimaVez(r.id, f);
+          var dd=ultima?Math.round((new Date(f+"T12:00:00")-new Date(ultima+"T12:00:00"))/86400000):null;
+          var repe = dd!=null && dd>=0 && dd<(+libro.ajustes.avisarDias||21);
+          return '<td>'+esc(r.nombre)+
+            (repe?' <span class="chapa aviso">'+
+              (dd===0?"hoy mismo":dd===1?"ayer":"hace "+dd+" d")+'</span>':"")+'</td>';
+        }
+        return '<tr data-dia="'+f+'" style="cursor:pointer'+
+          (esHoy?';background:var(--acento-suave)':"")+'">'+
+          '<td><strong>'+esc(diaLargo(f).split(",")[0])+'</strong>'+
+          '<div class="nota" style="margin:0">'+esc(dmy(f))+'</div></td>'+
+          celda("primero")+celda("segundo")+celda("postre")+
+          '<td class="nota" style="margin:0">'+esc(m.nota||"")+'</td></tr>';
+      }).join("")+
+    '</tbody></table></div></div>';
+
+  main.querySelectorAll("[data-dia]").forEach(function(tr){
+    tr.addEventListener("click", function(){
+      ui.dia=tr.dataset.dia; ui.vista="hoy"; pintar();
+    });
+  });
+  document.getElementById("s_antes").addEventListener("click", function(){
+    var d=new Date(lunes); d.setDate(d.getDate()-7);
+    ui.dia=d.toISOString().slice(0,10); pintar();
+  });
+  document.getElementById("s_luego").addEventListener("click", function(){
+    var d=new Date(lunes); d.setDate(d.getDate()+7);
+    ui.dia=d.toISOString().slice(0,10); pintar();
+  });
+  document.getElementById("s_hoy").addEventListener("click", function(){
+    ui.dia=hoyISO(); pintar();
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   AJUSTES
+   ══════════════════════════════════════════════════════════════ */
+function verAjustes(){
+  var main=document.getElementById("main");
+  main.innerHTML=
+    cabecera("Ajustes","Cómo se comporta el recetario.")+
+
+    '<div class="tarjeta" style="max-width:560px;margin-bottom:16px">'+
+      '<div class="tarjeta-cab"><h2>De serie</h2></div>'+
+      '<div class="tarjeta-cuerpo"><div class="rejilla">'+
+        '<div class="campo"><label class="lbl" for="a_rac">Raciones de siempre</label>'+
+          '<input type="number" id="a_rac" min="1" step="1" value="'+
+          esc(libro.ajustes.raciones||4)+'"></div>'+
+        '<div class="campo"><label class="lbl" for="a_dias">Avisar si se repite antes de</label>'+
+          '<input type="number" id="a_dias" min="0" step="1" value="'+
+          esc(libro.ajustes.avisarDias||21)+'"></div>'+
+      '</div>'+
+      '<p class="nota" style="margin:12px 0 0">Al poner un plato en el menú, si se sirvió hace '+
+      'menos de esos días sale el aviso. Ponlo a 0 y no avisa nunca.</p>'+
+      '<button class="btn fuerte" id="a_guardar" style="margin-top:14px">Guardar</button>'+
+      '</div></div>'+
+
+    '<div class="tarjeta" style="max-width:560px;border-color:var(--malo)">'+
+      '<div class="tarjeta-cab"><h2 style="color:var(--malo)">Borrar</h2>'+
+        '<span class="pista">No tiene vuelta atrás</span></div>'+
+      '<div class="tarjeta-cuerpo">'+
+        '<p class="nota" style="margin:0 0 14px">Lo borrado se va también de GitHub.</p>'+
+        '<div style="display:flex;flex-direction:column;gap:12px">'+
+          '<div><button class="btn malo" id="b_menus">Borrar los menús</button>'+
+            '<div class="nota" style="margin-top:4px">'+
+            plural((libro.menus||[]).length,"día montado","días montados")+
+            '. Las recetas se quedan.</div></div>'+
+          '<div style="border-top:1px solid var(--linea);padding-top:12px">'+
+            '<button class="btn malo fuerte" id="b_todo">Vaciar el recetario</button>'+
+            '<div class="nota" style="margin-top:4px">Se van las '+
+            plural(recetas().length,"receta","recetas")+' y los menús.</div></div>'+
+        '</div></div></div>';
+
+  document.getElementById("a_guardar").addEventListener("click", function(){
+    libro.ajustes.raciones=Math.max(1, Math.round(numero("a_rac")))||4;
+    libro.ajustes.avisarDias=Math.max(0, Math.round(numero("a_dias")));
+    guardar(); pintar(); avisar("Ajustes guardados");
+  });
+
+  document.getElementById("b_menus").addEventListener("click", function(){
+    if(!(libro.menus||[]).length){ avisar("No hay ningún menú montado.", true); return; }
+    confirmar("Borrar los menús",
+      '<p style="margin:0">Se van los '+(libro.menus||[]).length+' días montados. '+
+      'Las recetas y sus fechas de última elaboración se quedan.</p>',
+      function(){ libro.menus=[]; guardar(); pintar(); avisar("Menús borrados"); },
+      {aceptar:"Borrar", malo:true});
+  });
+
+  document.getElementById("b_todo").addEventListener("click", function(){
+    if(!recetas().length && !(libro.menus||[]).length){ avisar("Ya está vacío.", true); return; }
+    abrirVentana("Vaciar el recetario",
+      '<p style="margin:0 0 12px">Se van <strong>'+plural(recetas().length,"receta","recetas")+
+      '</strong> con sus pasos, y los menús montados.</p>'+
+      '<div class="campo"><label class="lbl" for="b_palabra">Escribe BORRAR para confirmarlo</label>'+
+        '<input id="b_palabra" class="mono" placeholder="BORRAR" autocomplete="off"></div>',
+      function(){
+        if(valor("b_palabra").toUpperCase()!=="BORRAR"){
+          avisar("Escribe BORRAR para confirmarlo.", true); return true;
+        }
+        libro.recetas=[]; libro.menus=[];
+        guardar(); pintar(); avisar("Recetario vacío");
+      }, {aceptar:"Vaciar", malo:true});
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════ */
+cargar();
+pintar();
+
+})();
