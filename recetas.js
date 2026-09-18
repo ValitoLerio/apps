@@ -26,6 +26,38 @@ var TIPOS = {
 };
 var ORDEN_TIPOS = ["primero","segundo","postre","base"];
 
+/* Los catorce de declaración obligatoria. Sirviendo a empresas hay que
+   poder decirlos plato a plato y del menú entero. */
+var ALERGENOS = {
+  gluten:     {nombre:"Gluten",             icono:"🌾"},
+  crustaceos: {nombre:"Crustáceos",         icono:"🦐"},
+  huevo:      {nombre:"Huevo",              icono:"🥚"},
+  pescado:    {nombre:"Pescado",            icono:"🐟"},
+  cacahuete:  {nombre:"Cacahuetes",         icono:"🥜"},
+  soja:       {nombre:"Soja",               icono:"🫘"},
+  lacteos:    {nombre:"Lácteos",            icono:"🥛"},
+  frutosSec:  {nombre:"Frutos de cáscara",  icono:"🌰"},
+  apio:       {nombre:"Apio",               icono:"🌿"},
+  mostaza:    {nombre:"Mostaza",            icono:"🟡"},
+  sesamo:     {nombre:"Sésamo",             icono:"⚪"},
+  sulfitos:   {nombre:"Sulfitos",           icono:"🍷"},
+  altramuces: {nombre:"Altramuces",         icono:"🫛"},
+  moluscos:   {nombre:"Moluscos",           icono:"🦑"}
+};
+var ORDEN_ALERGENOS = ["gluten","crustaceos","huevo","pescado","cacahuete","soja","lacteos",
+                       "frutosSec","apio","mostaza","sesamo","sulfitos","altramuces","moluscos"];
+
+function alergenosDe(r){
+  return (r && Array.isArray(r.alergenos)) ? r.alergenos.filter(function(a){ return ALERGENOS[a]; }) : [];
+}
+function chapasAlergenos(lista, tam){
+  if(!lista.length) return '<span class="chapa ok">Sin alérgenos declarados</span>';
+  return lista.map(function(a){
+    return '<span class="chapa aviso"'+(tam?' style="font-size:'+tam+'"':"")+' title="'+
+           esc(ALERGENOS[a].nombre)+'">'+ALERGENOS[a].icono+' '+esc(ALERGENOS[a].nombre)+'</span>';
+  }).join(" ");
+}
+
 var VACIO = {
   recetas: [],
   menus:   [],                      /* {fecha, primero, segundo, postre, nota} */
@@ -259,6 +291,40 @@ function verHoy(){
     '<div class="rejilla" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px">'+
       ["primero","segundo","postre"].map(function(t){ return platoDelMenu(t, m, fecha); }).join("")+
     '</div>'+
+
+    /* Los alérgenos del menú entero: es lo que hay que saber decir
+       cuando preguntan en la mesa, sin ir plato por plato. */
+    (function(){
+      var puestos=[], porPlato=[];
+      ["primero","segundo","postre"].forEach(function(t){
+        var r=recetaDe(m[t]); if(!r) return;
+        var suyos=alergenosDe(r);
+        porPlato.push({plato:TIPOS[t].nombre, nombre:r.nombre, lista:suyos});
+        suyos.forEach(function(a){ if(puestos.indexOf(a)<0) puestos.push(a); });
+      });
+      if(!porPlato.length) return "";
+      puestos.sort(function(a,b){ return ORDEN_ALERGENOS.indexOf(a)-ORDEN_ALERGENOS.indexOf(b); });
+      return '<div class="tarjeta" style="margin-top:16px"><div class="tarjeta-cab">'+
+        '<h2>Alérgenos del menú</h2>'+
+        '<span class="pista">Lo que hay que poder decir si preguntan</span></div>'+
+        '<div class="tarjeta-cuerpo">'+
+          '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">'+
+            chapasAlergenos(puestos)+'</div>'+
+          '<div class="tabla-caja"><table><tbody>'+
+            porPlato.map(function(x){
+              return '<tr><td style="white-space:nowrap"><strong>'+esc(x.plato)+'</strong>'+
+                '<div class="nota" style="margin:0">'+esc(x.nombre)+'</div></td>'+
+                '<td>'+(x.lista.length
+                  ? x.lista.map(function(a){ return ALERGENOS[a].icono+" "+esc(ALERGENOS[a].nombre); }).join(" · ")
+                  : '<span style="color:var(--muted)">sin declarar</span>')+'</td></tr>';
+            }).join("")+
+          '</tbody></table></div>'+
+          (porPlato.some(function(x){ return !x.lista.length; })
+            ? '<p class="nota" style="margin:10px 0 0">Los que salen «sin declarar» es que no '+
+              'les has marcado nada en su ficha. Sin marcar no quiere decir que no lleven.</p>'
+            : "")+
+        '</div></div>';
+    })()+
 
     '<div class="tarjeta" style="margin-top:16px"><div class="tarjeta-cab">'+
       '<h2>Nota del día</h2><span class="pista">Lo que quieras recordar</span></div>'+
@@ -499,6 +565,11 @@ function fichaReceta(r){
       (ultima?'<span class="chapa neutra">'+esc(haceCuanto(ultima))+'</span>'
              :'<span class="chapa ok">nueva</span>')+
       ((+r.veces||0)>0?'<span class="chapa neutra">'+plural(+r.veces,"vez","veces")+'</span>':"")+
+      (alergenosDe(r).length
+        ? '<span class="chapa aviso" title="'+
+          esc(alergenosDe(r).map(function(a){ return ALERGENOS[a].nombre; }).join(", "))+'">'+
+          alergenosDe(r).map(function(a){ return ALERGENOS[a].icono; }).join("")+'</span>'
+        : "")+
     '</span></button>';
 }
 
@@ -528,6 +599,10 @@ function verReceta(){
 
     '<div class="rejilla" style="grid-template-columns:minmax(240px,1fr) minmax(280px,2fr);'+
       'align-items:start;gap:16px">'+
+
+      '<div class="tarjeta"><div class="tarjeta-cab"><h2>Alérgenos</h2></div>'+
+        '<div class="tarjeta-cuerpo" style="display:flex;flex-wrap:wrap;gap:6px">'+
+          chapasAlergenos(alergenosDe(r))+'</div></div>'+
 
       '<div class="tarjeta"><div class="tarjeta-cab"><h2>Ingredientes</h2></div>'+
         '<div class="tarjeta-cuerpo">'+
@@ -708,6 +783,20 @@ function editarReceta(id){
       '<span class="nota" style="margin:5px 0 0">Cada línea es un paso de los que luego salen '+
       'de uno en uno en la cocina. Cuanto más corto, mejor se lee con las manos ocupadas.</span></div>'+
 
+    '<div class="campo" style="margin-bottom:12px">'+
+      '<label class="lbl">Alérgenos</label>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:4px">'+
+        ORDEN_ALERGENOS.map(function(k){
+          return '<label style="display:flex;gap:6px;align-items:center;cursor:pointer;font-size:13px">'+
+            '<input type="checkbox" class="e_alg" value="'+k+'" style="width:auto"'+
+            (alergenosDe(r).indexOf(k)>=0?" checked":"")+'>'+
+            '<span>'+ALERGENOS[k].icono+' '+esc(ALERGENOS[k].nombre)+'</span></label>';
+        }).join("")+
+      '</div>'+
+      '<span class="nota" style="margin:6px 0 0">Marca lo que lleve de verdad el plato. '+
+      'Se enseñan en la ficha y, juntos, en el menú del día: es lo que hay que poder decir '+
+      'si alguien pregunta.</span></div>'+
+
     '<div class="campo"><label class="lbl" for="e_notas">Notas</label>'+
       '<textarea id="e_notas" rows="3" placeholder="Sale mejor con el caldo del día anterior…">'+
       esc(r.notas||"")+'</textarea></div>',
@@ -724,6 +813,8 @@ function editarReceta(id){
       r.pasos=(document.getElementById("e_pasos").value||"").split("\n")
                 .map(function(x){ return x.trim(); }).filter(Boolean);
       r.notas=(document.getElementById("e_notas").value||"").trim();
+      r.alergenos=Array.prototype.slice.call(document.querySelectorAll(".e_alg:checked"))
+                    .map(function(x){ return x.value; });
       if(nueva) libro.recetas.push(r);
       guardar(); pintar();
       avisar(nueva?"Receta guardada":"Receta actualizada");
