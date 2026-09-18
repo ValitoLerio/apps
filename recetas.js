@@ -893,6 +893,22 @@ function verHoy(){
       '<button class="btn" id="h_montar">✨ Móntamelo</button>'+
       '<button class="btn" id="h_compra">Lo que hace falta</button>')+
 
+    (function(){
+      /* El aviso de la mesa: dos arroces el mismo día, o tres pescados,
+         es un menú cojo aunque cada plato esté bien. */
+      var pasadas=familiasPasadas(delDia.map(function(x){ return x.r; }));
+      if(!pasadas.length) return "";
+      return '<div class="tarjeta" style="margin-bottom:14px;border-color:var(--aviso)">'+
+        '<div class="tarjeta-cuerpo" style="display:flex;gap:10px;align-items:flex-start">'+
+        '<span style="font-size:18px">⚠︎</span><div>'+
+        pasadas.map(function(x){
+          return '<div><strong>'+plural(x.hay,"plato","platos")+' de '+esc(x.familia)+'</strong> '+
+            'el mismo día'+(x.tope===1?', y con uno basta':', y el tope está en '+x.tope)+'.</div>';
+        }).join("")+
+        '<div class="nota" style="margin:4px 0 0">Cámbialo o déjalo: esto sólo avisa.</div>'+
+        '</div></div></div>';
+    })()+
+
     '<div class="rejilla" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">'+
       TIPOS_DEL_MENU.map(function(t){ return paseDelMenu(t, m, fecha); }).join("")+
     '</div>'+
@@ -2064,6 +2080,76 @@ function editarReceta(id){
 }
 
 /* ══════════════════════════════════════════════════════════════
+   DE QUÉ ES CADA PLATO, Y QUÉ NO PUEDE JUNTARSE
+   ══════════════════════════════════════════════════════════════
+   Un menú no puede llevar dos arroces el mismo día aunque uno sea de
+   primero y otro de segundo, ni tres pescados seguidos. Cada receta se
+   clasifica por lo que lleva y el montador respeta los topes. */
+
+var FAMILIAS_PLATO = {
+  arroz:    {nombre:"arroz", femenino:false, tope:1, pistas:["arroz","paella","risotto","arros"]},
+  pasta:    {nombre:"pasta", femenino:true, tope:1, pistas:["pasta","macarron","espagueti","tallarin","fideo",
+                                                "canelon","lasana","noqui","fusilli","raviol","fideua"]},
+  legumbre: {nombre:"legumbre", femenino:true, tope:1, pistas:["lenteja","garbanzo","alubia","judia blanca","judia pinta",
+                                                "faba","pocha","haba","fabada","potaje","cocido"]},
+  pescado:  {nombre:"pescado", femenino:false, tope:2, pistas:["merluza","bacalao","atun","salmon","rape","dorada","lubina",
+                                                "trucha","sardina","boqueron","anchoa","pescado","bonito",
+                                                "cazon","rodaballo","gamba","langostino","almeja","mejillon",
+                                                "calamar","chipiron","sepia","pulpo","marisco","chirla",
+                                                "bogavante","ventresca","palito de cangrejo"]},
+  sopa:     {nombre:"sopa o crema", femenino:true, tope:1, pistas:["sopa","crema","caldo","gazpacho","salmorejo",
+                                                    "ajoblanco","pure","porrusalda","minestrone"]},
+  huevo:    {nombre:"huevo", femenino:false, tope:1, pistas:["tortilla","revuelto","huevos"]},
+  frito:    {nombre:"fritura", femenino:true, tope:2, pistas:["rebozad","empanad","romana","andaluza","frito","fritos",
+                                                "croqueta","bunuelo","milanesa"]},
+  carne:    {nombre:"carne", femenino:true, tope:3, pistas:["pollo","pavo","ternera","cerdo","cordero","conejo","costilla",
+                                                "carne","lomo","solomillo","chuleta","albondig","hamburguesa",
+                                                "chorizo","morcilla","panceta","jamon","rabo","carrillera",
+                                                "callos","codillo","butifarra","salchicha","magro","escalope"]}
+};
+var ORDEN_FAMILIAS = ["arroz","pasta","legumbre","pescado","sopa","huevo","frito","carne"];
+
+/* De qué es un plato: puede ser de varias —una paella de marisco es
+   arroz y pescado— y las dos cuentan. */
+function familiasDe(r){
+  if(!r) return [];
+  var texto=sinTildes(((r.nombre||"")+" "+
+    (r.ingredientes||[]).map(function(i){ return i.que; }).join(" ")).toLowerCase());
+  var nombre=sinTildes((r.nombre||"").toLowerCase());
+  return ORDEN_FAMILIAS.filter(function(k){
+    return FAMILIAS_PLATO[k].pistas.some(function(p){
+      /* la sopa o la fritura se ven en el nombre; el pescado y el arroz,
+         también en lo que lleva dentro */
+      return (k==="sopa"||k==="frito") ? nombre.indexOf(p)>=0 : texto.indexOf(p)>=0;
+    });
+  });
+}
+
+/* Cuánto hay ya de cada familia en lo que llevamos puesto ese día */
+function cuentaFamilias(recetasDelDia){
+  var c={};
+  recetasDelDia.forEach(function(r){
+    familiasDe(r).forEach(function(f){ c[f]=(c[f]||0)+1; });
+  });
+  return c;
+}
+/* ¿Cabe este plato hoy sin pasarse de ninguna familia? */
+function cabeHoy(r, cuenta){
+  return familiasDe(r).every(function(f){
+    return (cuenta[f]||0) < FAMILIAS_PLATO[f].tope;
+  });
+}
+function sumarFamilias(r, cuenta){
+  familiasDe(r).forEach(function(f){ cuenta[f]=(cuenta[f]||0)+1; });
+}
+/* Lo que se ha pasado de la raya, para avisar */
+function familiasPasadas(recetasDelDia){
+  var c=cuentaFamilias(recetasDelDia);
+  return Object.keys(c).filter(function(f){ return c[f]>FAMILIAS_PLATO[f].tope; })
+    .map(function(f){ return {familia:FAMILIAS_PLATO[f].nombre, hay:c[f], tope:FAMILIAS_PLATO[f].tope}; });
+}
+
+/* ══════════════════════════════════════════════════════════════
    MONTAR MENÚS SOLO
    ══════════════════════════════════════════════════════════════
    Un día, una semana o un mes de golpe, sin que se repita un plato
@@ -2089,25 +2175,41 @@ function colaDe(tipo, desde){
 }
 
 function montarMenus(desde, dias, cuantos, sustituir){
-  var colas={}, puestos=0, saltados=0, cortos=[];
+  var colas={}, puestos=0, saltados=0, cortos=[], apretados=false;
   TIPOS_DEL_MENU.forEach(function(t){ colas[t]=colaDe(t, desde); });
 
   for(var d=0; d<dias; d++){
     var f=sumarDias(desde, d);
     var m=menuDe(f)||{};
+    /* lo que ya hay puesto ese día cuenta para los topes */
+    var cuenta=cuentaFamilias(platosDelMenu(m).map(recetaDe).filter(Boolean));
     TIPOS_DEL_MENU.forEach(function(t){
       var n=+cuantos[t]||0; if(!n) return;
       if(platosDe(m,t).length && !sustituir){ saltados++; return; }
       var cola=colas[t];
       if(!cola.length){ if(cortos.indexOf(t)<0) cortos.push(t); return; }
       var lista=[];
-      while(lista.length<n && cola.length) lista.push(cola.shift());
+      /* se va mirando la cola por orden y se salta lo que no cabe hoy:
+         dos arroces o tres pescados el mismo día no se ponen */
+      for(var k=0; k<cola.length && lista.length<n; k++){
+        var cand=recetaDe(cola[k]);
+        if(!cand) continue;
+        if(!cabeHoy(cand, cuenta)) continue;
+        lista.push(cola[k]); sumarFamilias(cand, cuenta);
+      }
+      /* si por los topes no salen bastantes, se completa con lo que haya */
+      for(var k2=0; k2<cola.length && lista.length<n; k2++){
+        if(lista.indexOf(cola[k2])<0){ lista.push(cola[k2]); apretados=true; }
+      }
+      lista.forEach(function(id){
+        var i=cola.indexOf(id); if(i>=0) cola.splice(i,1);
+      });
       cola.push.apply(cola, lista);        /* al final de la cola: tardan en volver */
       fijarPase(f, t, lista);
       puestos+=lista.length;
     });
   }
-  return {puestos:puestos, saltados:saltados, cortos:cortos};
+  return {puestos:puestos, saltados:saltados, cortos:cortos, apretados:apretados};
 }
 
 /* Cuántos días aguanta el recetario sin repetir con esos platos al día */
@@ -2128,6 +2230,14 @@ function abrirMontador(desde, dias, titulo){
     '<p class="nota" style="margin:0 0 12px">Desde el <strong>'+esc(dmy(desde))+'</strong>, '+
       plural(dias,"día","días")+'. Se reparte el recetario entero: no vuelve a salir un plato '+
       'hasta que han salido todos los demás de su pase.</p>'+
+    '<p class="nota" style="margin:0 0 12px">Y no se juntan el mismo día: '+
+      ORDEN_FAMILIAS.filter(function(f){ return FAMILIAS_PLATO[f].tope<=2; })
+        .map(function(f){
+          var d=FAMILIAS_PLATO[f];
+          return d.tope===1
+            ? "más de "+(d.femenino?"una ":"un ")+d.nombre
+            : "más de dos "+d.nombre+"s";
+        }).join(", ")+'.</p>'+
     '<div class="rejilla" style="margin-bottom:10px">'+
       TIPOS_DEL_MENU.map(function(t){
         return '<div class="campo"><label class="lbl" for="mm_'+t+'">'+
@@ -2152,7 +2262,8 @@ function abrirMontador(desde, dias, titulo){
         return;
       }
       avisar(plural(res.puestos,"plato puesto","platos puestos")+
-             (res.saltados?" · "+plural(res.saltados,"pase respetado","pases respetados"):""));
+             (res.saltados?" · "+plural(res.saltados,"pase respetado","pases respetados"):"")+
+             (res.apretados?" · algún día ha habido que repetir familia por falta de recetas":""));
     }, {aceptar:"Montar"});
 
   function avisoCorto(){
