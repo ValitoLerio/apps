@@ -2697,8 +2697,41 @@ function editarRevision(id){
 /* ══════════════════════════════════════════════════════════════
    GASTOS FIJOS
    ══════════════════════════════════════════════════════════════ */
-var TIPOS_FIJOS=["Luz","Agua","Internet","Móvil","Teléfono fijo","Seguro del piso",
-                 "Comunidad","Alquiler o hipoteca","Gimnasio","Otro"];
+/* Los recibos que se repiten cada mes. Esta es la lista de salida -la
+   de una casa de aqui: la luz de FEDA, el agua del comu, la comunidad,
+   los seguros del piso y de los coches, los moviles...- y se puede
+   cambiar entera desde la propia pantalla: quitar lo que no tengas y
+   poner lo tuyo. */
+var TIPOS_FIJOS_DE_SALIDA=[
+  "Luz","Agua","Basura e impuestos","Gas o gasoil","Calefacción",
+  "Internet","Móviles","Teléfono fijo","Televisión y suscripciones",
+  "Comunidad","Hipoteca","Alquiler","Parking",
+  "Seguro del piso","Seguro del coche","Seguro de la moto",
+  "Seguro de vida","Seguro de salud","Alarma",
+  "Gimnasio","Mantenimiento caldera","Gestoría","Otro"
+];
+function tiposFijos(){
+  var a=libro.ajustes || (libro.ajustes={});
+  if(!Array.isArray(a.tiposFijos) || !a.tiposFijos.length)
+    a.tiposFijos=TIPOS_FIJOS_DE_SALIDA.slice();
+  return a.tiposFijos;
+}
+/* La lista, a mano: uno por linea. Es lo mas corto de explicar y lo mas
+   rapido de cambiar. */
+function editarTiposFijos(){
+  abrirVentana("Los recibos que sueles tener",
+    '<p class="nota" style="margin:0 0 10px">Uno por línea. Estos son los que salen como '+
+    'botones para anotar rápido, y los que aparecen en «Tipo» al apuntar un recibo.</p>'+
+    '<textarea id="tf_lista" rows="12" style="width:100%;font-family:var(--mono);font-size:13px">'+
+    esc(tiposFijos().join("\n"))+'</textarea>',
+    function(){
+      var l=(document.getElementById("tf_lista").value||"").split("\n")
+            .map(function(x){ return x.trim(); }).filter(Boolean);
+      if(!l.length){ avisar("Deja al menos uno.", true); return true; }
+      libro.ajustes.tiposFijos=l;
+      guardar(); pintar(); avisar("Lista guardada");
+    }, {aceptar:"Guardar"});
+}
 
 function verFijos(main){
   var mes=delMes(libro.fijos, ui.mes).slice().sort(function(a,b){ return (a.concepto||"").localeCompare(b.concepto||""); });
@@ -2723,12 +2756,65 @@ function verFijos(main){
         (dif>0?"+":"")+eur(dif)+'</div>'+
         '<div class="n">'+(anterior>0?(dif>0?"más caro":dif<0?"más barato":"igual"):"sin comparación")+'</div></div>'+
     '</div>'+
+    /* Los que sueles tener y este mes todavia no estan: un boton cada
+       uno, que anotarlos es lo que se hace aqui todos los meses. Y si
+       el mes pasado tenias unos cuantos, se traen todos de una. */
+    (function(){
+      var puestos={};
+      mes.forEach(function(f){ puestos[(f.tipo||"").toLowerCase()]=true; });
+      var faltan=tiposFijos().filter(function(t){
+        return t!=="Otro" && !puestos[t.toLowerCase()]; });
+      var delAnterior=delMes(libro.fijos, mesAnterior);
+      var porTraer=delAnterior.filter(function(f){ return !puestos[(f.tipo||"").toLowerCase()]; });
+      return '<div class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab">'+
+        '<h2>Los de cada mes</h2>'+
+        '<span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+          (porTraer.length
+            ? '<button class="btn sm" id="traerFijos">Traer los '+porTraer.length+' de '+
+              esc(mesLargo(mesAnterior))+'</button>'
+            : "")+
+          '<button class="btn suave sm" id="editaTipos">Editar la lista</button></span></div>'+
+        '<div class="tarjeta-cuerpo">'+
+          (faltan.length
+            ? '<div class="quienes">'+faltan.map(function(t){
+                return '<button class="quien-chip" data-ftipo="'+esc(t)+'" '+
+                  'title="Anotar el recibo de '+esc(t)+' de este mes">+ '+esc(t)+'</button>';
+              }).join("")+'</div>'+
+              '<p class="nota" style="margin:10px 0 0">Pulsa uno y solo tienes que poner el importe. '+
+              'Los que ya están apuntados este mes no salen.</p>'
+            : '<p class="nota" style="margin:0">Este mes ya están todos los de tu lista. '+
+              'Si te falta alguno, dale a «Editar la lista».</p>')+
+        '</div></div>';
+    })()+
+
     '<div class="tarjeta"><div class="tarjeta-cab"><h2>Recibos de '+esc(mesLargo(ui.mes))+'</h2>'+
       '<span class="pista">Pulsa «repetir» para copiarlo al mes siguiente</span></div>'+
       '<div class="tabla-caja" id="tablaFijos"></div></div>';
 
   engancharMes("f_mes");
   document.getElementById("nuevoFijo").addEventListener("click", function(){ editarFijo(null); });
+  document.getElementById("editaTipos").addEventListener("click", editarTiposFijos);
+  main.querySelectorAll("[data-ftipo]").forEach(function(b){
+    b.addEventListener("click", function(){ editarFijo(null, b.getAttribute("data-ftipo")); });
+  });
+  var traer=document.getElementById("traerFijos");
+  if(traer) traer.addEventListener("click", function(){
+    /* Los del mes pasado, con su importe, al mes que estas mirando: casi
+       siempre es el mismo recibo y el mismo dinero, y lo que cambie se
+       corrige encima. */
+    var puestos={};
+    delMes(libro.fijos, ui.mes).forEach(function(f){ puestos[(f.tipo||"").toLowerCase()]=true; });
+    var n=0;
+    delMes(libro.fijos, mesAnterior).forEach(function(f){
+      if(puestos[(f.tipo||"").toLowerCase()]) return;
+      var dia=(f.fecha||"").slice(8) || "01";
+      libro.fijos.push({id:uid(), fecha:ui.mes+"-"+dia, concepto:f.concepto, tipo:f.tipo,
+                        importe:f.importe});
+      n++;
+    });
+    guardar(); pintar();
+    avisar(n?("Traídos "+n+" recibos de "+mesLargo(mesAnterior)+": repasa los importes"):"No había ninguno que traer");
+  });
 
   var caja=document.getElementById("tablaFijos");
   if(!mes.length){
@@ -2766,13 +2852,14 @@ function verFijos(main){
   });
 }
 
-function editarFijo(id){
+function editarFijo(id, tipoPuesto){
   var f=id?(libro.fijos||[]).filter(function(x){return x.id===id;})[0]
-          :{id:uid(), fecha:ui.mes+"-01", concepto:"", tipo:"Luz", importe:0};
+          :{id:uid(), fecha:ui.mes+"-01", concepto:"", tipo:(tipoPuesto||tiposFijos()[0]), importe:0};
   abrirVentana(id?"Editar recibo":"Anotar recibo",
     '<div class="rejilla">'+
       '<div class="campo"><label class="lbl" for="fx_tipo">Tipo</label><select id="fx_tipo">'+
-        TIPOS_FIJOS.map(function(t){ return '<option'+(f.tipo===t?" selected":"")+">"+esc(t)+"</option>"; }).join("")+
+        tiposFijos().concat(f.tipo && tiposFijos().indexOf(f.tipo)<0 ? [f.tipo] : [])
+          .map(function(t){ return '<option'+(f.tipo===t?" selected":"")+">"+esc(t)+"</option>"; }).join("")+
       '</select></div>'+
       '<div class="campo"><label class="lbl" for="fx_conc">Concepto</label>'+
         '<input id="fx_conc" value="'+esc(f.concepto)+'" placeholder="FEDA, Andorra Telecom…"></div>'+
