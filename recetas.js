@@ -397,17 +397,225 @@ var VARIANTES = {
   ]
 };
 
+/* ══════════════════════════════════════════════════════════════
+   MANERAS DE HACERLO
+   ══════════════════════════════════════════════════════════════
+   El catálogo de arriba son recetas enteras de unos cuantos platos.
+   Esto es lo otro: las maneras de cocinar cualquier producto. Se
+   junta el producto —lo que él escribe— con la técnica, y sale una
+   receta armada que luego cambia a su gusto. Con veinte productos y
+   veinte técnicas salen cientos de formas sin escribirlas una a una. */
+
+var PRODUCTOS = {
+  "pollo":     {cantidad:"3|kg|pollo troceado",        tipo:"segundo", familia:"ave"},
+  "pavo":      {cantidad:"3|kg|pavo en dados",          tipo:"segundo", familia:"ave"},
+  "conejo":    {cantidad:"3|kg|conejo troceado",        tipo:"segundo", familia:"ave"},
+  "ternera":   {cantidad:"2,5|kg|ternera en dados",     tipo:"segundo", familia:"carne"},
+  "cerdo":     {cantidad:"3|kg|lomo de cerdo",          tipo:"segundo", familia:"carne"},
+  "cordero":   {cantidad:"3,5|kg|cordero troceado",     tipo:"segundo", familia:"carne"},
+  "costilla":  {cantidad:"3|kg|costilla de cerdo",      tipo:"segundo", familia:"carne"},
+  "carne picada":{cantidad:"2,5|kg|carne picada",       tipo:"segundo", familia:"carne"},
+  "merluza":   {cantidad:"3|kg|merluza en lomos",       tipo:"segundo", familia:"pescado"},
+  "bacalao":   {cantidad:"10||lomos de bacalao desalado",tipo:"segundo", familia:"pescado"},
+  "salmón":    {cantidad:"3|kg|lomo de salmón",         tipo:"segundo", familia:"pescado"},
+  "atún":      {cantidad:"3|kg|atún en tacos",          tipo:"segundo", familia:"pescado"},
+  "rape":      {cantidad:"3|kg|rape en medallones",     tipo:"segundo", familia:"pescado"},
+  "dorada":    {cantidad:"10||doradas",                 tipo:"segundo", familia:"pescado"},
+  "calamar":   {cantidad:"3|kg|calamares limpios",      tipo:"segundo", familia:"pescado"},
+  "gambas":    {cantidad:"2,5|kg|gambas peladas",       tipo:"segundo", familia:"pescado"},
+  "huevos":    {cantidad:"20||huevos",                  tipo:"segundo", familia:"huevo"},
+  "patatas":   {cantidad:"3|kg|patatas",                tipo:"primero", familia:"verdura"},
+  "calabacín": {cantidad:"3|kg|calabacines",            tipo:"primero", familia:"verdura"},
+  "berenjena": {cantidad:"3|kg|berenjenas",             tipo:"primero", familia:"verdura"},
+  "coliflor":  {cantidad:"3|kg|coliflor",               tipo:"primero", familia:"verdura"},
+  "espinacas": {cantidad:"3|kg|espinacas",              tipo:"primero", familia:"verdura"},
+  "judías verdes":{cantidad:"3|kg|judía verde",         tipo:"primero", familia:"verdura"},
+  "setas":     {cantidad:"2,5|kg|setas",                tipo:"primero", familia:"verdura"},
+  "alcachofas":{cantidad:"3|kg|alcachofas",             tipo:"primero", familia:"verdura"},
+  "garbanzos": {cantidad:"2|kg|garbanzos cocidos",      tipo:"primero", familia:"legumbre"},
+  "lentejas":  {cantidad:"1,8|kg|lentejas",             tipo:"primero", familia:"legumbre"},
+  "alubias":   {cantidad:"2|kg|alubias cocidas",        tipo:"primero", familia:"legumbre"},
+  "arroz":     {cantidad:"1|kg|arroz",                  tipo:"primero", familia:"arroz"},
+  "pasta":     {cantidad:"1,5|kg|pasta",                tipo:"primero", familia:"pasta"}
+};
+
+/* Cada técnica dice para qué familias vale, qué añade y cómo se hace.
+   {p} es el producto. */
+var TECNICAS = [
+  {sub:"a la plancha", vale:["ave","carne","pescado","verdura"], tiempo:"25 min", alergenos:[],
+   ing:["|aceite de oliva","|sal","2||limones"],
+   pasos:["Salar {p} y secarlo bien","Plancha muy caliente, sin mover",
+     "Dar la vuelta una sola vez","Limón y buen aceite al salir"]},
+  {sub:"al horno", vale:["ave","carne","pescado","verdura"], tiempo:"50 min", alergenos:["sulfitos"],
+   ing:["1,5|kg|patatas","3||cebollas","200|ml|vino blanco","|aceite de oliva","|sal"],
+   pasos:["Cama de patata y cebolla en rodajas, sazonada","Poner {p} encima salado",
+     "Vino y un chorro de aceite","Horno a 190° 35 minutos regando",
+     "Subir a 220° los últimos 8 minutos"]},
+  {sub:"al ajillo", vale:["ave","carne","pescado","verdura"], tiempo:"35 min", alergenos:["sulfitos"],
+   ing:["12||dientes de ajo","2||guindillas","200|ml|vino blanco","|perejil","|aceite de oliva","|sal"],
+   pasos:["Dorar el ajo laminado y la guindilla","Sacarlos y reservar",
+     "Marcar {p} a fuego fuerte","Volver el ajo y mojar con el vino",
+     "Reducir y perejil picado"]},
+  {sub:"en salsa", vale:["ave","carne","pescado","huevo"], tiempo:"50 min", alergenos:["gluten","sulfitos"],
+   ing:["3||cebollas","3||zanahorias","200|ml|vino blanco","1|l|caldo","|harina",
+     "|aceite de oliva","|sal"],
+   pasos:["Enharinar ligeramente {p} y dorarlo","Pochar cebolla y zanahoria",
+     "Vino, reducir y caldo","Triturar la salsa","Volver {p} y cocer 20 minutos"]},
+  {sub:"guisad{o} con patatas", vale:["ave","carne","pescado","legumbre"], tiempo:"1 h 15 min", alergenos:[],
+   ing:["2|kg|patatas","3||cebollas","2||pimientos verdes","1|cucharada|pimentón",
+     "|aceite de oliva","|sal"],
+   pasos:["Dorar {p} salado","Pochar cebolla y pimiento",
+     "Pimentón fuera del fuego","Patata chascada y cubrir de agua",
+     "35 minutos a fuego suave"]},
+  {sub:"rebozad{o}", vale:["ave","carne","pescado","verdura"], tiempo:"40 min", alergenos:["gluten","huevo"],
+   ing:["6||huevos","|harina","|aceite de oliva","|sal","2||limones"],
+   pasos:["Salar y secar {p}","Pasar por harina y huevo batido",
+     "Freír en aceite abundante a 180°","Escurrir en rejilla","Servir con limón"]},
+  {sub:"empanad{o}", vale:["ave","carne","pescado","verdura"], tiempo:"45 min", alergenos:["gluten","huevo"],
+   ing:["6||huevos","500|g|pan rallado","|harina","|aceite de oliva","|sal"],
+   pasos:["Salar {p}","Harina, huevo y pan rallado","Apretar bien el pan",
+     "Freír a 180° dos minutos por cara","Escurrir en rejilla"]},
+  {sub:"en escabeche", vale:["ave","carne","pescado","verdura"], tiempo:"1 h", alergenos:["sulfitos"],
+   ing:["400|ml|vinagre","400|ml|vino blanco","400|ml|aceite de oliva","6||zanahorias",
+     "3||cebollas","10||dientes de ajo","|laurel","|pimienta en grano","|sal"],
+   pasos:["Dorar {p} salado","Añadir la verdura, el ajo, el laurel y la pimienta",
+     "Mojar con vinagre, vino y aceite","Cocer tapado 35 minutos",
+     "Enfriar y reposar dos días"]},
+  {sub:"a la cazuela con verduras", vale:["ave","carne","pescado","verdura","legumbre"], tiempo:"55 min",
+   alergenos:["apio"],
+   ing:["3||cebollas","4||zanahorias","2||calabacines","2||pimientos","800|ml|caldo",
+     "|aceite de oliva","|sal"],
+   pasos:["Dorar {p}","Pochar la verdura en la misma cazuela",
+     "Juntar con el caldo","Tapar y cocer 30 minutos","Destapar para que espese"]},
+  {sub:"al curry", vale:["ave","carne","pescado","verdura","legumbre"], tiempo:"50 min", alergenos:["lacteos"],
+   ing:["3||cebollas","3|cucharadas|curry","600|ml|nata","2||manzanas","|aceite de oliva","|sal"],
+   pasos:["Dorar {p} y reservar","Pochar cebolla y manzana",
+     "Tostar el curry un minuto","Nata y {p}, 15 minutos suave"]},
+  {sub:"con tomate", vale:["ave","carne","pescado","huevo","verdura","legumbre"], tiempo:"50 min", alergenos:[],
+   ing:["2|kg|tomate triturado","3||cebollas","4||dientes de ajo","1|cucharadita|azúcar",
+     "|aceite de oliva","|sal"],
+   pasos:["Pochar cebolla y ajo","Tomate y azúcar, 25 minutos",
+     "Marcar {p} aparte","Juntar y cocer 15 minutos"]},
+  {sub:"a la crema de setas", vale:["ave","carne","pescado","huevo"], tiempo:"45 min", alergenos:["lacteos","sulfitos"],
+   ing:["1,5|kg|setas","3||cebollas","500|ml|nata","200|ml|vino blanco","|aceite de oliva","|sal"],
+   pasos:["Saltear las setas a fuego fuerte","Pochar la cebolla y mojar con el vino",
+     "Nata y reducir","Marcar {p} y terminarlo en la salsa"]},
+  {sub:"a la mostaza", vale:["ave","carne","pescado"], tiempo:"40 min", alergenos:["mostaza","lacteos","sulfitos"],
+   ing:["3|cucharadas|mostaza","400|ml|nata","200|ml|vino blanco","3||cebollas",
+     "|aceite de oliva","|sal"],
+   pasos:["Marcar {p} y reservar","Pochar la cebolla picada fina",
+     "Vino, mostaza y nata","Volver {p} 8 minutos"]},
+  {sub:"a la cerveza", vale:["ave","carne"], tiempo:"55 min", alergenos:["gluten"],
+   ing:["3||cebollas","500|ml|cerveza","4||dientes de ajo","2||hojas de laurel",
+     "|harina","|aceite de oliva","|sal"],
+   pasos:["Enharinar y dorar {p}","Pochar cebolla y ajo",
+     "Cerveza y laurel","Tapar 35 minutos","Destapar para que ligue"]},
+  {sub:"a la naranja", vale:["ave","carne","pescado"], tiempo:"50 min", alergenos:["sulfitos"],
+   ing:["6||naranjas","2|cucharadas|miel","200|ml|vino blanco","3||cebollas",
+     "|aceite de oliva","|sal"],
+   pasos:["Dorar {p}","Pochar la cebolla","Zumo, vino y miel",
+     "Tapar 25 minutos","Destapar y reducir hasta glasear"]},
+  {sub:"rellen{o}", vale:["ave","carne","pescado","verdura"], tiempo:"1 h", alergenos:["gluten","lacteos"],
+   ing:["500|g|carne picada","300|g|jamón","3||cebollas","400|ml|bechamel",
+     "|aceite de oliva","|sal"],
+   pasos:["Abrir {p} y salarlo","Pochar cebolla y saltear el relleno",
+     "Ligar con bechamel y enfriar","Rellenar y cerrar bien",
+     "Horno a 180° 30 minutos"]},
+  {sub:"gratinad{o}", vale:["pescado","verdura","legumbre","pasta","huevo"], tiempo:"45 min",
+   alergenos:["gluten","lacteos"],
+   ing:["1,2|l|bechamel","300|g|queso rallado","|nuez moscada","|sal"],
+   pasos:["Cocer {p} justo de punto y escurrir muy bien",
+     "Colocar en la bandeja","Bechamel por encima y queso","Gratinar 12 minutos"]},
+  {sub:"en ensalada", vale:["pescado","verdura","legumbre","pasta","arroz","huevo"], tiempo:"30 min",
+   alergenos:["mostaza","sulfitos"],
+   ing:["3||tomates","2||cebolletas","300|g|aceitunas","|vinagreta","|sal"],
+   pasos:["Cocer o preparar {p} y dejarlo templar","Picar la verdura fina",
+     "Juntar todo","Aliñar con la vinagreta en el momento"]},
+  {sub:"a la brasa", vale:["ave","carne","pescado","verdura"], tiempo:"40 min", alergenos:[],
+   ing:["|aceite de oliva","|sal gorda","6||dientes de ajo","|perejil"],
+   pasos:["Encender la brasa con tiempo y esperar a la ceniza",
+     "Salar {p} justo antes","Brasa fuerte para marcar y luego a un lado",
+     "Pintar con ajo y perejil en aceite"]},
+  {sub:"en croquetas", vale:["ave","carne","pescado","verdura"], tiempo:"1 h + frío",
+   alergenos:["gluten","lacteos","huevo"],
+   ing:["3|l|leche","350|g|harina","350|g|mantequilla","6||huevos","600|g|pan rallado","|sal"],
+   pasos:["Picar {p} muy fino y rehogarlo en la mantequilla",
+     "Añadir la harina y cocerla bien","Leche caliente poco a poco, batiendo",
+     "Cocer 15 minutos hasta que se despegue","Enfriar 6 horas, bolear y empanar",
+     "Freír a 180°"]},
+  {sub:"en pastel", vale:["pescado","verdura","carne"], tiempo:"1 h", alergenos:["huevo","lacteos"],
+   ing:["12||huevos","600|ml|nata","3||cebollas","600|ml|salsa de tomate","|sal"],
+   pasos:["Pochar la cebolla y juntar con {p} picado",
+     "Batir huevos con la nata","Mezclar todo y salpimentar",
+     "Molde y baño maría a 170° 45 minutos","Frío y salsa de tomate al servir"]},
+  {sub:"en sopa", vale:["ave","pescado","verdura","legumbre"], tiempo:"50 min", alergenos:["gluten","apio"],
+   ing:["3|l|caldo","200|g|fideos","3||zanahorias","2||puerros","1||rama de apio","|sal"],
+   pasos:["Rehogar la verdura picada","Añadir {p} y el caldo",
+     "Cocer 25 minutos","Fideos los últimos 8 minutos"]},
+  {sub:"en pisto", vale:["carne","ave","huevo","verdura"], tiempo:"50 min", alergenos:[],
+   ing:["3||calabacines","3||pimientos","4||cebollas","1,5|kg|tomate triturado",
+     "|aceite de oliva","|sal"],
+   pasos:["Pochar cebolla y pimiento","Añadir el calabacín en dados",
+     "Tomate y 25 minutos","Marcar {p} aparte y juntar 5 minutos"]},
+  {sub:"a la cazuela de barro con ajo y pimentón", vale:["pescado","verdura"], tiempo:"35 min", alergenos:[],
+   ing:["10||dientes de ajo","1|cucharada|pimentón","100|ml|vinagre","|aceite de oliva","|sal"],
+   pasos:["Confitar el ajo laminado en la cazuela","Sacarlo y marcar {p}",
+     "Fuera del fuego, el pimentón y un chorro de vinagre",
+     "Volcar el refrito por encima"]}
+];
+
+/* «patatas rebozadas», no «patatas rebozado». La terminación sale del
+   propio producto. */
+function concordar(sub, producto){
+  if(sub.indexOf("{o}")<0) return sub;
+  var t=sinTildes(String(producto||"").toLowerCase()).replace(/\s+\S*$/,"") ||
+        sinTildes(String(producto||"").toLowerCase());
+  var ultima=sinTildes(String(producto||"").toLowerCase()).split(/\s+/)[0]||"";
+  var plural=/s$/.test(ultima);
+  var femenino=/as?$/.test(ultima);
+  var fin=(femenino?"a":"o")+(plural?"s":"");
+  return sub.replace("{o}", fin);
+}
+
+function familiaDe(nombre){
+  var t=sinTildes(String(nombre||"").toLowerCase());
+  var claves=Object.keys(PRODUCTOS), mejor=null;
+  claves.forEach(function(k){
+    if(t.indexOf(sinTildes(k))>=0 && (!mejor || k.length>mejor.length)) mejor=k;
+  });
+  return mejor ? {clave:mejor, datos:PRODUCTOS[mejor]} : null;
+}
+
+/* Las maneras que valen para lo que se está escribiendo, ya armadas */
+function manerasPara(nombre){
+  var p=familiaDe(nombre);
+  if(!p) return [];
+  return TECNICAS.filter(function(t){ return t.vale.indexOf(p.datos.familia)>=0; })
+    .map(function(t){
+      return {sub:concordar(t.sub, p.clave), tipo:p.datos.tipo, raciones:10, tiempo:t.tiempo,
+              alergenos:t.alergenos.slice(),
+              ing:[p.datos.cantidad].concat(t.ing),
+              pasos:t.pasos.map(function(x){ return x.replace(/\{p\}/g, p.clave); }),
+              notas:""};
+    });
+}
+
 /* Busca formas de hacer lo que se está escribiendo. Basta con que el
    nombre contenga la palabra: «lentejas de la casa» encuentra las
    lentejas. */
 function variantesPara(nombre){
   var t=String(nombre||"").trim().toLowerCase();
   if(t.length<3) return null;
-  var claves=Object.keys(VARIANTES);
-  for(var i=0;i<claves.length;i++){
-    if(t.indexOf(claves[i])>=0) return {clave:claves[i], formas:VARIANTES[claves[i]]};
-  }
-  return null;
+  var formas=[], clave=null;
+  Object.keys(VARIANTES).forEach(function(k){
+    if(t.indexOf(k)>=0 && !clave){ clave=k; formas=VARIANTES[k].slice(); }
+  });
+  /* Y detrás, todas las maneras de cocinar ese producto */
+  manerasPara(nombre).forEach(function(m){
+    if(!formas.some(function(f){ return f.sub===m.sub; })) formas.push(m);
+  });
+  if(!formas.length) return null;
+  return {clave:clave||(familiaDe(nombre)||{}).clave||t, formas:formas};
 }
 
 /* «400|g|lentejas» o «|sal» para lo que va al gusto */
@@ -1699,6 +1907,14 @@ function editarReceta(id){
     document.querySelectorAll(".e_alg").forEach(function(c){
       c.checked = (f.alergenos||[]).indexOf(c.value)>=0;
     });
+    /* El nombre, completo: «merluza» + «al ajillo» = «Merluza al ajillo».
+       Si ya lo lleva escrito no se toca. */
+    var campo=document.getElementById("e_nom");
+    var escrito=(campo.value||"").trim();
+    if(f.sub && escrito && escrito.toLowerCase().indexOf(f.sub.toLowerCase())<0){
+      var nuevo=escrito+" "+f.sub;
+      campo.value=nuevo.charAt(0).toUpperCase()+nuevo.slice(1);
+    }
     avisar("Puesta la receta: cámbiala a tu gusto");
     pintarFormas();
   }
