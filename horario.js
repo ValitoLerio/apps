@@ -147,9 +147,16 @@ function horasDeCelda(c) {
    izquierda, el de noche a la derecha y el partido saca dos trozos: se
    ve de un vistazo quien entra antes y cuanto dura cada turno, sin leer
    una sola hora. */
-function barraHoras(c, color) {
-  var ini0 = 7*60, largo = 20*60;          // de las 07:00 a las 03:00
-  function trozo(a, b) {
+var BARRA_INI = 7*60, BARRA_LARGO = 20*60;   // de las 07:00 a las 03:00
+
+/* Una regla del dia debajo del turno, de las 7:00 a las 3:00, con el
+   trozo pintado donde se trabaja. Y ahora se puede arrastrar: mover el
+   trozo corre el turno entero sin cambiarle la duracion, y tirando de un
+   borde se cambia solo la entrada o solo la salida. Va de cuarto en
+   cuarto de hora. */
+function barraHoras(c, color, sid, dia) {
+  var ini0 = BARRA_INI, largo = BARRA_LARGO;
+  function trozo(a, b, tramo) {
     if (!a || !b) return '';
     var A = parseInt(a.split(':')[0])*60 + parseInt(a.split(':')[1]);
     var B = parseInt(b.split(':')[0])*60 + parseInt(b.split(':')[1]);
@@ -159,14 +166,140 @@ function barraHoras(c, color) {
     if (x < 0) { w += x; x = 0; }
     if (x >= 1 || w <= 0) return '';
     if (x + w > 1) w = 1 - x;
-    return '<i style="position:absolute;top:0;bottom:0;left:' + (x*100).toFixed(1) + '%;width:' +
-           (w*100).toFixed(1) + '%;background:' + color + ';border-radius:2px"></i>';
+    /* La raya se ve fina, pero lo que se agarra es más alto que ella: un
+       hilo de 4 px no hay quien lo coja con el dedo. */
+    var mueve = (sid!=null)
+      ? ' data-tramo="'+tramo+'" title="Arrastra para correr el turno; por los bordes, la entrada o la salida"'
+      : '';
+    var alto = (sid!=null) ? 'top:-7px;bottom:-7px' : 'top:0;bottom:0';
+    return '<i'+mueve+' style="position:absolute;'+alto+';left:' + (x*100).toFixed(1) + '%;width:' +
+           (w*100).toFixed(1) + '%;background:transparent' +
+           (sid!=null?';cursor:grab;touch-action:none':'') + '">'+
+           '<span style="position:absolute;'+(sid!=null?'top:7px;bottom:7px':'top:0;bottom:0')+
+           ';left:0;right:0;background:'+color+';border-radius:2px"></span></i>';
   }
-  var dentro = trozo(c.inicio, c.fin) + trozo(c.inicio2, c.fin2);
+  var dentro = trozo(c.inicio, c.fin, 1) + trozo(c.inicio2, c.fin2, 2);
   if (!dentro) return '';
-  return '<div title="el dia entero, de las 7:00 a las 3:00" style="position:relative;width:92%;height:6px;' +
-         'margin:2px auto 0;background:rgba(128,128,128,.16);border-radius:2px">' + dentro + '</div>';
+  var datos = (sid!=null)
+    ? ' class="regla-dia" data-sid="'+sid+'" data-d="'+dia.d+'" data-m="'+dia.m+'" data-y="'+dia.y+'"'
+    : '';
+  return '<div'+datos+' title="el dia entero, de las 7:00 a las 3:00" style="position:relative;width:84%;height:4px;' +
+         'margin:3px auto 0;background:rgba(128,128,128,.16);border-radius:2px">' + dentro + '</div>';
 }
+
+/* ── Arrastrar la regla ──────────────────────────────────────────────
+   Un solo oyente en el documento: las celdas se repintan a cada cambio,
+   asi que colgar oyentes de cada barra seria colgarlos y perderlos todo
+   el rato. */
+function hhmm(min) {
+  min = ((Math.round(min) % 1440) + 1440) % 1440;
+  return String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0');
+}
+function minutosDeHora(h) {
+  if (!h) return null;
+  var p = h.split(':');
+  return parseInt(p[0])*60 + parseInt(p[1]);
+}
+
+var arrastre = null;
+
+function iniciarArrastre(e) {
+  var trozo = e.target.closest('i[data-tramo]');
+  if (!trozo) return;
+  var regla = trozo.closest('.regla-dia');
+  if (!regla) return;
+
+  var sid = regla.dataset.sid;
+  var dia = {d:+regla.dataset.d, m:+regla.dataset.m, y:+regla.dataset.y};
+  var celda = gcAt(sid, dia);
+  if (!celda) return;
+
+  var tramo = +trozo.dataset.tramo;
+  var campoIni = tramo===2 ? 'inicio2' : 'inicio';
+  var campoFin = tramo===2 ? 'fin2'    : 'fin';
+
+  var A = minutosDeHora(celda[campoIni]), B = minutosDeHora(celda[campoFin]);
+  if (A==null || B==null) return;
+  if (A < BARRA_INI) A += 1440;
+  if (B <= A) B += 1440;
+
+  /* Cerca de un borde se estira ese lado; por el medio, se corre entero */
+  var caja = trozo.getBoundingClientRect();
+  var borde = Math.min(10, caja.width/3);
+  var x = e.clientX - caja.left;
+  var modo = x <= borde ? 'ini' : (x >= caja.width-borde ? 'fin' : 'mover');
+
+  e.preventDefault();
+  arrastre = {sid:sid, dia:dia, celda:celda, campoIni:campoIni, campoFin:campoFin,
+              A:A, B:B, modo:modo, x0:e.clientX,
+              anchoRegla:regla.getBoundingClientRect().width, movido:false};
+  trozo.style.cursor = 'grabbing';
+  document.body.style.userSelect = 'none';
+}
+
+function moverArrastre(e) {
+  if (!arrastre) return;
+  var px = e.clientX - arrastre.x0;
+  var min = (px / arrastre.anchoRegla) * BARRA_LARGO;
+  var paso = 15;
+  var salto = Math.round(min / paso) * paso;
+  if (!salto && !arrastre.movido) return;
+  arrastre.movido = true;
+
+  var A = arrastre.A, B = arrastre.B;
+  if (arrastre.modo === 'mover') { A += salto; B += salto; }
+  else if (arrastre.modo === 'ini') { A = Math.min(A + salto, B - paso); }
+  else { B = Math.max(B + salto, A + paso); }
+
+  /* Ni antes de las 7:00 ni mas alla de las 3:00 */
+  if (A < BARRA_INI) { var d = BARRA_INI - A; A += d; if (arrastre.modo==='mover') B += d; }
+  var tope = BARRA_INI + BARRA_LARGO;
+  if (B > tope) { var d2 = B - tope; B -= d2; if (arrastre.modo==='mover') A -= d2; }
+  if (B <= A) return;
+
+  arrastre.nuevoA = A; arrastre.nuevoB = B;
+  pintarArrastre(A, B);
+}
+
+/* Mientras se arrastra se enseña la hora, sin guardar nada todavia */
+function pintarArrastre(A, B) {
+  var aviso = document.getElementById('avisoArrastre');
+  if (!aviso) {
+    aviso = document.createElement('div');
+    aviso.id = 'avisoArrastre';
+    aviso.style.cssText = 'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);'+
+      'background:var(--text);color:var(--bg);padding:8px 16px;border-radius:20px;'+
+      'font-size:13px;font-weight:600;z-index:200;pointer-events:none';
+    document.body.appendChild(aviso);
+  }
+  aviso.textContent = hhmm(A)+' – '+hhmm(B)+'   ('+((B-A)/60).toFixed(2).replace('.',',')+' h)';
+}
+
+function soltarArrastre() {
+  if (!arrastre) return;
+  var a = arrastre; arrastre = null;
+  document.body.style.userSelect = '';
+  var aviso = document.getElementById('avisoArrastre');
+  if (aviso) aviso.remove();
+  if (!a.movido || a.nuevoA==null) { document.querySelectorAll('i[data-tramo]').forEach(function(i){ i.style.cursor='grab'; }); return; }
+
+  var datos = Object.assign({}, a.celda);
+  datos[a.campoIni] = hhmm(a.nuevoA);
+  datos[a.campoFin] = hhmm(a.nuevoB);
+
+  var sM = curM, sY = curY;
+  curM = a.dia.m; curY = a.dia.y;
+  sc(a.sid, a.dia.d, datos);
+  curM = sM; curY = sY;
+
+  renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones(); pegarCabeceras();
+  toast(hhmm(a.nuevoA)+' – '+hhmm(a.nuevoB));
+}
+
+document.addEventListener('pointerdown', iniciarArrastre);
+document.addEventListener('pointermove', moverArrastre);
+document.addEventListener('pointerup', soltarArrastre);
+document.addEventListener('pointercancel', soltarArrastre);
 
 function textoTurno(c) {
   if (!c || !c.inicio) return '';
@@ -1017,7 +1150,7 @@ function renderTable() {
             + '<span class="th">'+fmtC(cell.inicio)+'-'+fmtC(cell.fin)
             + (esPartido(cell) ? '<br>'+fmtC(cell.inicio2)+'-'+fmtC(cell.fin2) : '')
             + '</span></span></div>'
-            + barraHoras(cell, 'var(--est-trabajo)');
+            + barraHoras(cell, 'var(--est-trabajo)', s.id, dia);
         if (cell.nota) inn += '<div style="width:100%;display:flex;justify-content:'+align+';'+pad+'"><span style="font-size:.6rem;color:var(--text2);max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+cell.nota+'</span></div>';
       } else if (est !== 'libre') {
         var lbl = est==='baja'?'B':est==='ausencia'?'A':EICO[est]||est;
@@ -1121,7 +1254,7 @@ function renderWeekTable() {
                   : '')
               + (cell.nota?'<div style="font-size:.62rem;color:'+letraFloja(wbgCol)+';margin-left:2px">'+cell.nota+'</div>':'')
               + '</div>'
-              + '<div style="position:absolute;left:8%;right:8%;bottom:4px">' + barraHoras(cell, 'var(--est-trabajo)') + '</div>'
+              + '<div style="position:absolute;left:8%;right:8%;bottom:4px">' + barraHoras(cell, 'var(--est-trabajo)', s.id, dd) + '</div>'
               + '</div>';
       } else if (est === 'vacaciones') { inner = 'VAC'; }
       else if (est === 'festivo')      { inner = 'FES'; }
