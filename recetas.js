@@ -1966,7 +1966,19 @@ function abrirMontador(desde, dias, titulo){
    eso, empezando por las que no necesitan nada más. La sal, el aceite,
    el agua y la pimienta se dan por hechos: nadie los apunta. */
 
-var BASICOS = ["sal","pimienta","aceite","agua","azucar","vinagre"];
+var BASICOS_DE_SERIE = ["sal","pimienta","aceite","agua","azucar","vinagre","ajo","cebolla",
+  "huevo","harina","pan rallado","laurel","pimenton","perejil","azafran","canela","leche",
+  "mantequilla","caldo","vino blanco","nuez moscada","oregano","tomillo","guindilla","maicena"];
+
+/* Lo que nunca falta en la cámara y nadie apunta. Se puede cambiar en
+   Ajustes: cada cocina tiene lo suyo. */
+function basicos(){
+  var puestos=libro.ajustes && libro.ajustes.basicos;
+  var lista = (puestos!=null && puestos!=="")
+    ? String(puestos).split(/[,;\n]+/)
+    : BASICOS_DE_SERIE;
+  return lista.map(function(x){ return singular(sinTildes(x.trim())); }).filter(Boolean);
+}
 
 function sinTildes(t){
   return String(t||"").toLowerCase()
@@ -1999,17 +2011,19 @@ function palabrasDe(t){
 }
 /* Un ingrediente está cubierto si alguna palabra suya coincide con algo
    de la cámara: «pechuga de pollo» lo cubre «pollo». */
-function ingredienteCubierto(ing, tengo){
+function ingredienteCubierto(ing, tengo, base){
   var suyas=palabrasDe(ing.que||"");
+  base=base||basicos();
   if(!suyas.length) return true;
   for(var i=0;i<suyas.length;i++){
-    if(BASICOS.indexOf(suyas[i])>=0) return true;
+    if(base.indexOf(suyas[i])>=0) return true;
     for(var j=0;j<tengo.length;j++) if(tengo[j].indexOf(suyas[i])>=0) return true;
   }
   return false;
 }
 function loQueFalta(r, tengo){
-  return (r.ingredientes||[]).filter(function(i){ return !ingredienteCubierto(i, tengo); })
+  var base=basicos();
+  return (r.ingredientes||[]).filter(function(i){ return !ingredienteCubierto(i, tengo, base); })
            .map(function(i){ return i.que; });
 }
 /* Los ingredientes que más se repiten en el recetario, para apuntarlos
@@ -2019,7 +2033,7 @@ function sugerenciasDespensa(){
   recetas().forEach(function(r){
     (r.ingredientes||[]).forEach(function(i){
       var p=palabrasDe(i.que||"")[0];
-      if(!p || BASICOS.indexOf(p)>=0) return;
+      if(!p || basicos().indexOf(p)>=0) return;
       cuenta[p]=(cuenta[p]||0)+1;
     });
   });
@@ -2055,15 +2069,22 @@ function verDespensa(){
   var lo=(libro.despensa||[]);
   var tengo=lo.map(function(x){ return singular(sinTildes(x)); }).filter(Boolean);
 
-  var calculadas = tengo.length ? recetas().map(function(r){
+  var calculadas = tengo.length ? recetas().filter(function(r){
+      return r.tipo!=="base";          /* una bechamel no es la comida de hoy */
+    }).map(function(r){
       var falta=loQueFalta(r, tengo);
       var total=(r.ingredientes||[]).length||1;
-      return {r:r, falta:falta, parte:(total-falta.length)/total};
+      var propios=(r.ingredientes||[]).filter(function(i){
+        return ingredienteCubierto(i, tengo, []);     /* sin los básicos */
+      }).length;
+      return {r:r, falta:falta, propios:propios, parte:(total-falta.length)/total};
     }).filter(function(x){
-      /* algo suyo tiene que estar en la cámara: si no, es una receta cualquiera */
-      return x.parte>0 && (x.r.ingredientes||[]).length>0;
+      /* tiene que faltar poco de verdad: si no, es una receta cualquiera */
+      if(!(x.r.ingredientes||[]).length) return false;
+      return x.propios>0 && x.parte>=0.5;
     }).sort(function(a,b){
       if(a.falta.length!==b.falta.length) return a.falta.length-b.falta.length;
+      if(b.propios!==a.propios) return b.propios-a.propios;
       if(b.parte!==a.parte) return b.parte-a.parte;
       return a.r.nombre.localeCompare(b.r.nombre,"es");
     }) : [];
@@ -2084,8 +2105,8 @@ function verDespensa(){
 
   main.innerHTML=
     cabecera("Con lo que tengo",
-      "Apunta lo que hay en la c\u00e1mara y te digo qu\u00e9 sale. La sal, el aceite, el agua, "+
-      "el az\u00facar, el vinagre y la pimienta se dan por hechos.",
+      "Apunta lo que hay en la c\u00e1mara y te digo qu\u00e9 sale. Lo de diario \u2014sal, aceite, ajo, "+
+      "cebolla, huevo, harina, piment\u00f3n\u2026\u2014 se da por hecho; esa lista se cambia en Ajustes.",
       lo.length?'<button class="btn malo" id="d_vaciar">Vaciar la lista</button>':"")+
 
     '<div class="tarjeta" style="margin-bottom:16px">'+
@@ -2097,7 +2118,21 @@ function verDespensa(){
         '<button class="btn fuerte" id="d_add">A\u00f1adir</button>'+
       '</div>'+
       '<span class="nota" style="margin:6px 0 0">Uno detr\u00e1s de otro o separados por comas. '+
-      'Se queda guardado hasta que lo vac\u00edes.</span>'+
+      'Se queda guardado hasta que lo vac\u00edes. Cuanto m\u00e1s apuntes, mejor sale.</span>'+
+      (function(){
+        /* Lo que se apunta es producto: harina, pollo, pimiento. Si es el
+           nombre de una receta se avisa, que no es lo mismo. */
+        var confundidos=lo.filter(function(x){
+          var n=singular(sinTildes(x));
+          return recetas().some(function(r){ return singular(sinTildes(r.nombre))===n; });
+        });
+        return confundidos.length
+          ? '<span class="nota" style="display:block;margin:6px 0 0;color:var(--aviso)">'+
+            esc(confundidos.join(", "))+(confundidos.length===1?" es una receta tuya":" son recetas tuyas")+
+            ', no un producto. Aqu\u00ed va lo que tienes en la c\u00e1mara: harina, pollo, pimiento\u2026 '+
+            'Si lo tienes ya hecho, d\u00e9jalo: sirve para las recetas que lo llevan dentro.</span>'
+          : "";
+      })()+
 
       (lo.length
         ? '<div class="grupo" style="margin-top:10px;flex-wrap:wrap">'+
@@ -2118,7 +2153,7 @@ function verDespensa(){
 
     (lo.length
       ? '<div class="filtros"><div class="grupo">'+
-          ['todos'].concat(ORDEN_TIPOS).map(function(k){
+          ['todos'].concat(TIPOS_DEL_MENU).map(function(k){
             var etiqueta = k==="todos" ? "Todas" : TIPOS[k].nombre+"s";
             return '<button data-tt="'+k+'" aria-pressed="'+((ui.tipoTengo||"todos")===k)+'">'+
                    esc(etiqueta)+'</button>';
@@ -2137,6 +2172,7 @@ function verDespensa(){
             'Apunta alguna cosa m\u00e1s y vuelve a mirar.</div>'));
 
   var campo=document.getElementById("d_nuevo");
+  campo.focus();
   function meter(){
     if(ponerEnDespensa(campo.value)) verDespensa();
     else { campo.value=""; campo.focus(); }
@@ -2266,6 +2302,13 @@ function verAjustes(){
       '</div>'+
       '<p class="nota" style="margin:12px 0 0">Al poner un plato en el menú, si se sirvió hace '+
       'menos de esos días sale el aviso. Ponlo a 0 y no avisa nunca.</p>'+
+      '<div class="campo" style="margin-top:14px"><label class="lbl" for="a_basicos">'+
+        'Lo que nunca falta en la cámara</label>'+
+        '<textarea id="a_basicos" rows="3" placeholder="sal, aceite, ajo, cebolla…">'+
+        esc(libro.ajustes.basicos!=null && libro.ajustes.basicos!=="" ? libro.ajustes.basicos
+            : BASICOS_DE_SERIE.join(", "))+'</textarea>'+
+        '<span class="nota" style="margin:5px 0 0">Separado por comas. En «Con lo que tengo» '+
+        'esto se da por hecho y no cuenta como que falta.</span></div>'+
       '<button class="btn fuerte" id="a_guardar" style="margin-top:14px">Guardar</button>'+
       '</div></div>'+
 
@@ -2288,6 +2331,8 @@ function verAjustes(){
   document.getElementById("a_guardar").addEventListener("click", function(){
     libro.ajustes.raciones=Math.max(1, Math.round(numero("a_rac")))||4;
     libro.ajustes.avisarDias=Math.max(0, Math.round(numero("a_dias")));
+    libro.ajustes.basicos=(document.getElementById("a_basicos").value||"").trim();
+    libro.ajustes.basicos=(document.getElementById("a_basicos").value||"").trim();
     guardar(); pintar(); avisar("Ajustes guardados");
   });
 
