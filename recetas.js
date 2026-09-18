@@ -550,6 +550,41 @@ function escalar(ing, raciones, base){
   return v==null ? "" : num(v);
 }
 
+/* Cada pase del día guarda una lista de platos, no uno solo: hay días
+   de tres primeros y días de uno. Los menús de antes tenían un campo
+   por pase; se siguen leyendo igual. */
+var TIPOS_DEL_MENU = ["primero","segundo","postre"];
+var CAMPO_DEL_PASE = {primero:"primeros", segundo:"segundos", postre:"postres", base:"bases"};
+
+function platosDe(m, tipo){
+  if(!m) return [];
+  var l=m[CAMPO_DEL_PASE[tipo]||(tipo+"s")];
+  if(l && l.length) return l.slice();
+  return m[tipo] ? [m[tipo]] : [];
+}
+function fijarPase(fecha, tipo, lista){
+  var cambios={};
+  cambios[CAMPO_DEL_PASE[tipo]||(tipo+"s")]=lista.slice();
+  cambios[tipo]="";                 /* el campo viejo se queda vacío */
+  fijarMenu(fecha, cambios);
+}
+function ponerEnMenu(fecha, tipo, ids){
+  var m=menuDe(fecha)||{};
+  var l=platosDe(m,tipo);
+  ids.forEach(function(id){ if(l.indexOf(id)<0) l.push(id); });
+  fijarPase(fecha, tipo, l);
+}
+function quitarDelMenu(fecha, tipo, id){
+  var l=platosDe(menuDe(fecha)||{}, tipo).filter(function(x){ return x!==id; });
+  fijarPase(fecha, tipo, l);
+}
+/* Todos los platos de un menú, del pase que sean. */
+function platosDelMenu(m){
+  var todos=[];
+  ORDEN_TIPOS.forEach(function(t){ todos=todos.concat(platosDe(m,t)); });
+  return todos;
+}
+
 function menuDe(fecha){
   return (libro.menus||[]).filter(function(m){ return m.fecha===fecha; })[0] || null;
 }
@@ -568,7 +603,7 @@ function ultimaVez(recetaId, antesDe){
   if(r && r.ultima) fechas.push(r.ultima);
   (libro.menus||[]).forEach(function(m){
     if(antesDe && m.fecha>=antesDe) return;
-    ORDEN_TIPOS.forEach(function(t){ if(m[t]===recetaId) fechas.push(m.fecha); });
+    if(platosDelMenu(m).indexOf(recetaId)>=0) fechas.push(m.fecha);
   });
   fechas.sort();
   return fechas.length ? fechas[fechas.length-1] : null;
@@ -636,30 +671,43 @@ function verHoy(){
   var main=document.getElementById("main");
   var fecha=ui.dia||hoyISO();
   var m=menuDe(fecha)||{};
+  var delDia=[];
+  TIPOS_DEL_MENU.forEach(function(t){
+    platosDe(m,t).forEach(function(id){ var r=recetaDe(id); if(r) delDia.push({tipo:t, r:r}); });
+  });
 
   main.innerHTML=
     cabecera("Menú de "+diaLargo(fecha),
-      "Monta el menú y cocínalo paso a paso. Al darle a «hecho» queda apuntada la fecha, "+
-      "y la próxima vez que lo pongas te dirá cuánto hace que se sirvió.",
+      "Pon los platos que quieras en cada pase: tres primeros y tres segundos si ese día "+
+      "van tres. Al darle a «hecho» queda apuntada la fecha, y la próxima vez que lo pongas "+
+      "te dirá cuánto hace que se sirvió.",
       '<input type="date" id="h_fecha" value="'+esc(fecha)+'" style="width:auto">'+
+      '<button class="btn" id="h_montar">✨ Móntamelo</button>'+
       '<button class="btn" id="h_compra">Lo que hace falta</button>')+
 
-    '<div class="rejilla" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px">'+
-      ["primero","segundo","postre"].map(function(t){ return platoDelMenu(t, m, fecha); }).join("")+
+    '<div class="rejilla" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">'+
+      TIPOS_DEL_MENU.map(function(t){ return paseDelMenu(t, m, fecha); }).join("")+
     '</div>'+
 
-    /* Lo que suma el menú entero: cada vez preguntan más, y con los tres
-       platos por separado no se sabe. */
+    /* Lo que suma el menú entero: cada vez preguntan más, y con los
+       platos por separado no se sabe. Se cuenta un plato de cada pase,
+       que es lo que se come un comensal. */
     (function(){
-      var t={kcal:0, hidratos:0, proteinas:0, grasas:0}, hay=false, faltan=[];
-      ["primero","segundo","postre"].forEach(function(k){
-        var r=recetaDe(m[k]); if(!r) return;
-        if(tieneNutricion(r)){
-          hay=true;
-          var n=nutricionDe(r);
-          t.kcal+=n.kcal; t.hidratos+=n.hidratos;
-          t.proteinas+=n.proteinas; t.grasas+=n.grasas;
-        } else faltan.push(r.nombre);
+      var t={kcal:0, hidratos:0, proteinas:0, grasas:0}, hay=false, faltan=[], usados=[];
+      TIPOS_DEL_MENU.forEach(function(k){
+        var suyos=platosDe(m,k).map(recetaDe).filter(Boolean);
+        if(!suyos.length) return;
+        /* el más fuerte del pase: si preguntan, es la cifra que no se queda corta */
+        var peor=null;
+        suyos.forEach(function(r){
+          if(!tieneNutricion(r)){ faltan.push(r.nombre); return; }
+          if(!peor || nutricionDe(r).kcal>nutricionDe(peor).kcal) peor=r;
+        });
+        if(!peor) return;
+        hay=true; usados.push(peor.nombre);
+        var n=nutricionDe(peor);
+        t.kcal+=n.kcal; t.hidratos+=n.hidratos;
+        t.proteinas+=n.proteinas; t.grasas+=n.grasas;
       });
       if(!hay) return "";
       return '<div class="cifras" style="margin-top:16px">'+
@@ -672,23 +720,22 @@ function verHoy(){
         '<div class="cifra"><div class="k">Grasas</div>'+
           '<div class="v">'+num(t.grasas,0)+' g</div></div>'+
       '</div>'+
+      '<p class="nota" style="margin:-8px 0 0">Contando el plato más fuerte de cada pase ('+
+      esc(usados.join(", "))+'): un comensal elige uno de cada.'+
       (faltan.length
-        ? '<p class="nota" style="margin:-8px 0 0">Sin contar '+esc(faltan.join(" ni "))+
-          ', que no '+(faltan.length===1?"tiene":"tienen")+' valores puestos.</p>'
-        : "");
+        ? ' Sin contar '+esc(faltan.join(" ni "))+', que no '+
+          (faltan.length===1?"tiene":"tienen")+' valores puestos.'
+        : "")+'</p>';
     })()+
 
     /* Los alérgenos del menú entero: es lo que hay que saber decir
        cuando preguntan en la mesa, sin ir plato por plato. */
     (function(){
-      var puestos=[], porPlato=[];
-      ["primero","segundo","postre"].forEach(function(t){
-        var r=recetaDe(m[t]); if(!r) return;
-        var suyos=alergenosDe(r);
-        porPlato.push({plato:TIPOS[t].nombre, nombre:r.nombre, lista:suyos});
-        suyos.forEach(function(a){ if(puestos.indexOf(a)<0) puestos.push(a); });
+      var puestos=[];
+      delDia.forEach(function(x){
+        alergenosDe(x.r).forEach(function(a){ if(puestos.indexOf(a)<0) puestos.push(a); });
       });
-      if(!porPlato.length) return "";
+      if(!delDia.length) return "";
       puestos.sort(function(a,b){ return ORDEN_ALERGENOS.indexOf(a)-ORDEN_ALERGENOS.indexOf(b); });
       return '<div class="tarjeta" style="margin-top:16px"><div class="tarjeta-cab">'+
         '<h2>Alérgenos del menú</h2>'+
@@ -697,15 +744,16 @@ function verHoy(){
           '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">'+
             chapasAlergenos(puestos)+'</div>'+
           '<div class="tabla-caja"><table><tbody>'+
-            porPlato.map(function(x){
-              return '<tr><td style="white-space:nowrap"><strong>'+esc(x.plato)+'</strong>'+
-                '<div class="nota" style="margin:0">'+esc(x.nombre)+'</div></td>'+
-                '<td>'+(x.lista.length
-                  ? x.lista.map(function(a){ return ALERGENOS[a].icono+" "+esc(ALERGENOS[a].nombre); }).join(" · ")
+            delDia.map(function(x){
+              var suyos=alergenosDe(x.r);
+              return '<tr><td style="white-space:nowrap"><strong>'+esc(TIPOS[x.tipo].nombre)+'</strong>'+
+                '<div class="nota" style="margin:0">'+esc(x.r.nombre)+'</div></td>'+
+                '<td>'+(suyos.length
+                  ? suyos.map(function(a){ return ALERGENOS[a].icono+" "+esc(ALERGENOS[a].nombre); }).join(" · ")
                   : '<span style="color:var(--muted)">sin declarar</span>')+'</td></tr>';
             }).join("")+
           '</tbody></table></div>'+
-          (porPlato.some(function(x){ return !x.lista.length; })
+          (delDia.some(function(x){ return !alergenosDe(x.r).length; })
             ? '<p class="nota" style="margin:10px 0 0">Los que salen «sin declarar» es que no '+
               'les has marcado nada en su ficha. Sin marcar no quiere decir que no lleven.</p>'
             : "")+
@@ -725,13 +773,16 @@ function verHoy(){
     fijarMenu(fecha, {nota:this.value.trim()}); avisar("Nota guardada");
   });
   document.getElementById("h_compra").addEventListener("click", function(){ verLoQueHaceFalta(fecha); });
+  document.getElementById("h_montar").addEventListener("click", function(){
+    abrirMontador(fecha, 1, "Montar el menú del día");
+  });
 
   main.querySelectorAll("[data-elegir]").forEach(function(b){
     b.addEventListener("click", function(){ elegirPlato(b.dataset.elegir, fecha); });
   });
-  main.querySelectorAll("[data-quitar]").forEach(function(b){
+  main.querySelectorAll("[data-fuera]").forEach(function(b){
     b.addEventListener("click", function(){
-      var cambio={}; cambio[b.dataset.quitar]=""; fijarMenu(fecha, cambio); pintar();
+      quitarDelMenu(fecha, b.dataset.tipo, b.dataset.fuera); pintar();
     });
   });
   main.querySelectorAll("[data-cocinar]").forEach(function(b){
@@ -745,69 +796,87 @@ function verHoy(){
   });
 }
 
-function platoDelMenu(tipo, m, fecha){
+/* Un pase entero —los primeros, los segundos, los postres— con todos
+   los platos que ese día se sirvan. La cantidad la pone él: unos días
+   son tres primeros y otros uno. */
+function paseDelMenu(tipo, m, fecha){
   var info=TIPOS[tipo];
-  var r=recetaDe(m[tipo]);
-  if(!r){
-    return '<div class="tarjeta"><div class="tarjeta-cab"><h2>'+info.icono+' '+esc(info.nombre)+'</h2></div>'+
-      '<div class="tarjeta-cuerpo">'+
-        '<div class="vacio" style="padding:22px 12px"><strong>Sin elegir</strong>'+
-        'Pulsa y busca entre tus recetas.</div>'+
-        '<button class="btn fuerte" data-elegir="'+tipo+'" style="margin-top:12px;width:100%">'+
-        'Elegir '+esc(info.nombre.toLowerCase())+'</button>'+
-      '</div></div>';
-  }
+  var suyos=platosDe(m,tipo).map(recetaDe).filter(Boolean);
 
+  return '<div class="tarjeta"><div class="tarjeta-cab">'+
+      '<h2>'+info.icono+' '+esc(info.nombre)+'s</h2>'+
+      '<span class="pista">'+(suyos.length?plural(suyos.length,"plato","platos"):"ninguno")+'</span>'+
+    '</div>'+
+    '<div class="tarjeta-cuerpo">'+
+      (suyos.length
+        ? suyos.map(function(r){ return platoDelPase(r, tipo, fecha); }).join("")
+        : '<div class="vacio" style="padding:22px 12px"><strong>Sin elegir</strong>'+
+          'Pulsa y busca entre tus recetas.</div>')+
+      '<button class="btn '+(suyos.length?"":"fuerte")+'" data-elegir="'+tipo+'" '+
+        'style="margin-top:10px;width:100%">'+
+        (suyos.length?"+ Añadir otro "+esc(info.nombre.toLowerCase())
+                     :"Elegir "+esc(info.nombre.toLowerCase()))+'</button>'+
+    '</div></div>';
+}
+
+function platoDelPase(r, tipo, fecha){
   var ultima=ultimaVez(r.id, fecha);
   var dias=ultima?Math.round((new Date(fecha+"T12:00:00")-new Date(ultima+"T12:00:00"))/86400000):null;
   var repetido = dias!=null && dias>=0 && dias < (+libro.ajustes.avisarDias||21);
 
-  return '<div class="tarjeta"><div class="tarjeta-cab"><h2>'+info.icono+' '+esc(info.nombre)+'</h2>'+
-    '<button class="btn suave sm malo" data-quitar="'+tipo+'" title="Quitarlo del menú">✕</button></div>'+
-    '<div class="tarjeta-cuerpo">'+
-      '<div style="font-family:var(--titulo);font-size:19px;font-weight:600;line-height:1.2">'+
+  return '<div style="border:1px solid var(--linea);border-radius:10px;padding:10px 12px;'+
+      'margin-bottom:8px;background:var(--sup2)">'+
+    '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'+
+      '<div style="font-family:var(--titulo);font-size:17px;font-weight:600;line-height:1.2">'+
         esc(r.nombre)+'</div>'+
-      '<div class="nota" style="margin:6px 0 0">'+
-        (r.tiempo?esc(r.tiempo)+' · ':"")+
-        plural(+r.pasos?r.pasos.length:(r.pasos||[]).length,"paso","pasos")+' · '+
-        plural((r.ingredientes||[]).length,"ingrediente","ingredientes")+'</div>'+
+      '<button class="btn suave sm malo" data-fuera="'+esc(r.id)+'" data-tipo="'+tipo+'" '+
+        'title="Quitarlo del menú">✕</button>'+
+    '</div>'+
+    '<div class="nota" style="margin:5px 0 0">'+
+      (r.tiempo?esc(r.tiempo)+' · ':"")+
+      plural((r.pasos||[]).length,"paso","pasos")+' · '+
+      plural((r.ingredientes||[]).length,"ingrediente","ingredientes")+'</div>'+
+    '<div style="margin-top:7px">'+
       (ultima
-        ? '<div style="margin-top:8px"><span class="chapa '+(repetido?"aviso":"neutra")+'">'+
-          (repetido?"⚠︎ ":"")+'Servido '+haceCuanto(ultima)+'</span></div>'
-        : '<div style="margin-top:8px"><span class="chapa ok">Nunca servido</span></div>')+
-      (repetido
-        ? '<p class="nota" style="margin:8px 0 0;color:var(--aviso)">'+
-          (dias===0 ? 'Ya se ha servido hoy.'
-           : dias===1 ? 'Se sirvió ayer.'
-           : 'Hace sólo '+dias+' días que se sirvió.')+
-          ' Si no quieres repetir tan pronto, cámbialo.</p>'
-        : "")+
-      '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'+
-        '<button class="btn fuerte" data-cocinar="'+r.id+'">Cocinar</button>'+
-        '<button class="btn" data-hecho="'+r.id+'">Hecho</button>'+
-        '<button class="btn suave sm" data-elegir="'+tipo+'">Cambiar</button>'+
-      '</div>'+
-    '</div></div>';
+        ? '<span class="chapa '+(repetido?"aviso":"neutra")+'">'+
+          (repetido?"⚠︎ ":"")+'Servido '+haceCuanto(ultima)+'</span>'
+        : '<span class="chapa ok">Nunca servido</span>')+
+    '</div>'+
+    (repetido
+      ? '<p class="nota" style="margin:7px 0 0;color:var(--aviso)">'+
+        (dias===0 ? 'Ya se ha servido hoy.'
+         : dias===1 ? 'Se sirvió ayer.'
+         : 'Hace sólo '+dias+' días que se sirvió.')+'</p>'
+      : "")+
+    '<div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">'+
+      '<button class="btn fuerte sm" data-cocinar="'+r.id+'">Cocinar</button>'+
+      '<button class="btn sm" data-hecho="'+r.id+'">Hecho</button>'+
+    '</div>'+
+  '</div>';
 }
 
-/* Elegir un plato: buscador sobre las recetas de ese tipo, y las de
-   cualquier tipo por si un primero sirve de segundo. */
+/* Elegir platos: buscador sobre las recetas de ese tipo. Se pueden
+   marcar varios de una vez, que es como se monta el día. */
 function elegirPlato(tipo, fecha){
-  var elegido="";
-  var d=abrirVentana("Elegir "+TIPOS[tipo].nombre.toLowerCase(),
+  var elegidos=[];
+  var d=abrirVentana("Poner "+TIPOS[tipo].nombre.toLowerCase()+"s",
     '<div class="campo" style="margin-bottom:10px">'+
       '<label class="lbl" for="el_busca">Buscar en tus recetas</label>'+
-      '<input id="el_busca" placeholder="lentejas, merluza, flan…" autocomplete="off"></div>'+
+      '<input id="el_busca" placeholder="lentejas, merluza, flan…" autocomplete="off">'+
+      '<span class="nota" style="margin:5px 0 0">Marca los que quieras: se ponen todos.</span></div>'+
     '<div id="el_lista"></div>',
     function(){
-      if(!elegido){ avisar("Elige una receta.", true); return true; }
-      var cambio={}; cambio[tipo]=elegido;
-      fijarMenu(fecha, cambio);
-      pintar(); avisar(TIPOS[tipo].nombre+": "+recetaDe(elegido).nombre);
+      if(!elegidos.length){ avisar("Marca alguna receta.", true); return true; }
+      ponerEnMenu(fecha, tipo, elegidos);
+      pintar();
+      avisar(elegidos.length===1
+        ? TIPOS[tipo].nombre+": "+recetaDe(elegidos[0]).nombre
+        : plural(elegidos.length,"plato puesto","platos puestos"));
     }, {aceptar:"Ponerlo en el menú"});
 
   var busca=document.getElementById("el_busca");
   var caja=document.getElementById("el_lista");
+  var yaPuestos=platosDe(menuDe(fecha)||{}, tipo);
 
   function pintarOpciones(){
     /* Sólo las de ese tipo: un postre no se pone de segundo. Si hace
@@ -817,32 +886,39 @@ function elegirPlato(tipo, fecha){
     function filtra(l){
       if(!t) return l;
       return l.filter(function(r){
-        return (r.nombre+" "+(r.notas||"")).toLowerCase().indexOf(t)>=0; });
+        return (r.nombre+" "+(r.notas||"")+" "+
+                (r.ingredientes||[]).map(function(i){ return i.que; }).join(" "))
+                 .toLowerCase().indexOf(t)>=0; });
     }
-    function bloque(titulo, lista){
+    function bloque(lista){
       if(!lista.length) return "";
-      return '<div class="lbl" style="margin:10px 0 6px">'+esc(titulo)+'</div>'+
-        lista.slice(0,14).map(function(r){
+      return lista.slice(0,40).map(function(r){
           var ultima=ultimaVez(r.id, fecha);
+          var marcado=elegidos.indexOf(r.id)>=0;
+          var puesto=yaPuestos.indexOf(r.id)>=0;
           return '<button type="button" data-pick="'+esc(r.id)+'" '+
             'style="display:block;width:100%;text-align:left;border:1px solid '+
-            (elegido===r.id?"var(--acento)":"var(--linea)")+';background:'+
-            (elegido===r.id?"var(--acento-suave)":"transparent")+';border-radius:8px;'+
+            (marcado?"var(--acento)":"var(--linea)")+';background:'+
+            (marcado?"var(--acento-suave)":"transparent")+';border-radius:8px;'+
             'padding:8px 11px;margin-bottom:6px;cursor:pointer;font:inherit;color:inherit">'+
-            '<strong>'+esc(r.nombre)+'</strong>'+
+            (marcado?"✓ ":"")+'<strong>'+esc(r.nombre)+'</strong>'+
             '<span style="color:var(--muted);font-size:12px"> · '+
-            (ultima?"servido "+haceCuanto(ultima):"nunca servido")+'</span></button>';
+            (ultima?"servido "+haceCuanto(ultima):"nunca servido")+
+            (puesto?" · ya está en el menú":"")+'</span></button>';
         }).join("");
     }
-    var htmlSuyas=bloque(TIPOS[tipo].nombre+"s", filtra(suyas));
-    caja.innerHTML = htmlSuyas ||
+    caja.innerHTML = bloque(filtra(suyas)) ||
       '<p class="nota" style="margin:0">'+
       (suyas.length
         ? 'Ninguno de tus '+esc(TIPOS[tipo].nombre.toLowerCase())+'s se llama así.'
         : 'Todavía no tienes ningún '+esc(TIPOS[tipo].nombre.toLowerCase())+'. '+
           'Dalo de alta en el Recetario.')+'</p>';
     caja.querySelectorAll("[data-pick]").forEach(function(b){
-      b.addEventListener("click", function(){ elegido=b.dataset.pick; pintarOpciones(); });
+      b.addEventListener("click", function(){
+        var i=elegidos.indexOf(b.dataset.pick);
+        if(i>=0) elegidos.splice(i,1); else elegidos.push(b.dataset.pick);
+        pintarOpciones();
+      });
     });
   }
   busca.addEventListener("input", pintarOpciones);
@@ -859,14 +935,16 @@ function verLoQueHaceFalta(fecha){
   var platos=[];
 
   ORDEN_TIPOS.forEach(function(t){
-    var r=recetaDe(m[t]); if(!r) return;
-    platos.push(r.nombre);
-    (r.ingredientes||[]).forEach(function(ing){
-      var clave=(ing.que||"").trim().toLowerCase()+"|"+(ing.unidad||"").trim().toLowerCase();
-      if(!juntos[clave]) juntos[clave]={que:ing.que, unidad:ing.unidad, cantidad:0, suelto:[]};
-      var c=escalarNum(ing, raciones, +r.raciones||raciones);
-      if(c==null) juntos[clave].suelto.push(r.nombre);
-      else juntos[clave].cantidad=r2(juntos[clave].cantidad+c);
+    platosDe(m,t).forEach(function(id){
+      var r=recetaDe(id); if(!r) return;
+      platos.push(r.nombre);
+      (r.ingredientes||[]).forEach(function(ing){
+        var clave=(ing.que||"").trim().toLowerCase()+"|"+(ing.unidad||"").trim().toLowerCase();
+        if(!juntos[clave]) juntos[clave]={que:ing.que, unidad:ing.unidad, cantidad:0, suelto:[]};
+        var c=escalarNum(ing, raciones, +r.raciones||raciones);
+        if(c==null) juntos[clave].suelto.push(r.nombre);
+        else juntos[clave].cantidad=r2(juntos[clave].cantidad+c);
+      });
     });
   });
 
@@ -874,7 +952,8 @@ function verLoQueHaceFalta(fecha){
   abrirVentana("Lo que hace falta · "+diaLargo(fecha),
     (platos.length
       ? '<p class="nota" style="margin:0 0 12px">Para <strong>'+plural(raciones,"ración","raciones")+
-        '</strong> de '+esc(platos.join(", "))+'. Las cantidades salen ya estiradas.</p>'+
+        '</strong> de cada plato: '+esc(platos.join(", "))+
+        '. Las cantidades salen ya estiradas y sumadas.</p>'+
         '<div class="tabla-caja"><table><tbody>'+
         claves.sort().map(function(k){
           var i=juntos[k];
@@ -1559,14 +1638,31 @@ function editarReceta(id){
   /* Las que ya tienes y se parecen a lo que estás escribiendo: si la
      receta ya existe no hace falta volver a escribirla, y si se parece
      sirve de punto de partida. */
+  /* Lo que se escribe puede ser un plato —«lentejas con chorizo»— o un
+     producto a secas —«pollo»—. En el segundo caso lo que sirve no es el
+     nombre sino el ingrediente: salen todas las del recetario que lo
+     llevan, que son muchas m\u00e1s. */
   function parecidasEn(nombre){
     var t=String(nombre||"").trim().toLowerCase();
     if(t.length<3) return [];
-    return recetas().filter(function(x){
-      if(id && x.id===id) return false;
+    var claves=palabrasDe(t);
+    var porNombre=[], porIngrediente=[];
+    recetas().forEach(function(x){
+      if(id && x.id===id) return;
       var n=(x.nombre||"").toLowerCase();
-      return n.indexOf(t)>=0 || t.indexOf(n)>=0;
-    }).slice(0,6);
+      if(n.indexOf(t)>=0 || t.indexOf(n)>=0){ porNombre.push(x); return; }
+      if(!claves.length) return;
+      var suyas=palabrasDe(x.nombre||"");
+      (x.ingredientes||[]).forEach(function(i){ suyas=suyas.concat(palabrasDe(i.que||"")); });
+      var cabe=claves.every(function(c){ return suyas.indexOf(c)>=0; });
+      if(cabe) porIngrediente.push(x);
+    });
+    function porTipo(a,b){
+      var d=ORDEN_TIPOS.indexOf(a.tipo)-ORDEN_TIPOS.indexOf(b.tipo);
+      return d || a.nombre.localeCompare(b.nombre,"es");
+    }
+    return porNombre.sort(porTipo).slice(0,10)
+             .concat(porIngrediente.sort(porTipo).slice(0,24));
   }
 
   function copiarDe(otra){
@@ -1596,9 +1692,10 @@ function editarReceta(id){
     /* Lo que ya tiene va primero: no tiene sentido escribir dos veces
        la misma receta. */
     var htmlMias = mias.length
-      ? '<div class="nota" style="margin:0 0 5px">Ya tienes '+
-        (mias.length===1?"una parecida":"estas parecidas")+
-        '. Pulsa para copiarla y cambiar lo que quieras:</div>'+
+      ? '<div class="nota" style="margin:0 0 5px">'+
+        (mias.length===1 ? "Ya tienes una con eso. Pulsa para copiarla y cambiar lo que quieras:"
+                         : "Tu recetario tiene "+mias.length+" con eso. Pulsa una para copiarla "+
+                           "y cambiar lo que quieras:")+'</div>'+
         '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'+
           mias.map(function(x,i){
             return '<button type="button" class="btn sm" data-mia="'+i+'">'+
@@ -1662,7 +1759,7 @@ function editarReceta(id){
       '<p style="margin:0 0 10px">Se va la receta con sus ingredientes y sus pasos.</p>'+
       (function(){
         var enMenus=(libro.menus||[]).filter(function(m){
-          return ORDEN_TIPOS.some(function(t){ return m[t]===r.id; }); }).length;
+          return platosDelMenu(m).indexOf(r.id)>=0; }).length;
         return enMenus
           ? '<p class="nota" style="margin:0">Está puesta en '+plural(enMenus,"menú","menús")+
             ': esos días se quedarán con ese hueco vacío.</p>'
@@ -1671,11 +1768,124 @@ function editarReceta(id){
       function(){
         libro.recetas=recetas().filter(function(x){ return x.id!==r.id; });
         (libro.menus||[]).forEach(function(m){
-          ORDEN_TIPOS.forEach(function(t){ if(m[t]===r.id) m[t]=""; });
+          ORDEN_TIPOS.forEach(function(t){
+            if(m[t]===r.id) m[t]="";
+            var k=CAMPO_DEL_PASE[t]||(t+"s");
+            if(m[k]) m[k]=m[k].filter(function(x){ return x!==r.id; });
+          });
         });
         ui.receta=null; guardar(); pintar(); avisar("Receta borrada");
       }, {aceptar:"Borrar", malo:true});
   });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MONTAR MENÚS SOLO
+   ══════════════════════════════════════════════════════════════
+   Un día, una semana o un mes de golpe, sin que se repita un plato
+   hasta que hayan salido todos los demás. Cada pase tiene su cola:
+   delante, lo que hace más que no se sirve; lo que se usa se va al
+   final. Así se reparte el recetario entero. */
+
+function sumarDias(iso, n){
+  var d=new Date(iso+"T12:00:00");
+  d.setDate(d.getDate()+n);
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+
+         String(d.getDate()).padStart(2,"0");
+}
+
+function colaDe(tipo, desde){
+  return recetas().filter(function(r){ return r.tipo===tipo; })
+    .map(function(r){ return {id:r.id, ult:ultimaVez(r.id, desde)||"", az:Math.random()}; })
+    .sort(function(a,b){
+      if(a.ult!==b.ult) return a.ult<b.ult ? -1 : 1;   /* lo más antiguo, primero */
+      return a.az-b.az;                                 /* y entre iguales, al azar */
+    })
+    .map(function(x){ return x.id; });
+}
+
+function montarMenus(desde, dias, cuantos, sustituir){
+  var colas={}, puestos=0, saltados=0, cortos=[];
+  TIPOS_DEL_MENU.forEach(function(t){ colas[t]=colaDe(t, desde); });
+
+  for(var d=0; d<dias; d++){
+    var f=sumarDias(desde, d);
+    var m=menuDe(f)||{};
+    TIPOS_DEL_MENU.forEach(function(t){
+      var n=+cuantos[t]||0; if(!n) return;
+      if(platosDe(m,t).length && !sustituir){ saltados++; return; }
+      var cola=colas[t];
+      if(!cola.length){ if(cortos.indexOf(t)<0) cortos.push(t); return; }
+      var lista=[];
+      while(lista.length<n && cola.length) lista.push(cola.shift());
+      cola.push.apply(cola, lista);        /* al final de la cola: tardan en volver */
+      fijarPase(f, t, lista);
+      puestos+=lista.length;
+    });
+  }
+  return {puestos:puestos, saltados:saltados, cortos:cortos};
+}
+
+/* Cuántos días aguanta el recetario sin repetir con esos platos al día */
+function diasSinRepetir(cuantos){
+  var min=null;
+  TIPOS_DEL_MENU.forEach(function(t){
+    var n=+cuantos[t]||0; if(!n) return;
+    var cuantas=delTipo(t).length;
+    var d=Math.floor(cuantas/n);
+    if(min==null || d<min) min=d;
+  });
+  return min==null?0:min;
+}
+
+function abrirMontador(desde, dias, titulo){
+  var porDefecto={primero:3, segundo:3, postre:1};
+  abrirVentana(titulo,
+    '<p class="nota" style="margin:0 0 12px">Desde el <strong>'+esc(dmy(desde))+'</strong>, '+
+      plural(dias,"día","días")+'. Se reparte el recetario entero: no vuelve a salir un plato '+
+      'hasta que han salido todos los demás de su pase.</p>'+
+    '<div class="rejilla" style="margin-bottom:10px">'+
+      TIPOS_DEL_MENU.map(function(t){
+        return '<div class="campo"><label class="lbl" for="mm_'+t+'">'+
+          TIPOS[t].icono+' '+esc(TIPOS[t].nombre)+'s al día</label>'+
+          '<input type="number" id="mm_'+t+'" min="0" max="8" step="1" value="'+
+          porDefecto[t]+'"></div>';
+      }).join("")+
+    '</div>'+
+    '<label style="display:flex;gap:8px;align-items:center;cursor:pointer">'+
+      '<input type="checkbox" id="mm_sust" style="width:auto"> '+
+      '<span>Cambiar también los días que ya tengan platos puestos</span></label>'+
+    '<div id="mm_aviso" class="nota" style="margin:10px 0 0"></div>',
+    function(){
+      var cuantos={primero:numero("mm_primero"), segundo:numero("mm_segundo"), postre:numero("mm_postre")};
+      if(!cuantos.primero && !cuantos.segundo && !cuantos.postre){
+        avisar("Pon al menos un plato al día.", true); return true;
+      }
+      var res=montarMenus(desde, dias, cuantos, document.getElementById("mm_sust").checked);
+      pintar();
+      if(!res.puestos && res.saltados){
+        avisar("Esos días ya tenían platos. Marca la casilla para cambiarlos.", true);
+        return;
+      }
+      avisar(plural(res.puestos,"plato puesto","platos puestos")+
+             (res.saltados?" · "+plural(res.saltados,"pase respetado","pases respetados"):""));
+    }, {aceptar:"Montar"});
+
+  function avisoCorto(){
+    var cuantos={primero:numero("mm_primero"), segundo:numero("mm_segundo"), postre:numero("mm_postre")};
+    var aguanta=diasSinRepetir(cuantos);
+    var caja=document.getElementById("mm_aviso");
+    if(!aguanta){ caja.textContent="Te falta alguna receta de algún pase."; return; }
+    caja.innerHTML = aguanta>=dias
+      ? "Con lo que tienes llegas a los "+dias+" días sin repetir ni un plato."
+      : "Con lo que tienes no se repite nada durante <strong>"+aguanta+" días</strong>. "+
+        "A partir de ahí vuelven a salir, empezando por los más antiguos. Cuantas más recetas "+
+        "tengas, más tarda en repetirse.";
+  }
+  TIPOS_DEL_MENU.forEach(function(t){
+    document.getElementById("mm_"+t).addEventListener("input", avisoCorto);
+  });
+  avisoCorto();
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -1794,8 +2004,8 @@ function verDespensa(){
     calculadas=calculadas.filter(function(x){ return x.r.tipo===ui.tipoTengo; });
 
   var yaSale  = calculadas.filter(function(x){ return x.falta.length===0; });
-  var casi    = calculadas.filter(function(x){ return x.falta.length>0 && x.falta.length<=2; }).slice(0,24);
-  var lejos   = calculadas.filter(function(x){ return x.falta.length>2; }).slice(0,12);
+  var casi    = calculadas.filter(function(x){ return x.falta.length>0 && x.falta.length<=2; }).slice(0,60);
+  var lejos   = calculadas.filter(function(x){ return x.falta.length>2; }).slice(0,40);
 
   function tabla(titulo, cuantas, grupo){
     if(!grupo.length) return "";
@@ -1910,25 +2120,29 @@ function verSemana(){
   main.innerHTML=
     cabecera("La semana",
       "De un vistazo, qué hay cada día. Pulsa un día para montarlo.",
+      '<button class="btn fuerte" id="s_montaSemana">✨ Montar la semana</button>'+
+      '<button class="btn" id="s_montaMes">✨ Montar cuatro semanas</button>'+
       '<button class="btn" id="s_antes">← Semana anterior</button>'+
       '<button class="btn" id="s_hoy">Esta semana</button>'+
       '<button class="btn" id="s_luego">Siguiente →</button>')+
 
     '<div class="tarjeta"><div class="tabla-caja"><table><thead><tr>'+
-      '<th>Día</th><th>🥣 Primero</th><th>🍖 Segundo</th><th>🍮 Postre</th><th>Nota</th>'+
+      '<th>Día</th><th>🥣 Primeros</th><th>🍖 Segundos</th><th>🍮 Postres</th><th>Nota</th>'+
       '</tr></thead><tbody>'+
       dias.map(function(f){
         var m=menuDe(f)||{};
         var esHoy=(f===hoyISO());
         function celda(t){
-          var r=recetaDe(m[t]);
-          if(!r) return '<td style="color:var(--muted)">—</td>';
-          var ultima=ultimaVez(r.id, f);
-          var dd=ultima?Math.round((new Date(f+"T12:00:00")-new Date(ultima+"T12:00:00"))/86400000):null;
-          var repe = dd!=null && dd>=0 && dd<(+libro.ajustes.avisarDias||21);
-          return '<td>'+esc(r.nombre)+
-            (repe?' <span class="chapa aviso">'+
-              (dd===0?"hoy mismo":dd===1?"ayer":"hace "+dd+" d")+'</span>':"")+'</td>';
+          var suyos=platosDe(m,t).map(recetaDe).filter(Boolean);
+          if(!suyos.length) return '<td style="color:var(--muted)">—</td>';
+          return '<td>'+suyos.map(function(r){
+            var ultima=ultimaVez(r.id, f);
+            var dd=ultima?Math.round((new Date(f+"T12:00:00")-new Date(ultima+"T12:00:00"))/86400000):null;
+            var repe = dd!=null && dd>=0 && dd<(+libro.ajustes.avisarDias||21);
+            return '<div>'+esc(r.nombre)+
+              (repe?' <span class="chapa aviso">'+
+                (dd===0?"hoy mismo":dd===1?"ayer":"hace "+dd+" d")+'</span>':"")+'</div>';
+          }).join("")+'</td>';
         }
         return '<tr data-dia="'+f+'" style="cursor:pointer'+
           (esHoy?';background:var(--acento-suave)':"")+'">'+
@@ -1938,6 +2152,13 @@ function verSemana(){
           '<td class="nota" style="margin:0">'+esc(m.nota||"")+'</td></tr>';
       }).join("")+
     '</tbody></table></div></div>';
+
+  document.getElementById("s_montaSemana").addEventListener("click", function(){
+    abrirMontador(dias[0], 7, "Montar la semana");
+  });
+  document.getElementById("s_montaMes").addEventListener("click", function(){
+    abrirMontador(dias[0], 28, "Montar cuatro semanas");
+  });
 
   main.querySelectorAll("[data-dia]").forEach(function(tr){
     tr.addEventListener("click", function(){
