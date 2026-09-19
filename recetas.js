@@ -1249,6 +1249,17 @@ function verRecetario(){
       '</div>'+
     '</div>'+
 
+    /* Con el recetario grande no se pintan las 700 de golpe: el móvil se
+       queda pensando. Se enseñan las primeras y hay botón para el resto. */
+    (function(){
+      var TOPE=60;
+      var recortada = !ui.verTodas && lista.length>TOPE;
+      var quedan = recortada ? lista.length-TOPE : 0;
+      if(recortada) lista=lista.slice(0,TOPE);
+      window.__quedan=quedan;
+      return "";
+    })()+
+
     (lista.length
       ? (ui.tipo!=="todos"
           /* Con un tipo elegido no hace falta separar nada */
@@ -1274,17 +1285,38 @@ function verRecetario(){
             (recetas().length?"Prueba con otra palabra.":"Dale a «Nueva receta» y empieza por la que más hagas.")+
             '</div>'));
 
+  if(window.__quedan){
+    var mas=document.createElement("div");
+    mas.style.textAlign="center";
+    mas.innerHTML='<button class="btn" id="verTodas">Ver las '+window.__quedan+' que faltan</button>'+
+      '<div class="nota" style="margin:6px 0 0">Se enseñan 60 para que vaya ligero. '+
+      'Busca por nombre o ingrediente y salen las que quieras.</div>';
+    main.appendChild(mas);
+    document.getElementById("verTodas").addEventListener("click", function(){
+      ui.verTodas=true; verRecetario();
+    });
+  }
+
   document.getElementById("nuevaReceta").addEventListener("click", function(){ editarReceta(null); });
   document.getElementById("pegarReceta").addEventListener("click", pegarReceta);
   main.querySelectorAll("[data-tipo]").forEach(function(b){
-    b.addEventListener("click", function(){ ui.tipo=b.dataset.tipo; pintar(); });
+    b.addEventListener("click", function(){ ui.tipo=b.dataset.tipo; ui.verTodas=false; pintar(); });
   });
   main.querySelectorAll("[data-dieta]").forEach(function(b){
-    b.addEventListener("click", function(){ ui.dieta=b.dataset.dieta; pintar(); });
+    b.addEventListener("click", function(){ ui.dieta=b.dataset.dieta; ui.verTodas=false; pintar(); });
   });
   var busca=document.getElementById("r_busca");
-  busca.addEventListener("input", function(){ ui.busca=busca.value; verRecetario();
-    var v=document.getElementById("r_busca"); if(v){ v.focus(); v.selectionStart=v.value.length; } });
+  busca.addEventListener("input", function(){
+    ui.busca=busca.value;
+    clearTimeout(window.__esperaBusca);
+    /* se espera a que pare de escribir: repintar en cada tecla se nota */
+    window.__esperaBusca=setTimeout(function(){
+      ui.verTodas=false;
+      verRecetario();
+      var v=document.getElementById("r_busca");
+      if(v){ v.focus(); v.selectionStart=v.value.length; }
+    }, 220);
+  });
   main.querySelectorAll("[data-abrir]").forEach(function(b){
     b.addEventListener("click", function(){ ui.receta=b.dataset.abrir; ui.paso=0; ui.hechos={}; pintar(); });
   });
@@ -2490,7 +2522,16 @@ var PALABRAS_VACIAS = ["con","sin","del","los","las","una","uno","para","picado"
   "cucharadita","cucharaditas","trozo","trozos","loncha","lonchas","gusto","opcional"]
   .map(function(w){ return singular(w); });
 
+var __palabras={};
 function palabrasDe(t){
+  var clave=String(t||"");
+  if(__palabras[clave]) return __palabras[clave].slice();
+  var r=__palabrasDe(clave);
+  if(Object.keys(__palabras).length>4000) __palabras={};
+  __palabras[clave]=r;
+  return r.slice();
+}
+function __palabrasDe(t){
   return sinTildes(t).split(/[^a-z0-9]+/)
     .map(singular)   /* primero al singular: la lista de abajo está en singular */
     .filter(function(w){ return w.length>2 && PALABRAS_VACIAS.indexOf(w)<0; });
@@ -2507,8 +2548,8 @@ function ingredienteCubierto(ing, tengo, base){
   }
   return false;
 }
-function loQueFalta(r, tengo){
-  var base=basicos();
+function loQueFalta(r, tengo, base){
+  base=base||basicos();
   return (r.ingredientes||[]).filter(function(i){ return !ingredienteCubierto(i, tengo, base); })
            .map(function(i){ return i.que; });
 }
@@ -2554,11 +2595,12 @@ function verDespensa(){
   var main=document.getElementById("main");
   var lo=(libro.despensa||[]);
   var tengo=lo.map(function(x){ return singular(sinTildes(x)); }).filter(Boolean);
+  var base=basicos();          /* se calcula una vez, no por ingrediente */
 
   var calculadas = tengo.length ? recetas().filter(function(r){
       return r.tipo!=="base";          /* una bechamel no es la comida de hoy */
     }).map(function(r){
-      var falta=loQueFalta(r, tengo);
+      var falta=loQueFalta(r, tengo, base);
       var total=(r.ingredientes||[]).length||1;
       var propios=(r.ingredientes||[]).filter(function(i){
         return ingredienteCubierto(i, tengo, []);     /* sin los básicos */
