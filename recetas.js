@@ -2267,7 +2267,10 @@ function diasSinRepetir(cuantos){
 }
 
 function abrirMontador(desde, dias, titulo){
-  var porDefecto={primero:3, segundo:3, postre:1};
+  /* Lo que puso la última vez: si un día pone tres postres, la próxima
+     vez ya salen tres. */
+  var guardado=(libro.ajustes && libro.ajustes.cuantos) || null;
+  var porDefecto=guardado || {primero:3, segundo:3, postre:1};
   abrirVentana(titulo,
     '<p class="nota" style="margin:0 0 12px">Desde el <strong>'+esc(dmy(desde))+'</strong>, '+
       plural(dias,"día","días")+'. Se reparte el recetario entero: no vuelve a salir un plato '+
@@ -2285,7 +2288,7 @@ function abrirMontador(desde, dias, titulo){
         return '<div class="campo"><label class="lbl" for="mm_'+t+'">'+
           TIPOS[t].icono+' '+esc(TIPOS[t].nombre)+'s al día</label>'+
           '<input type="number" id="mm_'+t+'" min="0" max="8" step="1" value="'+
-          porDefecto[t]+'"></div>';
+          (porDefecto[t]!=null?porDefecto[t]:0)+'"></div>';
       }).join("")+
     '</div>'+
     '<label style="display:flex;gap:8px;align-items:center;cursor:pointer">'+
@@ -2297,6 +2300,7 @@ function abrirMontador(desde, dias, titulo){
       if(!cuantos.primero && !cuantos.segundo && !cuantos.postre){
         avisar("Pon al menos un plato al día.", true); return true;
       }
+      libro.ajustes.cuantos=cuantos; guardar();
       var res=montarMenus(desde, dias, cuantos, document.getElementById("mm_sust").checked);
       pintar();
       if(!res.puestos && res.saltados){
