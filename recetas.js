@@ -667,11 +667,19 @@ function diasDesde(f){
 function haceCuanto(f){
   var d=diasDesde(f);
   if(d==null) return "nunca";
-  if(d<=0) return "hoy";
+  /* Los menús se montan con antelación: hay fechas que aún no han llegado */
+  if(d<0){
+    var x=-d;
+    if(x===1) return "mañana";
+    if(x<14)  return "dentro de "+x+" días";
+    if(x<31)  return "dentro de "+plural(Math.round(x/7),"semana","semanas");
+    return "dentro de "+plural(Math.round(x/30),"mes","meses");
+  }
+  if(d===0) return "hoy";
   if(d===1) return "ayer";
-  if(d<7)  return "hace "+d+" días";
-  if(d<31) return "hace "+Math.round(d/7)+" semanas";
-  if(d<365) return "hace "+Math.round(d/30)+" meses";
+  if(d<14) return "hace "+d+" días";
+  if(d<31) return "hace "+plural(Math.round(d/7),"semana","semanas");
+  if(d<365) return "hace "+plural(Math.round(d/30),"mes","meses");
   return "hace más de un año";
 }
 function valor(id){ var e=document.getElementById(id); return e?e.value.trim():""; }
@@ -837,6 +845,7 @@ function pintar(){
       boton("recetario","Recetario", recetas().length)+
       boton("tengo","Con lo que tengo", (libro.despensa||[]).length||null)+
       boton("semana","La semana", null)+
+      boton("servidos","Lo que he puesto", null)+
       boton("ajustes","Ajustes", null)+
       '<div class="pie-rail">'+
         '<span style="font-size:11px;color:var(--muted)">Guardado en GitHub</span>'+
@@ -856,6 +865,7 @@ function pintar(){
   else if(ui.vista==="recetario") verRecetario();
   else if(ui.vista==="tengo")     verDespensa();
   else if(ui.vista==="semana")    verSemana();
+  else if(ui.vista==="servidos")  verServidos();
   else                            verAjustes();
 }
 
@@ -2281,6 +2291,155 @@ function abrirMontador(desde, dias, titulo){
     document.getElementById("mm_"+t).addEventListener("input", avisoCorto);
   });
   avisoCorto();
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LO QUE HE PUESTO
+   ══════════════════════════════════════════════════════════════
+   Todos los platos que han pasado por el menú, con las veces y la
+   última. Al tocar uno salen los días, uno por uno: es la respuesta a
+   «¿cuándo puse yo esto?». */
+
+/* Los días en que un plato estuvo en el menú, del más reciente al más
+   antiguo. Cuenta también el «hecho» suelto, que no va por menú. */
+function diasServido(recetaId){
+  var fechas=[];
+  (libro.menus||[]).forEach(function(m){
+    if(platosDelMenu(m).indexOf(recetaId)>=0 && m.fecha) fechas.push(m.fecha);
+  });
+  var r=recetaDe(recetaId);
+  if(r && r.ultima && fechas.indexOf(r.ultima)<0) fechas.push(r.ultima);
+  return fechas.sort().reverse();
+}
+
+function verServidos(){
+  var main=document.getElementById("main");
+  var tipo=ui.tipoServidos||"todos";
+  var orden=ui.ordenServidos||"reciente";
+
+  var filas=recetas()
+    .filter(function(r){ return r.tipo!=="base"; })
+    .map(function(r){
+      var dias=diasServido(r.id);
+      return {r:r, dias:dias, veces:Math.max(dias.length, +r.veces||0),
+              ultima:dias.length?dias[0]:(r.ultima||"")};
+    })
+    .filter(function(x){
+      if(tipo==="nunca") return !x.veces;
+      if(tipo!=="todos" && x.r.tipo!==tipo) return false;
+      return true;
+    });
+
+  if(orden==="reciente") filas.sort(function(a,b){
+    if(a.ultima!==b.ultima) return a.ultima<b.ultima?1:-1;
+    return a.r.nombre.localeCompare(b.r.nombre,"es");
+  });
+  else if(orden==="veces") filas.sort(function(a,b){
+    return b.veces-a.veces || a.r.nombre.localeCompare(b.r.nombre,"es");
+  });
+  else filas.sort(function(a,b){ return a.r.nombre.localeCompare(b.r.nombre,"es"); });
+
+  var puestos=filas.filter(function(x){ return x.veces>0; }).length;
+  var total=filas.length;
+
+  main.innerHTML=
+    cabecera("Lo que he puesto",
+      "Todos los platos que han pasado por el menú. Toca uno y salen los días, "+
+      "del último al primero.",
+      "")+
+
+    '<div class="cifras" style="margin-bottom:16px">'+
+      '<div class="cifra"><div class="k">Platos servidos</div>'+
+        '<div class="v acento">'+puestos+'</div>'+
+        '<div class="n">de '+total+' que tienes</div></div>'+
+      '<div class="cifra"><div class="k">Sin estrenar</div>'+
+        '<div class="v">'+(total-puestos)+'</div>'+
+        '<div class="n">nunca han salido</div></div>'+
+      '<div class="cifra"><div class="k">Días montados</div>'+
+        '<div class="v">'+(libro.menus||[]).length+'</div></div>'+
+    '</div>'+
+
+    '<div class="filtros">'+
+      '<div class="grupo">'+
+        [["todos","Todos"],["primero","Primeros"],["segundo","Segundos"],
+         ["postre","Postres"],["nunca","Sin estrenar"]].map(function(x){
+          return '<button data-ts="'+x[0]+'" aria-pressed="'+(tipo===x[0])+'">'+
+                 esc(x[1])+'</button>';
+        }).join("")+
+      '</div>'+
+      '<div class="grupo">'+
+        [["reciente","Por el último día"],["veces","Por veces"],["nombre","Por nombre"]]
+        .map(function(x){
+          return '<button data-os="'+x[0]+'" aria-pressed="'+(orden===x[0])+'">'+
+                 esc(x[1])+'</button>';
+        }).join("")+
+      '</div>'+
+    '</div>'+
+
+    (filas.length
+      ? '<div class="tarjeta"><div class="tabla-caja"><table><thead><tr>'+
+          '<th>Plato</th><th>Qué es</th><th class="num">Veces</th><th>Último día</th>'+
+        '</tr></thead><tbody>'+
+        filas.map(function(x){
+          return '<tr data-ver="'+esc(x.r.id)+'" style="cursor:pointer">'+
+            '<td><strong>'+esc(x.r.nombre)+'</strong></td>'+
+            '<td style="white-space:nowrap">'+TIPOS[x.r.tipo].icono+' '+
+              esc(TIPOS[x.r.tipo].corto)+'</td>'+
+            '<td class="num">'+(x.veces||'<span style="color:var(--muted)">—</span>')+'</td>'+
+            '<td>'+(x.ultima
+              ? esc(dmy(x.ultima))+' <span class="nota" style="margin:0">'+
+                esc(haceCuanto(x.ultima))+'</span>'
+              : '<span class="chapa ok">nunca</span>')+'</td></tr>';
+        }).join("")+
+        '</tbody></table></div></div>'
+      : '<div class="vacio"><strong>Nada que enseñar</strong>'+
+        'Monta algún menú y aquí verás lo que has ido poniendo.</div>');
+
+  main.querySelectorAll("[data-ts]").forEach(function(b){
+    b.addEventListener("click", function(){ ui.tipoServidos=b.dataset.ts; verServidos(); });
+  });
+  main.querySelectorAll("[data-os]").forEach(function(b){
+    b.addEventListener("click", function(){ ui.ordenServidos=b.dataset.os; verServidos(); });
+  });
+  main.querySelectorAll("[data-ver]").forEach(function(tr){
+    tr.addEventListener("click", function(){ verDiasDe(tr.dataset.ver); });
+  });
+}
+
+/* Los días de un plato, uno debajo de otro, con lo que había ese día */
+function verDiasDe(recetaId){
+  var r=recetaDe(recetaId); if(!r) return;
+  var dias=diasServido(recetaId);
+
+  abrirVentana(r.nombre,
+    (dias.length
+      ? '<p class="nota" style="margin:0 0 12px">'+
+        ((diasDesde(dias[0])||0)<0
+          ? 'Está puesto <strong>'+(dias.length===1?"un día":dias.length+" días")+
+            '</strong>. El próximo, '
+          : 'Lo has puesto <strong>'+plural(dias.length,"vez","veces")+'</strong>. El último, ')+
+        esc(haceCuanto(dias[0]))+'.</p>'+
+        '<div class="tabla-caja"><table><tbody>'+
+        dias.map(function(f){
+          var m=menuDe(f)||{};
+          var conQue=platosDelMenu(m).filter(function(id){ return id!==recetaId; })
+            .map(recetaDe).filter(Boolean).map(function(x){ return x.nombre; });
+          return '<tr><td style="white-space:nowrap"><strong>'+esc(diaLargo(f))+'</strong>'+
+            '<div class="nota" style="margin:0">'+esc(haceCuanto(f))+'</div></td>'+
+            '<td class="nota" style="margin:0">'+
+            (conQue.length ? 'con '+esc(conQue.join(", ")) : 'solo en el menú')+
+            (m.nota?'<div>'+esc(m.nota)+'</div>':"")+'</td></tr>';
+        }).join("")+
+        '</tbody></table></div>'
+      : '<div class="vacio"><strong>Todavía no lo has puesto</strong>'+
+        'En cuanto entre en un menú, aquí salen los días.</div>'),
+    function(){}, {aceptar:"Cerrar", extra:'<button class="btn" id="sv_abrir">Ver la receta</button>'});
+
+  var abrir=document.getElementById("sv_abrir");
+  if(abrir) abrir.addEventListener("click", function(){
+    var d=abrir.closest("dialog"); if(d){ d.close(); d.remove(); }
+    ui.receta=recetaId; ui.paso=0; ui.hechos={}; pintar();
+  });
 }
 
 /* ══════════════════════════════════════════════════════════════
