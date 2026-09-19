@@ -2851,6 +2851,11 @@ function verAjustes(){
             plural((libro.menus||[]).length,"día montado","días montados")+
             '. Las recetas se quedan.</div></div>'+
           '<div style="border-top:1px solid var(--linea);padding-top:12px">'+
+            '<button class="btn malo" id="b_historial">Empezar de cero el historial</button>'+
+            '<div class="nota" style="margin-top:4px">Borra los menús y las veces que has '+
+            'servido cada plato. Las recetas se quedan enteras: es lo que se hace antes '+
+            'de empezar a usarlo de verdad.</div></div>'+
+          '<div style="border-top:1px solid var(--linea);padding-top:12px">'+
             '<button class="btn malo fuerte" id="b_todo">Vaciar el recetario</button>'+
             '<div class="nota" style="margin-top:4px">Se van las '+
             plural(recetas().length,"receta","recetas")+' y los menús.</div></div>'+
@@ -2860,8 +2865,22 @@ function verAjustes(){
     libro.ajustes.raciones=Math.max(1, Math.round(numero("a_rac")))||4;
     libro.ajustes.avisarDias=Math.max(0, Math.round(numero("a_dias")));
     libro.ajustes.basicos=(document.getElementById("a_basicos").value||"").trim();
-    libro.ajustes.basicos=(document.getElementById("a_basicos").value||"").trim();
     guardar(); pintar(); avisar("Ajustes guardados");
+  });
+
+  document.getElementById("b_historial").addEventListener("click", function(){
+    var servidas=recetas().filter(function(r){ return (+r.veces||0)>0 || r.ultima; }).length;
+    if(!(libro.menus||[]).length && !servidas){ avisar("El historial ya está vacío.", true); return; }
+    confirmar("Empezar de cero",
+      '<p style="margin:0 0 8px">Se van los '+plural((libro.menus||[]).length,"día montado","días montados")+
+      ' y la marca de servido de '+plural(servidas,"receta","recetas")+'.</p>'+
+      '<p class="nota" style="margin:0">Las '+plural(recetas().length,"receta","recetas")+
+      ' se quedan como están.</p>',
+      function(){
+        libro.menus=[];
+        recetas().forEach(function(r){ r.veces=0; r.ultima=""; });
+        guardar(); pintar(); avisar("Historial a cero");
+      }, {aceptar:"Empezar de cero", malo:true});
   });
 
   document.getElementById("b_menus").addEventListener("click", function(){
