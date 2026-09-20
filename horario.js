@@ -1334,9 +1334,11 @@ function renderCov() {
       var n   = cov[slot][i];
       var col = cbg(n);
       var tip = n===0?'Nadie':n+' persona'+(n>1?'s':'')+': '+who[slot][i].join(', ');
-      html += '<td title="'+lbl+' Dia '+etiquetaDia(dia, curM)+' - '+tip+'" style="text-align:center;padding:5px 2px;background:'+col.bg+';border:1px solid rgba(46,43,34,.35);cursor:default;transition:filter .1s" onmouseover="this.style.filter=\'brightness(1.5)\'" onmouseout="this.style.filter=\'none\'">'
-            + '<div style="color:'+col.fg+';font-size:'+(n>0?'1.1rem':'.75rem')+';font-weight:'+(n>0?'900':'400')+';line-height:1">'+(n>0?n:'.') +'</div>'
-            + (n>0?'<div style="color:rgba(255,255,255,.55);font-size:.56rem;margin-top:1px">pers.</div>':'')
+      /* Solo el numero: el «pers.» debajo de cada celda no decia nada que
+         no dijera ya el titulo de la tabla, y hacia la rejilla el doble
+         de alta. */
+      html += '<td title="'+lbl+' Dia '+etiquetaDia(dia, curM)+' - '+tip+'" style="text-align:center;padding:3px 2px;background:'+col.bg+';border:1px solid rgba(46,43,34,.35);cursor:default;transition:filter .1s" onmouseover="this.style.filter=\'brightness(1.5)\'" onmouseout="this.style.filter=\'none\'">'
+            + '<div style="color:'+col.fg+';font-size:'+(n>0?'1.05rem':'.75rem')+';font-weight:'+(n>0?'900':'400')+';line-height:1.05">'+(n>0?n:'.') +'</div>'
             + '</td>';
     });
     html += '</tr>';
