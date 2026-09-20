@@ -384,6 +384,25 @@ function guardarPlegados(){
   try { localStorage.setItem('rplg', JSON.stringify(plegados)); } catch(e){}
 }
 
+/* Los cerrados, abajo del todo. Asi lo que esta abierto queda arriba y
+   se ve entero aunque el cuadrante tenga a toda la plantilla. */
+function ordenarBloques(){
+  var cuerpo = document.getElementById('cuerpo');
+  if (!cuerpo) return;
+  var abiertos = BLOQUES.filter(function(b){ return !plegados[b.id]; });
+  var cerrados = BLOQUES.filter(function(b){ return  plegados[b.id]; });
+  abiertos.concat(cerrados).forEach(function(b){
+    var el = document.getElementById(b.id);
+    if (el) cuerpo.appendChild(el);
+    if (b.id === 'sarea') {
+      var st = document.getElementById('statsbar');
+      if (st) { cuerpo.appendChild(st); st.style.display = plegados.sarea ? 'none' : ''; }
+    }
+  });
+  var clip = document.getElementById('clip-banner');
+  if (clip) cuerpo.appendChild(clip);   /* el aviso de copiar, siempre el último */
+}
+
 function aplicarPlegado(id){
   var bloque = document.getElementById(id);
   if (!bloque) return;
@@ -403,6 +422,7 @@ function plegar(id){
   plegados[id] = !plegados[id];
   guardarPlegados();
   aplicarPlegado(id);
+  ordenarBloques();
   /* Al abrir uno, ponerlo a la vista sin tener que buscarlo */
   if (!plegados[id]) {
     var b = document.getElementById(id);
@@ -414,6 +434,7 @@ function soloEsto(id){
   BLOQUES.forEach(function(b){ plegados[b.id] = (b.id !== id); });
   guardarPlegados();
   BLOQUES.forEach(function(b){ aplicarPlegado(b.id); });
+  ordenarBloques();
   var b = document.getElementById(id);
   if (b && b.scrollIntoView) b.scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -444,6 +465,7 @@ function montarBarraBloques(){
     ch.addEventListener('dblclick', function(e){ e.preventDefault(); soloEsto(ch.dataset.bloque); });
   });
   BLOQUES.forEach(function(b){ aplicarPlegado(b.id); });
+  ordenarBloques();
 }
 
 function renderAll() {
@@ -457,6 +479,7 @@ function renderAll() {
   montarBarraBloques();
   renderNav(); renderTable(); renderStats(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
   BLOQUES.forEach(function(b){ aplicarPlegado(b.id); });
+  ordenarBloques();
   pegarCabeceras();
 }
 
