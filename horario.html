@@ -498,7 +498,7 @@
 
 
 
-<script src="sync.js?v=202609201105"></script>
+<script src="sync.js?v=202609201113"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -506,7 +506,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609201105';
+    s.src = 'horario.js?v=202609201113';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

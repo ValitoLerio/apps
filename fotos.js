@@ -694,6 +694,7 @@ function barraSeleccion(){
   var n = Object.keys(ui.sel).length;
   return '<div class="barraSel">'+
     '<strong>'+plural(n,'foto marcada','fotos marcadas')+'</strong>'+
+    '<button class="btn sm fuerte" id="s_mandar">📤 Mandar</button>'+
     '<button class="btn sm" id="s_album">Poner en un álbum</button>'+
     '<button class="btn sm" id="s_etiqueta">Poner etiqueta</button>'+
     '<button class="btn sm" id="s_fecha">Cambiar la fecha</button>'+
@@ -708,6 +709,9 @@ function engancharBarraSeleccion(){
   var b;
   b = document.getElementById('s_nada');
   if (b) b.addEventListener('click', function(){ ui.sel = {}; verGaleria(); });
+
+  b = document.getElementById('s_mandar');
+  if (b) b.addEventListener('click', function(){ mandarFotos(marcadas()); });
 
   b = document.getElementById('s_fav');
   if (b) b.addEventListener('click', function(){
@@ -808,6 +812,8 @@ function abrirVisor(id){
     '<div class="barraV">'+
       '<span class="nom" id="v_nom"></span>'+
       '<button class="btn sm" id="v_fav">★</button>'+
+      '<button class="btn sm" id="v_mandar">📤 Mandar</button>'+
+      '<button class="btn sm" id="v_copiar">Copiar</button>'+
       '<button class="btn sm" id="v_editar">Ficha</button>'+
       '<button class="btn sm" id="v_cerrar">Cerrar</button>'+
     '</div>'+
@@ -902,6 +908,12 @@ function abrirVisor(id){
     var caja = document.getElementById('v_ficha');
     if (caja.style.display === 'none') pintarFicha(); else caja.style.display='none';
   });
+  document.getElementById('v_mandar').addEventListener('click', function(){
+    mandarFotos([lista[i]]);
+  });
+  document.getElementById('v_copiar').addEventListener('click', function(){
+    copiarFoto(lista[i]);
+  });
   document.getElementById('v_fav').addEventListener('click', function(){
     var f = lista[i]; f.fav = !f.fav; guardar(); pintarFoto();
   });
@@ -951,6 +963,121 @@ async function archivoDeRuta(mango, ruta){
     var fh = await actual.getFileHandle(partes[partes.length-1]);
     return await fh.getFile();
   }catch(e){ return null; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MANDAR FOTOS
+   ══════════════════════════════════════════════════════════════
+   En el móvil sale el botón de compartir de siempre —WhatsApp, correo,
+   AirDrop— porque el navegador lo deja. En el ordenador no lo deja: ahí
+   las fotos se bajan a la carpeta de Descargas y desde allí se arrastran
+   al WhatsApp o se adjuntan al correo. Y para una sola, se puede copiar
+   y pegarla directamente en la conversación. */
+
+/* El archivo de verdad si tenemos su carpeta; si no, la miniatura */
+function archivoDe(f){
+  if (ui.carpetas.length && f.ruta){
+    var orden = ui.carpetas.slice().sort(function(a,b){
+      return (b.nombre===f.carpeta?1:0) - (a.nombre===f.carpeta?1:0);
+    });
+    var i = 0;
+    function probar(){
+      if (i >= orden.length) return miniaturaArchivo(f);
+      return archivoDeRuta(orden[i++].mango, f.ruta).then(function(archivo){
+        return archivo || probar();
+      }).catch(probar);
+    }
+    return probar();
+  }
+  return miniaturaArchivo(f);
+}
+function miniaturaArchivo(f){
+  return leerDe('miniaturas', f.id).then(function(b){
+    if (!b) return null;
+    var nombre = f.nombre.replace(/\.[^.]+$/,'') + ' (pequeña).jpg';
+    var archivo = new File([b], nombre, {type:'image/jpeg'});
+    archivo.esMini = true;      /* es la miniatura, no el original */
+    return archivo;
+  }).catch(function(){ return null; });
+}
+
+function sePuedeCompartir(archivos){
+  try { return !!(navigator.canShare && navigator.canShare({files:archivos})); }
+  catch(e){ return false; }
+}
+
+function bajarArchivo(archivo){
+  var url = URL.createObjectURL(archivo);
+  var a = document.createElement('a');
+  a.href = url; a.download = archivo.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+}
+
+function mandarFotos(lista){
+  if (!lista.length) return;
+  if (lista.length > 30){
+    avisar('De golpe, treinta como mucho: marca menos.', true);
+    return;
+  }
+  avisar('Preparando '+plural(lista.length,'foto','fotos')+'…');
+  Promise.all(lista.map(archivoDe)).then(function(archivos){
+    archivos = archivos.filter(Boolean);
+    if (!archivos.length){
+      var raras = lista.filter(function(f){ return !f.verse; }).length;
+      avisar(raras === lista.length
+        ? 'Esa foto es '+extDe(lista[0].nombre).toUpperCase()+' y aquí no hay copia. '+
+          'Añade su carpeta y ya se puede mandar.'
+        : 'No tengo el archivo a mano. Añade la carpeta donde estén.', true);
+      return;
+    }
+    var faltan = lista.length - archivos.length;
+    var pequenas = archivos.filter(function(a){ return a.esMini; }).length;
+    var aviso = (faltan ? ' · '+faltan+' sin encontrar' : '')+
+                (pequenas ? ' · '+pequenas+' en pequeño, porque no tengo su carpeta' : '');
+
+    if (sePuedeCompartir(archivos)){
+      navigator.share({files:archivos, title:'Fotos'}).then(function(){
+        avisar(plural(archivos.length,'foto mandada','fotos mandadas')+aviso, pequenas>0);
+      }).catch(function(e){
+        if (e && e.name === 'AbortError') return;
+        archivos.forEach(bajarArchivo);
+        avisar('Te las he bajado a Descargas');
+      });
+      return;
+    }
+    /* Ordenador: a la carpeta de Descargas, de una en una */
+    archivos.forEach(function(a, i){ setTimeout(function(){ bajarArchivo(a); }, i*250); });
+    avisar(plural(archivos.length,'foto bajada','fotos bajadas')+' a Descargas. '+
+           (archivos.length===1?'Arrástrala':'Arrástralas')+' al WhatsApp'+aviso+'.', pequenas>0);
+  });
+}
+
+/* Una sola, al portapapeles: se pega en el chat sin bajarla */
+function copiarFoto(f){
+  if (!navigator.clipboard || !window.ClipboardItem){
+    avisar('Este navegador no deja copiar fotos; usa «Bajar».', true);
+    return;
+  }
+  archivoDe(f).then(function(archivo){
+    if (!archivo){ avisar('No tengo el archivo a mano.', true); return; }
+    /* el portapapeles sólo admite PNG: se repinta */
+    var url = URL.createObjectURL(archivo);
+    var img = new Image();
+    img.onload = function(){
+      var cv = document.createElement('canvas');
+      cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+      cv.getContext('2d').drawImage(img,0,0);
+      URL.revokeObjectURL(url);
+      cv.toBlob(function(b){
+        navigator.clipboard.write([new ClipboardItem({'image/png': b})]).then(function(){
+          avisar('Copiada: pégala en el WhatsApp o en el correo');
+        }).catch(function(e){ avisar('No se pudo copiar: '+e.message, true); });
+      }, 'image/png');
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); avisar('Esa foto no se puede copiar.', true); };
+    img.src = url;
+  });
 }
 
 /* ══════════════════════════════════════════════════════════════
