@@ -550,7 +550,7 @@
 
 </div>
 
-<script src="sync.js?v=202609201128"></script>
+<script src="sync.js?v=202609201859"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
@@ -1084,14 +1084,17 @@
     var delMes = dias.filter(function(d){ return (d.fecha||'').slice(0,7) === ym; });
     var ventasMes = delMes.reduce(function(s,d){ return s + (+d.visa||0) + (+d.efectivo||0); }, 0);
 
-    var mete = dias.reduce(function(s,d){ return s + (+d.aAmarilla||0); }, 0) +
-               (libro.aportaciones||[]).reduce(function(s,a){ return s + (+a.importe||0); }, 0);
-    var saca = (libro.retiradas||[]).reduce(function(s,r){ return s + (+r.importe||0); }, 0);
+    /* La caja amarilla es el recuento de la última noche, no una suma:
+       es un fondo que se cuenta, no un cajón donde se va echando. */
+    var conRecuento = dias.filter(function(d){
+      return d.aAmarilla !== null && d.aAmarilla !== undefined && d.aAmarilla !== '';
+    }).sort(function(a,b){ return String(a.fecha||'').localeCompare(String(b.fecha||'')); });
+    var amarilla = conRecuento.length ? (+conRecuento[conRecuento.length-1].aAmarilla || 0) : 0;
 
     var deHoy = dias.filter(function(d){ return d.fecha === hoy; })[0];
 
     pon('d-caja-mes',      euros(ventasMes));
-    pon('d-caja-amarilla', euros(mete - saca));
+    pon('d-caja-amarilla', conRecuento.length ? euros(amarilla) : 'sin contar');
     pon('d-caja-dias',     String(delMes.length));
     pon('d-caja-hoy',      deHoy ? euros((+deHoy.visa||0)+(+deHoy.efectivo||0)) : 'sin cerrar');
   }

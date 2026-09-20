@@ -900,8 +900,12 @@ function verHoy(){
       "van tres. Al darle a «hecho» queda apuntada la fecha, y la próxima vez que lo pongas "+
       "te dirá cuánto hace que se sirvió.",
       '<input type="date" id="h_fecha" value="'+esc(fecha)+'" style="width:auto">'+
+      '<label class="lbl" for="h_comensales" style="align-self:center">Comensales</label>'+
+      '<input type="number" id="h_comensales" min="1" step="1" style="width:78px" '+
+        'value="'+esc(m.comensales || libro.ajustes.raciones || 10)+'">'+
       '<button class="btn" id="h_montar">✨ Móntamelo</button>'+
-      '<button class="btn" id="h_compra">Lo que hace falta</button>')+
+      '<button class="btn" id="h_compra">Lo que hace falta</button>'+
+      '<button class="btn" id="h_mandar">📱 Mandar el menú</button>')+
 
     (function(){
       /* El aviso de la mesa: dos arroces el mismo día, o tres pescados,
@@ -1007,6 +1011,15 @@ function verHoy(){
     fijarMenu(fecha, {nota:this.value.trim()}); avisar("Nota guardada");
   });
   document.getElementById("h_compra").addEventListener("click", function(){ verLoQueHaceFalta(fecha); });
+  document.getElementById("h_mandar").addEventListener("click", function(){
+    mandarTexto("Menú de "+diaLargo(fecha), textoMenu(fecha));
+  });
+  document.getElementById("h_comensales").addEventListener("change", function(){
+    var n = Math.max(1, Math.round(+this.value||0));
+    fijarMenu(fecha, {comensales:n});
+    avisar(plural(n,"comensal","comensales")+" para este día");
+    pintar();
+  });
   document.getElementById("h_montar").addEventListener("click", function(){
     abrirMontador(fecha, 1, "Montar el menú del día");
   });
@@ -1164,7 +1177,8 @@ function elegirPlato(tipo, fecha){
    ingrediente: es la lista que se lleva a la cámara. */
 function verLoQueHaceFalta(fecha){
   var m=menuDe(fecha)||{};
-  var raciones=ui.raciones||libro.ajustes.raciones||4;
+  /* Los comensales de ese día mandan: es lo que hay que cocinar. */
+  var raciones=+m.comensales || ui.raciones || libro.ajustes.raciones || 10;
   var juntos={};
   var platos=[];
 
@@ -2191,6 +2205,174 @@ function familiasPasadas(recetasDelDia){
     .map(function(f){ return {familia:FAMILIAS_PLATO[f].nombre, hay:c[f], tope:FAMILIAS_PLATO[f].tope}; });
 }
 
+
+/* ══════════════════════════════════════════════════════════════
+   MANDAR EL MENÚ
+   ══════════════════════════════════════════════════════════════
+   El menú no sirve de nada dentro del teléfono de uno: lo tiene que ver
+   la cocina y a veces la sala. Aquí sale el texto listo para pegarlo en
+   el grupo de WhatsApp, con los alérgenos debajo, que es lo que luego
+   preguntan en la mesa. */
+
+function enOrdenador(){
+  try{
+    return !((navigator.maxTouchPoints||0) > 1 &&
+             window.matchMedia("(pointer: coarse)").matches);
+  }catch(e){ return true; }
+}
+
+function textoMenuDia(fecha, conAlergenos){
+  var m = menuDe(fecha);
+  if(!m) return "";
+  var lineas = [];
+  var hay = false;
+  TIPOS_DEL_MENU.forEach(function(t){
+    var suyos = platosDe(m,t).map(recetaDe).filter(Boolean);
+    if(!suyos.length) return;
+    hay = true;
+    lineas.push(TIPOS[t].icono+" "+TIPOS[t].nombre.toUpperCase()+
+                (suyos.length>1?"S":""));
+    suyos.forEach(function(r){ lineas.push("  · "+r.nombre); });
+  });
+  if(!hay) return "";
+  if(conAlergenos){
+    var puestos = [];
+    platosDelMenu(m).map(recetaDe).filter(Boolean).forEach(function(r){
+      alergenosDe(r).forEach(function(a){ if(puestos.indexOf(a)<0) puestos.push(a); });
+    });
+    if(puestos.length){
+      puestos.sort(function(a,b){ return ORDEN_ALERGENOS.indexOf(a)-ORDEN_ALERGENOS.indexOf(b); });
+      lineas.push("");
+      lineas.push("Alérgenos: "+puestos.map(function(a){ return ALERGENOS[a].nombre; }).join(", "));
+    }
+  }
+  if(m.nota) lineas.push("Nota: "+m.nota);
+  return lineas.join("\n");
+}
+
+function textoMenu(fecha){
+  var cuerpo = textoMenuDia(fecha, true);
+  if(!cuerpo) return "";
+  var m = menuDe(fecha) || {};
+  return "MENÚ · "+diaLargo(fecha)+
+         (m.comensales?" · "+plural(+m.comensales,"comensal","comensales"):"")+
+         "\n\n"+cuerpo;
+}
+
+function textoMenuSemana(dias){
+  var trozos = [];
+  dias.forEach(function(f){
+    var t = textoMenuDia(f, false);
+    if(!t) return;
+    trozos.push(diaLargo(f).toUpperCase()+"\n"+t);
+  });
+  if(!trozos.length) return "";
+  return "MENÚS DE LA SEMANA\n\n"+trozos.join("\n\n");
+}
+
+function mandarTexto(titulo, texto){
+  if(!texto){ avisar("No hay nada que mandar: monta antes el menú.", true); return; }
+  var enlaceApp = "https://wa.me/?text="+encodeURIComponent(texto);
+  var enlaceWeb = "https://web.whatsapp.com/send?text="+encodeURIComponent(texto);
+
+  var d = abrirVentana(titulo,
+    '<div class="nota" style="margin:0 0 10px">Se abre WhatsApp con el menú escrito: '+
+      'sólo hay que elegir el chat. Si la aplicación se queja, copia el texto y pégalo.</div>'+
+    '<div class="mono" style="white-space:pre-wrap;background:var(--sup2);border:1px solid var(--linea);'+
+      'border-radius:8px;padding:12px;font-size:12.5px;max-height:44vh;overflow:auto">'+
+      esc(texto)+'</div>',
+    function(){}, {aceptar:"Cerrar",
+      extra:'<button class="btn" id="mt_copiar">Copiar</button>'+
+            '<a class="btn" id="mt_web" href="'+esc(enlaceWeb)+'" target="_blank" rel="noopener" '+
+              'style="text-decoration:none">Abrir en el navegador</a>'+
+            (enOrdenador() ? '' :
+              '<a class="btn fuerte" href="'+esc(enlaceApp)+'" target="_blank" rel="noopener" '+
+              'style="text-decoration:none">Abrir WhatsApp</a>')});
+
+  var copiar = document.getElementById("mt_copiar");
+  if(copiar) copiar.addEventListener("click", function(e){
+    e.preventDefault();
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(texto).then(function(){ avisar("Copiado"); })
+        .catch(function(){ avisar("No se pudo copiar.", true); });
+    } else avisar("No se pudo copiar.", true);
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LA COMPRA DE LA SEMANA
+   ══════════════════════════════════════════════════════════════
+   Lo que hace falta para un día ya estaba; lo que hace falta para la
+   semana entera es lo que se lleva al proveedor. Se suman los siete
+   días, cada uno por sus comensales. */
+function juntarIngredientes(fechas){
+  var juntos = {}, platos = [], sinContar = [];
+  fechas.forEach(function(fecha){
+    var m = menuDe(fecha);
+    if(!m) return;
+    var raciones = +m.comensales || +libro.ajustes.raciones || 10;
+    ORDEN_TIPOS.forEach(function(t){
+      platosDe(m,t).forEach(function(id){
+        var r = recetaDe(id); if(!r) return;
+        platos.push(r.nombre);
+        (r.ingredientes||[]).forEach(function(ing){
+          var clave = (ing.que||"").trim().toLowerCase()+"|"+(ing.unidad||"").trim().toLowerCase();
+          if(!juntos[clave]) juntos[clave] = {que:ing.que, unidad:ing.unidad, cantidad:0, suelto:[]};
+          var c = escalarNum(ing, raciones, +r.raciones||raciones);
+          if(c==null){ if(juntos[clave].suelto.indexOf(r.nombre)<0) juntos[clave].suelto.push(r.nombre); }
+          else juntos[clave].cantidad = r2(juntos[clave].cantidad + c);
+        });
+      });
+    });
+  });
+  return {juntos:juntos, platos:platos};
+}
+
+function verCompraDeVarios(fechas, titulo, pie){
+  var r = juntarIngredientes(fechas);
+  var claves = Object.keys(r.juntos).sort();
+
+  function textoLista(){
+    return titulo.toUpperCase()+"\n\n"+claves.map(function(k){
+      var i = r.juntos[k];
+      return "· "+i.que+(i.cantidad>0 ? ": "+num(i.cantidad)+" "+(i.unidad||"") : "");
+    }).join("\n");
+  }
+
+  abrirVentana(titulo,
+    (claves.length
+      ? '<p class="nota" style="margin:0 0 12px">'+esc(pie)+' · '+
+        plural(r.platos.length,"plato","platos")+'. Las cantidades salen sumadas y estiradas '+
+        'a los comensales de cada día.</p>'+
+        '<div class="tabla-caja"><table><tbody>'+
+        claves.map(function(k){
+          var i = r.juntos[k];
+          return '<tr><td>'+esc(i.que)+
+            (i.suelto.length?'<div class="nota" style="margin:0">al gusto, en '+
+              esc(i.suelto.slice(0,3).join(" y "))+'</div>':"")+'</td>'+
+            '<td class="num">'+(i.cantidad>0?num(i.cantidad)+" "+esc(i.unidad||""):"—")+'</td></tr>';
+        }).join("")+'</tbody></table></div>'
+      : '<div class="vacio"><strong>No hay nada montado</strong>'+
+        'Monta los menús y aquí sale la compra sumada.</div>'),
+    function(){}, {aceptar:"Cerrar",
+      extra: claves.length
+        ? '<button class="btn" id="cl_copiar">Copiar la lista</button>'+
+          '<button class="btn" id="cl_wa">📱 Mandar</button>'
+        : ""});
+
+  var c = document.getElementById("cl_copiar");
+  if(c) c.addEventListener("click", function(e){
+    e.preventDefault();
+    if(navigator.clipboard) navigator.clipboard.writeText(textoLista()).then(function(){ avisar("Copiada"); });
+  });
+  var w = document.getElementById("cl_wa");
+  if(w) w.addEventListener("click", function(e){
+    e.preventDefault();
+    var dlg = w.closest("dialog"); if(dlg){ dlg.close(); dlg.remove(); }
+    mandarTexto(titulo, textoLista());
+  });
+}
+
 /* ══════════════════════════════════════════════════════════════
    MONTAR MENÚS SOLO
    ══════════════════════════════════════════════════════════════
@@ -2756,6 +2938,8 @@ function verSemana(){
   main.innerHTML=
     cabecera("La semana",
       "De un vistazo, qué hay cada día. Pulsa un día para montarlo.",
+      '<button class="btn" id="s_compraSemana">🧺 La compra de la semana</button>'+
+      '<button class="btn" id="s_mandarSemana">📱 Mandar la semana</button>'+
       '<button class="btn fuerte" id="s_montaSemana">✨ Montar la semana</button>'+
       '<button class="btn" id="s_montaMes">✨ Montar cuatro semanas</button>'+
       '<button class="btn" id="s_antes">← Semana anterior</button>'+
@@ -2791,6 +2975,13 @@ function verSemana(){
 
   document.getElementById("s_montaSemana").addEventListener("click", function(){
     abrirMontador(dias[0], 7, "Montar la semana");
+  });
+  document.getElementById("s_compraSemana").addEventListener("click", function(){
+    verCompraDeVarios(dias, "La compra de la semana",
+                      "Del "+dmy(dias[0])+" al "+dmy(dias[6]));
+  });
+  document.getElementById("s_mandarSemana").addEventListener("click", function(){
+    mandarTexto("Menús de la semana", textoMenuSemana(dias));
   });
   document.getElementById("s_montaMes").addEventListener("click", function(){
     abrirMontador(dias[0], 28, "Montar cuatro semanas");

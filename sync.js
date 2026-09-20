@@ -29,6 +29,13 @@ var BRANCH_KEY = '__sync_branch';
 var SHA_KEY    = '__sync_sha';
 
 var ARCHIVO    = 'datos.json';
+
+/* Las secciones que engordan mucho viven en su propio archivo. El de
+   las recetas pasaba del mega él solo, y así cada guardado de cualquier
+   otra app tenía que subir todo eso otra vez. Cada archivo va por su
+   lado: se baja el que hace falta y se sube el que se toca. */
+var APARTE     = {recetas: 'datos_recetas.json'};
+function archivoDe(seccion){ return APARTE[seccion] || ARCHIVO; }
 var RETARDO    = 2500;    // ms de espera tras el último cambio
 var REINTENTOS = 3;       // ante conflicto de escritura
 var VIGILANCIA = 60000;   // cada cuánto se mira si hay versión nueva
@@ -60,8 +67,11 @@ var avisando      = false;  // hay un diálogo de conflicto abierto
 function token() { return _get.call(localStorage, TOKEN_KEY); }
 function repo()  { return _get.call(localStorage, REPO_KEY); }
 function rama()  { return _get.call(localStorage, BRANCH_KEY) || 'main'; }
-function sha()   { return _get.call(localStorage, SHA_KEY); }
-function guardarSha(s){ _set.call(localStorage, SHA_KEY, s || ''); }
+function claveSha(archivo){
+  return SHA_KEY + (!archivo || archivo === ARCHIVO ? '' : '_' + archivo.replace(/[^a-z0-9]/gi,''));
+}
+function sha(archivo)   { return _get.call(localStorage, claveSha(archivo)); }
+function guardarSha(s, archivo){ _set.call(localStorage, claveSha(archivo), s || ''); }
 
 function conectado(){ return !!token() && !!repo(); }
 
@@ -124,22 +134,55 @@ function errorDe(res){
    nada», la app sube sólo su sección y se lleva por delante las de las
    demás. Por eso, cuando no viene contenido pero sí hay sha, se pide el
    blob, que sí lo trae. */
-function descargar(){
-  return api('contents/' + ARCHIVO + '?ref=' + encodeURIComponent(rama()) + '&_=' + Date.now(),
+function descargar(archivo){
+  archivo = archivo || ARCHIVO;
+  return api('contents/' + archivo + '?ref=' + encodeURIComponent(rama()) + '&_=' + Date.now(),
              {cache: 'no-store'})
     .then(function(res){
-      if (res.status === 404) { guardarSha(''); return {}; }
+      if (res.status === 404) { guardarSha('', archivo); return {}; }
       if (!res.ok) throw errorDe(res);
       return res.json().then(function(data){
-        guardarSha(data.sha || '');
+        guardarSha(data.sha || '', archivo);
         if (data.content && String(data.content).trim()) {
           try { return JSON.parse(deBase64(data.content)); }
           catch(e){ throw new Error('El archivo de datos está corrupto: ' + e.message); }
         }
-        if (data.sha) return descargarBlob(data.sha);   // archivo grande
+        if (data.sha) return descargarBlob(data.sha);   // archivo grande (no cabe por esta vía)
         return {};
       });
     });
+}
+
+/* Lo que necesita una app: el archivo de siempre —que lleva los
+   candados y las demás secciones— y, si la suya vive aparte, también el
+   suyo. Mientras quede la copia vieja en datos.json, se hace caso a la
+   del archivo nuevo. */
+function descargarPara(seccion){
+  var archivo = archivoDe(seccion);
+  if (archivo === ARCHIVO) return descargar(ARCHIVO);
+  return Promise.all([descargar(ARCHIVO), descargar(archivo)])
+    .then(function(dos){
+      var base = dos[0] || {}, suyo = dos[1] || {};
+      var junto = Object.assign({}, base);
+      if (suyo[seccion]) junto[seccion] = suyo[seccion];
+      return junto;
+    });
+}
+
+/* Todo junto, para el escritorio: el archivo de siempre más los
+   apartados. */
+function descargarEntero(){
+  var otros = Object.keys(APARTE);
+  return Promise.all([descargar(ARCHIVO)].concat(otros.map(function(sec){
+    return descargar(APARTE[sec]).catch(function(){ return {}; });
+  }))).then(function(todos){
+    var junto = Object.assign({}, todos[0] || {});
+    otros.forEach(function(sec, i){
+      var d = todos[i+1] || {};
+      if (d[sec]) junto[sec] = d[sec];
+    });
+    return junto;
+  });
 }
 
 /* El archivo entero por el otro camino: los blobs sí llegan completos
@@ -159,31 +202,32 @@ function descargarBlob(shaArchivo){
     });
 }
 
-function subir(contenido, intento){
+function subir(contenido, archivo, intento){
+  archivo = archivo || ARCHIVO;
   intento = intento || 0;
   var cuerpo = {
     message: 'datos: ' + new Date().toISOString(),
     content: aBase64(JSON.stringify(contenido, null, 2)),
     branch:  rama()
   };
-  if (sha()) cuerpo.sha = sha();
+  if (sha(archivo)) cuerpo.sha = sha(archivo);
 
-  return api('contents/' + ARCHIVO, {
+  return api('contents/' + archivo, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(cuerpo)
   }).then(function(res){
     // Otro dispositivo escribió justo ahora: recojo lo suyo y reintento
     if ((res.status === 409 || res.status === 422) && intento < REINTENTOS){
-      return descargar().then(function(remoto){
+      return descargar(archivo).then(function(remoto){
         var fusion = Object.assign({}, remoto);
         Object.keys(contenido).forEach(function(k){ fusion[k] = contenido[k]; });
-        return subir(fusion, intento + 1);
+        return subir(fusion, archivo, intento + 1);
       });
     }
     if (!res.ok) throw errorDe(res);
     return res.json().then(function(data){
-      if (data && data.content && data.content.sha) guardarSha(data.content.sha);
+      if (data && data.content && data.content.sha) guardarSha(data.content.sha, archivo);
       return data;
     });
   });
@@ -460,14 +504,16 @@ function hacerSubida(){
   pendiente = null;
   estado('Guardando…', 'trabajando');
 
-  return descargar()
+  var archivo = archivoDe(seccionActiva);
+
+  return descargar(archivo)
     .then(function(remoto){
       remoto = remoto || {};
 
       /* Red de seguridad: si el archivo existe —hay sha— pero vuelve
          vacío, algo ha ido mal al leerlo. Subir ahora sería borrar los
          datos de las otras apps, así que no se sube y se reintenta. */
-      if (!Object.keys(remoto).length && sha()) {
+      if (!Object.keys(remoto).length && sha(archivo)) {
         subiendo = false;
         estado('No he podido leer los datos; no guardo para no borrar nada', 'error');
         programarSubida();
@@ -485,10 +531,13 @@ function hacerSubida(){
       var completo = Object.assign({}, remoto);
       completo[seccionActiva] = leerSeccion(seccionActiva);
       completo.actualizado = new Date().toISOString();
-      return subir(completo).then(function(){
+      return subir(completo, archivo).then(function(){
         baseRemota = huella(completo[seccionActiva]);
         haycambios = false;
         estado('Guardado', 'ok');
+        /* Si esta sección se ha mudado a su archivo, se limpia del
+           antiguo para que no queden dos copias. */
+        if (archivo !== ARCHIVO) limpiarDelArchivoViejo(seccionActiva);
       });
     })
     .catch(function(err){
@@ -496,6 +545,18 @@ function hacerSubida(){
       console.error('[sync]', err);
     })
     .then(function(){ subiendo = false; });
+}
+
+/* La sección ya vive en su archivo: se borra del datos.json de siempre.
+   Se hace una vez, en silencio, y si falla no pasa nada: se reintenta
+   en el siguiente guardado. */
+function limpiarDelArchivoViejo(seccion){
+  return descargar(ARCHIVO).then(function(viejo){
+    if (!viejo || !viejo[seccion]) return false;
+    delete viejo[seccion];
+    viejo.actualizado = new Date().toISOString();
+    return subir(viejo, ARCHIVO).then(function(){ return true; });
+  }).catch(function(){ return false; });
 }
 
 // ── Conflicto entre dispositivos ──────────────────────────────────
@@ -530,7 +591,7 @@ function conflicto(remoto){
 function comprobarActualizaciones(){
   if (!conectado() || !seccionActiva || subiendo || avisando) return Promise.resolve(false);
 
-  return descargar().then(function(remoto){
+  return descargar(archivoDe(seccionActiva)).then(function(remoto){
     remoto = remoto || {};
     var suya = huella(remoto[seccionActiva]);
     if (baseRemota === null || suya === baseRemota) return false;
@@ -605,7 +666,7 @@ window.Sync = {
     seccionActiva = seccion;
     if (!conectado()) return Promise.reject(new Error('sin-credenciales'));
 
-    return descargar().then(function(datos){
+    return descargarPara(seccion).then(function(datos){
       datos = datos || {};
       var candado = candadoDe(datos, seccion);
 
@@ -629,7 +690,7 @@ window.Sync = {
     });
   },
 
-  /** ¿Tiene contraseña puesta esta app? (necesita los datos ya descargados) */
+  /** Todo lo que necesita una app: su sección y los candados. */
   tieneCandado: function(datos, seccion){ return !!candadoDe(datos, seccion); },
 
   /** Pone o cambia la contraseña de una app. */
@@ -696,7 +757,7 @@ window.Sync = {
   comprobarActualizaciones: comprobarActualizaciones,
 
   /** Descarga el archivo completo, sin tocar localStorage. */
-  descargarTodo: descargar,
+  descargarTodo: descargarEntero,
 
   /**
    * Ajustes del escritorio, que no son de ninguna app: por ejemplo en

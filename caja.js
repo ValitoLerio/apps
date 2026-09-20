@@ -2193,7 +2193,7 @@ function verAnio(main){
 
   main.innerHTML=
     cabecera("Año "+ui.anio,
-      "Cómo ha ido cada mes y lo que se ha guardado en la amarilla.",
+      "Cómo ha ido cada mes y cuánto se quedó de más en la amarilla.",
       '<div class="campo"><label class="lbl" for="a_anio">Año</label><select id="a_anio">'+
         anios.map(function(a){ return '<option'+(a===ui.anio?" selected":"")+">"+a+"</option>"; }).join("")+
       '</select></div>')+
@@ -2203,11 +2203,9 @@ function verAnio(main){
       '<div class="cifra"><div class="k">Visa</div><div class="v">'+eur(total.visa)+'</div></div>'+
       '<div class="cifra"><div class="k">Efectivo</div><div class="v">'+eur(total.efectivo)+'</div></div>'+
       '<div class="cifra"><div class="k">Pagos</div><div class="v malo">'+eur(total.gastos)+'</div></div>'+
-      '<div class="cifra"><div class="k">C. amarilla</div><div class="v amarilla">'+
-        eur(cierreAnio?r2(+cierreAnio.aAmarilla||0):0)+'</div>'+
-        '<div class="n">'+(cierreAnio?"recuento del "+esc(dmy(cierreAnio.fecha)):"sin recuentos")+
-        '</div></div>'+
-      '<div class="cifra"><div class="k">Sobra amarilla</div><div class="v">'+eur(total.sobrante)+'</div></div>'+
+      '<div class="cifra"><div class="k">Sobró en la amarilla</div><div class="v">'+
+        eur(total.sobrante)+'</div>'+
+        '<div class="n">por encima de '+eur(objetivoAmarilla())+' en todo el año</div></div>'+
       '<div class="cifra"><div class="k">Media por día</div>'+
         '<div class="v">'+eur(total.dias>0?r2(total.ventas/total.dias):0)+'</div>'+
         '<div class="n">'+(mejorMes&&mejorMes.t.ventas>0?"mejor: "+MESES[+mejorMes.ym.split("-")[1]-1]:"")+'</div></div>'+
@@ -2222,7 +2220,7 @@ function verAnio(main){
   document.getElementById("tablaAnio").innerHTML=
     '<table><thead><tr><th>Mes</th><th class="num">Días</th><th class="num">Visa</th>'+
     '<th class="num">Efectivo</th><th class="num">Ventas</th><th class="num">Gastos</th>'+
-    '<th class="num">Amarilla al cierre</th><th style="width:130px"></th></tr></thead><tbody>'+
+    '<th class="num">Sobró</th><th style="width:130px"></th></tr></thead><tbody>'+
     porMes.map(function(p){
       var vacio=p.t.dias===0;
       return '<tr'+(vacio?' style="opacity:.45"':' style="cursor:pointer"')+' data-mes="'+p.ym+'">'+
@@ -2232,11 +2230,11 @@ function verAnio(main){
         '<td class="num">'+(vacio?"—":eur(p.t.efectivo))+"</td>"+
         '<td class="num"><strong>'+(vacio?"—":eur(p.t.ventas))+"</strong></td>"+
         '<td class="num">'+(vacio?"—":eur(p.t.gastos))+"</td>"+
-        /* Lo que había en la amarilla al acabar el mes, que es un
-           recuento. Antes aquí se sumaban los de todos sus días y salía
-           una cifra disparatada. */
-        '<td class="num" style="color:var(--amarilla)">'+
-          ((vacio||!p.cierre)?"—":eur(r2(+p.cierre.aAmarilla||0)))+"</td>"+
+        /* Lo que se quedó de más en la amarilla ese mes. El recuento
+           del cierre no dice nada aquí —es el mismo fondo de siempre—;
+           lo que interesa del mes es cuánto se guardó por encima. */
+        '<td class="num">'+
+          ((vacio||!p.t.sobrante)?"—":eur(p.t.sobrante))+"</td>"+
         '<td><div style="background:var(--sup2);border-radius:4px;height:7px;overflow:hidden">'+
           '<div style="background:var(--acento);height:100%;width:'+(p.t.ventas/maximo*100).toFixed(1)+'%"></div>'+
         "</div></td></tr>";
@@ -2244,8 +2242,7 @@ function verAnio(main){
     '</tbody><tfoot><tr><td>Total</td><td class="num">'+total.dias+'</td>'+
     '<td class="num">'+eur(total.visa)+'</td><td class="num">'+eur(total.efectivo)+'</td>'+
     '<td class="num">'+eur(total.ventas)+'</td><td class="num">'+eur(total.gastos)+'</td>'+
-    '<td class="num" style="color:var(--amarilla)">'+
-      (cierreAnio?eur(r2(+cierreAnio.aAmarilla||0)):"—")+'</td><td></td></tr></tfoot></table>';
+    '<td class="num">'+(total.sobrante?eur(total.sobrante):"—")+'</td><td></td></tr></tfoot></table>';
 
   document.querySelectorAll("#tablaAnio [data-mes]").forEach(function(tr){
     tr.addEventListener("click", function(){
