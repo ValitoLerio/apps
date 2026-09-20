@@ -471,44 +471,133 @@ function cabecera(titulo, texto, botones){
 }
 
 function barraDeEntrada(){
+  /* El botón es una etiqueta pegada al campo de archivos: así abre el
+     cuadro de elegir en todos los navegadores, también en el iPhone.
+     El campo no se esconde con display:none —hay navegadores que
+     entonces no lo abren—, se aparta de la vista y ya está. */
   return '<div class="filtros">'+
-      '<button class="btn fuerte" id="f_anadir">+ Añadir fotos</button>'+
+      '<label class="btn fuerte" for="f_archivos" style="cursor:pointer">+ Añadir fotos</label>'+
+      '<input type="file" id="f_archivos" accept="image/*" multiple '+
+        'style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">'+
+      '<label class="btn" for="f_carpetaHTML" style="cursor:pointer">📁 Una carpeta entera</label>'+
+      '<input type="file" id="f_carpetaHTML" webkitdirectory directory multiple '+
+        'style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">'+
       (hayCarpetas()
-        ? '<button class="btn" id="f_carpeta">📂 Añadir una carpeta</button>'+
+        ? '<button class="btn" id="f_carpeta">📂 Recordar una carpeta</button>'+
           (ui.carpetas.length
             ? '<button class="btn" id="f_releer">🔄 Volver a leer '+
               (ui.carpetas.length===1 ? '«'+esc(ui.carpetas[0].nombre)+'»'
                                       : plural(ui.carpetas.length,'carpeta','carpetas'))+'</button>'
             : '')
         : '')+
-      '<input type="file" id="f_archivos" accept="image/*" multiple style="display:none">'+
     '</div>'+
+    '<div class="nota" style="margin:-6px 0 12px">También puedes <strong>arrastrar</strong> '+
+      'fotos o una carpeta y soltarlas aquí.</div>'+
     '<div id="progreso" style="display:none">'+
       '<div class="progreso"><i></i></div>'+
       '<div class="nota" id="progreso-txt" style="margin:0 0 10px"></div>'+
     '</div>';
 }
 
+function tragarArchivos(archivos){
+  var lista = Array.prototype.slice.call(archivos || [])
+    .filter(function(a){ return esImagen(a.name); })
+    .map(function(a){ return {archivo:a, ruta:a.webkitRelativePath||a.name, carpeta:''}; });
+  if (!lista.length){ avisar('Ahí no venía ninguna foto.', true); return; }
+  meterArchivos(lista, function(r){
+    pintar();
+    avisar(plural(r.nuevas,'foto nueva','fotos nuevas')+' de '+r.total+
+           (r.sinVer?' · '+r.sinVer+' no se pueden ver aquí':''));
+  });
+}
+
 function engancharEntrada(){
   var inp = document.getElementById('f_archivos');
-  var bA  = document.getElementById('f_anadir');
+  var inpDir = document.getElementById('f_carpetaHTML');
   var bC  = document.getElementById('f_carpeta');
-  if (bA && inp) bA.addEventListener('click', function(){ inp.click(); });
+
   if (inp) inp.addEventListener('change', function(){
-    var lista = Array.prototype.slice.call(inp.files||[])
-      .filter(function(a){ return esImagen(a.name); })
-      .map(function(a){ return {archivo:a, ruta:a.webkitRelativePath||''}; });
-    inp.value='';
-    if (!lista.length){ avisar('Ahí no venía ninguna foto.', true); return; }
-    meterArchivos(lista, function(r){
-      pintar();
-      avisar(plural(r.nuevas,'foto nueva','fotos nuevas')+' de '+r.total+
-             (r.sinVer?' · '+r.sinVer+' no se pueden ver aquí':''));
-    });
+    var f = inp.files; inp.value='';
+    tragarArchivos(f);
   });
+  if (inpDir) inpDir.addEventListener('change', function(){
+    var f = inpDir.files; inpDir.value='';
+    tragarArchivos(f);
+  });
+  engancharArrastre();
   if (bC) bC.addEventListener('click', anadirCarpeta);
   var bR = document.getElementById('f_releer');
   if (bR) bR.addEventListener('click', leerTodasLasCarpetas);
+}
+
+/* Arrastrar desde el Finder y soltar en la página: lo más cómodo en el
+   ordenador, y admite carpetas enteras. */
+function engancharArrastre(){
+  var main = document.getElementById('main');
+  if (!main || main.dataset.arrastre) return;
+  main.dataset.arrastre = '1';
+
+  ['dragenter','dragover'].forEach(function(ev){
+    main.addEventListener(ev, function(e){
+      e.preventDefault();
+      main.style.outline = '3px dashed var(--acento)';
+      main.style.outlineOffset = '-8px';
+    });
+  });
+  ['dragleave','drop'].forEach(function(ev){
+    main.addEventListener(ev, function(){ main.style.outline = ''; });
+  });
+
+  main.addEventListener('drop', function(e){
+    e.preventDefault();
+    var saco = [];
+    var items = e.dataTransfer.items;
+    if (items && items.length && items[0].webkitGetAsEntry){
+      var pendientes = 0, acabado = false;
+      function quizaListo(){
+        if (acabado && pendientes === 0){
+          if (!saco.length){ avisar('Ahí no venía ninguna foto.', true); return; }
+          meterArchivos(saco, function(r){
+            pintar();
+            avisar(plural(r.nuevas,'foto nueva','fotos nuevas')+' de '+r.total+
+                   (r.sinVer?' · '+r.sinVer+' no se pueden ver aquí':''));
+          });
+        }
+      }
+      function meterEntrada(entrada, ruta){
+        if (!entrada) return;
+        if (entrada.isFile){
+          pendientes++;
+          entrada.file(function(archivo){
+            if (esImagen(archivo.name)) saco.push({archivo:archivo, ruta:ruta+archivo.name, carpeta:''});
+            pendientes--; quizaListo();
+          }, function(){ pendientes--; quizaListo(); });
+        } else if (entrada.isDirectory){
+          pendientes++;
+          var lector = entrada.createReader();
+          (function leerTanda(){
+            lector.readEntries(function(hijos){
+              if (!hijos.length){ pendientes--; quizaListo(); return; }
+              hijos.forEach(function(h){ meterEntrada(h, ruta+entrada.name+'/'); });
+              leerTanda();
+            }, function(){ pendientes--; quizaListo(); });
+          })();
+        }
+      }
+      var hubo = false;
+      for (var i=0;i<items.length;i++){
+        var en = items[i].webkitGetAsEntry();
+        if (en){ hubo = true; meterEntrada(en, ''); }
+      }
+      if (hubo){
+        acabado = true;
+        quizaListo();
+        return;
+      }
+      /* Sin entradas: se tira de la lista de archivos de toda la vida */
+    }
+    tragarArchivos(e.dataTransfer.files);
+  });
 }
 
 /* ── Las que salen con los filtros puestos ───────────────────────── */
