@@ -492,7 +492,8 @@ function barraDeEntrada(){
         : '')+
     '</div>'+
     '<div class="nota" style="margin:-6px 0 12px">También puedes <strong>arrastrar</strong> '+
-      'fotos o una carpeta y soltarlas aquí.</div>'+
+      'fotos o una carpeta y soltarlas aquí. Desde la app <strong>Fotos</strong> del Mac, '+
+      'cópialas (⌘C) y <strong>pégalas aquí con ⌘V</strong>: es lo que mejor funciona.</div>'+
     '<div id="progreso" style="display:none">'+
       '<div class="progreso"><i></i></div>'+
       '<div class="nota" id="progreso-txt" style="margin:0 0 10px"></div>'+
@@ -525,6 +526,7 @@ function engancharEntrada(){
     tragarArchivos(f);
   });
   engancharArrastre();
+  engancharPegar();
   if (bC) bC.addEventListener('click', anadirCarpeta);
   var bR = document.getElementById('f_releer');
   if (bR) bR.addEventListener('click', leerTodasLasCarpetas);
@@ -595,8 +597,59 @@ function engancharArrastre(){
         return;
       }
       /* Sin entradas: se tira de la lista de archivos de toda la vida */
+      if (!(e.dataTransfer.files && e.dataTransfer.files.length)){
+        desdeDireccion(e.dataTransfer);
+        return;
+      }
     }
-    tragarArchivos(e.dataTransfer.files);
+    if (e.dataTransfer.files && e.dataTransfer.files.length) tragarArchivos(e.dataTransfer.files);
+    else desdeDireccion(e.dataTransfer);
+  });
+}
+
+/* La app Fotos del Mac no siempre suelta el archivo: a veces sólo manda
+   una dirección. Si es de internet se puede traer; si es del propio
+   ordenador, el navegador no la deja abrir y hay que decirlo claro. */
+function desdeDireccion(dt){
+  var url = '';
+  try { url = dt.getData('text/uri-list') || dt.getData('text/plain') || ''; } catch(e){}
+  url = String(url).split('\n')[0].trim();
+
+  if (/^https?:\/\//i.test(url)){
+    var nombre = decodeURIComponent(url.split('/').pop().split('?')[0]) || 'foto.jpg';
+    var x = new XMLHttpRequest();
+    x.open('GET', url); x.responseType = 'blob';
+    x.onload = function(){
+      if (x.status >= 200 && x.status < 300){
+        tragarArchivos([new File([x.response], nombre, {type:x.response.type||'image/jpeg'})]);
+      } else avisar('No he podido traer esa foto.', true);
+    };
+    x.onerror = function(){ avisar('No he podido traer esa foto.', true); };
+    x.send();
+    return;
+  }
+  avisar('Desde la app Fotos no llega el archivo. Cópiala y pégala aquí con ⌘V, '+
+         'o sácala antes al Escritorio.', true);
+}
+
+/* Copiar en la app Fotos y pegar aquí: es el camino que nunca falla */
+function engancharPegar(){
+  if (window.__pegarPuesto) return;
+  window.__pegarPuesto = true;
+  document.addEventListener('paste', function(e){
+    var datos = e.clipboardData;
+    if (!datos) return;
+    var saco = [];
+    for (var i=0;i<datos.items.length;i++){
+      var it = datos.items[i];
+      if (it.kind === 'file' && /^image\//.test(it.type)){
+        var a = it.getAsFile();
+        if (a) saco.push(a.name ? a : new File([a], 'pegada-'+Date.now()+'.png', {type:a.type}));
+      }
+    }
+    if (!saco.length) return;
+    e.preventDefault();
+    tragarArchivos(saco);
   });
 }
 
