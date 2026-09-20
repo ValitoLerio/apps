@@ -418,6 +418,12 @@ function soloEsto(id){
   if (b && b.scrollIntoView) b.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
+/* Por si el arranque falla en otro sitio: cuando la pagina esta lista,
+   la barra se pone igual. */
+document.addEventListener('DOMContentLoaded', function(){
+  setTimeout(function(){ try { montarBarraBloques(); } catch(e){} }, 1200);
+});
+
 function montarBarraBloques(){
   if (document.getElementById('barra-bloques')) return;
   var ancla = document.getElementById('mnav');
@@ -446,8 +452,11 @@ function renderAll() {
   // Sync hours year selector
   var hyr = document.getElementById('hours-year-sel');
   if (hyr) hyr.value = curY;
-  renderNav(); renderTable(); renderStats(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
+  /* La barra de bloques, lo primero: así sale aunque algo de abajo
+     falle al pintarse. */
   montarBarraBloques();
+  renderNav(); renderTable(); renderStats(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
+  BLOQUES.forEach(function(b){ aplicarPlegado(b.id); });
   pegarCabeceras();
 }
 
