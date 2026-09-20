@@ -20,6 +20,7 @@
     --pedidos:#b0c96b; --pedidos-tenue:#242b1499;
     --vacaciones:#e59ad0; --vacaciones-tenue:#2e162699;
     --recetas:#f0a48c; --recetas-tenue:#33191299;
+    --fotos:#8cc0e6; --fotos-tenue:#14252f99;
     --alerta:#ef8a76; --alerta-tenue:#331a16;
     --display:'Fraunces',Georgia,serif;
     --texto:'Archivo','Helvetica Neue',sans-serif;
@@ -41,6 +42,7 @@
     --pedidos:#4f6321; --pedidos-tenue:#e8eed7;
     --vacaciones:#8e3070; --vacaciones-tenue:#f6e6f1;
     --recetas:#a8442c; --recetas-tenue:#f7e6e0;
+    --fotos:#2f5d7a; --fotos-tenue:#e2ecf3;
       --alerta:#96331f; --alerta-tenue:#f7e2de;
       --sombra:0 16px 34px -26px rgba(15,22,24,.5);
     }
@@ -169,6 +171,7 @@
   .p-pedidos{--tono:var(--pedidos)}
   .p-vacaciones{--tono:var(--vacaciones)}
   .p-recetas{--tono:var(--recetas)}
+  .p-fotos{--tono:var(--fotos)}
 
   /* ── Colocar: mover las tarjetas a donde te parezca ───────────── */
   .colocando .puerta{cursor:default}
@@ -510,6 +513,22 @@
         <div class="entrar">Abrir <span class="flecha">&rarr;</span></div>
       </a>
 
+      <a class="puerta p-fotos" data-app="fotos" href="fotos.html">
+        <span class="rotulo">Casa</span>
+        <h2>Fotos</h2>
+        <p class="que">El álbum: las fotos se quedan en su carpeta y aquí va su ficha, ordenadas por álbum y por año.</p>
+        <div class="cifra">
+          <span class="n" id="d-fot-total">&mdash;</span>
+          <span class="u">fotos apuntadas</span>
+        </div>
+        <div class="tira">
+          <div class="celda"><span class="k">Álbumes</span><span class="v" id="d-fot-alb">—</span></div>
+          <div class="celda"><span class="k">Favoritas</span><span class="v" id="d-fot-fav">—</span></div>
+          <div class="celda"><span class="k">Último año</span><span class="v" id="d-fot-anio">—</span></div>
+        </div>
+        <div class="entrar">Abrir <span class="flecha">&rarr;</span></div>
+      </a>
+
       <a class="puerta p-patrimonio" data-app="patrimonio" href="patrimonio.html">
         <span class="rotulo">Patrimonio</span>
         <h2>Lo que tengo</h2>
@@ -550,7 +569,7 @@
 
 </div>
 
-<script src="sync.js?v=202609201031"></script>
+<script src="sync.js?v=202609201105"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
@@ -859,11 +878,11 @@
   var TARJETAS = {piso:'.p-piso', horario:'.p-resto', comanda:'.p-comanda',
                   casa:'.p-casa', caja:'.p-caja',
                   patrimonio:'.p-patrimonio', pedidos:'.p-pedidos',
-                  vacaciones:'.p-vacaciones', recetas:'.p-recetas'};
+                  vacaciones:'.p-vacaciones', recetas:'.p-recetas', fotos:'.p-fotos'};
   var NOMBRES  = {piso:'Piso Soldeu', horario:'Horario Restaurante',
                   comanda:'Comanda', casa:'Casa', caja:'Caja',
                   patrimonio:'Patrimonio', pedidos:'Pedidos',
-                  vacaciones:'Vacaciones', recetas:'Recetas'};
+                  vacaciones:'Vacaciones', recetas:'Recetas', fotos:'Fotos'};
   var seguridad = {};
 
   function pintarCandados(){
@@ -897,7 +916,8 @@
       patrimonio: ['d-pat-neto','d-pat-valor','d-pat-deuda','d-pat-plus'],
       pedidos: ['d-ped-productos','d-ped-pedido','d-ped-prov','d-ped-viejos'],
       vacaciones: ['d-vac-total','d-vac-gente','d-vac-gastos','d-vac-cuadre'],
-      recetas: ['d-rec-total','d-rec-hoy','d-rec-1','d-rec-2']
+      recetas: ['d-rec-total','d-rec-hoy','d-rec-1','d-rec-2'],
+      fotos:   ['d-fot-total','d-fot-alb','d-fot-fav','d-fot-anio']
     }[sec] || [];
     ids.forEach(function(id){ pon(id, '···'); });
   }
@@ -1213,6 +1233,23 @@
     pon('d-rec-2',     String(recetas.filter(function(r){ return r.tipo === 'segundo'; }).length));
   }
 
+  function resumenFotos(seccion){
+    var libro = leer(seccion['fotos.libro.v1'], {});
+    var fotos = libro.fotos || [];
+    var albumes = libro.albumes || [];
+    var anios = {};
+    fotos.forEach(function(f){
+      var a = (f.fecha || '').slice(0,4);
+      if (a) anios[a] = (anios[a] || 0) + 1;
+    });
+    var ultimo = Object.keys(anios).sort().pop();
+
+    pon('d-fot-total', String(fotos.length));
+    pon('d-fot-alb',   albumes.length ? String(albumes.length) : 'ninguno');
+    pon('d-fot-fav',   String(fotos.filter(function(f){ return f.fav; }).length));
+    pon('d-fot-anio',  ultimo ? ultimo + ' · ' + anios[ultimo] : '—');
+  }
+
   function pintarResumen(){
     return Sync.descargarTodo().then(function(datos){
       datos = datos || {};
@@ -1221,7 +1258,8 @@
                    comanda: !!seg.comanda, casa: !!seg.casa, caja: !!seg.caja,
                    patrimonio: !!seg.patrimonio,
                    pedidos: !!seg.pedidos,
-                   vacaciones: !!seg.vacaciones, recetas: !!seg.recetas};
+                   vacaciones: !!seg.vacaciones, recetas: !!seg.recetas,
+                   fotos: !!seg.fotos};
       resumenPiso(datos.piso || {});
       resumenHorario(datos.horario || {});
       resumenComanda(datos.comanda || {});
@@ -1231,6 +1269,7 @@
       resumenPedidos(datos.pedidos || {});
       resumenVacaciones(datos.vacaciones || {});
       resumenRecetas(datos.recetas || {});
+      resumenFotos(datos.fotos || {});
       Object.keys(seguridad).forEach(function(sec){ if (seguridad[sec]) ocultarCifras(sec); });
       pintarCandados();
       aplicarOrden((datos.escritorio || {}).orden);

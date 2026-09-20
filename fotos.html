@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es" data-app="recetas">
+<html lang="es" data-app="fotos">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Recetas</title>
+<title>Fotos</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -12,7 +12,7 @@
   --fondo:#efebe7; --sup:#fdfbf9; --sup2:#f4efea;
   --linea:#ded3ca; --linea-suave:#e9e1da;
   --tinta:#1a1411; --tinta2:#4c403a; --muted:#6e6058;
-  --acento:#a8442c; --acento-tinta:#fff; --acento-suave:#f7e6e0; --acento-linea:#e5c5b9;
+  --acento:#2f5d7a; --acento-tinta:#fff; --acento-suave:#e2ecf3; --acento-linea:#bcd2e0;
   --ok:#3f6b46; --ok-suave:#e0ece1;
   --aviso:#8a5310; --aviso-suave:#f6e9d6;
   --malo:#96331f; --malo-suave:#f7e2de;
@@ -27,7 +27,7 @@
     --fondo:#171210; --sup:#1f1917; --sup2:#29211e;
     --linea:#342a26; --linea-suave:#26201d;
     --tinta:#f3ede9; --tinta2:#cdc2bb; --muted:#9a8c84;
-    --acento:#f0a48c; --acento-tinta:#2a1009; --acento-suave:#331a13; --acento-linea:#4d2a20;
+    --acento:#8cc0e6; --acento-tinta:#0b1c28; --acento-suave:#14252f; --acento-linea:#1f3a4a;
     --ok:#8fc39a; --ok-suave:#1b2a1e;
     --aviso:#e0b168; --aviso-suave:#2f2617;
     --malo:#ef8a76; --malo-suave:#33201c;
@@ -38,7 +38,7 @@
   --fondo:#171210; --sup:#1f1917; --sup2:#29211e;
   --linea:#342a26; --linea-suave:#26201d;
   --tinta:#f3ede9; --tinta2:#cdc2bb; --muted:#9a8c84;
-  --acento:#f0a48c; --acento-tinta:#2a1009; --acento-suave:#331a13; --acento-linea:#4d2a20;
+  --acento:#8cc0e6; --acento-tinta:#0b1c28; --acento-suave:#14252f; --acento-linea:#1f3a4a;
   --ok:#8fc39a; --ok-suave:#1b2a1e;
   --aviso:#e0b168; --aviso-suave:#2f2617;
   --malo:#ef8a76; --malo-suave:#33201c;
@@ -227,31 +227,77 @@ dialog::backdrop{background:rgba(20,14,11,.55)}
   .pie-rail{margin:0 0 0 auto;border:0;padding:0;flex-direction:row;gap:12px;align-items:center}
   main{padding:16px 13px 70px}
 }
+
+/* ── Álbum de fotos ───────────────────────────────────────────────── */
+.rejaFotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--miniatura,150px),1fr));
+           gap:7px}
+.mini{position:relative;aspect-ratio:1;background:var(--sup2);border:1px solid var(--linea-suave);
+      border-radius:8px;overflow:hidden;cursor:pointer;padding:0}
+.mini img{width:100%;height:100%;object-fit:cover;display:block;opacity:0;transition:opacity .18s}
+.mini img.puesta{opacity:1}
+.mini .sinver{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+              flex-direction:column;gap:4px;color:var(--muted);font-size:11px;text-align:center;padding:6px}
+.mini .fav{position:absolute;top:5px;right:6px;font-size:13px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
+.mini .marca{position:absolute;top:5px;left:6px;width:18px;height:18px;border-radius:50%;
+             border:2px solid #fff;background:rgba(0,0,0,.25);box-shadow:0 1px 3px rgba(0,0,0,.4);
+             opacity:0;transition:opacity .15s}
+.mini:hover .marca,.mini[aria-pressed="true"] .marca,.rejaFotos.marcando .marca{opacity:1}
+.mini[aria-pressed="true"]{outline:3px solid var(--acento);outline-offset:-3px}
+.mini[aria-pressed="true"] .marca{background:var(--acento);border-color:#fff}
+.mini .pieMini{position:absolute;left:0;right:0;bottom:0;padding:14px 7px 5px;font-size:10.5px;
+               color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.62));
+               white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.visor{position:fixed;inset:0;background:#0d0b0a;z-index:90;display:flex;flex-direction:column}
+.visor .lienzo{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+.visor img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+.visor .barraV{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#151110;
+               color:#f0ece9;flex-wrap:wrap}
+.visor .barraV .nom{font-family:var(--titulo);font-size:16px;margin-right:auto;min-width:0;
+                    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.visor .flecha{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.4);
+               color:#fff;border:0;font-size:26px;padding:14px 12px;cursor:pointer;border-radius:8px}
+.visor .flecha.izq{left:10px} .visor .flecha.der{right:10px}
+.visor .fichaV{background:#151110;color:#e8e2de;padding:12px 14px;display:grid;
+               grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;
+               border-top:1px solid #2a2320;max-height:38vh;overflow:auto}
+.visor .fichaV input,.visor .fichaV select{background:#1f1917;border-color:#322925;color:#f0ece9}
+
+.barraSel{position:sticky;bottom:0;z-index:20;background:var(--sup);border:1px solid var(--linea);
+          border-radius:10px;box-shadow:var(--sombra);padding:10px 14px;display:flex;gap:9px;
+          align-items:center;flex-wrap:wrap;margin-top:14px}
+
+.progreso{height:6px;background:var(--sup2);border-radius:4px;overflow:hidden;margin:8px 0}
+.progreso i{display:block;height:100%;background:var(--acento);width:0;transition:width .2s}
+.vacio{background:var(--sup);border:1px dashed var(--linea);border-radius:var(--radio);
+       padding:34px 22px;text-align:center;color:var(--muted);font-size:13px}
+.vacio strong{display:block;font-family:var(--titulo);font-size:17px;color:var(--tinta);
+              margin-bottom:5px;font-weight:600}
 </style>
 </head>
 <body>
 
 <div id="cargando">
-  <div class="msg">Abriendo el recetario…</div>
+  <div class="msg">Abriendo el álbum…</div>
   <div class="sub" id="cargando-sub">Descargando tus datos del repositorio privado.</div>
 </div>
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609201105"></script>
+<script src="sync.js?v=1"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
   var sub  = document.getElementById('cargando-sub');
 
-  Sync.iniciar('recetas').then(function(){
+  Sync.iniciar('fotos').then(function(){
     var s = document.createElement('script');
-    s.src = 'recetas.js?v=202609201105';
+    s.src = 'fotos.js?v=1';
     s.onload = function(){ capa.remove(); };
-    s.onerror = function(){ sub.textContent = 'No se pudo cargar recetas.js. Recarga la pagina.'; };
+    s.onerror = function(){ sub.textContent = 'No se pudo cargar fotos.js. Recarga la pagina.'; };
     document.body.appendChild(s);
   }).catch(function(err){
-    if (err.message === 'sin-credenciales') { location.href = 'index.html?volver=recetas.html'; return; }
+    if (err.message === 'sin-credenciales') { location.href = 'index.html?volver=fotos.html'; return; }
     capa.querySelector('.msg').textContent = 'No he podido cargar tus datos';
     sub.innerHTML = err.message + '<br><br><a href="index.html">Volver al escritorio</a>';
   });

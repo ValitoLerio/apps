@@ -44,7 +44,8 @@ var SECCIONES = {
   patrimonio: ['patrimonio.libro.v1'],
   pedidos: ['pedidos.libro.v1'],
   vacaciones: ['vacaciones.libro.v1'],
-  recetas: ['recetas.libro.v1']
+  recetas: ['recetas.libro.v1'],
+  fotos:   ['fotos.libro.v1']
 };
 
 var seccionActiva = null;
