@@ -166,6 +166,17 @@
   #cargando .msg{font-family:'Playfair Display',serif;color:var(--gold2);font-size:1.05rem}
   #cargando .sub{font-size:.8rem;color:var(--text2);max-width:34ch;line-height:1.5}
   #cargando a{color:var(--gold);font-size:.82rem}
+
+  /* Bloques que se abren y se cierran desde la barra de arriba */
+  #barra-bloques{display:flex;gap:6px;flex-wrap:wrap;padding:7px 14px;background:var(--surface);
+    border-bottom:1px solid var(--border);position:sticky;top:0;z-index:40}
+  .plg-chip{background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.28);color:var(--gold2);
+    border-radius:999px;padding:4px 11px;font-size:.74rem;font-family:'DM Sans',sans-serif;
+    cursor:pointer;white-space:nowrap;user-select:none}
+  .plg-chip[aria-pressed="false"]{opacity:.5;background:transparent}
+  .plg-chip .plg-fl{opacity:.7;font-size:.7rem}
+  .plegado > *:nth-child(n+2){display:none}
+  .plegado{padding-bottom:0 !important}
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="comun.css?v=202608281120">
@@ -485,7 +496,7 @@
 
 
 
-<script src="sync.js?v=202609191250"></script>
+<script src="sync.js?v=202609201001"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -493,7 +504,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609191250';
+    s.src = 'horario.js?v=202609201001';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

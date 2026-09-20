@@ -360,6 +360,86 @@ function ponerChapa(id, texto) {
   if (el) el.textContent = texto;
 }
 
+
+/* ── Abrir y cerrar los bloques ───────────────────────────────────────
+   La pagina es larga: el cuadrante, la cobertura, las horas, las
+   ausencias y las vacaciones, uno debajo de otro. Con esto se pliegan
+   desde una barra de arriba y se deja abierto solo lo que se esta
+   mirando, sin subir y bajar todo el rato. Cada uno recuerda como se
+   dejo en este aparato. */
+var BLOQUES = [
+  {id:'sarea',              nom:'Cuadrante',  ico:'📅'},
+  {id:'cov',                nom:'Cobertura',  ico:'👥'},
+  {id:'hours-section',      nom:'Horas',      ico:'🕒'},
+  {id:'ausencias-section',  nom:'Ausencias',  ico:'🏖️'},
+  {id:'vac-section',        nom:'Vacaciones', ico:'📝'}
+];
+var plegados = {};
+
+function cargarPlegados(){
+  try { var d = localStorage.getItem('rplg'); if (d) plegados = JSON.parse(d) || {}; }
+  catch(e){ plegados = {}; }
+}
+function guardarPlegados(){
+  try { localStorage.setItem('rplg', JSON.stringify(plegados)); } catch(e){}
+}
+
+function aplicarPlegado(id){
+  var bloque = document.getElementById(id);
+  if (!bloque) return;
+  var cerrado = !!plegados[id];
+  /* El cuadrante no tiene cabecera propia: se esconde entero */
+  if (id === 'sarea') bloque.style.display = cerrado ? 'none' : '';
+  else bloque.classList.toggle('plegado', cerrado);
+
+  var chip = document.getElementById('plg-' + id);
+  if (chip) {
+    chip.setAttribute('aria-pressed', String(!cerrado));
+    chip.querySelector('.plg-fl').textContent = cerrado ? '▸' : '▾';
+  }
+}
+
+function plegar(id){
+  plegados[id] = !plegados[id];
+  guardarPlegados();
+  aplicarPlegado(id);
+  /* Al abrir uno, ponerlo a la vista sin tener que buscarlo */
+  if (!plegados[id]) {
+    var b = document.getElementById(id);
+    if (b && b.scrollIntoView) b.scrollIntoView({behavior:'smooth', block:'start'});
+  }
+}
+
+function soloEsto(id){
+  BLOQUES.forEach(function(b){ plegados[b.id] = (b.id !== id); });
+  guardarPlegados();
+  BLOQUES.forEach(function(b){ aplicarPlegado(b.id); });
+  var b = document.getElementById(id);
+  if (b && b.scrollIntoView) b.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function montarBarraBloques(){
+  if (document.getElementById('barra-bloques')) return;
+  var ancla = document.getElementById('mnav');
+  if (!ancla) return;
+  cargarPlegados();
+
+  var barra = document.createElement('div');
+  barra.id = 'barra-bloques';
+  barra.innerHTML = BLOQUES.map(function(b){
+    return '<button class="plg-chip" id="plg-'+b.id+'" data-bloque="'+b.id+'" '+
+           'title="Abrir o cerrar &middot; con doble clic, solo este">'+
+           b.ico+' '+b.nom+' <span class="plg-fl">▾</span></button>';
+  }).join('');
+  ancla.parentNode.insertBefore(barra, ancla.nextSibling);
+
+  barra.querySelectorAll('[data-bloque]').forEach(function(ch){
+    ch.addEventListener('click', function(){ plegar(ch.dataset.bloque); });
+    ch.addEventListener('dblclick', function(e){ e.preventDefault(); soloEsto(ch.dataset.bloque); });
+  });
+  BLOQUES.forEach(function(b){ aplicarPlegado(b.id); });
+}
+
 function renderAll() {
   var yr = document.getElementById('yr');
   if (yr) curY = parseInt(yr.value);
@@ -367,6 +447,7 @@ function renderAll() {
   var hyr = document.getElementById('hours-year-sel');
   if (hyr) hyr.value = curY;
   renderNav(); renderTable(); renderStats(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
+  montarBarraBloques();
   pegarCabeceras();
 }
 
