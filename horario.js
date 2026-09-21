@@ -1350,78 +1350,6 @@ function renderCov() {
 // ================================================================
 // POPUP
 // ================================================================
-/* ── Las horas de un toque ────────────────────────────────────────────
-   Aquí los turnos son a hora en punto: de 252 horas anotadas, 248 lo
-   están. Escribir «07:00» en el teléfono para eso es perder el tiempo,
-   así que salen botones con las horas que él más usa —sacadas de su
-   propio cuadrante— y con un toque queda puesta. Quien quiera media
-   hora, la sigue escribiendo en el campo de siempre. */
-function horasMasUsadas(cuales){
-  var cuenta = {};
-  function mirar(o){
-    if (!o) return;
-    if (Array.isArray(o)) { o.forEach(mirar); return; }
-    if (typeof o === 'object'){
-      Object.keys(o).forEach(function(k){
-        var v = o[k];
-        if (cuales.indexOf(k) >= 0 && typeof v === 'string' && /^\d\d:\d\d$/.test(v)){
-          if (v.slice(3) === '00') cuenta[v] = (cuenta[v]||0)+1;
-        } else mirar(v);
-      });
-    }
-  }
-  mirar(sched);
-  var lista = Object.keys(cuenta).sort(function(a,b){ return cuenta[b]-cuenta[a]; }).slice(0,7);
-  if (lista.length < 4){
-    /* Sin cuadrante todavía: las de un restaurante de toda la vida */
-    lista = cuales[0] === 'inicio' ? ['07:00','08:00','09:00','13:00','16:00','17:00','20:00']
-                                   : ['15:00','16:00','17:00','22:00','23:00','00:00','01:00'];
-  }
-  return lista.sort();
-}
-
-/* La salida puesta a mano manda sobre la automática */
-function finAMano(){
-  var pop = document.getElementById('popup');
-  if (pop) pop._finManual = true;
-  if (typeof calcFin === 'function') calcFin();
-}
-
-function pintarAtajosHora(){
-  var caja = document.getElementById('atajos-hora');
-  if (!caja) return;
-  function fila(etiqueta, campo, horas){
-    return '<div class="hfila"><span class="het">'+etiqueta+'</span>'+
-      horas.map(function(h){
-        return '<button type="button" class="hchip" data-hora="'+h+'" data-campo="'+campo+'">'+
-               h.slice(0,2)+'</button>';
-      }).join('')+'</div>';
-  }
-  caja.innerHTML = fila('Entrada', 'ini', horasMasUsadas(['inicio','inicio2'])) +
-                   fila('Salida',  'fin', horasMasUsadas(['fin','fin2']));
-
-  caja.querySelectorAll('[data-hora]').forEach(function(b){
-    b.addEventListener('click', function(){
-      var campo = b.dataset.campo;
-      /* Con el turno partido abierto y la segunda parte a medias, la hora
-         va a la segunda: es donde está mirando. */
-      var partido = document.getElementById('partido-row');
-      if (partido && partido.style.display !== 'none'){
-        var seg = document.getElementById(campo+'2');
-        var uno = document.getElementById(campo);
-        if (uno && uno.value && seg && !seg.value) campo = campo+'2';
-      }
-      var el = document.getElementById(campo);
-      if (!el) return;
-      el.value = b.dataset.hora;
-      var pop = document.getElementById('popup');
-      if (pop && campo.indexOf('fin') === 0) pop._finManual = true;   /* la elige él */
-      if (pop && campo === 'ini') pop._finManual = false;             /* vuelve la automática */
-      if (typeof calcFin === 'function') calcFin();
-    });
-  });
-}
-
 function openCell(sid, day, event, mo, yr) {
   event.stopPropagation();
   var savedM = curM, savedY = curY;
@@ -1465,11 +1393,6 @@ function openCell(sid, day, event, mo, yr) {
       var i2 = document.getElementById('ini2'); if (i2) i2.value = cell&&cell.inicio2?cell.inicio2:'';
       var f2 = document.getElementById('fin2'); if (f2) f2.value = cell&&cell.fin2?cell.fin2:'';
       togglePartido(esPartido(cell));
-      /* Si el turno guardado no cuadra con la jornada, es que la salida
-         se puso a mano: se respeta al volver a abrirlo. */
-      if (pop) pop._finManual = !!(cell && cell.inicio && cell.fin &&
-        Math.abs(minutosDe(cell.inicio, cell.fin)/60 - tgtH(sid)) > 0.01);
-      pintarAtajosHora();
       var nota = document.getElementById('nota'); if (nota) nota.value = cell&&cell.nota?cell.nota:'';
       var hl = document.getElementById('hl');
       if (cell&&cell.inicio) calcFin(); else if (hl) hl.textContent = 'Introduce la hora de entrada';
@@ -1504,16 +1427,13 @@ function calcFin() {
   var v = ini.value; if (!v) return;
   var pop = document.getElementById('popup');
   var partido = !!(pop && pop._partido);
-  /* Si la salida la ha puesto él, no se toca: la automática es una ayuda,
-     no una imposición. */
-  var finAMano = !!(pop && pop._finManual);
   var h = tgtH(active.sid);
   var felm = document.getElementById('fin');
   var fs;
   /* Con turno partido la salida no se puede adivinar: el primer tramo no
      dura la jornada entera. Se escriben los dos a mano y aqui se dice lo
      que suman contra las horas que tocan. */
-  if (partido || (finAMano && felm && felm.value)) {
+  if (partido) {
     fs = felm ? felm.value : '';
   } else {
     var p = v.split(':');
@@ -1534,14 +1454,7 @@ function calcFin() {
                    ' - partido: '+fmtH(v)+'-'+fmtH(fs)+
                    (i2&&f2 ? ' y '+fmtH(i2)+'-'+fmtH(f2) : ' y falta el segundo tramo');
   } else {
-    /* Las horas que salen de verdad del turno escrito. Si no son las que
-       tocan, se dice: «8h (tocan 9h)», que es lo que hay que ver antes
-       de guardarlo. */
-    var reales = Math.round((minutosDe(v, fs)/60)*10)/10;
-    var cuadra = Math.abs(reales - h) < 0.01;
-    hl.innerHTML = '<span style="color:var(--gold2);font-weight:600">'+reales+'h</span>'+
-      (cuadra ? '' : ' <span style="color:var(--text2)">(tocan '+h+'h)</span>')+
-      ' - '+rl+' - '+(curS==='verano'?'Verano':'Invierno')+' - '+fmtH(v)+' a '+fmtH(fs);
+    hl.innerHTML = '<span style="color:var(--gold2);font-weight:600">'+h+'h</span> - '+rl+' - '+(curS==='verano'?'Verano':'Invierno')+' - '+fmtH(v)+' to '+fmtH(fs);
   }
 }
 
