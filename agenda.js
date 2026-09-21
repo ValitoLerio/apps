@@ -652,7 +652,12 @@ function leerLinea(linea, ambito){
             valor:numeros.join(' / '), usuario:'', sitio:'', notas:''};
   }
 
-  /* Lo que queda es una contraseña: nombre, usuario si viene, y el dato */
+  /* Lo que queda es una contraseña: nombre, usuario si viene, y el dato.
+     Si la línea empieza por «correo», «clave» o «usuario», eso no es un
+     nombre: es una etiqueta, y se descarta. */
+  var GENERICO = /^(correo|e?-?mail|clave|contrase\w*|usuario|user|pass\w*|pin)$/i;
+  var utiles = partes.filter(function(x){ return !GENERICO.test(x.trim()); });
+  if(utiles.length >= 2) partes = utiles;
   var nombre = partes[0] || t;
   var usuario = partes.length >= 3 ? partes[1] : '';
   var valor = partes.length >= 3 ? partes.slice(2).join(' ')
@@ -692,9 +697,12 @@ function pegarLista(){
       });
       if(!buenos.length){ avisar('No hay nada que apuntar.', true); return true; }
       /* cada fila puede haber cambiado de tipo a mano */
-      buenos.forEach(function(x, i){
-        var sel = document.getElementById('pg_tipo_'+leidos.indexOf(x));
+      buenos.forEach(function(x){
+        var i = leidos.indexOf(x);
+        var sel = document.getElementById('pg_tipo_'+i);
         if(sel) x.tipo = sel.value;
+        var nom = document.getElementById('pg_nom_'+i);
+        if(nom && nom.value.trim()) x.nombre = nom.value.trim();
       });
       var claves = buenos.filter(function(x){ return x.tipo==='clave'; });
 
@@ -727,8 +735,9 @@ function pegarLista(){
       leidos.map(function(x, i){
         return '<tr><td style="width:26px"><input type="checkbox" id="pg_si_'+i+'" checked '+
             'style="width:auto"></td>'+
-          '<td><strong>'+esc(x.nombre)+'</strong>'+
-            (x.usuario?'<div class="nota" style="margin:0">usuario: '+esc(x.usuario)+'</div>':'')+
+          '<td><input id="pg_nom_'+i+'" value="'+esc(x.nombre)+'" '+
+              'style="padding:3px 6px;font-size:12.5px;font-weight:600" autocomplete="off">'+
+            (x.usuario?'<div class="nota" style="margin:2px 0 0">usuario: '+esc(x.usuario)+'</div>':'')+
             '</td>'+
           '<td style="width:108px"><select id="pg_tipo_'+i+'" style="padding:3px 5px;font-size:12px">'+
             ORDEN_TIPOS.map(function(t){
