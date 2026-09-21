@@ -84,7 +84,7 @@ function abrirVentana(titulo, cuerpoHTML, alGuardar, opciones){
   opciones = opciones || {};
   var d=document.createElement('dialog');
   d.style.cssText='border:1px solid var(--linea);border-radius:12px;background:var(--sup);'+
-    'color:var(--tinta);padding:0;max-width:min(520px,94vw);width:100%;box-shadow:var(--sombra)';
+    'color:var(--tinta);padding:0;max-width:min(680px,96vw);width:100%;box-shadow:var(--sombra)';
   d.innerHTML =
     '<form method="dialog" style="margin:0">'+
       '<div style="padding:14px 18px;border-bottom:1px solid var(--linea-suave);'+
@@ -767,7 +767,8 @@ function pegarLista(){
     if(!leidos.length){ vista.innerHTML = ''; return; }
     vista.innerHTML =
       '<div class="lbl" style="margin:0 0 6px">Así queda ('+plural(leidos.length,'línea','líneas')+')</div>'+
-      '<div class="tabla-caja" style="max-height:34vh;overflow:auto"><table><tbody>'+
+      '<div class="tabla-caja" style="max-height:34vh;overflow:auto">'+
+      '<table style="min-width:480px"><tbody>'+
       leidos.map(function(x, i){
         return '<tr><td style="width:26px"><input type="checkbox" id="pg_si_'+i+'" checked '+
             'style="width:auto"></td>'+
@@ -780,7 +781,7 @@ function pegarLista(){
               return '<option value="'+t+'"'+(x.tipo===t?' selected':'')+'>'+
                      TIPOS[t].icono+' '+TIPOS[t].nombre+'</option>'; }).join('')+
             '</select></td>'+
-          '<td class="mono" style="font-size:12px;word-break:break-all">'+
+          '<td class="mono" style="font-size:12px;word-break:break-word;min-width:150px">'+
             (x.tipo==='clave' ? '••••••••' : esc(x.valor))+'</td></tr>';
       }).join('')+'</tbody></table></div>';
   }
@@ -1022,16 +1023,18 @@ function importarLlavero(){
     });
     vista.innerHTML =
       '<div class="lbl" style="margin:0 0 6px">'+plural(leidas.length,'cuenta','cuentas')+' en el archivo</div>'+
-      '<div class="tabla-caja" style="max-height:38vh;overflow:auto"><table><tbody>'+
+      '<div class="tabla-caja" style="max-height:38vh;overflow:auto">'+
+      '<table style="min-width:520px"><tbody>'+
       leidas.map(function(x,i){
         var repe = repes[(x.nombre||'').toLowerCase()+'|'+(x.usuario||'').toLowerCase()];
         return '<tr><td style="width:26px"><input type="checkbox" id="im_si_'+i+'" '+
             (repe?'':'checked')+' style="width:auto"></td>'+
           '<td><strong>'+esc(x.nombre)+'</strong>'+
             (repe?'<div class="nota" style="margin:0">ya la tienes</div>':'')+'</td>'+
-          '<td class="mono" style="font-size:12px;word-break:break-all">'+esc(x.usuario)+'</td>'+
-          '<td style="width:96px">'+iconoDe(x.ambito)+' '+esc(x.ambito)+'</td>'+
-          '<td style="width:74px">'+(x.valor?'con clave':'sin clave')+'</td></tr>';
+          '<td class="mono" style="font-size:12px;word-break:break-word;min-width:170px">'+
+            esc(x.usuario)+'</td>'+
+          '<td style="width:104px;white-space:nowrap">'+iconoDe(x.ambito)+' '+esc(x.ambito)+'</td>'+
+          '<td style="width:78px;white-space:nowrap">'+(x.valor?'con clave':'sin clave')+'</td></tr>';
       }).join('')+'</tbody></table></div>';
   }
 }
