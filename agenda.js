@@ -25,7 +25,18 @@ var TIPOS = {
   correo:   {nombre:'Correo',   plural:'Correos',   icono:'✉️'}
 };
 var ORDEN_TIPOS = ['telefono','clave','correo'];
-var AMBITOS = {trabajo:{nombre:'Trabajo', icono:'🍽️'}, casa:{nombre:'Casa', icono:'🏠'}};
+/* Antes eran dos cajones, trabajo y casa. Ahora son las personas de la
+   familia más el trabajo: cada uno tiene sus contraseñas y no hay que
+   ir leyendo las de los demás para encontrar la tuya. */
+var PERSONAS_DE_SERIE = ['Valeriano','Loli','Sara','Sergio','Trabajo'];
+function personas(){
+  var p = (libro && libro.ajustes && libro.ajustes.personas) || null;
+  return (p && p.length) ? p.slice() : PERSONAS_DE_SERIE.slice();
+}
+function iconoDe(quien){
+  return quien === 'Trabajo' ? '🍽️' : quien === 'Casa' ? '🏠' : '👤';
+}
+function nombrePersona(quien){ return quien || 'Sin poner'; }
 
 var libro = null;
 var ui = { tipo:'todos', ambito:'todos', busca:'', verClave:{} };
@@ -110,6 +121,18 @@ function cargar(){
   if(!libro.apuntes) libro.apuntes = [];
   if(!libro.ajustes) libro.ajustes = {};
   if(libro.ajustes.cifrar === undefined) libro.ajustes.cifrar = null;
+  if(!libro.ajustes.personas || !libro.ajustes.personas.length)
+    libro.ajustes.personas = PERSONAS_DE_SERIE.slice();
+  /* Lo de antes iba por «trabajo» y «casa»; ahora va por personas. */
+  var cambiado = false;
+  (libro.apuntes||[]).forEach(function(a){
+    if(a.ambito === 'trabajo'){ a.ambito = 'Trabajo'; cambiado = true; }
+    else if(a.ambito === 'casa'){ a.ambito = 'Casa'; cambiado = true; }
+    if(a.ambito === 'Casa' && libro.ajustes.personas.indexOf('Casa') < 0){
+      libro.ajustes.personas.push('Casa'); cambiado = true;
+    }
+  });
+  if(cambiado) guardar();
 }
 function guardar(){ localStorage.setItem(CLAVE, JSON.stringify(libro)); }
 function apuntes(){ return libro.apuntes || []; }
@@ -265,9 +288,9 @@ function verLista(){
       '<input class="buscador" id="a_busca" placeholder="Buscar por nombre, usuario o sitio…" '+
         'value="'+esc(ui.busca)+'">'+
       '<div class="grupo">'+
-        ['todos','trabajo','casa'].map(function(k){
-          var etiqueta = k==='todos' ? 'Los dos' : AMBITOS[k].icono+' '+AMBITOS[k].nombre;
-          return '<button data-ambito="'+k+'" aria-pressed="'+(ui.ambito===k)+'">'+
+        ['todos'].concat(personas()).map(function(k){
+          var etiqueta = k==='todos' ? 'Todos' : iconoDe(k)+' '+k;
+          return '<button data-ambito="'+esc(k)+'" aria-pressed="'+(ui.ambito===k)+'">'+
                  esc(etiqueta)+'</button>';
         }).join('')+
       '</div>'+
@@ -314,7 +337,7 @@ function verLista(){
 
 function ficha(a){
   var info = TIPOS[a.tipo] || TIPOS.telefono;
-  var amb  = AMBITOS[a.ambito] || AMBITOS.trabajo;
+  var quien = a.ambito || 'Trabajo';
   var vista;
   if(a.tipo==='clave'){
     vista = ui.verClave[a.id]
@@ -329,7 +352,7 @@ function ficha(a){
   return '<div class="apunte">'+
     '<div style="display:flex;align-items:center;gap:7px;justify-content:space-between">'+
       '<span class="nom">'+esc(a.nombre||'sin nombre')+'</span>'+
-      '<span class="chapa neutra">'+amb.icono+' '+esc(amb.nombre)+'</span></div>'+
+      '<span class="chapa neutra">'+iconoDe(quien)+' '+esc(quien)+'</span></div>'+
     '<div class="val">'+vista+'</div>'+
     (a.usuario?'<div class="meta">usuario: <span class="mono">'+esc(a.usuario)+'</span></div>':'')+
     (a.sitio?'<div class="meta">'+esc(a.sitio)+'</div>':'')+
@@ -398,7 +421,7 @@ function engancharFichas(){
    ══════════════════════════════════════════════════════════════ */
 function editar(id){
   var nuevo = !id;
-  var a = id ? apunteDe(id) : {id:uid(), tipo:'telefono', ambito:'trabajo', nombre:'',
+  var a = id ? apunteDe(id) : {id:uid(), tipo:'telefono', ambito:(ui.ambito!=='todos'?ui.ambito:'Trabajo'), nombre:'',
                                valor:'', usuario:'', sitio:'', notas:''};
   if(!a) return;
 
@@ -419,10 +442,11 @@ function editar(id){
         '<select id="e_tipo">'+ORDEN_TIPOS.map(function(t){
           return '<option value="'+t+'"'+(a.tipo===t?' selected':'')+'>'+
                  TIPOS[t].icono+' '+TIPOS[t].nombre+'</option>'; }).join('')+'</select></div>'+
-      '<div class="campo"><label class="lbl" for="e_ambito">De dónde</label>'+
-        '<select id="e_ambito">'+Object.keys(AMBITOS).map(function(k){
-          return '<option value="'+k+'"'+(a.ambito===k?' selected':'')+'>'+
-                 AMBITOS[k].icono+' '+AMBITOS[k].nombre+'</option>'; }).join('')+'</select></div>'+
+      '<div class="campo"><label class="lbl" for="e_ambito">De quién es</label>'+
+        '<select id="e_ambito">'+personas().map(function(k){
+          return '<option value="'+esc(k)+'"'+(a.ambito===k?' selected':'')+'>'+
+                 iconoDe(k)+' '+esc(k)+'</option>'; }).join('')+
+          '<option value="__nueva">+ Otra persona…</option>'+'</select></div>'+
     '</div>'+
     '<div class="campo" style="margin-bottom:12px"><label class="lbl" for="e_nombre">Cómo se llama</label>'+
       '<input id="e_nombre" value="'+esc(a.nombre||'')+'" placeholder="Pescadería, la luz, el banco…" '+
@@ -484,6 +508,17 @@ function editar(id){
     }, {aceptar:nuevo?'Apuntar':'Guardar'});
 
   document.getElementById('e_tipo').addEventListener('change', function(){ pintarValor(this.value); });
+  document.getElementById('e_ambito').addEventListener('change', function(){
+    if(this.value !== '__nueva') return;
+    var quien = prompt('¿De quién? (Sergio, la abuela, el local de abajo…)');
+    quien = (quien||'').trim();
+    if(!quien){ this.value = personas()[0]; return; }
+    if(personas().indexOf(quien) < 0){ libro.ajustes.personas.push(quien); guardar(); }
+    var sel = this;
+    sel.insertBefore(new Option(iconoDe(quien)+' '+quien, quien),
+                     sel.options[sel.options.length-1]);
+    sel.value = quien;
+  });
   document.querySelectorAll('[data-sitio]').forEach(function(b){
     b.addEventListener('click', function(){
       var campo = document.getElementById('e_nombre');
@@ -504,46 +539,76 @@ function editar(id){
    antes por si algo hay que cambiar. */
 
 var RE_CORREO = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
-var RE_TELEFONO = /(\+?\d[\d\s().-]{5,}\d)/;
-var PALABRA_CLAVE = /(clave|contrase|password|pass\b|pin\b|usuario\b|user\b)/i;
+var PALABRA_CLAVE = /(contrase|password|\bpass\b|\bpin\b|\bclave\b)/i;
 
-/* Una línea suelta: «Pescadería Ordino: 812 345» o «luz 376800800» o
-   «Creand / vff.ad / miClave». Se parte por dos puntos, tabulador,
-   barra o punto y coma, y si no hay separador se busca el dato dentro
-   del texto. */
+/* Un teléfono es sólo cifras y separadores. Aquí son de seis —811521— y
+   también se apuntan con prefijo, +376 811 521, o dos seguidos. Nada de
+   pedir siete cifras como mínimo: ese fue el error que metió medio
+   listín en las contraseñas. */
+function soloDigitos(t){ return String(t||'').replace(/\D/g,''); }
+function esTelefono(t){
+  var limpio = String(t||'').trim();
+  if(!limpio) return false;
+  if(/[a-zñáéíóúü@]/i.test(limpio)) return false;      /* si lleva letras, no */
+  var d = soloDigitos(limpio);
+  return d.length >= 6 && d.length <= 24;               /* 24 admite dos números juntos */
+}
+
+/* Una línea suelta: «ALIMENTARIA GRUP 811521», «Luz: 376 739 739»,
+   «ANDOLAC ANGEL 361308 736320» o «Banco: usuario: clave». Se parte por
+   lo que haya y se mira qué pinta tiene cada trozo. */
 function leerLinea(linea, ambito){
   var t = String(linea||'').trim();
   if(!t) return null;
-  if(/^[-—·•*]+$/.test(t)) return null;
+  if(/^[-—·•*_=]+$/.test(t)) return null;
 
-  var partes = t.split(/\s*[:;\t|]\s*|\s{3,}|\s+\/\s+/).filter(function(x){ return x.trim(); });
-  var nombre = '', resto = t, usuario = '';
+  var partes = t.split(/\s*[:;\t|]\s*|\s{2,}|\s+\/\s+/)
+                .map(function(x){ return x.trim(); }).filter(Boolean);
 
-  if(partes.length >= 2){
-    nombre = partes[0].trim();
-    resto  = partes.slice(1).join(' ').trim();
-    if(partes.length >= 3){ usuario = partes[1].trim(); resto = partes.slice(2).join(' ').trim(); }
+  /* Un correo solo es un correo. Pero «Facebook: uncorreo: laclave» es
+     una contraseña con el correo de usuario: lo que manda es que venga
+     algo detrás. */
+  var correo = (t.match(RE_CORREO)||[])[0] || '';
+  if(correo){
+    var iCorreo = -1;
+    partes.forEach(function(x,i){ if(iCorreo<0 && RE_CORREO.test(x)) iCorreo=i; });
+    var detras = iCorreo>=0 ? partes.slice(iCorreo+1).join(' ').trim() : '';
+    if(!detras){
+      var nombreC = partes.filter(function(x){ return !RE_CORREO.test(x); }).join(' ').trim();
+      return {id:uid(), tipo:'correo', ambito:ambito, nombre:nombreC||correo,
+              valor:correo, usuario:'', sitio:'', notas:''};
+    }
+    return {id:uid(), tipo:'clave', ambito:ambito,
+            nombre:(partes.slice(0,iCorreo).join(' ').trim() || correo),
+            valor:detras, usuario:correo, sitio:'', notas:''};
   }
 
-  var correo = (resto.match(RE_CORREO) || t.match(RE_CORREO) || [])[0] || '';
-  var tel    = (resto.match(RE_TELEFONO) || t.match(RE_TELEFONO) || [])[0] || '';
+  var conLetras = partes.filter(function(x){ return !esTelefono(x); });
+  var numeros   = partes.filter(esTelefono);
 
-  var tipo, valor;
-  if(correo){ tipo='correo'; valor=correo; }
-  else if(tel && tel.replace(/\D/g,'').length >= 6 && !PALABRA_CLAVE.test(t)){
-    tipo='telefono'; valor=tel.trim();
-  } else { tipo='clave'; valor=resto || t; }
+  /* Sin separadores claros: se busca el número dentro del texto */
+  if(partes.length === 1 && !esTelefono(t)){
+    var m = t.match(/(\+?\d[\d\s().-]{4,}\d)\s*$/);
+    if(m && esTelefono(m[1])){
+      conLetras = [t.slice(0, m.index).trim()];
+      numeros = [m[1].trim()];
+    }
+  }
 
-  if(!nombre){
-    /* Sin separador: el nombre es lo que queda al quitar el dato */
-    nombre = t.replace(valor, '').replace(/[-–—:;,]+$/,'').trim() || valor;
+  if(numeros.length && !PALABRA_CLAVE.test(t)){
+    return {id:uid(), tipo:'telefono', ambito:ambito,
+            nombre:(conLetras.join(' ').trim() || numeros[0]),
+            valor:numeros.join(' / '), usuario:'', sitio:'', notas:''};
   }
-  if(tipo!=='clave' && usuario && !RE_CORREO.test(usuario) && !RE_TELEFONO.test(usuario)){
-    /* en teléfonos y correos, el del medio suele ser parte del nombre */
-    nombre = (nombre+' '+usuario).trim(); usuario = '';
-  }
-  return {id:uid(), tipo:tipo, ambito:ambito, nombre:nombre, valor:valor,
-          usuario:usuario, sitio:'', notas:''};
+
+  /* Lo que queda es una contraseña: nombre, usuario si viene, y el dato */
+  var nombre = partes[0] || t;
+  var usuario = partes.length >= 3 ? partes[1] : '';
+  var valor = partes.length >= 3 ? partes.slice(2).join(' ')
+            : (partes.length === 2 ? partes[1] : t);
+  if(!valor) return null;
+  return {id:uid(), tipo:'clave', ambito:ambito, nombre:nombre,
+          valor:valor, usuario:usuario, sitio:'', notas:''};
 }
 
 function leerLista(texto, ambito){
@@ -556,9 +621,10 @@ function pegarLista(){
 
   var d = abrirVentana('Pegar una lista',
     '<div class="campo" style="margin-bottom:10px">'+
-      '<label class="lbl" for="pg_ambito">De dónde es todo esto</label>'+
-      '<select id="pg_ambito">'+Object.keys(AMBITOS).map(function(k){
-        return '<option value="'+k+'">'+AMBITOS[k].icono+' '+AMBITOS[k].nombre+'</option>';
+      '<label class="lbl" for="pg_ambito">De quién es todo esto</label>'+
+      '<select id="pg_ambito">'+personas().map(function(k){
+        return '<option value="'+esc(k)+'"'+(k==='Trabajo'?' selected':'')+'>'+
+               iconoDe(k)+' '+esc(k)+'</option>';
       }).join('')+'</select></div>'+
     '<div class="campo" style="margin-bottom:12px">'+
       '<label class="lbl" for="pg_texto">Pega aquí la lista</label>'+
@@ -641,7 +707,7 @@ function imprimir(){
   abrirVentana('Imprimir',
     '<p class="nota" style="margin:0 0 10px">Se imprime lo que estás viendo: '+
       plural(lista.length,'apunte','apuntes')+
-      (ui.ambito!=='todos' ? ' de '+AMBITOS[ui.ambito].nombre.toLowerCase() : '')+
+      (ui.ambito!=='todos' ? ' de '+ui.ambito : '')+
       (ui.tipo!=='todos' ? ' · sólo '+TIPOS[ui.tipo].plural.toLowerCase() : '')+'.</p>'+
     (hayClaves
       ? '<label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">'+
@@ -680,11 +746,11 @@ function hacerPapel(lista, clavesAbiertas){
     '<div class="cuando">'+plural(lista.length,'apunte','apuntes')+' · '+
     hoy.getDate()+'/'+(hoy.getMonth()+1)+'/'+hoy.getFullYear()+'</div>'];
 
-  Object.keys(AMBITOS).forEach(function(amb){
+  personas().forEach(function(amb){
     ORDEN_TIPOS.forEach(function(tipo){
       var suyos = lista.filter(function(a){ return a.ambito===amb && a.tipo===tipo; });
       if(!suyos.length) return;
-      partes.push('<h2>'+AMBITOS[amb].nombre+' · '+TIPOS[tipo].plural+'</h2>');
+      partes.push('<h2>'+esc(amb)+' · '+TIPOS[tipo].plural+'</h2>');
       partes.push('<table><tbody>'+suyos.map(function(a){
         var dato = a.tipo==='clave'
           ? (clavesAbiertas[a.id] !== undefined ? clavesAbiertas[a.id] : '············')
@@ -701,6 +767,66 @@ function hacerPapel(lista, clavesAbiertas){
 
   caja.innerHTML = partes.join('');
   window.print();
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   ARREGLAR LO PEGADO
+   ══════════════════════════════════════════════════════════════
+   La primera versión del lector pedía siete cifras para dar algo por
+   teléfono, y aquí los números son de seis: medio listín de proveedores
+   acabó guardado como contraseñas, y encima cifrado. Esto lo deshace:
+   abre cada una con la maestra y, si lo que hay dentro es un número, la
+   pasa a teléfono en claro, que es lo que era. */
+function arreglarLoPegado(){
+  var sospechosas = apuntes().filter(function(a){ return a.tipo==='clave'; });
+  if(!sospechosas.length){ avisar('No hay nada que arreglar.', true); return; }
+
+  confirmar('Arreglar lo pegado',
+    '<p style="margin:0 0 8px">Voy a abrir las '+plural(sospechosas.length,'contraseña','contraseñas')+
+    ' guardadas y las que sean un número las pasaré a <strong>teléfonos</strong>.</p>'+
+    '<p class="nota" style="margin:0">Las que sean contraseñas de verdad se quedan como están, '+
+    'cifradas. Hace falta la contraseña maestra.</p>',
+    function(){
+      conMaestra(function(clave){
+        var tocadas = 0;
+        Promise.all(sospechosas.map(function(a){
+          var dentro = a.cifrada ? descifrar(a.cifrada, clave).catch(function(){ return null; })
+                                 : Promise.resolve(a.valor||'');
+          return dentro.then(function(texto){
+            if(texto == null) return;
+            /* el número podía haber caído en «usuario» */
+            var junto = (a.usuario && esTelefono(a.usuario) ? a.usuario+' / ' : '') + texto;
+            if(!esTelefono(junto)) return;
+            a.tipo = 'telefono';
+            a.valor = junto.replace(/\s*\/\s*$/,'').trim();
+            if(esTelefono(a.usuario)) a.usuario = '';
+            delete a.cifrada;
+            tocadas++;
+          });
+        })).then(function(){
+          guardar(); pintar();
+          avisar(tocadas
+            ? plural(tocadas,'apunte pasado a teléfono','apuntes pasados a teléfonos')
+            : 'Ninguna era un número: se quedan como contraseñas');
+        }).catch(function(){
+          avisar('No he podido abrirlas. ¿Es esa la contraseña maestra?', true);
+        });
+      });
+    }, {aceptar:'Arreglarlo'});
+}
+
+function vaciarAgenda(){
+  if(!apuntes().length){ avisar('La agenda ya está vacía.', true); return; }
+  confirmar('Vaciar la agenda',
+    '<p style="margin:0 0 8px">Se van los '+plural(apuntes().length,'apunte','apuntes')+
+    ', teléfonos y contraseñas incluidos.</p>'+
+    '<p class="nota" style="margin:0">No hay vuelta atrás. Si lo que quieres es volver a pegar '+
+    'la lista bien leída, esto es lo más limpio.</p>',
+    function(){
+      libro.apuntes = [];
+      guardar(); pintar(); avisar('Agenda vacía');
+    }, {aceptar:'Vaciarla', malo:true});
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -726,13 +852,65 @@ function verAjustes(){
       '<span class="nota" style="margin:0">Más cómodo —no pide nada— pero cualquiera que entre '+
       'a tu repositorio las lee. Las que ya estén cifradas se quedan como están.</span></span></label>'+
     '<p class="nota" style="margin:14px 0 0"><strong>Ojo con la contraseña maestra:</strong> no se '+
-    'guarda en ningún sitio. Si se te olvida, esas contraseñas no las abre nadie, ni yo.</p>',
+    'guarda en ningún sitio. Si se te olvida, esas contraseñas no las abre nadie, ni yo.</p>'+
+    '<div style="border-top:1px solid var(--linea);margin-top:14px;padding-top:12px">'+
+      '<div class="lbl" style="margin-bottom:6px">De quién puede ser cada apunte</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        personas().map(function(q){
+          var n = apuntes().filter(function(a){ return a.ambito===q; }).length;
+          return '<span class="chapa neutra">'+iconoDe(q)+' '+esc(q)+' · '+n+
+            (n?'':' <button type="button" class="btn suave sm" data-fuera="'+esc(q)+'" '+
+               'style="padding:0 4px">✕</button>')+'</span>';
+        }).join('')+
+      '</div>'+
+      '<button type="button" class="btn sm" id="aj_persona" style="margin-top:8px">+ Añadir a alguien</button>'+
+    '</div>'+
+    '<div style="border-top:1px solid var(--linea);margin-top:14px;padding-top:12px;'+
+      'display:flex;gap:8px;flex-wrap:wrap">'+
+      '<button type="button" class="btn" id="aj_arreglar">Arreglar lo pegado</button>'+
+      '<button type="button" class="btn malo" id="aj_vaciar">Vaciar la agenda</button>'+
+    '</div>'+
+    '<p class="nota" style="margin:8px 0 0">«Arreglar lo pegado» pasa a teléfonos las '+
+    'contraseñas que en realidad son números.</p>',
     function(){
       libro.ajustes.cifrar = document.getElementById('aj_sin').checked ? false : null;
       guardar();
       avisar(libro.ajustes.cifrar===false ? 'Las contraseñas nuevas se guardarán sin cifrar'
                                           : 'Las contraseñas nuevas se cifrarán');
     }, {aceptar:'Guardar'});
+
+  var perso = document.getElementById('aj_persona');
+  if(perso) perso.addEventListener('click', function(e){
+    e.preventDefault();
+    var quien = prompt('¿Quién?');
+    quien = (quien||'').trim();
+    if(!quien) return;
+    if(personas().indexOf(quien) < 0){ libro.ajustes.personas.push(quien); guardar(); }
+    var d = perso.closest('dialog'); if(d){ d.close(); d.remove(); }
+    verAjustes();
+  });
+  document.querySelectorAll('[data-fuera]').forEach(function(b){
+    b.addEventListener('click', function(e){
+      e.preventDefault();
+      libro.ajustes.personas = personas().filter(function(q){ return q !== b.dataset.fuera; });
+      guardar();
+      var d = b.closest('dialog'); if(d){ d.close(); d.remove(); }
+      verAjustes();
+    });
+  });
+
+  var arr = document.getElementById('aj_arreglar');
+  if(arr) arr.addEventListener('click', function(e){
+    e.preventDefault();
+    var d = arr.closest('dialog'); if(d){ d.close(); d.remove(); }
+    arreglarLoPegado();
+  });
+  var vac = document.getElementById('aj_vaciar');
+  if(vac) vac.addEventListener('click', function(e){
+    e.preventDefault();
+    var d = vac.closest('dialog'); if(d){ d.close(); d.remove(); }
+    vaciarAgenda();
+  });
 }
 
 /* ══════════════════════════════════════════════════════════════
