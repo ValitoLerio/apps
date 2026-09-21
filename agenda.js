@@ -281,6 +281,7 @@ function filtrados(){
   var t = ui.busca.trim().toLowerCase();
   return apuntes().filter(function(a){
     if(ui.tipo!=='todos' && a.tipo!==ui.tipo) return false;
+    if(ui.sinClave && !(a.tipo==='clave' && !a.cifrada && !(a.valor||'').length)) return false;
     if(ui.ambito!=='todos' && a.ambito!==ui.ambito) return false;
     if(!t) return true;
     return ((a.nombre||'')+' '+(a.usuario||'')+' '+(a.sitio||'')+' '+(a.notas||'')+' '+
@@ -305,6 +306,7 @@ function verLista(){
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
         '<button class="btn fuerte" id="a_nuevo">+ Apuntar</button>'+
         '<button class="btn" id="a_pegar">📋 Pegar una lista</button>'+
+        '<button class="btn" id="a_llavero">🔐 Traer el llavero</button>'+
         '<button class="btn" id="a_imprimir">🖨 Imprimir</button>'+
         '<button class="btn" id="a_ajustes">Ajustes</button>'+
       '</div></div>'+
@@ -312,6 +314,10 @@ function verLista(){
     '<div class="filtros">'+
       '<input class="buscador" id="a_busca" placeholder="Buscar por nombre, usuario o sitio…" '+
         'value="'+esc(ui.busca)+'">'+
+      (apuntes().some(function(a){ return a.tipo==='clave' && !a.cifrada && !(a.valor||'').length; })
+        ? '<div class="grupo"><button data-sinclave="1" aria-pressed="'+(!!ui.sinClave)+'">'+
+          'Sin contraseña</button></div>'
+        : '')+
       '<div class="grupo">'+
         ['todos'].concat(personas()).map(function(k){
           var etiqueta = k==='todos' ? 'Todos' : iconoDe(k)+' '+k;
@@ -374,8 +380,12 @@ function verLista(){
   main.querySelectorAll('[data-ambito]').forEach(function(b){
     b.addEventListener('click', function(){ ui.ambito = b.dataset.ambito; verLista(); });
   });
+  main.querySelectorAll('[data-sinclave]').forEach(function(b){
+    b.addEventListener('click', function(){ ui.sinClave = !ui.sinClave; verLista(); });
+  });
   document.getElementById('a_nuevo').addEventListener('click', function(){ editar(null); });
   document.getElementById('a_pegar').addEventListener('click', pegarLista);
+  document.getElementById('a_llavero').addEventListener('click', importarLlavero);
   document.getElementById('a_imprimir').addEventListener('click', imprimir);
   var ya = document.getElementById('a_arreglarYa');
   if(ya) ya.addEventListener('click', arreglarLoPegado);
@@ -388,9 +398,13 @@ function ficha(a){
   var quien = a.ambito || 'Trabajo';
   var vista;
   if(a.tipo==='clave'){
-    vista = ui.verClave[a.id]
-      ? '<span id="v_'+esc(a.id)+'">'+esc(ui.verClave[a.id])+'</span>'
-      : '<span class="oculto">••••••••</span>';
+    var tieneAlgo = !!(a.cifrada || (a.valor||'').length);
+    vista = !tieneAlgo
+      ? '<span style="color:var(--muted);font-family:var(--texto);font-size:13px">'+
+        'sin apuntar todavía</span>'
+      : (ui.verClave[a.id]
+          ? '<span id="v_'+esc(a.id)+'">'+esc(ui.verClave[a.id])+'</span>'
+          : '<span class="oculto">••••••••</span>');
   } else if(a.tipo==='telefono'){
     vista = '<a href="tel:'+esc(String(a.valor||'').replace(/\s/g,''))+'">'+esc(a.valor||'')+'</a>';
   } else {
@@ -407,10 +421,13 @@ function ficha(a){
     (a.notas?'<div class="meta">'+esc(a.notas)+'</div>':'')+
     '<div class="pie">'+
       (a.tipo==='clave'
-        ? '<button class="btn sm" data-ver="'+esc(a.id)+'">'+
-          (ui.verClave[a.id]?'Ocultar':'Ver')+'</button>'
+        ? (tieneAlgo
+            ? '<button class="btn sm" data-ver="'+esc(a.id)+'">'+
+              (ui.verClave[a.id]?'Ocultar':'Ver')+'</button>'
+            : '<button class="btn sm fuerte" data-editar="'+esc(a.id)+'">Ponerle la contraseña</button>')
         : '')+
-      '<button class="btn sm" data-copiar="'+esc(a.id)+'">Copiar</button>'+
+      (a.tipo!=='clave' || tieneAlgo
+        ? '<button class="btn sm" data-copiar="'+esc(a.id)+'">Copiar</button>' : '')+
       (a.usuario?'<button class="btn sm" data-copiaruser="'+esc(a.id)+'">Copiar usuario</button>':'')+
       '<button class="btn suave sm" data-editar="'+esc(a.id)+'">Editar</button>'+
       '<button class="btn suave sm malo" data-borrar="'+esc(a.id)+'">Borrar</button>'+
@@ -531,7 +548,10 @@ function editar(id){
       if(!nombre){ avisar('Ponle nombre.', true); return true; }
       var tipo = valorDe('e_tipo') || 'telefono';
       var v = dentro('e_valor').value.trim();
-      if(!v && !(tipo==='clave' && a.cifrada)){ avisar('Falta el dato.', true); return true; }
+      /* Una contraseña puede quedarse en blanco: hay cuentas que se
+         apuntan primero —sitio y usuario— y la contraseña se pone luego,
+         cuando toque mirarla. */
+      if(!v && tipo!=='clave'){ avisar('Falta el dato.', true); return true; }
 
       a.tipo = tipo;
       a.ambito = valorDe('e_ambito') || personas()[0];
@@ -547,7 +567,7 @@ function editar(id){
       }
 
       if(tipo!=='clave'){ a.valor = v; delete a.cifrada; terminar(); return; }
-      if(!v){ terminar(); return; }           /* clave sin tocar */
+      if(!v){ terminar(); return; }           /* contraseña sin tocar */
 
       if(!pideMaestra(a.ambito)){     /* esta persona las guarda a la vista */
         a.valor = v; delete a.cifrada; terminar(); return;
@@ -847,6 +867,174 @@ function hacerPapel(lista, clavesAbiertas){
   window.print();
 }
 
+
+
+/* ══════════════════════════════════════════════════════════════
+   TRAER EL LLAVERO DEL IPHONE O DEL MAC
+   ══════════════════════════════════════════════════════════════
+   El llavero de Apple se exporta a un archivo CSV con el sitio, la
+   dirección, el usuario y la contraseña. Ese archivo se lee aquí
+   mismo, en el aparato: no se sube a ningún sitio, no pasa por
+   internet. Lo que se guarda va cifrado como todo lo demás.
+
+   Ese archivo lleva las contraseñas en claro: en cuanto se importe,
+   se borra. Se avisa por escrito. */
+
+function partirCSV(texto){
+  var filas = [], fila = [], campo = '', comillas = false;
+  for(var i=0;i<texto.length;i++){
+    var c = texto[i];
+    if(comillas){
+      if(c === '"' && texto[i+1] === '"'){ campo += '"'; i++; }
+      else if(c === '"'){ comillas = false; }
+      else campo += c;
+    } else if(c === '"'){ comillas = true; }
+    else if(c === ','){ fila.push(campo); campo = ''; }
+    else if(c === '\n'){ fila.push(campo); filas.push(fila); fila = []; campo = ''; }
+    else if(c === '\r'){ /* nada */ }
+    else campo += c;
+  }
+  if(campo.length || fila.length){ fila.push(campo); filas.push(fila); }
+  return filas.filter(function(f){ return f.some(function(x){ return String(x).trim(); }); });
+}
+
+/* Apple lo exporta en inglés o en castellano según el aparato */
+function columnasLlavero(cabecera){
+  var idx = {titulo:-1, url:-1, usuario:-1, clave:-1, notas:-1};
+  cabecera.forEach(function(c, i){
+    var t = String(c||'').trim().toLowerCase();
+    if(/^(title|nombre|name)$/.test(t)) idx.titulo = i;
+    else if(/url|direcci/.test(t)) idx.url = i;
+    else if(/user|usuario/.test(t)) idx.usuario = i;
+    else if(/password|contrase/.test(t)) idx.clave = i;
+    else if(/note|nota/.test(t)) idx.notas = i;
+  });
+  return idx;
+}
+
+function nombreDeSitio(url, titulo){
+  var t = String(titulo||'').trim();
+  if(t) return t;
+  var u = String(url||'').replace(/^https?:\/\//i,'').replace(/^www\./i,'').split('/')[0];
+  return u || 'sin nombre';
+}
+
+/* Quién es cada uno por su usuario: si el correo lleva su nombre, suyo es */
+function personaPorUsuario(usuario, porDefecto){
+  var u = String(usuario||'').toLowerCase();
+  var quien = null;
+  personas().forEach(function(p){
+    if(p === 'Trabajo' || p === 'Casa') return;
+    var corto = p.toLowerCase().slice(0,4);
+    if(corto.length >= 3 && u.indexOf(corto) >= 0) quien = p;
+  });
+  return quien || porDefecto;
+}
+
+function importarLlavero(){
+  var leidas = [];
+
+  var v = abrirVentana('Traer el llavero',
+    '<p class="nota" style="margin:0 0 10px"><strong>En el Mac:</strong> abre <em>Contraseñas</em> '+
+      '(o Safari → Ajustes → Contraseñas), menú <em>Archivo → Exportar todas las contraseñas…</em>, '+
+      'y guarda el archivo. <strong>En el iPhone:</strong> Ajustes → Contraseñas → los tres puntos '+
+      '→ Exportar. Luego elige aquí ese archivo.</p>'+
+    '<div class="campo" style="margin-bottom:10px">'+
+      '<label class="btn fuerte" for="im_csv" style="cursor:pointer;justify-content:center">'+
+      'Elegir el archivo del llavero</label>'+
+      '<input type="file" id="im_csv" accept=".csv,text/csv,text/plain" '+
+        'style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></div>'+
+    '<div class="campo" style="margin-bottom:10px">'+
+      '<label class="lbl" for="im_quien">Si no se sabe de quién es, ponlo en</label>'+
+      '<select id="im_quien">'+personas().map(function(k){
+        return '<option value="'+esc(k)+'">'+iconoDe(k)+' '+esc(k)+'</option>'; }).join('')+
+      '</select></div>'+
+    '<div id="im_vista"></div>'+
+    '<p class="nota" style="margin:12px 0 0;color:var(--aviso)">El archivo del llavero lleva las '+
+      'contraseñas escritas en claro. <strong>Bórralo en cuanto acabes.</strong> Aquí no se sube '+
+      'a ningún sitio: se lee en este aparato y se guarda cifrado.</p>',
+    function(){
+      if(!leidas.length){ avisar('Elige antes el archivo.', true); return true; }
+      var buenas = leidas.filter(function(x,i){
+        var c = v.querySelector('#im_si_'+i);
+        return !c || c.checked;
+      });
+      if(!buenas.length){ avisar('No hay nada marcado.', true); return true; }
+
+      var conClave = buenas.filter(function(x){ return x.valor && pideMaestra(x.ambito); });
+
+      function terminar(){
+        buenas.forEach(function(x){ libro.apuntes.push(x); });
+        guardar(); pintar();
+        avisar(plural(buenas.length,'cuenta traída','cuentas traídas')+
+               '. Borra ya el archivo del llavero.');
+      }
+      if(!conClave.length){ terminar(); return; }
+      conMaestra(function(maestraOk){
+        Promise.all(conClave.map(function(x){
+          return cifrar(x.valor, maestraOk).then(function(p){ x.cifrada = p; delete x.valor; });
+        })).then(terminar).catch(function(){ avisar('No se pudieron cifrar.', true); });
+      });
+    }, {aceptar:'Traerlas'});
+
+  var campo = v.querySelector('#im_csv');
+  var quien = v.querySelector('#im_quien');
+  var vista = v.querySelector('#im_vista');
+
+  campo.addEventListener('change', function(){
+    var f = campo.files && campo.files[0];
+    if(!f) return;
+    var lector = new FileReader();
+    lector.onload = function(){
+      var filas = partirCSV(String(lector.result||''));
+      if(filas.length < 2){ avisar('Ese archivo no trae nada que entienda.', true); return; }
+      var col = columnasLlavero(filas[0]);
+      if(col.usuario < 0 && col.clave < 0){
+        avisar('No parece el archivo del llavero.', true); return;
+      }
+      leidas = filas.slice(1).map(function(f2){
+        var usuario = col.usuario>=0 ? String(f2[col.usuario]||'').trim() : '';
+        return {
+          id: uid(), tipo:'clave',
+          ambito: personaPorUsuario(usuario, quien.value),
+          nombre: nombreDeSitio(col.url>=0?f2[col.url]:'', col.titulo>=0?f2[col.titulo]:''),
+          usuario: usuario,
+          valor: col.clave>=0 ? String(f2[col.clave]||'').trim() : '',
+          sitio: col.url>=0 ? String(f2[col.url]||'').trim().replace(/^https?:\/\//i,'').split('/')[0] : '',
+          notas: col.notas>=0 ? String(f2[col.notas]||'').trim() : ''
+        };
+      }).filter(function(x){ return x.nombre && (x.usuario || x.valor); });
+      pintarVista();
+    };
+    lector.readAsText(f);
+  });
+
+  quien.addEventListener('change', function(){
+    leidas.forEach(function(x){ x.ambito = personaPorUsuario(x.usuario, quien.value); });
+    pintarVista();
+  });
+
+  function pintarVista(){
+    if(!leidas.length){ vista.innerHTML=''; return; }
+    var repes = {};
+    apuntes().forEach(function(a){
+      repes[(a.nombre||'').toLowerCase()+'|'+(a.usuario||'').toLowerCase()] = true;
+    });
+    vista.innerHTML =
+      '<div class="lbl" style="margin:0 0 6px">'+plural(leidas.length,'cuenta','cuentas')+' en el archivo</div>'+
+      '<div class="tabla-caja" style="max-height:38vh;overflow:auto"><table><tbody>'+
+      leidas.map(function(x,i){
+        var repe = repes[(x.nombre||'').toLowerCase()+'|'+(x.usuario||'').toLowerCase()];
+        return '<tr><td style="width:26px"><input type="checkbox" id="im_si_'+i+'" '+
+            (repe?'':'checked')+' style="width:auto"></td>'+
+          '<td><strong>'+esc(x.nombre)+'</strong>'+
+            (repe?'<div class="nota" style="margin:0">ya la tienes</div>':'')+'</td>'+
+          '<td class="mono" style="font-size:12px;word-break:break-all">'+esc(x.usuario)+'</td>'+
+          '<td style="width:96px">'+iconoDe(x.ambito)+' '+esc(x.ambito)+'</td>'+
+          '<td style="width:74px">'+(x.valor?'con clave':'sin clave')+'</td></tr>';
+      }).join('')+'</tbody></table></div>';
+  }
+}
 
 /* ══════════════════════════════════════════════════════════════
    ARREGLAR LO PEGADO
