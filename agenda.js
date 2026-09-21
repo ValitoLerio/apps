@@ -28,7 +28,7 @@ var ORDEN_TIPOS = ['telefono','clave','correo'];
 /* Antes eran dos cajones, trabajo y casa. Ahora son las personas de la
    familia más el trabajo: cada uno tiene sus contraseñas y no hay que
    ir leyendo las de los demás para encontrar la tuya. */
-var PERSONAS_DE_SERIE = ['Valeriano','Loli','Sara','Sergio','Trabajo'];
+var PERSONAS_DE_SERIE = ['Valeriano','Loli','Sara','Sergio','Casa','Trabajo'];
 function personas(){
   var p = (libro && libro.ajustes && libro.ajustes.personas) || null;
   return (p && p.length) ? p.slice() : PERSONAS_DE_SERIE.slice();
@@ -133,6 +133,11 @@ function cargar(){
   if(libro.ajustes.cifrar === undefined) libro.ajustes.cifrar = null;
   if(!libro.ajustes.personas || !libro.ajustes.personas.length)
     libro.ajustes.personas = PERSONAS_DE_SERIE.slice();
+  /* Los que falten de la lista de siempre se añaden solos: así no hay
+     que ir a Ajustes a ponerlos a mano. */
+  PERSONAS_DE_SERIE.forEach(function(q){
+    if(libro.ajustes.personas.indexOf(q) < 0) libro.ajustes.personas.push(q);
+  });
   /* Las del trabajo se consultan con prisa y delante de gente: de serie
      no piden nada. Las de cada uno, sí. */
   if(!libro.ajustes.sinCifrar) libro.ajustes.sinCifrar = ['Trabajo'];
@@ -622,12 +627,22 @@ function leerLinea(linea, ambito){
   var conLetras = partes.filter(function(x){ return !esTelefono(x); });
   var numeros   = partes.filter(esTelefono);
 
-  /* Sin separadores claros: se busca el número dentro del texto */
+  /* Sin separadores claros —«GAMOR 725323 323352»— el nombre es lo que
+     va delante y los números son todos los de detrás, no sólo el último:
+     antes el primero se quedaba pegado al nombre. */
   if(partes.length === 1 && !esTelefono(t)){
-    var m = t.match(/(\+?\d[\d\s().-]{4,}\d)\s*$/);
-    if(m && esTelefono(m[1])){
-      conLetras = [t.slice(0, m.index).trim()];
-      numeros = [m[1].trim()];
+    var m = t.match(/^(.*?[a-zñáéíóúü)])\s+((?:\+?[\d][\d\s().-]*){1,})$/i);
+    if(m){
+      var cola = m[2].trim();
+      var trozos = cola.split(/\s{1,}(?=\+?\d)/).map(function(x){ return x.trim(); })
+                       .filter(function(x){ return esTelefono(x); });
+      /* «+376 739 739» es un número solo, no tres: si al separarlos
+         quedan trozos cortos, se deja la cola entera. */
+      var digitos = soloDigitos(cola);
+      if(!trozos.length || trozos.some(function(x){ return soloDigitos(x).length < 6; })){
+        trozos = (digitos.length >= 6) ? [cola] : [];
+      }
+      if(trozos.length){ conLetras = [m[1].trim()]; numeros = trozos; }
     }
   }
 
@@ -828,6 +843,7 @@ function arreglarLoPegado(){
     function(){
       conMaestra(function(clave){
         var tocadas = 0;
+        limpiarNombres();
         Promise.all(sospechosas.map(function(a){
           var dentro = a.cifrada ? descifrar(a.cifrada, clave).catch(function(){ return null; })
                                  : Promise.resolve(a.valor||'');
@@ -886,6 +902,28 @@ function dejarDePedirla(){
         })).then(terminar);
       });
     }, {aceptar:'No pedírmela más'});
+}
+
+/* Nombres con el número pegado —«GAMOR 725323»— de cuando el lector se
+   quedaba sólo con el último. El número se va al teléfono y el nombre
+   queda limpio; si ese número ya estaba, no se repite. */
+function limpiarNombres(){
+  var tocados = 0;
+  apuntes().forEach(function(a){
+    if(a.tipo !== 'telefono') return;
+    var m = String(a.nombre||'').match(/^(.*?[a-zñáéíóúü)])\s+((?:[\d][\d\s().+-]*)+)$/i);
+    if(!m) return;
+    var nombre = m[1].trim(), cola = m[2].trim();
+    if(soloDigitos(cola).length < 6) return;
+    a.nombre = nombre;
+    var ya = soloDigitos(a.valor||'');
+    if(ya.indexOf(soloDigitos(cola)) < 0){
+      a.valor = (cola + ' / ' + (a.valor||'')).replace(/\s*\/\s*$/,'').trim();
+    }
+    tocados++;
+  });
+  if(tocados) guardar();
+  return tocados;
 }
 
 function vaciarAgenda(){
@@ -949,6 +987,7 @@ function verAjustes(){
       'display:flex;gap:8px;flex-wrap:wrap">'+
       '<button type="button" class="btn" id="aj_nomas">No volver a pedírmela</button>'+
       '<button type="button" class="btn" id="aj_arreglar">Arreglar lo pegado</button>'+
+      '<button type="button" class="btn" id="aj_nombres">Limpiar los nombres</button>'+
       '<button type="button" class="btn malo" id="aj_vaciar">Vaciar la agenda</button>'+
     '</div>'+
     '<p class="nota" style="margin:8px 0 0">Quítale la marca a quien no quieras que pida nada '+
@@ -993,6 +1032,15 @@ function verAjustes(){
     e.preventDefault();
     var d = nomas.closest('dialog'); if(d){ d.close(); d.remove(); }
     dejarDePedirla();
+  });
+
+  var nom = document.getElementById('aj_nombres');
+  if(nom) nom.addEventListener('click', function(e){
+    e.preventDefault();
+    var d = nom.closest('dialog'); if(d){ d.close(); d.remove(); }
+    var n = limpiarNombres();
+    pintar();
+    avisar(n ? plural(n,'nombre limpiado','nombres limpiados') : 'Los nombres ya están limpios');
   });
 
   var arr = document.getElementById('aj_arreglar');
