@@ -332,6 +332,10 @@
       <div style="font-size:.71rem;color:var(--text2)">Elige qu&eacute; pones y pulsa los d&iacute;as. Sale solo en el horario del mes y de la semana.</div>
     </div>
     <div class="mes-chip" id="vac-rango"></div>
+    <button onclick="abrirPegarAno()" title="Pegar el cuadro de vacaciones de la hoja de calculo"
+      style="margin-left:auto;padding:6px 12px;border-radius:14px;border:1px solid var(--border);
+      background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit;font-size:.72rem;
+      font-weight:600">&#128203; Pegar el cuadro del a&ntilde;o</button>
   </div>
   <div id="vac-tipos" style="display:flex;gap:8px;padding:12px 20px 0;flex-wrap:wrap"></div>
   <div style="display:flex;gap:14px;padding:10px 20px 0;flex-wrap:wrap;font-size:.7rem;color:var(--text2)">
@@ -391,6 +395,34 @@
     <button class="pcopy" id="copybtn" onclick="copyCell()" style="display:none">Copiar</button>
     <button class="pdel" id="delbtn" onclick="borrarCelda()" style="display:none" title="Vaciar este día">&#128465;&#65039;</button>
     <button class="pcanc" onclick="closePopup()">&#10005;</button>
+  </div>
+</div>
+
+<!-- PEGAR EL CUADRO DEL ANO -->
+<div class="ov" id="pegaov">
+  <div class="modal" style="max-width:660px;width:95vw">
+    <h3>Pegar el cuadro de vacaciones</h3>
+    <div style="font-size:.73rem;color:var(--text2);margin-bottom:10px">
+      Copia el cuadro entero de la hoja de c&aacute;lculo y p&eacute;galo aqu&iacute;. Lee los doce meses de
+      una vez: <b>V</b> vacaciones, <b>B</b> baja, <b>A</b> ausencia, <b>F</b> festivo.
+    </div>
+    <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:8px">
+      <div style="width:110px">
+        <div style="font-size:.63rem;color:var(--text2);margin-bottom:2px">A&ntilde;o</div>
+        <input class="pi" id="pega-ano" type="number" min="2020" max="2100" oninput="repasarPegado()">
+      </div>
+      <div style="font-size:.68rem;color:var(--text2);padding-bottom:6px">
+        El a&ntilde;o al que pertenece el cuadro.
+      </div>
+    </div>
+    <textarea class="pi" id="pega-texto" rows="7" oninput="repasarPegado()"
+      placeholder="ENERO&#10;&#9;&#9;JU&#9;VI&#9;SA...&#10;&#9;&#9;1&#9;2&#9;3...&#10;&#9;VALERIANO&#9;&#9;V&#9;V..."
+      style="font-family:'SF Mono',Menlo,monospace;font-size:.68rem;resize:vertical"></textarea>
+    <div id="pega-resumen" style="margin-top:12px;max-height:38vh;overflow-y:auto"></div>
+    <div class="pact" style="margin-top:14px">
+      <button class="psave" onclick="aplicarPegado()">Ponerlo en el horario</button>
+      <button class="pcanc" onclick="cerrarPegarAno()">&#10005;</button>
+    </div>
   </div>
 </div>
 
@@ -498,7 +530,7 @@
 
 
 
-<script src="sync.js?v=202609212000"></script>
+<script src="sync.js?v=202609212006"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -506,7 +538,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609212000';
+    s.src = 'horario.js?v=202609212006';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

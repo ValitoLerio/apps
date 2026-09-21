@@ -936,6 +936,229 @@ function migrarVacacionesViejas(){
   return pasadas;
 }
 
+// ================================================================
+// PEGAR EL CUADRO DEL ANO
+// ================================================================
+// El cuadro de vacaciones de siempre, el de la hoja de calculo: una
+// fila por persona, una columna por dia y una V, una B o una A en los
+// dias que toque. Se pega tal cual, con sus doce meses, y cada marca
+// se pone en el horario donde corresponde.
+//
+// De la hoja se leen tres cosas: el nombre del mes, la fila de los
+// numeros de los dias -que dice que columna es cada dia- y las filas
+// de las personas. La fila de abajo, la de cuanta gente queda, se
+// deja pasar: son numeros sueltos, no marcas.
+var MESES_LARGOS = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO',
+                    'AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+var MARCAS = {
+  'V':'vacaciones', 'VAC':'vacaciones',
+  'B':'baja', 'BAJA':'baja',
+  'A':'ausencia', 'AUS':'ausencia',
+  'F':'festivo', 'FES':'festivo'
+};
+var pegadoLeido = null;   // lo ultimo que se ha repasado
+
+function sinTildes(t){
+  return String(t==null?'':t).toUpperCase()
+    .replace(/[ÁÀÄÂ]/g,'A').replace(/[ÉÈËÊ]/g,'E').replace(/[ÍÌÏÎ]/g,'I')
+    .replace(/[ÓÒÖÔ]/g,'O').replace(/[ÚÙÜÛ]/g,'U').replace(/Ñ/g,'N')
+    .replace(/[^A-Z0-9]/g,'');
+}
+function quienEs(nombre){
+  var n = sinTildes(nombre);
+  if (!n) return null;
+  var todos = staff();
+  for (var i=0;i<todos.length;i++) if (sinTildes(todos[i].name) === n) return todos[i];
+  for (var j=0;j<todos.length;j++){             // por si acaso, por el principio
+    var m = sinTildes(todos[j].name);
+    if (m && (m.indexOf(n)===0 || n.indexOf(m)===0)) return todos[j];
+  }
+  return null;
+}
+
+/* Lee el texto pegado y devuelve lo que ha entendido, sin tocar nada. */
+function leerCuadroAno(texto, ano){
+  var lineas = String(texto||'').split(/\r?\n/);
+  var mesAhora = -1, columnas = null;
+  var marcas = [], desconocidos = {}, sueltas = {}, meses = {};
+
+  lineas.forEach(function(linea){
+    var celdas = linea.split('\t');
+    var limpias = celdas.map(function(c){ return String(c||'').trim(); });
+    var conAlgo = limpias.filter(function(c){ return c; });
+    if (!conAlgo.length) return;
+
+    // 1. El nombre de un mes en cualquier celda manda: empieza bloque
+    for (var i=0;i<limpias.length;i++){
+      var idx = MESES_LARGOS.indexOf(sinTildes(limpias[i]));
+      if (idx >= 0){ mesAhora = idx; columnas = null; }
+    }
+    if (mesAhora < 0) return;
+
+    // 2. La fila de los numeros de los dias: 1, 2, 3... hasta el final
+    //    del mes. Se cuenta por la posicion, no por lo que ponga en la
+    //    celda: en su hoja hay algun 25 escrito como 2, y asi el dia
+    //    cae igual donde le toca. Lo que venga despues del ultimo dia
+    //    del mes -los totales de la derecha- se queda fuera.
+    var soloNumeros = conAlgo.every(function(x){ return /^[0-9]{1,2}$/.test(x); });
+    if (soloNumeros){
+      var primero = +conAlgo[0];
+      if (primero === 1 || primero === 2){
+        var cuantosDias = new Date(ano, mesAhora+1, 0).getDate();
+        var mapa = {}, toca = 1;
+        for (var c=0;c<limpias.length && toca<=cuantosDias;c++){
+          if (/^[0-9]{1,2}$/.test(limpias[c])){ mapa[c] = toca; toca++; }
+        }
+        if (toca > 20){ columnas = mapa; return; }
+      }
+    }
+    if (!columnas) return;
+
+    // 3. Fila de persona: nombre en la primera celda con letras
+    var nombre = '';
+    for (var k=0;k<limpias.length;k++){
+      if (columnas[k] !== undefined) break;
+      if (/[A-Za-zÁÉÍÓÚÑ]/.test(limpias[k])){ nombre = limpias[k]; break; }
+    }
+    if (!nombre) return;                                   // fila de cobertura
+    if (MESES_LARGOS.indexOf(sinTildes(nombre)) >= 0) return;
+    if (/^(TOTAL|VACACIONES|BAJA|PERSONAL|SEMANA|DIA)/.test(sinTildes(nombre))) return;
+
+    var quien = quienEs(nombre);
+    var dellRow = 0;
+    Object.keys(columnas).forEach(function(col){
+      var marca = sinTildes(limpias[col] || '');
+      if (!marca) return;
+      var estado = MARCAS[marca];
+      if (!estado){
+        if (marca.length <= 4) sueltas[marca] = (sueltas[marca]||0) + 1;
+        return;
+      }
+      dellRow++;
+      if (!quien){ desconocidos[nombre] = (desconocidos[nombre]||0) + 1; return; }
+      marcas.push({sid:quien.id, quien:quien.name, mes:mesAhora,
+                   dia:columnas[col], estado:estado});
+      meses[mesAhora] = true;
+    });
+    if (dellRow && !quien) desconocidos[nombre] = desconocidos[nombre] || dellRow;
+  });
+
+  // Lo que ya hay puesto en esos dias
+  var pisaTurnos = 0, yaIgual = 0, cambian = 0;
+  marcas.forEach(function(m){
+    var celda = (((sched[ano]||{})[m.mes]||{})[m.sid]||{})[m.dia] || null;
+    var est = celda && celda.estado ? celda.estado : (celda && celda.ini ? 'trabajo' : 'libre');
+    if (celda && celda.ini) { pisaTurnos++; m.pisa = true; }
+    else if (est === m.estado) yaIgual++;
+    else cambian++;
+  });
+
+  return {marcas:marcas, desconocidos:desconocidos, sueltas:sueltas,
+          meses:Object.keys(meses).length, pisaTurnos:pisaTurnos,
+          yaIgual:yaIgual, cambian:cambian, ano:ano};
+}
+
+/* Cuenta por persona y por tipo, para enseñarlo antes de tocar nada. */
+function resumenPegado(leido){
+  var por = {};
+  leido.marcas.forEach(function(m){
+    if (!por[m.quien]) por[m.quien] = {vacaciones:0, baja:0, ausencia:0, festivo:0};
+    por[m.quien][m.estado]++;
+  });
+  return por;
+}
+
+function abrirPegarAno(){
+  var ta = document.getElementById('pega-texto');
+  var an = document.getElementById('pega-ano');
+  if (ta) ta.value = '';
+  if (an) an.value = curY;
+  var res = document.getElementById('pega-resumen');
+  if (res) res.innerHTML = '<div style="color:var(--text2);font-size:.74rem">' +
+    'Copia el cuadro entero de la hoja de calculo -los doce meses si quieres- y pegalo aqui.</div>';
+  pegadoLeido = null;
+  var ov = document.getElementById('pegaov'); if (ov) ov.classList.add('show');
+  if (ta) setTimeout(function(){ ta.focus(); }, 60);
+}
+function cerrarPegarAno(){
+  var ov = document.getElementById('pegaov'); if (ov) ov.classList.remove('show');
+}
+
+function repasarPegado(){
+  var ta = document.getElementById('pega-texto');
+  var an = document.getElementById('pega-ano');
+  var res = document.getElementById('pega-resumen');
+  if (!ta || !res) return;
+  var ano = parseInt(an && an.value, 10) || curY;
+  var leido = leerCuadroAno(ta.value, ano);
+  pegadoLeido = leido;
+
+  if (!leido.marcas.length && !Object.keys(leido.desconocidos).length){
+    res.innerHTML = '<div style="color:#e87c6f;font-size:.76rem">No he encontrado ningun mes con marcas. ' +
+      'Tiene que llevar el nombre del mes, la fila con los numeros de los dias y debajo las filas de la gente.</div>';
+    return;
+  }
+
+  var por = resumenPegado(leido);
+  var filas = Object.keys(por).map(function(n){
+    var c = por[n];
+    var trozos = [];
+    if (c.vacaciones) trozos.push('<span style="color:var(--est-vacaciones-txt,#8fcdf0)">' + c.vacaciones + ' vacaciones</span>');
+    if (c.baja)       trozos.push('<span style="color:#c48ae0">' + c.baja + ' de baja</span>');
+    if (c.ausencia)   trozos.push('<span style="color:#f0a070">' + c.ausencia + ' ausencias</span>');
+    if (c.festivo)    trozos.push('<span style="color:#e87c6f">' + c.festivo + ' festivos</span>');
+    return '<tr><td style="padding:3px 10px 3px 0;font-weight:700;white-space:nowrap">' + esc(n) + '</td>' +
+           '<td style="padding:3px 0;color:var(--text2)">' + trozos.join(' &middot; ') + '</td></tr>';
+  }).join('');
+
+  var extra = '';
+  var desc = Object.keys(leido.desconocidos);
+  if (desc.length){
+    extra += '<div style="margin-top:10px;padding:8px 10px;border:1px solid rgba(232,124,111,.4);border-radius:7px;' +
+      'background:rgba(232,124,111,.09);font-size:.72rem;color:#e87c6f">Estos nombres no estan en el personal, ' +
+      'asi que sus dias no los pongo: <b>' + desc.map(esc).join(', ') + '</b>. Dalos de alta en Personal y vuelve a pegarlo.</div>';
+  }
+  var otras = Object.keys(leido.sueltas);
+  if (otras.length){
+    extra += '<div style="margin-top:8px;font-size:.7rem;color:var(--text2)">Marcas que no entiendo y dejo fuera: ' +
+      otras.map(function(x){ return '<b>' + esc(x) + '</b> (' + leido.sueltas[x] + ')'; }).join(', ') + '.</div>';
+  }
+  if (leido.pisaTurnos){
+    extra += '<div style="margin-top:8px;font-size:.7rem;color:#e0b168">Ojo: ' + leido.pisaTurnos +
+      ' de esos dias tienen turno puesto. Si sigo, el turno se va: no se puede estar de vacaciones y trabajar.</div>';
+  }
+  if (leido.yaIgual){
+    extra += '<div style="margin-top:8px;font-size:.7rem;color:var(--text2)">' + leido.yaIgual +
+      ' dias ya estaban igual; esos se quedan como estan.</div>';
+  }
+
+  res.innerHTML =
+    '<div style="font-size:.76rem;margin-bottom:8px;color:var(--gold2)">' +
+      leido.marcas.length + ' dias en ' + leido.meses + ' meses de ' + leido.ano + '</div>' +
+    '<table style="font-size:.74rem;border-collapse:collapse;width:100%">' + filas + '</table>' + extra;
+}
+
+function aplicarPegado(){
+  if (!pegadoLeido || !pegadoLeido.marcas.length){ repasarPegado(); return; }
+  var leido = pegadoLeido, ano = leido.ano, puestos = 0, turnosFuera = 0;
+
+  leido.marcas.forEach(function(m){
+    if (!sched[ano]) sched[ano] = {};
+    if (!sched[ano][m.mes]) sched[ano][m.mes] = {};
+    if (!sched[ano][m.mes][m.sid]) sched[ano][m.mes][m.sid] = {};
+    var antes = sched[ano][m.mes][m.sid][m.dia];
+    if (antes && antes.ini) turnosFuera++;
+    sched[ano][m.mes][m.sid][m.dia] = {estado:m.estado, nota:(antes && antes.nota) || ''};
+    puestos++;
+  });
+
+  save();
+  cerrarPegarAno();
+  renderAll();
+  toast(puestos + ' dias puestos en el horario de ' + ano +
+        (turnosFuera ? ' (' + turnosFuera + ' turnos se han quitado)' : ''));
+}
+
 function renderVacaciones(){
   var tbl = document.getElementById('vactbl'); if (!tbl) return;
   var dias = diasDelMes(curY, curM);
