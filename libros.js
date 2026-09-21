@@ -14,9 +14,10 @@ var VACIO = {libros:[], ajustes:{}};
 var ESTADOS = {
   porleer: {nombre:'Por leer', icono:'📗'},
   leyendo: {nombre:'Leyendo',  icono:'📖'},
-  leido:   {nombre:'Leído',    icono:'✅'}
+  leido:   {nombre:'Leído',    icono:'✅'},
+  deseo:   {nombre:'Me gustaría leerlo', icono:'💭'}
 };
-var ORDEN_ESTADOS = ['porleer','leyendo','leido'];
+var ORDEN_ESTADOS = ['porleer','leyendo','leido','deseo'];
 
 var libro = null;
 var ui = {vista:'todos', busca:'', orden:'titulo', genero:''};
@@ -447,6 +448,11 @@ function cuantos(estado){
 }
 function prestados(){ return libros().filter(function(l){ return (l.prestado||'').trim(); }); }
 function conFichero(){ return libros().filter(function(l){ return l.archivo; }); }
+/* Los que ha leído y no tiene guardados: los de papel, los prestados,
+   los de toda la vida. Valen igual para acordarse de lo que ha leído. */
+function sinFichero(){
+  return libros().filter(function(l){ return l.estado === 'leido' && !l.archivo; });
+}
 
 /* ══════════════════════════════════════════════════════════════
    PINTAR
@@ -461,6 +467,8 @@ function pintar(){
       boton('porleer','Por leer', cuantos('porleer'))+
       boton('leyendo','Leyendo', cuantos('leyendo'))+
       boton('leido','Leídos', cuantos('leido'))+
+      boton('leidosinfichero','Leídos sin fichero', sinFichero().length)+
+      boton('deseo','Me gustaría leer', cuantos('deseo'))+
       boton('archivos','Descargados', conFichero().length)+
       boton('prestados','Prestados', prestados().length)+
       '<div class="pie-rail">'+
@@ -471,7 +479,11 @@ function pintar(){
     '<main id="main"></main>';
 
   root.querySelectorAll('[data-vista]').forEach(function(b){
-    b.addEventListener('click', function(){ ui.vista = b.dataset.vista; verLista(); });
+    b.addEventListener('click', function(){
+      ui.vista = b.dataset.vista;
+      ui.busca = '';
+      pintar();               /* así el apartado de la izquierda se marca */
+    });
   });
   verLista();
 }
@@ -486,6 +498,7 @@ function filtrados(){
   return libros().filter(function(l){
     if(ui.vista==='prestados' && !(l.prestado||'').trim()) return false;
     if(ui.vista==='archivos' && !l.archivo) return false;
+    if(ui.vista==='leidosinfichero' && !(l.estado === 'leido' && !l.archivo)) return false;
     if(ORDEN_ESTADOS.indexOf(ui.vista)>=0 && (l.estado||'porleer')!==ui.vista) return false;
     if(ui.genero && l.genero!==ui.genero) return false;
     if(!t) return true;
@@ -506,20 +519,30 @@ function verLista(){
   var titulo = ui.vista==='todos' ? 'Toda la biblioteca'
              : ui.vista==='prestados' ? 'Prestados'
              : ui.vista==='archivos' ? 'Libros descargados'
+             : ui.vista==='leidosinfichero' ? 'Leídos sin fichero'
+             : ui.vista==='deseo' ? 'Me gustaría leer'
              : ESTADOS[ui.vista].nombre;
+  var explica = ui.vista==='leidosinfichero'
+        ? 'Los que has leído y no tienes guardados: los de papel, los prestados, los de siempre.'
+      : ui.vista==='deseo'
+        ? 'Los que te apetece leer y todavía no tienes. La lista para cuando busques algo.'
+      : ui.vista==='archivos'
+        ? 'Los epub y los pdf que tienes en este aparato. Se pueden abrir y enviar.'
+      : 'Lo que tienes, lo que te falta por leer y dónde está cada uno.';
   var leidosAno = libros().filter(function(l){
     return l.estado==='leido' && (l.fecha||'').slice(0,4)===String(new Date().getFullYear());
   }).length;
 
   main.innerHTML =
     '<div class="cabecera"><div><h1>'+esc(titulo)+'</h1>'+
-      '<p>Lo que tienes, lo que te falta por leer y dónde está cada uno.</p></div>'+
+      '<p>'+esc(explica)+'</p></div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
         '<button class="btn fuerte" id="l_nuevo">+ Añadir libro</button>'+
         '<button class="btn" id="l_bajados">📥 Añadir descargados</button>'+
         (conFichero().length ? '<button class="btn" id="l_enviar">📤 Enviar libros</button>' : '')+
         (repetidos().length
           ? '<button class="btn malo" id="l_repes">⚠ Quitar repetidos</button>' : '')+
+        '<button class="btn" id="l_reves">↔ Título y autor</button>'+
         '<button class="btn" id="l_pegar">📋 Pegar una lista</button>'+
         '<button class="btn" id="l_imprimir">🖨 Imprimir</button>'+
       '</div></div>'+
@@ -531,6 +554,8 @@ function verLista(){
           '<div class="cifra"><div class="k">Por leer</div><div class="v">'+cuantos('porleer')+'</div></div>'+
           '<div class="cifra"><div class="k">Leídos</div><div class="v">'+cuantos('leido')+'</div>'+
             '<div class="n">'+leidosAno+' este año</div></div>'+
+          '<div class="cifra"><div class="k">Me gustaría</div><div class="v">'+cuantos('deseo')+'</div>'+
+            '<div class="n">por conseguir</div></div>'+
           '<div class="cifra"><div class="k">Descargados</div><div class="v">'+conFichero().length+'</div>'+
             '<div class="n">epub y pdf</div></div>'+
           '<div class="cifra"><div class="k">Prestados</div><div class="v'+(prestados().length?' aviso':'')+'">'+
@@ -559,8 +584,14 @@ function verLista(){
     (lista.length
       ? '<div class="fichas">'+lista.map(ficha).join('')+'</div>'
       : '<div class="vacio"><strong>'+
-        (libros().length ? 'Nada con esa búsqueda' : 'La biblioteca está vacía')+'</strong>'+
-        (libros().length ? 'Prueba con otra palabra.'
+        (ui.vista==='deseo' && !cuantos('deseo') ? 'Nada apuntado todavía'
+         : ui.vista==='leidosinfichero' && !sinFichero().length ? 'Ninguno de momento'
+         : libros().length ? 'Nada con esa búsqueda' : 'La biblioteca está vacía')+'</strong>'+
+        (ui.vista==='deseo' && !cuantos('deseo')
+           ? 'Apunta aquí los que te apetece leer: dale a «+ Añadir libro» y ponle «Me gustaría leerlo».'
+         : ui.vista==='leidosinfichero' && !sinFichero().length
+           ? 'Aquí saldrán los que marques como leídos y no tengas guardados en el ordenador.'
+         : libros().length ? 'Prueba con otra palabra.'
                          : 'Dale a «+ Añadir libro», a «Pegar una lista» si ya los tienes escritos, '+
                            'o arrastra aquí los epub y los pdf que tengas descargados.')+
         '</div>');
@@ -582,6 +613,8 @@ function verLista(){
   document.getElementById('l_bajados').addEventListener('click', function(){
     pedirFicheros(meterDescargados);
   });
+  var rev = document.getElementById('l_reves');
+  if(rev) rev.addEventListener('click', alReves);
   var rep = document.getElementById('l_repes');
   if(rep) rep.addEventListener('click', limpiarRepetidos);
   var env = document.getElementById('l_enviar');
@@ -606,7 +639,8 @@ function ficha(l){
   return '<div class="libro">'+
     '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'+
       '<span class="tit">'+esc(l.titulo||'sin título')+'</span>'+
-      '<span class="chapa '+(l.estado==='leido'?'ok':(l.estado==='leyendo'?'acento':'neutra'))+'">'+
+      '<span class="chapa '+(l.estado==='leido'?'ok':(l.estado==='leyendo'?'acento':
+        (l.estado==='deseo'?'aviso':'neutra')))+'">'+
         est.icono+' '+esc(est.nombre)+'</span></div>'+
     (l.autor?'<div class="aut">'+esc(l.autor)+'</div>':'')+
     (l.estado==='leido' ? '<div>'+estrellas(l)+'</div>' : '')+
@@ -624,16 +658,21 @@ function ficha(l){
       : '')+
     (l.notas?'<div class="meta">'+esc(l.notas)+'</div>':'')+
     '<div class="pie">'+
-      (l.estado!=='leido'
-        ? '<button class="btn sm fuerte" data-leido="'+esc(l.id)+'">Ya lo he leído</button>' : '')+
+      (l.estado==='deseo'
+        ? '<button class="btn sm fuerte" data-porleer="'+esc(l.id)+'">Ya lo tengo</button>'
+        : (l.estado!=='leido'
+            ? '<button class="btn sm fuerte" data-leido="'+esc(l.id)+'">Ya lo he leído</button>' : ''))+
       (l.estado==='porleer'
         ? '<button class="btn sm" data-leyendo="'+esc(l.id)+'">Lo estoy leyendo</button>' : '')+
+      (l.estado==='deseo'
+        ? '<button class="btn sm" data-leido="'+esc(l.id)+'">Ya lo he leído</button>' : '')+
       (l.estado==='leido'
         ? '<button class="btn sm" data-porleer="'+esc(l.id)+'">Volver a por leer</button>' : '')+
       (l.archivo && AQUI[l.id]
         ? '<button class="btn sm" data-abrir="'+esc(l.id)+'">Abrir</button>'+
           '<button class="btn sm" data-enviar="'+esc(l.id)+'">Enviar</button>'
-        : '<button class="btn suave sm" data-adjuntar="'+esc(l.id)+'">Adjuntar fichero</button>')+
+        : (l.estado==='deseo' ? ''
+            : '<button class="btn suave sm" data-adjuntar="'+esc(l.id)+'">Adjuntar fichero</button>'))+
       '<button class="btn suave sm" data-editar="'+esc(l.id)+'">Editar</button>'+
       '<button class="btn suave sm malo" data-borrar="'+esc(l.id)+'">Borrar</button>'+
     '</div></div>';
@@ -950,6 +989,62 @@ function limpiarRepetidos(){
         pintar(); avisar(plural(borrar.length,'repetido quitado','repetidos quitados'));
       });
     }, {aceptar:'Quitarlos'});
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CAMBIAR EL TITULO POR EL AUTOR
+   ══════════════════════════════════════════════════════════════
+   Al meter los ficheros hay que decir si se llaman «Autor - Título» o
+   al revés. Si se eligió mal, quedan cambiados. Esto los endereza sin
+   tener que entrar uno a uno. */
+function pareceNombreDePersona(t){
+  t = String(t||'').trim();
+  if(!t) return false;
+  if(/\d/.test(t)) return false;
+  var palabras = t.split(/\s+/);
+  if(palabras.length > 3) return false;
+  return !/\b(de|del|la|el|los|las|un|una|y|en|al)\b/i.test(t);
+}
+function alReves(){
+  var lista = libros().filter(function(l){ return (l.autor||'').trim(); });
+  if(!lista.length){ avisar('No hay ninguno con autor'); return; }
+
+  var v = abrirVentana('Cambiar el título por el autor',
+    '<p style="margin:0 0 10px">Marca los que estén del revés y se cambian de sitio. '+
+    'Vienen marcados los que parecen estarlo.</p>'+
+    '<div class="tabla-caja" style="max-height:46vh;overflow:auto"><table style="min-width:420px"><tbody>'+
+    lista.map(function(l,i){
+      /* Si el libro vino de un fichero, lo que manda es como se llama el
+         fichero: si lo que hay guardado como título es lo de DETRÁS del
+         guion, se leyó como «Autor - Título» y hay que darle la vuelta. */
+      var sospecha;
+      if(l.archivo && l.archivo.nombre){
+        var comoSeLeyo = deNombreDeFichero(l.archivo.nombre, true);
+        sospecha = (comoSeLeyo.titulo === l.titulo && comoSeLeyo.autor === l.autor);
+      }else{
+        sospecha = pareceNombreDePersona(l.titulo) && !pareceNombreDePersona(l.autor);
+      }
+      return '<tr><td style="width:26px;vertical-align:top;padding-top:6px">'+
+          '<input type="checkbox" id="ar_'+i+'"'+(sospecha?' checked':'')+' style="width:auto"></td>'+
+        '<td style="padding:4px 0"><strong style="font-size:13px">'+esc(l.titulo||'')+'</strong>'+
+          '<span class="nota" style="margin:0"> de '+esc(l.autor)+'</span>'+
+          '<div class="nota" style="margin:2px 0 0">quedaría <strong>'+esc(l.autor)+'</strong> de '+
+          esc(l.titulo||'')+'</div>'+
+          (l.archivo && l.archivo.nombre
+            ? '<div class="nota" style="margin:1px 0 0;opacity:.75">'+esc(l.archivo.nombre)+'</div>' : '')+
+        '</td></tr>';
+    }).join('')+'</tbody></table></div>',
+    function(){
+      var n = 0;
+      lista.forEach(function(l,i){
+        if(!v.querySelector('#ar_'+i).checked) return;
+        var t = l.titulo; l.titulo = l.autor; l.autor = t; n++;
+      });
+      if(!n){ avisar('No has marcado ninguno.', true); return true; }
+      libro.ajustes.autorDelante = false;   /* sus ficheros son «Título - Autor» */
+      guardar(); pintar();
+      avisar(plural(n,'libro cambiado','libros cambiados'));
+    }, {aceptar:'Cambiarlos'});
 }
 
 /* ══════════════════════════════════════════════════════════════
