@@ -38,6 +38,16 @@ function iconoDe(quien){
 }
 function nombrePersona(quien){ return quien || 'Sin poner'; }
 
+/* Las contraseñas del trabajo las mira cualquiera de la casa y se
+   consultan con prisa, así que puede no interesar que pidan nada. Cada
+   persona lo lleva como quiera: las suyas cifradas y las del trabajo a
+   la vista, o al revés. */
+function pideMaestra(quien){
+  if(libro.ajustes.cifrar === false) return false;           /* apagado del todo */
+  var sin = libro.ajustes.sinCifrar || [];
+  return sin.indexOf(quien) < 0;
+}
+
 var libro = null;
 var ui = { tipo:'todos', ambito:'todos', busca:'', verClave:{} };
 var maestra = null;          /* la contraseña maestra, sólo en memoria */
@@ -123,6 +133,9 @@ function cargar(){
   if(libro.ajustes.cifrar === undefined) libro.ajustes.cifrar = null;
   if(!libro.ajustes.personas || !libro.ajustes.personas.length)
     libro.ajustes.personas = PERSONAS_DE_SERIE.slice();
+  /* Las del trabajo se consultan con prisa y delante de gente: de serie
+     no piden nada. Las de cada uno, sí. */
+  if(!libro.ajustes.sinCifrar) libro.ajustes.sinCifrar = ['Trabajo'];
   /* Lo de antes iba por «trabajo» y «casa»; ahora va por personas. */
   var cambiado = false;
   (libro.apuntes||[]).forEach(function(a){
@@ -497,7 +510,7 @@ function editar(id){
       if(tipo!=='clave'){ a.valor = v; delete a.cifrada; terminar(); return; }
       if(!v){ terminar(); return; }           /* clave sin tocar */
 
-      if(libro.ajustes.cifrar === false){     /* él ha dicho que sin contraseña */
+      if(!pideMaestra(a.ambito)){     /* esta persona las guarda a la vista */
         a.valor = v; delete a.cifrada; terminar(); return;
       }
       conMaestra(function(clave){
@@ -652,7 +665,9 @@ function pegarLista(){
         guardar(); pintar();
         avisar(plural(buenos.length,'apunte nuevo','apuntes nuevos'));
       }
-      if(!claves.length || libro.ajustes.cifrar === false){ terminar(); return; }
+      if(!claves.length || !pideMaestra(document.getElementById('pg_ambito').value)){
+        terminar(); return;
+      }
 
       conMaestra(function(maestraOk){
         Promise.all(claves.map(function(x){
@@ -816,6 +831,40 @@ function arreglarLoPegado(){
     }, {aceptar:'Arreglarlo'});
 }
 
+/* «Que no me pida nada más». Abre lo que haya cifrado con la maestra —una
+   última vez— y lo deja guardado a la vista. A partir de ahí la agenda no
+   pregunta nunca. Se dice claro lo que se pierde: quien entre en el
+   repositorio las lee. */
+function dejarDePedirla(){
+  var cifradas = apuntes().filter(function(a){ return a.tipo==='clave' && a.cifrada; });
+
+  confirmar('No volver a pedírmela',
+    '<p style="margin:0 0 8px">Las contraseñas se guardarán <strong>a la vista</strong>: '+
+    'la agenda no volverá a pedirte nada, ni al verlas ni al copiarlas.</p>'+
+    (cifradas.length
+      ? '<p class="nota" style="margin:0 0 8px">Hay '+plural(cifradas.length,'contraseña cifrada','contraseñas cifradas')+
+        '. Hace falta la maestra una última vez para abrirlas.</p>'
+      : '')+
+    '<p class="nota" style="margin:0">A cambio: cualquiera que entre a tu repositorio privado '+
+    'las puede leer. Los teléfonos y los correos ya estaban así.</p>',
+    function(){
+      function terminar(){
+        libro.ajustes.cifrar = false;
+        libro.ajustes.sinCifrar = personas().slice();
+        guardar(); pintar();
+        avisar('Hecho: no vuelve a pedirte la contraseña');
+      }
+      if(!cifradas.length){ terminar(); return; }
+      conMaestra(function(clave){
+        Promise.all(cifradas.map(function(a){
+          return descifrar(a.cifrada, clave).then(function(t){
+            a.valor = t; delete a.cifrada;
+          }).catch(function(){});
+        })).then(terminar);
+      });
+    }, {aceptar:'No pedírmela más'});
+}
+
 function vaciarAgenda(){
   if(!apuntes().length){ avisar('La agenda ya está vacía.', true); return; }
   confirmar('Vaciar la agenda',
@@ -855,25 +904,42 @@ function verAjustes(){
     'guarda en ningún sitio. Si se te olvida, esas contraseñas no las abre nadie, ni yo.</p>'+
     '<div style="border-top:1px solid var(--linea);margin-top:14px;padding-top:12px">'+
       '<div class="lbl" style="margin-bottom:6px">De quién puede ser cada apunte</div>'+
-      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+      '<div>'+
         personas().map(function(q){
           var n = apuntes().filter(function(a){ return a.ambito===q; }).length;
-          return '<span class="chapa neutra">'+iconoDe(q)+' '+esc(q)+' · '+n+
-            (n?'':' <button type="button" class="btn suave sm" data-fuera="'+esc(q)+'" '+
-               'style="padding:0 4px">✕</button>')+'</span>';
+          var pide = pideMaestra(q);
+          return '<div style="display:flex;align-items:center;gap:8px;width:100%;'+
+              'padding:5px 0;border-bottom:1px solid var(--linea-suave)">'+
+            '<span style="flex:1">'+iconoDe(q)+' <strong>'+esc(q)+'</strong> '+
+              '<span class="nota" style="margin:0">· '+plural(n,'apunte','apuntes')+'</span></span>'+
+            '<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12.5px">'+
+              '<input type="checkbox" class="pideM" data-quien="'+esc(q)+'" style="width:auto"'+
+              (pide?' checked':'')+'> pide la maestra</label>'+
+            (n?'':'<button type="button" class="btn suave sm malo" data-fuera="'+esc(q)+'" '+
+               'style="padding:0 6px">✕</button>')+
+          '</div>';
         }).join('')+
       '</div>'+
       '<button type="button" class="btn sm" id="aj_persona" style="margin-top:8px">+ Añadir a alguien</button>'+
     '</div>'+
     '<div style="border-top:1px solid var(--linea);margin-top:14px;padding-top:12px;'+
       'display:flex;gap:8px;flex-wrap:wrap">'+
+      '<button type="button" class="btn" id="aj_nomas">No volver a pedírmela</button>'+
       '<button type="button" class="btn" id="aj_arreglar">Arreglar lo pegado</button>'+
       '<button type="button" class="btn malo" id="aj_vaciar">Vaciar la agenda</button>'+
     '</div>'+
+    '<p class="nota" style="margin:8px 0 0">Quítale la marca a quien no quieras que pida nada '+
+    '—el trabajo, por ejemplo—: sus contraseñas se guardan a la vista y se leen sin escribir nada. '+
+    'Lo que ya esté cifrado se queda cifrado hasta que lo edites.</p>'+
     '<p class="nota" style="margin:8px 0 0">«Arreglar lo pegado» pasa a teléfonos las '+
     'contraseñas que en realidad son números.</p>',
     function(){
       libro.ajustes.cifrar = document.getElementById('aj_sin').checked ? false : null;
+      var sin = [];
+      document.querySelectorAll('.pideM').forEach(function(c){
+        if(!c.checked) sin.push(c.dataset.quien);
+      });
+      libro.ajustes.sinCifrar = sin;
       guardar();
       avisar(libro.ajustes.cifrar===false ? 'Las contraseñas nuevas se guardarán sin cifrar'
                                           : 'Las contraseñas nuevas se cifrarán');
@@ -897,6 +963,13 @@ function verAjustes(){
       var d = b.closest('dialog'); if(d){ d.close(); d.remove(); }
       verAjustes();
     });
+  });
+
+  var nomas = document.getElementById('aj_nomas');
+  if(nomas) nomas.addEventListener('click', function(e){
+    e.preventDefault();
+    var d = nomas.closest('dialog'); if(d){ d.close(); d.remove(); }
+    dejarDePedirla();
   });
 
   var arr = document.getElementById('aj_arreglar');
