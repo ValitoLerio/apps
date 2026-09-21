@@ -443,6 +443,26 @@ function estantes(){
   libros().forEach(function(l){ if(l.donde) c[l.donde]=(c[l.donde]||0)+1; });
   return Object.keys(c).sort(function(a,b){ return a.localeCompare(b,'es'); });
 }
+/* Los escritores que tienes, con lo que llevas leído de cada uno. El
+   que más libros tenga, primero. */
+function escritores(){
+  var c = {};
+  libros().forEach(function(l){
+    var n = (l.autor||'').trim();
+    if(!n) n = 'Sin autor';
+    if(!c[n]) c[n] = {nombre:n, total:0, leidos:0, pendientes:0, deseo:0};
+    c[n].total++;
+    if(l.estado === 'leido') c[n].leidos++;
+    else if(l.estado === 'deseo') c[n].deseo++;
+    else c[n].pendientes++;
+  });
+  return Object.keys(c).map(function(n){ return c[n]; })
+    .sort(function(a,b){ return b.total - a.total || a.nombre.localeCompare(b.nombre,'es'); });
+}
+function librosDe(nombre){
+  return libros().filter(function(l){ return ((l.autor||'').trim() || 'Sin autor') === nombre; });
+}
+
 function cuantos(estado){
   return libros().filter(function(l){ return (l.estado||'porleer')===estado; }).length;
 }
@@ -469,6 +489,7 @@ function pintar(){
       boton('leido','Leídos', cuantos('leido'))+
       boton('leidosinfichero','Leídos sin fichero', sinFichero().length)+
       boton('deseo','Me gustaría leer', cuantos('deseo'))+
+      boton('autores','Escritores', escritores().length)+
       boton('archivos','Descargados', conFichero().length)+
       boton('prestados','Prestados', prestados().length)+
       '<div class="pie-rail">'+
@@ -488,8 +509,9 @@ function pintar(){
   verLista();
 }
 function boton(vista, texto, cuenta){
+  var puesto = ui.vista===vista || (vista==='autores' && ui.vista==='autor');
   return '<button class="nav" data-vista="'+vista+'"'+
-         (ui.vista===vista?' aria-current="true"':'')+'>'+
+         (puesto?' aria-current="true"':'')+'>'+
          '<span>'+esc(texto)+'</span><span class="cuenta">'+cuenta+'</span></button>';
 }
 
@@ -499,6 +521,7 @@ function filtrados(){
     if(ui.vista==='prestados' && !(l.prestado||'').trim()) return false;
     if(ui.vista==='archivos' && !l.archivo) return false;
     if(ui.vista==='leidosinfichero' && !(l.estado === 'leido' && !l.archivo)) return false;
+    if(ui.vista==='autor' && ((l.autor||'').trim() || 'Sin autor') !== ui.autor) return false;
     if(ORDEN_ESTADOS.indexOf(ui.vista)>=0 && (l.estado||'porleer')!==ui.vista) return false;
     if(ui.genero && l.genero!==ui.genero) return false;
     if(!t) return true;
@@ -521,6 +544,8 @@ function verLista(){
              : ui.vista==='archivos' ? 'Libros descargados'
              : ui.vista==='leidosinfichero' ? 'Leídos sin fichero'
              : ui.vista==='deseo' ? 'Me gustaría leer'
+             : ui.vista==='autores' ? 'Escritores'
+             : ui.vista==='autor' ? ui.autor
              : ESTADOS[ui.vista].nombre;
   var explica = ui.vista==='leidosinfichero'
         ? 'Los que has leído y no tienes guardados: los de papel, los prestados, los de siempre.'
@@ -528,6 +553,14 @@ function verLista(){
         ? 'Los que te apetece leer y todavía no tienes. La lista para cuando busques algo.'
       : ui.vista==='archivos'
         ? 'Los epub y los pdf que tienes en este aparato. Se pueden abrir y enviar.'
+      : ui.vista==='autores'
+        ? 'Cada uno con sus libros. Pulsa en uno y ves todo lo suyo.'
+      : ui.vista==='autor'
+        ? (function(){
+            var suyos = librosDe(ui.autor);
+            var leidos = suyos.filter(function(l){ return l.estado==='leido'; }).length;
+            return plural(suyos.length,'libro suyo','libros suyos')+', '+leidos+' leídos.';
+          })()
       : 'Lo que tienes, lo que te falta por leer y dónde está cada uno.';
   var leidosAno = libros().filter(function(l){
     return l.estado==='leido' && (l.fecha||'').slice(0,4)===String(new Date().getFullYear());
@@ -543,6 +576,8 @@ function verLista(){
         (repetidos().length
           ? '<button class="btn malo" id="l_repes">⚠ Quitar repetidos</button>' : '')+
         '<button class="btn" id="l_reves">↔ Título y autor</button>'+
+        (ui.vista==='autores' && escritoresRepetidos().length
+          ? '<button class="btn malo" id="l_juntar">⚠ Juntar escritores</button>' : '')+
         '<button class="btn" id="l_pegar">📋 Pegar una lista</button>'+
         '<button class="btn" id="l_imprimir">🖨 Imprimir</button>'+
       '</div></div>'+
@@ -581,7 +616,12 @@ function verLista(){
       '</select>'+
     '</div>'+
 
-    (lista.length
+    (ui.vista==='autores'
+      ? (escritores().length
+          ? '<div class="fichas">'+escritores().map(fichaEscritor).join('')+'</div>'
+          : '<div class="vacio"><strong>Todavía no hay escritores</strong>'+
+            'Según vayas metiendo libros con su autor, aparecen aquí.</div>')
+      : lista.length
       ? '<div class="fichas">'+lista.map(ficha).join('')+'</div>'
       : '<div class="vacio"><strong>'+
         (ui.vista==='deseo' && !cuantos('deseo') ? 'Nada apuntado todavía'
@@ -595,6 +635,15 @@ function verLista(){
                          : 'Dale a «+ Añadir libro», a «Pegar una lista» si ya los tienes escritos, '+
                            'o arrastra aquí los epub y los pdf que tengas descargados.')+
         '</div>');
+
+  if(ui.vista==='autor'){
+    var volver = document.createElement('button');
+    volver.className = 'btn suave sm';
+    volver.textContent = '← Todos los escritores';
+    volver.style.marginBottom = '12px';
+    volver.addEventListener('click', function(){ ui.vista='autores'; pintar(); });
+    main.insertBefore(volver, main.querySelector('.filtros'));
+  }
 
   var busca = document.getElementById('l_busca');
   busca.addEventListener('input', function(){
@@ -613,6 +662,8 @@ function verLista(){
   document.getElementById('l_bajados').addEventListener('click', function(){
     pedirFicheros(meterDescargados);
   });
+  var jun = document.getElementById('l_juntar');
+  if(jun) jun.addEventListener('click', juntarEscritores);
   var rev = document.getElementById('l_reves');
   if(rev) rev.addEventListener('click', alReves);
   var rep = document.getElementById('l_repes');
@@ -634,6 +685,20 @@ function estrellas(l){
   return s+'</span>';
 }
 
+function fichaEscritor(e){
+  var barra = e.total ? Math.round(e.leidos * 100 / e.total) : 0;
+  return '<button class="libro" data-autor="'+esc(e.nombre)+'" '+
+      'style="cursor:pointer;text-align:left;font:inherit;color:inherit">'+
+    '<span class="tit">'+esc(e.nombre)+'</span>'+
+    '<div class="meta">'+plural(e.total,'libro','libros')+'</div>'+
+    '<div style="height:5px;border-radius:3px;background:var(--sup2);overflow:hidden">'+
+      '<div style="height:100%;width:'+barra+'%;background:var(--acento)"></div></div>'+
+    '<div class="meta">'+
+      [e.leidos?e.leidos+' leídos':'', e.pendientes?e.pendientes+' por leer':'',
+       e.deseo?e.deseo+' en la lista':''].filter(Boolean).join(' · ')+
+    '</div></button>';
+}
+
 function ficha(l){
   var est = ESTADOS[l.estado||'porleer'];
   return '<div class="libro">'+
@@ -642,7 +707,10 @@ function ficha(l){
       '<span class="chapa '+(l.estado==='leido'?'ok':(l.estado==='leyendo'?'acento':
         (l.estado==='deseo'?'aviso':'neutra')))+'">'+
         est.icono+' '+esc(est.nombre)+'</span></div>'+
-    (l.autor?'<div class="aut">'+esc(l.autor)+'</div>':'')+
+    (l.autor?'<div class="aut"><button data-autor="'+esc(l.autor)+'" '+
+      'style="border:0;background:none;padding:0;font:inherit;color:var(--muted);'+
+      'cursor:pointer;text-decoration:underline;text-underline-offset:2px">'+
+      esc(l.autor)+'</button></div>':'')+
     (l.estado==='leido' ? '<div>'+estrellas(l)+'</div>' : '')+
     '<div class="meta">'+
       [l.genero?esc(l.genero):'', l.donde?'📚 '+esc(l.donde):'',
@@ -680,6 +748,11 @@ function ficha(l){
 
 function engancharFichas(){
   var main = document.getElementById('main');
+  main.querySelectorAll('[data-autor]').forEach(function(b){
+    b.addEventListener('click', function(){
+      ui.autor = b.dataset.autor; ui.vista = 'autor'; ui.busca = ''; pintar();
+    });
+  });
   function cambiar(id, estado){
     var l = libroDe(id); if(!l) return;
     l.estado = estado;
@@ -989,6 +1062,78 @@ function limpiarRepetidos(){
         pintar(); avisar(plural(borrar.length,'repetido quitado','repetidos quitados'));
       });
     }, {aceptar:'Quitarlos'});
+}
+
+/* ══════════════════════════════════════════════════════════════
+   JUNTAR ESCRITORES QUE SON EL MISMO
+   ══════════════════════════════════════════════════════════════
+   «Jean M. Auel», «Jean M. Aue» y «Jean M. Auel,» son el mismo señor
+   escrito de tres maneras. Se juntan bajo el nombre mejor escrito: el
+   más largo, que suele ser el que lleva las tildes y no está cortado. */
+function mismoEscritor(a, b){
+  var x = llano(a), y = llano(b);
+  if(!x || !y) return false;
+  if(x === y) return true;
+  var corto = x.length < y.length ? x : y, largo = x.length < y.length ? y : x;
+  return corto.length >= 6 && largo.indexOf(corto) === 0;
+}
+function escritoresRepetidos(){
+  var nombres = escritores().map(function(e){ return e.nombre; })
+    .filter(function(n){ return n !== 'Sin autor'; });
+  var grupos = [], usados = {};
+  nombres.forEach(function(n, i){
+    if(usados[n]) return;
+    var grupo = [n];
+    nombres.slice(i+1).forEach(function(m){
+      if(!usados[m] && mismoEscritor(n, m)){ grupo.push(m); usados[m] = true; }
+    });
+    if(grupo.length > 1) grupos.push(grupo);
+  });
+  return grupos;
+}
+function juntarEscritores(){
+  var grupos = escritoresRepetidos();
+  if(!grupos.length){ avisar('No hay escritores repetidos'); return; }
+  /* El nombre bueno es el más largo, pero sin la coma ni el punto que
+     se cuelan al escribirlo: «Jean M. Auel,» se queda en «Jean M. Auel». */
+  function aseado(n){ return String(n||'').replace(/[\s.,;:·\-]+$/,'').trim(); }
+  var opciones = grupos.map(function(g){
+    var vistos = {}, lista = [];
+    g.map(aseado).concat(g).forEach(function(n){
+      if(n && !vistos[n]){ vistos[n] = true; lista.push(n); }
+    });
+    return lista.sort(function(a,b){ return aseado(b).length - aseado(a).length; });
+  });
+  var elegido = opciones.map(function(o){ return o[0]; });
+
+  var v = abrirVentana('Juntar escritores',
+    '<p style="margin:0 0 10px">El mismo escritor escrito de varias maneras. '+
+    'Se queda el nombre de arriba y los libros de los otros pasan a él.</p>'+
+    '<div class="tabla-caja" style="max-height:44vh;overflow:auto">'+
+    grupos.map(function(g, i){
+      return '<div style="padding:8px 0;border-bottom:1px solid var(--linea-suave)">'+
+        '<div class="campo"><label class="lbl" for="je_'+i+'">Se queda como</label>'+
+        '<select id="je_'+i+'">'+opciones[i].map(function(n){
+          var suyos = librosDe(n).length;
+          return '<option value="'+esc(n)+'"'+(n===elegido[i]?' selected':'')+'>'+esc(n)+
+                 (suyos?' ('+plural(suyos,'libro','libros')+')':'')+'</option>'; }).join('')+
+        '</select></div>'+
+        '<div class="nota" style="margin:4px 0 0">se juntan: '+g.map(esc).join(' · ')+'</div></div>';
+    }).join('')+'</div>',
+    function(){
+      var tocados = 0;
+      grupos.forEach(function(g, i){
+        var bueno = v.querySelector('#je_'+i).value;
+        g.forEach(function(n){
+          if(n === bueno) return;
+          librosDe(n).forEach(function(l){ l.autor = bueno; tocados++; });
+        });
+        librosDe(bueno).forEach(function(l){ l.autor = bueno; });   /* deja el nombre aseado */
+      });
+      if(!tocados){ avisar('No había nada que juntar.', true); return true; }
+      guardar(); pintar();
+      avisar(plural(tocados,'libro cambiado de escritor','libros cambiados de escritor'));
+    }, {aceptar:'Juntarlos'});
 }
 
 /* ══════════════════════════════════════════════════════════════
