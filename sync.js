@@ -52,7 +52,8 @@ var SECCIONES = {
   pedidos: ['pedidos.libro.v1'],
   vacaciones: ['vacaciones.libro.v1'],
   recetas: ['recetas.libro.v1'],
-  agenda:  ['agenda.libro.v1']
+  agenda:  ['agenda.libro.v1'],
+  libros:  ['libros.libro.v1']
 };
 
 var seccionActiva = null;

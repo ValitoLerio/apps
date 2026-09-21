@@ -21,6 +21,7 @@
     --vacaciones:#e59ad0; --vacaciones-tenue:#2e162699;
     --recetas:#f0a48c; --recetas-tenue:#33191299;
     --agenda:#8ed3ad; --agenda-tenue:#13291f99;
+  --libros:#e3c088; --libros-tenue:#2b221499;
     --alerta:#ef8a76; --alerta-tenue:#331a16;
     --display:'Fraunces',Georgia,serif;
     --texto:'Archivo','Helvetica Neue',sans-serif;
@@ -43,6 +44,7 @@
     --vacaciones:#8e3070; --vacaciones-tenue:#f6e6f1;
     --recetas:#a8442c; --recetas-tenue:#f7e6e0;
     --agenda:#2f6b52; --agenda-tenue:#e2efe8;
+  --libros:#6b4f2a; --libros-tenue:#f2e9dc;
       --alerta:#96331f; --alerta-tenue:#f7e2de;
       --sombra:0 16px 34px -26px rgba(15,22,24,.5);
     }
@@ -172,6 +174,7 @@
   .p-vacaciones{--tono:var(--vacaciones)}
   .p-recetas{--tono:var(--recetas)}
   .p-agenda{--tono:var(--agenda)}
+  .p-libros{--tono:var(--libros)}
 
   /* ── Colocar: mover las tarjetas a donde te parezca ───────────── */
   .colocando .puerta{cursor:default}
@@ -529,6 +532,22 @@
         <div class="entrar">Abrir <span class="flecha">&rarr;</span></div>
       </a>
 
+      <a class="puerta p-libros" data-app="libros" href="libros.html">
+        <span class="rotulo">Biblioteca</span>
+        <h2>Libros</h2>
+        <p class="que">Los que tienes, los que te faltan por leer y los que has prestado.</p>
+        <div class="cifra">
+          <span class="n" id="d-lib-total">&mdash;</span>
+          <span class="u">libros en casa</span>
+        </div>
+        <div class="tira">
+          <div class="celda"><span class="k">Por leer</span><span class="v" id="d-lib-porleer">—</span></div>
+          <div class="celda"><span class="k">Leídos</span><span class="v" id="d-lib-leidos">—</span></div>
+          <div class="celda"><span class="k">Prestados</span><span class="v" id="d-lib-prestados">—</span></div>
+        </div>
+        <div class="entrar">Abrir <span class="flecha">&rarr;</span></div>
+      </a>
+
       <a class="puerta p-patrimonio" data-app="patrimonio" href="patrimonio.html">
         <span class="rotulo">Patrimonio</span>
         <h2>Lo que tengo</h2>
@@ -569,7 +588,7 @@
 
 </div>
 
-<script src="sync.js?v=202609211058"></script>
+<script src="sync.js?v=202609211936"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
@@ -917,7 +936,8 @@
       pedidos: ['d-ped-productos','d-ped-pedido','d-ped-prov','d-ped-viejos'],
       vacaciones: ['d-vac-total','d-vac-gente','d-vac-gastos','d-vac-cuadre'],
       recetas: ['d-rec-total','d-rec-hoy','d-rec-1','d-rec-2'],
-      agenda:  ['d-ag-total','d-ag-tel','d-ag-clave','d-ag-correo']
+      agenda:  ['d-ag-total','d-ag-tel','d-ag-clave','d-ag-correo'],
+      libros:  ['d-lib-total','d-lib-porleer','d-lib-leidos','d-lib-prestados']
     }[sec] || [];
     ids.forEach(function(id){ pon(id, '···'); });
   }
@@ -1246,6 +1266,16 @@
     pon('d-ag-correo', String(cuantos('correo')));
   }
 
+  function resumenLibros(seccion){
+    var libro = leer(seccion['libros.libro.v1'], {});
+    var lista = libro.libros || [];
+    function cuantos(e){ return lista.filter(function(l){ return (l.estado||'porleer') === e; }).length; }
+    pon('d-lib-total',     String(lista.length));
+    pon('d-lib-porleer',   String(cuantos('porleer')));
+    pon('d-lib-leidos',    String(cuantos('leido')));
+    pon('d-lib-prestados', String(lista.filter(function(l){ return (l.prestado||'').trim(); }).length));
+  }
+
   function pintarResumen(){
     return Sync.descargarTodo().then(function(datos){
       datos = datos || {};
@@ -1255,7 +1285,7 @@
                    patrimonio: !!seg.patrimonio,
                    pedidos: !!seg.pedidos,
                    vacaciones: !!seg.vacaciones, recetas: !!seg.recetas,
-                   agenda: !!seg.agenda};
+                   agenda: !!seg.agenda, libros: !!seg.libros};
       resumenPiso(datos.piso || {});
       resumenHorario(datos.horario || {});
       resumenComanda(datos.comanda || {});
@@ -1266,6 +1296,7 @@
       resumenVacaciones(datos.vacaciones || {});
       resumenRecetas(datos.recetas || {});
       resumenAgenda(datos.agenda || {});
+      resumenLibros(datos.libros || {});
       Object.keys(seguridad).forEach(function(sec){ if (seguridad[sec]) ocultarCifras(sec); });
       pintarCandados();
       aplicarOrden((datos.escritorio || {}).orden);
