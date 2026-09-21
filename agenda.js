@@ -306,7 +306,7 @@ function verLista(){
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
         '<button class="btn fuerte" id="a_nuevo">+ Apuntar</button>'+
         '<button class="btn" id="a_pegar">📋 Pegar una lista</button>'+
-        '<button class="btn" id="a_llavero">🔐 Traer el llavero</button>'+
+        '<button class="btn" id="a_llavero">🔐 Traer el archivo de contraseñas</button>'+
         '<button class="btn" id="a_imprimir">🖨 Imprimir</button>'+
         '<button class="btn" id="a_ajustes">Ajustes</button>'+
       '</div></div>'+
@@ -935,14 +935,17 @@ function personaPorUsuario(usuario, porDefecto){
 function importarLlavero(){
   var leidas = [];
 
-  var v = abrirVentana('Traer el llavero',
-    '<p class="nota" style="margin:0 0 10px"><strong>En el Mac:</strong> abre <em>Contraseñas</em> '+
-      '(o Safari → Ajustes → Contraseñas), menú <em>Archivo → Exportar todas las contraseñas…</em>, '+
-      'y guarda el archivo. <strong>En el iPhone:</strong> Ajustes → Contraseñas → los tres puntos '+
-      '→ Exportar. Luego elige aquí ese archivo.</p>'+
+  var v = abrirVentana('Traer el archivo de contraseñas',
+    '<p class="nota" style="margin:0 0 10px">Esto trae de golpe todas las contraseñas que el '+
+      'ordenador o el navegador tienen guardadas, a partir del archivo que ellos mismos generan '+
+      '(suele llamarse <strong>Contraseñas.csv</strong> o <strong>Chrome Passwords.csv</strong>).</p>'+
+    '<p class="nota" style="margin:0 0 10px"><strong>Cómo se saca ese archivo.</strong> '+
+      'En el Mac: abre <em>Contraseñas</em>, botón <em>⊙⌄</em> de abajo a la izquierda → '+
+      '<em>Exportar todas las contraseñas…</em>. En Chrome: <em>chrome://password-manager/settings</em> '+
+      '→ <em>Exportar</em>. En el iPhone: Ajustes → Contraseñas → los tres puntos → Exportar.</p>'+
     '<div class="campo" style="margin-bottom:10px">'+
       '<label class="btn fuerte" for="im_csv" style="cursor:pointer;justify-content:center">'+
-      'Elegir el archivo del llavero</label>'+
+      'Elegir el archivo (Contraseñas.csv)</label>'+
       '<input type="file" id="im_csv" accept=".csv,text/csv,text/plain" '+
         'style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></div>'+
     '<div class="campo" style="margin-bottom:10px">'+
@@ -968,7 +971,7 @@ function importarLlavero(){
         buenas.forEach(function(x){ libro.apuntes.push(x); });
         guardar(); pintar();
         avisar(plural(buenas.length,'cuenta traída','cuentas traídas')+
-               '. Borra ya el archivo del llavero.');
+               '. Borra ya ese archivo.');
       }
       if(!conClave.length){ terminar(); return; }
       conMaestra(function(maestraOk){
@@ -991,7 +994,7 @@ function importarLlavero(){
       if(filas.length < 2){ avisar('Ese archivo no trae nada que entienda.', true); return; }
       var col = columnasLlavero(filas[0]);
       if(col.usuario < 0 && col.clave < 0){
-        avisar('No parece el archivo del llavero.', true); return;
+        avisar('Ese archivo no parece el de las contraseñas.', true); return;
       }
       leidas = filas.slice(1).map(function(f2){
         var usuario = col.usuario>=0 ? String(f2[col.usuario]||'').trim() : '';
