@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es" data-app="recetas">
+<html lang="es" data-app="agenda">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Recetas</title>
+<title>Agenda</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -12,7 +12,7 @@
   --fondo:#efebe7; --sup:#fdfbf9; --sup2:#f4efea;
   --linea:#ded3ca; --linea-suave:#e9e1da;
   --tinta:#1a1411; --tinta2:#4c403a; --muted:#6e6058;
-  --acento:#a8442c; --acento-tinta:#fff; --acento-suave:#f7e6e0; --acento-linea:#e5c5b9;
+  --acento:#2f6b52; --acento-tinta:#fff; --acento-suave:#e2efe8; --acento-linea:#bcd8c9;
   --ok:#3f6b46; --ok-suave:#e0ece1;
   --aviso:#8a5310; --aviso-suave:#f6e9d6;
   --malo:#96331f; --malo-suave:#f7e2de;
@@ -27,7 +27,7 @@
     --fondo:#171210; --sup:#1f1917; --sup2:#29211e;
     --linea:#342a26; --linea-suave:#26201d;
     --tinta:#f3ede9; --tinta2:#cdc2bb; --muted:#9a8c84;
-    --acento:#f0a48c; --acento-tinta:#2a1009; --acento-suave:#331a13; --acento-linea:#4d2a20;
+    --acento:#8ed3ad; --acento-tinta:#0a1f16; --acento-suave:#13291f; --acento-linea:#1f4231;
     --ok:#8fc39a; --ok-suave:#1b2a1e;
     --aviso:#e0b168; --aviso-suave:#2f2617;
     --malo:#ef8a76; --malo-suave:#33201c;
@@ -38,7 +38,7 @@
   --fondo:#171210; --sup:#1f1917; --sup2:#29211e;
   --linea:#342a26; --linea-suave:#26201d;
   --tinta:#f3ede9; --tinta2:#cdc2bb; --muted:#9a8c84;
-  --acento:#f0a48c; --acento-tinta:#2a1009; --acento-suave:#331a13; --acento-linea:#4d2a20;
+  --acento:#8ed3ad; --acento-tinta:#0a1f16; --acento-suave:#13291f; --acento-linea:#1f4231;
   --ok:#8fc39a; --ok-suave:#1b2a1e;
   --aviso:#e0b168; --aviso-suave:#2f2617;
   --malo:#ef8a76; --malo-suave:#33201c;
@@ -227,12 +227,28 @@ dialog::backdrop{background:rgba(20,14,11,.55)}
   .pie-rail{margin:0 0 0 auto;border:0;padding:0;flex-direction:row;gap:12px;align-items:center}
   main{padding:16px 13px 70px}
 }
+
+/* ── Agenda ───────────────────────────────────────────────────────── */
+.fichas{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.apunte{background:var(--sup);border:1px solid var(--linea);border-radius:var(--radio);
+        box-shadow:var(--sombra);padding:13px 15px;display:flex;flex-direction:column;gap:6px}
+.apunte .nom{font-family:var(--titulo);font-size:17px;font-weight:600;line-height:1.2}
+.apunte .val{font-family:var(--mono);font-size:14px;word-break:break-all}
+.apunte .val a{color:var(--acento);text-decoration:none}
+.apunte .val a:hover{text-decoration:underline}
+.apunte .meta{font-size:12px;color:var(--muted)}
+.apunte .pie{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.oculto{letter-spacing:.18em}
+.vacio{background:var(--sup);border:1px dashed var(--linea);border-radius:var(--radio);
+       padding:34px 22px;text-align:center;color:var(--muted);font-size:13px}
+.vacio strong{display:block;font-family:var(--titulo);font-size:17px;color:var(--tinta);
+              margin-bottom:5px;font-weight:600}
 </style>
 </head>
 <body>
 
 <div id="cargando">
-  <div class="msg">Abriendo el recetario…</div>
+  <div class="msg">Abriendo la agenda…</div>
   <div class="sub" id="cargando-sub">Descargando tus datos del repositorio privado.</div>
 </div>
 
@@ -244,14 +260,14 @@ dialog::backdrop{background:rgba(20,14,11,.55)}
   var capa = document.getElementById('cargando');
   var sub  = document.getElementById('cargando-sub');
 
-  Sync.iniciar('recetas').then(function(){
+  Sync.iniciar('agenda').then(function(){
     var s = document.createElement('script');
-    s.src = 'recetas.js?v=202609210910';
+    s.src = 'agenda.js?v=202609210910';
     s.onload = function(){ capa.remove(); };
-    s.onerror = function(){ sub.textContent = 'No se pudo cargar recetas.js. Recarga la pagina.'; };
+    s.onerror = function(){ sub.textContent = 'No se pudo cargar agenda.js. Recarga la pagina.'; };
     document.body.appendChild(s);
   }).catch(function(err){
-    if (err.message === 'sin-credenciales') { location.href = 'index.html?volver=recetas.html'; return; }
+    if (err.message === 'sin-credenciales') { location.href = 'index.html?volver=agenda.html'; return; }
     capa.querySelector('.msg').textContent = 'No he podido cargar tus datos';
     sub.innerHTML = err.message + '<br><br><a href="index.html">Volver al escritorio</a>';
   });

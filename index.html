@@ -20,6 +20,7 @@
     --pedidos:#b0c96b; --pedidos-tenue:#242b1499;
     --vacaciones:#e59ad0; --vacaciones-tenue:#2e162699;
     --recetas:#f0a48c; --recetas-tenue:#33191299;
+    --agenda:#8ed3ad; --agenda-tenue:#13291f99;
     --alerta:#ef8a76; --alerta-tenue:#331a16;
     --display:'Fraunces',Georgia,serif;
     --texto:'Archivo','Helvetica Neue',sans-serif;
@@ -41,6 +42,7 @@
     --pedidos:#4f6321; --pedidos-tenue:#e8eed7;
     --vacaciones:#8e3070; --vacaciones-tenue:#f6e6f1;
     --recetas:#a8442c; --recetas-tenue:#f7e6e0;
+    --agenda:#2f6b52; --agenda-tenue:#e2efe8;
       --alerta:#96331f; --alerta-tenue:#f7e2de;
       --sombra:0 16px 34px -26px rgba(15,22,24,.5);
     }
@@ -169,6 +171,7 @@
   .p-pedidos{--tono:var(--pedidos)}
   .p-vacaciones{--tono:var(--vacaciones)}
   .p-recetas{--tono:var(--recetas)}
+  .p-agenda{--tono:var(--agenda)}
 
   /* ── Colocar: mover las tarjetas a donde te parezca ───────────── */
   .colocando .puerta{cursor:default}
@@ -510,6 +513,22 @@
         <div class="entrar">Abrir <span class="flecha">&rarr;</span></div>
       </a>
 
+      <a class="puerta p-agenda" data-app="agenda" href="agenda.html">
+        <span class="rotulo">Libreta</span>
+        <h2>Agenda</h2>
+        <p class="que">Teléfonos, claves y correos del trabajo y de casa. Las claves, cifradas.</p>
+        <div class="cifra">
+          <span class="n" id="d-ag-total">&mdash;</span>
+          <span class="u">apuntes guardados</span>
+        </div>
+        <div class="tira">
+          <div class="celda"><span class="k">Teléfonos</span><span class="v" id="d-ag-tel">—</span></div>
+          <div class="celda"><span class="k">Claves</span><span class="v" id="d-ag-clave">—</span></div>
+          <div class="celda"><span class="k">Correos</span><span class="v" id="d-ag-correo">—</span></div>
+        </div>
+        <div class="entrar">Abrir <span class="flecha">&rarr;</span></div>
+      </a>
+
       <a class="puerta p-patrimonio" data-app="patrimonio" href="patrimonio.html">
         <span class="rotulo">Patrimonio</span>
         <h2>Lo que tengo</h2>
@@ -550,7 +569,7 @@
 
 </div>
 
-<script src="sync.js?v=202609210848"></script>
+<script src="sync.js?v=202609210910"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
@@ -859,11 +878,11 @@
   var TARJETAS = {piso:'.p-piso', horario:'.p-resto', comanda:'.p-comanda',
                   casa:'.p-casa', caja:'.p-caja',
                   patrimonio:'.p-patrimonio', pedidos:'.p-pedidos',
-                  vacaciones:'.p-vacaciones', recetas:'.p-recetas'};
+                  vacaciones:'.p-vacaciones', recetas:'.p-recetas', agenda:'.p-agenda'};
   var NOMBRES  = {piso:'Piso Soldeu', horario:'Horario Restaurante',
                   comanda:'Comanda', casa:'Casa', caja:'Caja',
                   patrimonio:'Patrimonio', pedidos:'Pedidos',
-                  vacaciones:'Vacaciones', recetas:'Recetas'};
+                  vacaciones:'Vacaciones', recetas:'Recetas', agenda:'Agenda'};
   var seguridad = {};
 
   function pintarCandados(){
@@ -897,7 +916,8 @@
       patrimonio: ['d-pat-neto','d-pat-valor','d-pat-deuda','d-pat-plus'],
       pedidos: ['d-ped-productos','d-ped-pedido','d-ped-prov','d-ped-viejos'],
       vacaciones: ['d-vac-total','d-vac-gente','d-vac-gastos','d-vac-cuadre'],
-      recetas: ['d-rec-total','d-rec-hoy','d-rec-1','d-rec-2']
+      recetas: ['d-rec-total','d-rec-hoy','d-rec-1','d-rec-2'],
+      agenda:  ['d-ag-total','d-ag-tel','d-ag-clave','d-ag-correo']
     }[sec] || [];
     ids.forEach(function(id){ pon(id, '···'); });
   }
@@ -1216,6 +1236,16 @@
     pon('d-rec-2',     String(recetas.filter(function(r){ return r.tipo === 'segundo'; }).length));
   }
 
+  function resumenAgenda(seccion){
+    var libro = leer(seccion['agenda.libro.v1'], {});
+    var apuntes = libro.apuntes || [];
+    function cuantos(t){ return apuntes.filter(function(a){ return a.tipo === t; }).length; }
+    pon('d-ag-total',  String(apuntes.length));
+    pon('d-ag-tel',    String(cuantos('telefono')));
+    pon('d-ag-clave',  String(cuantos('clave')));
+    pon('d-ag-correo', String(cuantos('correo')));
+  }
+
   function pintarResumen(){
     return Sync.descargarTodo().then(function(datos){
       datos = datos || {};
@@ -1224,7 +1254,8 @@
                    comanda: !!seg.comanda, casa: !!seg.casa, caja: !!seg.caja,
                    patrimonio: !!seg.patrimonio,
                    pedidos: !!seg.pedidos,
-                   vacaciones: !!seg.vacaciones, recetas: !!seg.recetas};
+                   vacaciones: !!seg.vacaciones, recetas: !!seg.recetas,
+                   agenda: !!seg.agenda};
       resumenPiso(datos.piso || {});
       resumenHorario(datos.horario || {});
       resumenComanda(datos.comanda || {});
@@ -1234,6 +1265,7 @@
       resumenPedidos(datos.pedidos || {});
       resumenVacaciones(datos.vacaciones || {});
       resumenRecetas(datos.recetas || {});
+      resumenAgenda(datos.agenda || {});
       Object.keys(seguridad).forEach(function(sec){ if (seguridad[sec]) ocultarCifras(sec); });
       pintarCandados();
       aplicarOrden((datos.escritorio || {}).orden);
