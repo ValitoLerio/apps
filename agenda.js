@@ -21,7 +21,7 @@ var VACIO = {apuntes:[], ajustes:{cifrar:null}};
 
 var TIPOS = {
   telefono: {nombre:'Teléfono', plural:'Teléfonos', icono:'📞'},
-  clave:    {nombre:'Clave',    plural:'Claves',    icono:'🔑'},
+  clave:    {nombre:'Contraseña', plural:'Contraseñas', icono:'🔑'},
   correo:   {nombre:'Correo',   plural:'Correos',   icono:'✉️'}
 };
 var ORDEN_TIPOS = ['telefono','clave','correo'];
@@ -169,7 +169,7 @@ function conMaestra(sigue){
   abrirVentana('Contraseña maestra',
     '<div class="campo"><label class="lbl" for="cm_txt">Escríbela</label>'+
     '<input type="password" id="cm_txt" autocomplete="current-password"></div>'+
-    '<p class="nota" style="margin:10px 0 0">Es la que abre tus claves. No se guarda en ningún '+
+    '<p class="nota" style="margin:10px 0 0">Es la que abre tus contraseñas. No se guarda en ningún '+
     'sitio: se pide una vez cada vez que abres la agenda.</p>',
     function(){
       var txt = valor('cm_txt');
@@ -204,10 +204,10 @@ function pintar(){
   root.innerHTML =
     '<nav class="rail">'+
       '<div class="marca"><span class="nom">Agenda</span>'+
-        '<span class="sub">Teléfonos y claves</span></div>'+
+        '<span class="sub">Teléfonos y contraseñas</span></div>'+
       boton('todos','Todo', apuntes().length)+
       boton('telefono','Teléfonos', cuenta('telefono'))+
-      boton('clave','Claves', cuenta('clave'))+
+      boton('clave','Contraseñas', cuenta('clave'))+
       boton('correo','Correos', cuenta('correo'))+
       '<div class="pie-rail">'+
         '<span style="font-size:11px;color:var(--muted)">Guardado en GitHub</span>'+
@@ -249,7 +249,11 @@ function verLista(){
 
   main.innerHTML =
     '<div class="cabecera"><div><h1>'+esc(titulo)+'</h1>'+
-      '<p>Teléfonos, claves y correos del trabajo y de casa. Se apunta, se busca y se copia.</p></div>'+
+      '<p>Teléfonos, contraseñas y correos, del trabajo y de casa. '+
+      (ui.tipo==='clave'
+        ? 'Aquí van las contraseñas de Facebook, del correo, del banco, del wifi… '+
+          'Se guardan cifradas y se copian de un toque para pegarlas donde haga falta.'
+        : 'Se apunta, se busca y se copia.')+'</p></div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
         '<button class="btn fuerte" id="a_nuevo">+ Apuntar</button>'+
         '<button class="btn" id="a_pegar">📋 Pegar una lista</button>'+
@@ -283,7 +287,9 @@ function verLista(){
       : '<div class="vacio"><strong>'+
         (apuntes().length ? 'Nada con esa búsqueda' : 'La agenda está vacía')+'</strong>'+
         (apuntes().length ? 'Prueba con otra palabra.'
-                          : 'Dale a «+ Apuntar» y empieza por el teléfono que más uses.')+
+                          : 'Dale a «+ Apuntar» —o a «Pegar una lista» si ya las tienes escritas— '+
+                            'y empieza por lo que más uses: el teléfono del proveedor, la contraseña '+
+                            'del correo, el wifi…')+
         '</div>');
 
   var busca = document.getElementById('a_busca');
@@ -640,7 +646,7 @@ function imprimir(){
     (hayClaves
       ? '<label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">'+
         '<input type="checkbox" id="im_claves" style="width:auto;margin-top:3px">'+
-        '<span>Imprimir también <strong>las claves</strong><br>'+
+        '<span>Imprimir también <strong>las contraseñas</strong><br>'+
         '<span class="nota" style="margin:0">Salen escritas en el papel. Guárdalo donde guardarías '+
         'el dinero.</span></span></label>'
       : ''),
@@ -706,26 +712,26 @@ function verAjustes(){
 
   abrirVentana('Ajustes',
     '<p class="nota" style="margin:0 0 12px">Los teléfonos y los correos se guardan tal cual: '+
-    'no son secreto. Las claves, cifradas con tu contraseña maestra.</p>'+
+    'no son secreto. Las contraseñas, cifradas con tu contraseña maestra.</p>'+
     '<div class="cifras" style="margin:0 0 14px">'+
-      '<div class="cifra"><div class="k">Claves cifradas</div><div class="v acento">'+conCifrado+'</div></div>'+
-      '<div class="cifra"><div class="k">Claves en claro</div><div class="v'+(enClaro?' malo':'')+'">'+
+      '<div class="cifra"><div class="k">Cifradas</div><div class="v acento">'+conCifrado+'</div></div>'+
+      '<div class="cifra"><div class="k">Sin cifrar</div><div class="v'+(enClaro?' malo':'')+'">'+
         enClaro+'</div></div>'+
       '<div class="cifra"><div class="k">Apuntes</div><div class="v">'+apuntes().length+'</div></div>'+
     '</div>'+
     '<label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">'+
       '<input type="checkbox" id="aj_sin" style="width:auto;margin-top:3px"'+
       (libro.ajustes.cifrar===false?' checked':'')+'>'+
-      '<span>Guardar las claves <strong>sin cifrar</strong><br>'+
+      '<span>Guardar las contraseñas <strong>sin cifrar</strong><br>'+
       '<span class="nota" style="margin:0">Más cómodo —no pide nada— pero cualquiera que entre '+
       'a tu repositorio las lee. Las que ya estén cifradas se quedan como están.</span></span></label>'+
     '<p class="nota" style="margin:14px 0 0"><strong>Ojo con la contraseña maestra:</strong> no se '+
-    'guarda en ningún sitio. Si se te olvida, esas claves no las abre nadie, ni yo.</p>',
+    'guarda en ningún sitio. Si se te olvida, esas contraseñas no las abre nadie, ni yo.</p>',
     function(){
       libro.ajustes.cifrar = document.getElementById('aj_sin').checked ? false : null;
       guardar();
-      avisar(libro.ajustes.cifrar===false ? 'Las claves nuevas se guardarán sin cifrar'
-                                          : 'Las claves nuevas se cifrarán');
+      avisar(libro.ajustes.cifrar===false ? 'Las contraseñas nuevas se guardarán sin cifrar'
+                                          : 'Las contraseñas nuevas se cifrarán');
     }, {aceptar:'Guardar'});
 }
 

@@ -270,7 +270,7 @@ dialog::backdrop{background:rgba(20,14,11,.55)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609210914"></script>
+<script src="sync.js?v=202609210926"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -278,7 +278,7 @@ dialog::backdrop{background:rgba(20,14,11,.55)}
 
   Sync.iniciar('agenda').then(function(){
     var s = document.createElement('script');
-    s.src = 'agenda.js?v=202609210914';
+    s.src = 'agenda.js?v=202609210926';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar agenda.js. Recarga la pagina.'; };
     document.body.appendChild(s);
