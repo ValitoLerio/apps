@@ -1000,17 +1000,24 @@ function leerCuadroAno(texto, ano){
     //    celda: en su hoja hay algun 25 escrito como 2, y asi el dia
     //    cae igual donde le toca. Lo que venga despues del ultimo dia
     //    del mes -los totales de la derecha- se queda fuera.
-    var soloNumeros = conAlgo.every(function(x){ return /^[0-9]{1,2}$/.test(x); });
-    if (soloNumeros){
-      var primero = +conAlgo[0];
-      if (primero === 1 || primero === 2){
-        var cuantosDias = new Date(ano, mesAhora+1, 0).getDate();
-        var mapa = {}, toca = 1;
-        for (var c=0;c<limpias.length && toca<=cuantosDias;c++){
-          if (/^[0-9]{1,2}$/.test(limpias[c])){ mapa[c] = toca; toca++; }
-        }
-        if (toca > 20){ columnas = mapa; return; }
+    //    Empieza donde haya un 1 con nada delante -asi no se confunde con
+    //    la fila de una persona- y termina en el ultimo dia del mes. Lo
+    //    que venga detras (TOTAL, los acumulados) se queda fuera.
+    var arranque = -1;
+    for (var a=0;a<limpias.length;a++){
+      if (!limpias[a]) continue;
+      arranque = (limpias[a] === '1') ? a : -1;
+      break;
+    }
+    if (arranque >= 0){
+      var cuantosDias = new Date(ano, mesAhora+1, 0).getDate();
+      var mapa = {}, toca = 1;
+      for (var c=arranque;c<limpias.length && toca<=cuantosDias;c++){
+        if (!limpias[c]) continue;                       // hueco: se salta
+        if (!/^[0-9]{1,2}$/.test(limpias[c])) break;     // TOTAL y demas: se acabo
+        mapa[c] = toca; toca++;
       }
+      if (toca > 20){ columnas = mapa; return; }
     }
     if (!columnas) return;
 
