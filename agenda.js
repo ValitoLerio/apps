@@ -99,6 +99,13 @@ function abrirVentana(titulo, cuerpoHTML, alGuardar, opciones){
         '<button value="ok" class="btn '+(opciones.malo?'malo':'fuerte')+'">'+
         esc(opciones.aceptar||'Guardar')+'</button></div>'+
     '</form>';
+  /* Si quedó abierta una ventana de antes, los botones de la nueva se
+     enganchaban a la vieja: mismo id, y el navegador devuelve el primero
+     que encuentra. Se cierra lo que haya antes de abrir. */
+  document.querySelectorAll('dialog').forEach(function(x){
+    try{ x.close(); }catch(e){}
+    x.remove();
+  });
   document.body.appendChild(d);
   d.addEventListener('close', function(){
     if(d.returnValue==='ok' && alGuardar){ if(alGuardar()===true) return; }
@@ -462,22 +469,26 @@ function engancharFichas(){
    ══════════════════════════════════════════════════════════════ */
 function editar(id){
   var nuevo = !id;
+  var ventana = null;                 /* la ventana de este editor */
+  function dentro(elId){ return ventana ? ventana.querySelector('#'+elId) : document.getElementById(elId); }
+  function valorDe(elId){ var e = dentro(elId); return e ? e.value.trim() : ''; }
   var a = id ? apunteDe(id) : {id:uid(), tipo:'telefono', ambito:(ui.ambito!=='todos'?ui.ambito:'Trabajo'), nombre:'',
                                valor:'', usuario:'', sitio:'', notas:''};
   if(!a) return;
 
   function pintarValor(tipo){
-    var campo = document.getElementById('e_valor');
-    var etiqueta = document.getElementById('e_valorLbl');
-    if(!campo) return;
+    var campo = dentro('e_valor');
+    var etiqueta = dentro('e_valorLbl');
+    if(!campo || !etiqueta) return;
     campo.type = tipo==='clave' ? 'password' : (tipo==='correo' ? 'email' : 'tel');
     campo.placeholder = tipo==='clave' ? 'la contraseña'
                       : tipo==='correo' ? 'alguien@sitio.com' : '+376 000 000';
     etiqueta.textContent = tipo==='clave' ? 'Contraseña' : TIPOS[tipo].nombre;
-    document.getElementById('e_usuarioCampo').style.display = tipo==='telefono' ? 'none' : '';
+    var cu = dentro('e_usuarioCampo');
+    if(cu) cu.style.display = tipo==='telefono' ? 'none' : '';
   }
 
-  abrirVentana(nuevo?'Apuntar':'Editar '+(a.nombre||''),
+  ventana = abrirVentana(nuevo?'Apuntar':'Editar '+(a.nombre||''),
     '<div class="rejilla" style="margin-bottom:12px">'+
       '<div class="campo"><label class="lbl" for="e_tipo">Qué es</label>'+
         '<select id="e_tipo">'+ORDEN_TIPOS.map(function(t){
@@ -516,18 +527,18 @@ function editar(id){
       '<textarea id="e_notas" rows="2">'+esc(a.notas||'')+'</textarea></div>',
 
     function(){
-      var nombre = valor('e_nombre');
+      var nombre = valorDe('e_nombre');
       if(!nombre){ avisar('Ponle nombre.', true); return true; }
-      var tipo = valor('e_tipo') || 'telefono';
-      var v = document.getElementById('e_valor').value.trim();
+      var tipo = valorDe('e_tipo') || 'telefono';
+      var v = dentro('e_valor').value.trim();
       if(!v && !(tipo==='clave' && a.cifrada)){ avisar('Falta el dato.', true); return true; }
 
       a.tipo = tipo;
-      a.ambito = valor('e_ambito') || 'trabajo';
+      a.ambito = valorDe('e_ambito') || personas()[0];
       a.nombre = nombre;
-      a.usuario = valor('e_usuario');
-      a.sitio = valor('e_sitio');
-      a.notas = (document.getElementById('e_notas').value||'').trim();
+      a.usuario = valorDe('e_usuario');
+      a.sitio = valorDe('e_sitio');
+      a.notas = (dentro('e_notas').value||'').trim();
 
       function terminar(){
         if(nuevo) libro.apuntes.push(a);
@@ -548,8 +559,13 @@ function editar(id){
       });
     }, {aceptar:nuevo?'Apuntar':'Guardar'});
 
-  document.getElementById('e_tipo').addEventListener('change', function(){ pintarValor(this.value); });
-  document.getElementById('e_ambito').addEventListener('change', function(){
+  /* «change» no siempre llega en todos los navegadores al elegir en un
+     desplegable; con «input» también, y así el campo cambia siempre. */
+  var selTipo = dentro('e_tipo');
+  ['change','input'].forEach(function(ev){
+    selTipo.addEventListener(ev, function(){ pintarValor(this.value); });
+  });
+  dentro('e_ambito').addEventListener('change', function(){
     if(this.value !== '__nueva') return;
     var quien = prompt('¿De quién? (Sergio, la abuela, el local de abajo…)');
     quien = (quien||'').trim();
@@ -560,9 +576,9 @@ function editar(id){
                      sel.options[sel.options.length-1]);
     sel.value = quien;
   });
-  document.querySelectorAll('[data-sitio]').forEach(function(b){
+  ventana.querySelectorAll('[data-sitio]').forEach(function(b){
     b.addEventListener('click', function(){
-      var campo = document.getElementById('e_nombre');
+      var campo = dentro('e_nombre');
       campo.value = b.dataset.sitio;
       campo.focus();
     });
