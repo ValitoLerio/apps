@@ -29,6 +29,48 @@ function esc(t){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
   });
 }
+/* Para saber si dos libros son el mismo: sin tildes, sin puntos y
+   sin el artículo de delante. «El Quijote» y «quijote» son uno. */
+function llano(t){
+  return String(t==null?'':t).toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9ñ ]+/g,' ')
+    .replace(/^(el|la|los|las|un|una|the|a)\s+/,'')
+    .replace(/\s+/g,' ').trim();
+}
+function esElMismo(a, b){
+  if(!llano(a.titulo) || llano(a.titulo) !== llano(b.titulo)) return false;
+  var x = llano(a.autor), y = llano(b.autor);
+  return !x || !y || x === y;          /* si falta el autor, vale el título */
+}
+/* Devuelve el libro que ya tienes igual a éste, o nada. */
+function yaLoTengo(cual, saltarId){
+  var lista = libros();
+  for(var i=0;i<lista.length;i++){
+    if(saltarId && lista[i].id === saltarId) continue;
+    if(esElMismo(cual, lista[i])) return lista[i];
+  }
+  return null;
+}
+/* ¿Ya está éste entre los que llevo aceptados de la misma tanda? */
+function estaEntre(lista, cual){
+  for(var i=0;i<lista.length;i++) if(esElMismo(cual, lista[i])) return true;
+  return false;
+}
+function repetidos(){
+  var lista = libros(), grupos = [], usados = {};
+  for(var i=0;i<lista.length;i++){
+    if(usados[lista[i].id]) continue;
+    var grupo = [lista[i]];
+    for(var j=i+1;j<lista.length;j++){
+      if(usados[lista[j].id]) continue;
+      if(esElMismo(lista[i], lista[j])){ grupo.push(lista[j]); usados[lista[j].id] = true; }
+    }
+    if(grupo.length > 1) grupos.push(grupo);
+  }
+  return grupos;
+}
+
 function uid(){ return Math.random().toString(36).slice(2)+Date.now().toString(36); }
 function fin(nombre){
   var m = String(nombre||'').match(/\.([a-z0-9]{2,5})$/i);
@@ -85,7 +127,11 @@ function abrirVentana(titulo, cuerpoHTML, alGuardar, opciones){
     '</form>';
   document.body.appendChild(d);
   d.addEventListener('close', function(){
-    if(d.returnValue==='ok' && alGuardar){ if(alGuardar()===true) return; }
+    /* si el guardado dice que no (falta el título, está repetido…) la
+       ventana se vuelve a abrir con lo que hubiera escrito */
+    if(d.returnValue==='ok' && alGuardar){
+      if(alGuardar()===true){ try{ d.showModal(); }catch(e){} return; }
+    }
     d.remove();
   });
   d.showModal();
@@ -280,22 +326,46 @@ function meterDescargados(ficheros){
       var estado = v.querySelector('#fd_estado').value;
       var delante = v.querySelector('#fd_orden').value === '1';
       libro.ajustes.autorDelante = delante;
-      var metidos = 0, faenas = [];
+      var metidos = 0, pegados = 0, fuera = 0, faenas = [], aceptados = [];
       ficheros.forEach(function(f, i){
-        if(!v.querySelector('#fd_si_'+i).checked) return;
         var d = deNombreDeFichero(f.name, delante);
         var tit = v.querySelector('#fd_tit_'+i);
         var aut = v.querySelector('#fd_aut_'+i);
-        var l = {id:uid(), titulo:(tit&&tit.value.trim())||d.titulo, autor:(aut&&aut.value.trim())||d.autor,
+        var ficha = {titulo:(tit&&tit.value.trim())||d.titulo,
+                     autor:(aut&&aut.value.trim())||d.autor};
+        var repe = yaLoTengo(ficha);
+        if(repe){
+          /* No lo duplico. Si al que tienes le falta el fichero, se lo pongo. */
+          if(!repe.archivo){
+            repe.archivo = {nombre:f.name, tipo:f.type||'', tam:f.size};
+            if(!repe.donde) repe.donde = 'En el ordenador';
+            faenas.push(meterFichero(repe.id, f));
+            pegados++;
+          }else fuera++;
+          return;
+        }
+        if(estaEntre(aceptados, ficha)){ fuera++; return; }   /* repetido en la misma tanda */
+        var chk = v.querySelector('#fd_si_'+i);
+        if(chk && !chk.checked) return;
+        aceptados.push(ficha);
+        var l = {id:uid(), titulo:ficha.titulo, autor:ficha.autor,
                  estado:estado, genero:'', donde:'En el ordenador', prestado:'', nota:0, fecha:'', notas:'',
                  archivo:{nombre:f.name, tipo:f.type||'', tam:f.size}};
         libro.libros.push(l); metidos++;
         faenas.push(meterFichero(l.id, f));
       });
-      if(!metidos){ avisar('No has marcado ninguno.', true); return true; }
+      if(!metidos && !pegados){
+        avisar(fuera ? 'Ya los tenías todos' : 'No has marcado ninguno.', true);
+        return true;
+      }
       guardar();
       Promise.all(faenas).then(repasarFicheros).then(function(){
-        pintar(); avisar(plural(metidos,'libro guardado','libros guardados'));
+        pintar();
+        avisar([metidos ? plural(metidos,'libro guardado','libros guardados') : '',
+                pegados ? plural(pegados,'fichero puesto al que ya tenías',
+                                         'ficheros puestos a los que ya tenías') : '',
+                fuera ? plural(fuera,'repetido fuera','repetidos fuera') : ''
+               ].filter(Boolean).join(' · '));
       }).catch(function(){
         pintar(); avisar('Alguno no ha cabido en el navegador', true);
       });
@@ -303,8 +373,7 @@ function meterDescargados(ficheros){
 
   function repasar(){
     var delante = v.querySelector('#fd_orden').value === '1';
-    var ya = {};
-    libros().forEach(function(l){ ya[(l.titulo||'').toLowerCase()] = true; });
+    var vistos = [];
     var total = ficheros.reduce(function(a,f){ return a + f.size; }, 0);
     v.querySelector('#fd_vista').innerHTML =
       '<div class="lbl" style="margin:0 0 6px">'+plural(ficheros.length,'fichero','ficheros')+
@@ -312,12 +381,18 @@ function meterDescargados(ficheros){
       '<div class="tabla-caja" style="max-height:34vh;overflow:auto"><table style="min-width:440px"><tbody>'+
       ficheros.map(function(f,i){
         var d = deNombreDeFichero(f.name, delante);
-        var repe = ya[(d.titulo||'').toLowerCase()];
-        return '<tr><td style="width:26px"><input type="checkbox" id="fd_si_'+i+'" '+
-            (repe?'':'checked')+' style="width:auto"></td>'+
+        var tengo = yaLoTengo(d);
+        var aviso = estaEntre(vistos, d) ? 'repetido en esta tanda'
+                  : tengo ? (tengo.archivo ? 'ya lo tienes, con fichero'
+                                           : 'ya lo tienes: le pongo el fichero')
+                  : '';
+        if(aviso !== 'repetido en esta tanda') vistos.push(d);
+        return '<tr'+(aviso?' style="opacity:.6"':'')+'>'+
+          '<td style="width:26px"><input type="checkbox" id="fd_si_'+i+'" '+
+            (aviso?'':'checked')+(aviso?' disabled':'')+' style="width:auto"></td>'+
           '<td><input id="fd_tit_'+i+'" value="'+esc(d.titulo)+'" '+
             'style="padding:3px 6px;font-size:12.5px;font-weight:600">'+
-            (repe?'<div class="nota" style="margin:2px 0 0">ya lo tienes</div>':'')+'</td>'+
+            (aviso?'<div class="nota" style="margin:2px 0 0">'+aviso+'</div>':'')+'</td>'+
           '<td style="min-width:140px"><input id="fd_aut_'+i+'" value="'+esc(d.autor)+'" '+
             'style="padding:3px 6px;font-size:12.5px"></td>'+
           '<td class="nota" style="margin:0;white-space:nowrap">'+peso(f.size)+'</td></tr>';
@@ -443,6 +518,8 @@ function verLista(){
         '<button class="btn fuerte" id="l_nuevo">+ Añadir libro</button>'+
         '<button class="btn" id="l_bajados">📥 Añadir descargados</button>'+
         (conFichero().length ? '<button class="btn" id="l_enviar">📤 Enviar libros</button>' : '')+
+        (repetidos().length
+          ? '<button class="btn malo" id="l_repes">⚠ Quitar repetidos</button>' : '')+
         '<button class="btn" id="l_pegar">📋 Pegar una lista</button>'+
         '<button class="btn" id="l_imprimir">🖨 Imprimir</button>'+
       '</div></div>'+
@@ -505,6 +582,8 @@ function verLista(){
   document.getElementById('l_bajados').addEventListener('click', function(){
     pedirFicheros(meterDescargados);
   });
+  var rep = document.getElementById('l_repes');
+  if(rep) rep.addEventListener('click', limpiarRepetidos);
   var env = document.getElementById('l_enviar');
   if(env) env.addEventListener('click', enviarVarios);
   document.getElementById('l_pegar').addEventListener('click', pegarLista);
@@ -688,6 +767,11 @@ function editar(id){
     function(){
       var titulo = val('e_titulo');
       if(!titulo){ avisar('Ponle el título.', true); return true; }
+      var repe = yaLoTengo({titulo:titulo, autor:val('e_autor')}, l.id);
+      if(repe){
+        avisar('Ese ya lo tienes: «'+repe.titulo+'»'+(repe.autor?', de '+repe.autor:''), true);
+        return true;
+      }
       l.titulo = titulo;
       l.autor = val('e_autor');
       l.estado = val('e_estado') || 'porleer';
@@ -764,18 +848,22 @@ function pegarLista(){
       'Si no, se queda sólo el título y ya lo completas luego.</span></div>'+
     '<div id="pg_vista"></div>',
     function(){
-      var buenos = leidos.filter(function(x,i){
+      var metidos = 0, fuera = 0, aceptados = [];
+      leidos.forEach(function(x, i){
         var c = v.querySelector('#pg_si_'+i);
-        return !c || c.checked;
-      });
-      if(!buenos.length){ avisar('No hay nada que añadir.', true); return true; }
-      buenos.forEach(function(x,i){
-        var t = v.querySelector('#pg_tit_'+leidos.indexOf(x));
+        if(c && !c.checked){ return; }
+        var t = v.querySelector('#pg_tit_'+i);
         if(t && t.value.trim()) x.titulo = t.value.trim();
-        libro.libros.push(x);
+        if(yaLoTengo(x) || estaEntre(aceptados, x)){ fuera++; return; }
+        aceptados.push(x);
+        libro.libros.push(x); metidos++;
       });
+      if(!metidos && !fuera){ avisar('No hay nada que añadir.', true); return true; }
       guardar(); pintar();
-      avisar(plural(buenos.length,'libro añadido','libros añadidos'));
+      avisar(metidos
+        ? plural(metidos,'libro añadido','libros añadidos') +
+          (fuera ? ' · '+plural(fuera,'repetido fuera','repetidos fuera') : '')
+        : 'Ya los tenías todos');
     }, {aceptar:'Añadirlos'});
 
   var texto = v.querySelector('#pg_texto');
@@ -786,25 +874,82 @@ function pegarLista(){
     leidos = String(texto.value||'').split(/\r?\n/)
       .map(function(l){ return leerLineaLibro(l, estado.value); }).filter(Boolean);
     if(!leidos.length){ vista.innerHTML=''; return; }
-    var ya = {};
-    libros().forEach(function(l){ ya[(l.titulo||'').toLowerCase()] = true; });
+    var vistos = [];
     vista.innerHTML =
       '<div class="lbl" style="margin:0 0 6px">'+plural(leidos.length,'libro','libros')+'</div>'+
       '<div class="tabla-caja" style="max-height:34vh;overflow:auto">'+
       '<table style="min-width:420px"><tbody>'+
       leidos.map(function(x,i){
-        var repe = ya[(x.titulo||'').toLowerCase()];
-        return '<tr><td style="width:26px"><input type="checkbox" id="pg_si_'+i+'" '+
-            (repe?'':'checked')+' style="width:auto"></td>'+
+        var repe = yaLoTengo(x) ? 'ya lo tienes' :
+                   (estaEntre(vistos, x) ? 'repetido en la lista' : '');
+        if(!repe) vistos.push(x);
+        return '<tr'+(repe?' style="opacity:.55"':'')+'>'+
+          '<td style="width:26px"><input type="checkbox" id="pg_si_'+i+'" '+
+            (repe?'':'checked')+(repe?' disabled':'')+' style="width:auto"></td>'+
           '<td><input id="pg_tit_'+i+'" value="'+esc(x.titulo)+'" '+
-            'style="padding:3px 6px;font-size:12.5px;font-weight:600">'+
-            (repe?'<div class="nota" style="margin:2px 0 0">ya lo tienes</div>':'')+'</td>'+
+            (repe?'disabled ':'')+'style="padding:3px 6px;font-size:12.5px;font-weight:600">'+
+            (repe?'<div class="nota" style="margin:2px 0 0">'+repe+'</div>':'')+'</td>'+
           '<td class="nota" style="margin:0;min-width:130px">'+esc(x.autor||'—')+'</td></tr>';
       }).join('')+'</tbody></table></div>';
   }
   texto.addEventListener('input', repasar);
   estado.addEventListener('change', repasar);
   texto.focus();
+}
+
+/* ══════════════════════════════════════════════════════════════
+   QUITAR LOS REPETIDOS QUE YA HUBIERA
+   ══════════════════════════════════════════════════════════════
+   De cada grupo se queda el más completo —el que tenga el fichero— y
+   se le pasa lo que los otros tuvieran relleno. */
+function riqueza(l){
+  var n = 0;
+  if(l.archivo) n += 10;
+  ['autor','genero','donde','prestado','fecha','notas'].forEach(function(c){
+    if((l[c]||'').toString().trim()) n++;
+  });
+  if(+l.nota) n++;
+  if(l.estado === 'leido') n++;
+  return n;
+}
+function limpiarRepetidos(){
+  var grupos = repetidos();
+  if(!grupos.length){ avisar('No hay ninguno repetido'); return; }
+  var sobran = grupos.reduce(function(a,g){ return a + g.length - 1; }, 0);
+
+  confirmar('Quitar '+plural(sobran,'repetido','repetidos'),
+    '<p style="margin:0 0 10px">De cada libro me quedo con la ficha más completa y borro las demás.</p>'+
+    '<div class="tabla-caja" style="max-height:40vh;overflow:auto"><table style="min-width:360px"><tbody>'+
+    grupos.map(function(g){
+      return '<tr><td><strong style="font-size:13px">'+esc(g[0].titulo||'')+'</strong>'+
+        (g[0].autor?'<div class="nota" style="margin:0">'+esc(g[0].autor)+'</div>':'')+'</td>'+
+        '<td class="nota" style="margin:0;white-space:nowrap">'+g.length+' fichas</td></tr>';
+    }).join('')+'</tbody></table></div>',
+    function(){
+      var borrar = [];
+      grupos.forEach(function(g){
+        var mejor = g.slice().sort(function(a,b){ return riqueza(b) - riqueza(a); })[0];
+        g.forEach(function(l){
+          if(l === mejor) return;
+          ['autor','genero','donde','prestado','fecha','notas'].forEach(function(c){
+            if(!(mejor[c]||'').toString().trim() && (l[c]||'').toString().trim()) mejor[c] = l[c];
+          });
+          if(!+mejor.nota && +l.nota) mejor.nota = l.nota;
+          if(mejor.estado !== 'leido' && l.estado === 'leido'){
+            mejor.estado = 'leido'; if(l.fecha) mejor.fecha = l.fecha;
+          }
+          if(!mejor.archivo && l.archivo) mejor.archivo = l.archivo;
+          borrar.push(l.id);
+        });
+      });
+      libro.libros = libros().filter(function(l){ return borrar.indexOf(l.id) < 0; });
+      guardar();
+      Promise.all(borrar.map(function(id){
+        return tirarFichero(id).catch(function(){});
+      })).then(repasarFicheros).then(function(){
+        pintar(); avisar(plural(borrar.length,'repetido quitado','repetidos quitados'));
+      });
+    }, {aceptar:'Quitarlos'});
 }
 
 /* ══════════════════════════════════════════════════════════════
