@@ -309,6 +309,27 @@ function verLista(){
       '</div>'+
     '</div>'+
 
+    (function(){
+      /* Si hay un montón de contraseñas sin usuario ni sitio y todas del
+         mismo sitio, casi seguro que es un listín que entró mal. Se dice
+         y se arregla de un toque, en vez de esperar a que lo encuentre
+         él en Ajustes. */
+      var sospechosas = apuntes().filter(function(a){
+        return a.tipo==='clave' && !a.sitio && (a.nombre||'').length > 2;
+      });
+      if(sospechosas.length < 10) return '';
+      return '<div class="tarjeta" style="margin-bottom:16px;border-color:var(--aviso)">'+
+        '<div class="tarjeta-cuerpo" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">'+
+          '<span style="font-size:20px">⚠︎</span>'+
+          '<div style="flex:1;min-width:220px">'+
+            '<strong>'+plural(sospechosas.length,'contraseña guardada','contraseñas guardadas')+
+            ' que pueden ser teléfonos</strong>'+
+            '<div class="nota" style="margin:2px 0 0">Los números de seis cifras entraron como '+
+            'contraseñas. Esto los pasa a Teléfonos: te pedirá la maestra una vez.</div></div>'+
+          '<button class="btn fuerte" id="a_arreglarYa">Arreglarlo</button>'+
+        '</div></div>';
+    })()+
+
     (lista.length
       ? (ui.tipo==='todos'
           ? ORDEN_TIPOS.map(function(t){
@@ -344,6 +365,8 @@ function verLista(){
   document.getElementById('a_nuevo').addEventListener('click', function(){ editar(null); });
   document.getElementById('a_pegar').addEventListener('click', pegarLista);
   document.getElementById('a_imprimir').addEventListener('click', imprimir);
+  var ya = document.getElementById('a_arreglarYa');
+  if(ya) ya.addEventListener('click', arreglarLoPegado);
   document.getElementById('a_ajustes').addEventListener('click', verAjustes);
   engancharFichas();
 }
