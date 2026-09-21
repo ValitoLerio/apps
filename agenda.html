@@ -243,6 +243,22 @@ dialog::backdrop{background:rgba(20,14,11,.55)}
        padding:34px 22px;text-align:center;color:var(--muted);font-size:13px}
 .vacio strong{display:block;font-family:var(--titulo);font-size:17px;color:var(--tinta);
               margin-bottom:5px;font-weight:600}
+
+/* ── Para imprimir ────────────────────────────────────────────────── */
+#imprimible{display:none}
+@media print{
+  body{background:#fff;color:#000}
+  body > *{display:none !important}
+  #imprimible{display:block !important;padding:0;margin:0}
+  #imprimible h1{font-family:'Fraunces',Georgia,serif;font-size:20pt;margin:0 0 2mm}
+  #imprimible .cuando{font-size:9pt;color:#555;margin:0 0 6mm}
+  #imprimible h2{font-size:12pt;margin:6mm 0 2mm;border-bottom:1px solid #999;padding-bottom:1mm}
+  #imprimible table{width:100%;border-collapse:collapse;font-size:10pt}
+  #imprimible td{padding:1.6mm 1mm;border-bottom:1px solid #ddd;vertical-align:top}
+  #imprimible td.dato{font-family:'IBM Plex Mono',monospace}
+  #imprimible tr{break-inside:avoid}
+  @page{margin:14mm}
+}
 </style>
 </head>
 <body>
@@ -254,7 +270,7 @@ dialog::backdrop{background:rgba(20,14,11,.55)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609210910"></script>
+<script src="sync.js?v=202609210914"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -262,7 +278,7 @@ dialog::backdrop{background:rgba(20,14,11,.55)}
 
   Sync.iniciar('agenda').then(function(){
     var s = document.createElement('script');
-    s.src = 'agenda.js?v=202609210910';
+    s.src = 'agenda.js?v=202609210914';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar agenda.js. Recarga la pagina.'; };
     document.body.appendChild(s);

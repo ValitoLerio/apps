@@ -252,6 +252,8 @@ function verLista(){
       '<p>Teléfonos, claves y correos del trabajo y de casa. Se apunta, se busca y se copia.</p></div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
         '<button class="btn fuerte" id="a_nuevo">+ Apuntar</button>'+
+        '<button class="btn" id="a_pegar">📋 Pegar una lista</button>'+
+        '<button class="btn" id="a_imprimir">🖨 Imprimir</button>'+
         '<button class="btn" id="a_ajustes">Ajustes</button>'+
       '</div></div>'+
 
@@ -298,6 +300,8 @@ function verLista(){
     b.addEventListener('click', function(){ ui.ambito = b.dataset.ambito; verLista(); });
   });
   document.getElementById('a_nuevo').addEventListener('click', function(){ editar(null); });
+  document.getElementById('a_pegar').addEventListener('click', pegarLista);
+  document.getElementById('a_imprimir').addEventListener('click', imprimir);
   document.getElementById('a_ajustes').addEventListener('click', verAjustes);
   engancharFichas();
 }
@@ -416,7 +420,15 @@ function editar(id){
     '</div>'+
     '<div class="campo" style="margin-bottom:12px"><label class="lbl" for="e_nombre">Cómo se llama</label>'+
       '<input id="e_nombre" value="'+esc(a.nombre||'')+'" placeholder="Pescadería, la luz, el banco…" '+
-      'autocomplete="off"></div>'+
+      'autocomplete="off">'+
+      /* Los de siempre, de un toque: es lo que más se apunta */
+      '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">'+
+        ['Facebook','Instagram','WhatsApp','Correo','Banco','Wifi de casa','Wifi del local',
+         'Datáfono','Luz','Agua','Internet','Móvil','Hacienda','CASS','Seguro']
+        .map(function(x){
+          return '<button type="button" class="btn suave sm" data-sitio="'+esc(x)+'" '+
+                 'style="padding:2px 8px">'+esc(x)+'</button>'; }).join('')+
+      '</div></div>'+
     '<div class="campo" style="margin-bottom:12px"><label class="lbl" for="e_valor" id="e_valorLbl">Teléfono</label>'+
       '<input id="e_valor" value="'+esc(a.tipo==='clave'?'':(a.valor||''))+'" autocomplete="off">'+
       (a.tipo==='clave' && a.cifrada
@@ -466,7 +478,223 @@ function editar(id){
     }, {aceptar:nuevo?'Apuntar':'Guardar'});
 
   document.getElementById('e_tipo').addEventListener('change', function(){ pintarValor(this.value); });
+  document.querySelectorAll('[data-sitio]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var campo = document.getElementById('e_nombre');
+      campo.value = b.dataset.sitio;
+      campo.focus();
+    });
+  });
   pintarValor(a.tipo);
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   PEGAR UNA LISTA
+   ══════════════════════════════════════════════════════════════
+   Los teléfonos y las claves ya están escritos en algún sitio: en las
+   notas del móvil, en un papel pasado a limpio, en un correo. Aquí se
+   pegan de golpe y la app reparte cada línea en su sitio, enseñándolo
+   antes por si algo hay que cambiar. */
+
+var RE_CORREO = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
+var RE_TELEFONO = /(\+?\d[\d\s().-]{5,}\d)/;
+var PALABRA_CLAVE = /(clave|contrase|password|pass\b|pin\b|usuario\b|user\b)/i;
+
+/* Una línea suelta: «Pescadería Ordino: 812 345» o «luz 376800800» o
+   «Creand / vff.ad / miClave». Se parte por dos puntos, tabulador,
+   barra o punto y coma, y si no hay separador se busca el dato dentro
+   del texto. */
+function leerLinea(linea, ambito){
+  var t = String(linea||'').trim();
+  if(!t) return null;
+  if(/^[-—·•*]+$/.test(t)) return null;
+
+  var partes = t.split(/\s*[:;\t|]\s*|\s{3,}|\s+\/\s+/).filter(function(x){ return x.trim(); });
+  var nombre = '', resto = t, usuario = '';
+
+  if(partes.length >= 2){
+    nombre = partes[0].trim();
+    resto  = partes.slice(1).join(' ').trim();
+    if(partes.length >= 3){ usuario = partes[1].trim(); resto = partes.slice(2).join(' ').trim(); }
+  }
+
+  var correo = (resto.match(RE_CORREO) || t.match(RE_CORREO) || [])[0] || '';
+  var tel    = (resto.match(RE_TELEFONO) || t.match(RE_TELEFONO) || [])[0] || '';
+
+  var tipo, valor;
+  if(correo){ tipo='correo'; valor=correo; }
+  else if(tel && tel.replace(/\D/g,'').length >= 6 && !PALABRA_CLAVE.test(t)){
+    tipo='telefono'; valor=tel.trim();
+  } else { tipo='clave'; valor=resto || t; }
+
+  if(!nombre){
+    /* Sin separador: el nombre es lo que queda al quitar el dato */
+    nombre = t.replace(valor, '').replace(/[-–—:;,]+$/,'').trim() || valor;
+  }
+  if(tipo!=='clave' && usuario && !RE_CORREO.test(usuario) && !RE_TELEFONO.test(usuario)){
+    /* en teléfonos y correos, el del medio suele ser parte del nombre */
+    nombre = (nombre+' '+usuario).trim(); usuario = '';
+  }
+  return {id:uid(), tipo:tipo, ambito:ambito, nombre:nombre, valor:valor,
+          usuario:usuario, sitio:'', notas:''};
+}
+
+function leerLista(texto, ambito){
+  return String(texto||'').split(/\r?\n/).map(function(l){ return leerLinea(l, ambito); })
+    .filter(Boolean);
+}
+
+function pegarLista(){
+  var leidos = [];
+
+  var d = abrirVentana('Pegar una lista',
+    '<div class="campo" style="margin-bottom:10px">'+
+      '<label class="lbl" for="pg_ambito">De dónde es todo esto</label>'+
+      '<select id="pg_ambito">'+Object.keys(AMBITOS).map(function(k){
+        return '<option value="'+k+'">'+AMBITOS[k].icono+' '+AMBITOS[k].nombre+'</option>';
+      }).join('')+'</select></div>'+
+    '<div class="campo" style="margin-bottom:12px">'+
+      '<label class="lbl" for="pg_texto">Pega aquí la lista</label>'+
+      '<textarea id="pg_texto" rows="7" placeholder="Pescadería Ordino: 812 345&#10;'+
+        'Luz: 376 800 800&#10;correo del gestor: gestor@despacho.ad&#10;'+
+        'Banco Creand: vff.ad: miClaveSecreta"></textarea>'+
+      '<span class="nota" style="margin:5px 0 0">Una por línea. Vale con dos puntos, tabulador '+
+      'o barra entre el nombre y el dato; si no hay separador, lo busca igual.</span></div>'+
+    '<div id="pg_vista"></div>',
+    function(){
+      var buenos = leidos.filter(function(x, i){
+        var c = document.getElementById('pg_si_'+i);
+        return !c || c.checked;
+      });
+      if(!buenos.length){ avisar('No hay nada que apuntar.', true); return true; }
+      /* cada fila puede haber cambiado de tipo a mano */
+      buenos.forEach(function(x, i){
+        var sel = document.getElementById('pg_tipo_'+leidos.indexOf(x));
+        if(sel) x.tipo = sel.value;
+      });
+      var claves = buenos.filter(function(x){ return x.tipo==='clave'; });
+
+      function terminar(){
+        buenos.forEach(function(x){ libro.apuntes.push(x); });
+        guardar(); pintar();
+        avisar(plural(buenos.length,'apunte nuevo','apuntes nuevos'));
+      }
+      if(!claves.length || libro.ajustes.cifrar === false){ terminar(); return; }
+
+      conMaestra(function(maestraOk){
+        Promise.all(claves.map(function(x){
+          return cifrar(x.valor, maestraOk).then(function(p){ x.cifrada = p; delete x.valor; });
+        })).then(terminar).catch(function(){ avisar('No se pudieron cifrar las claves.', true); });
+      });
+    }, {aceptar:'Apuntarlo todo'});
+
+  var texto  = document.getElementById('pg_texto');
+  var ambito = document.getElementById('pg_ambito');
+  var vista  = document.getElementById('pg_vista');
+
+  function repasar(){
+    leidos = leerLista(texto.value, ambito.value);
+    if(!leidos.length){ vista.innerHTML = ''; return; }
+    vista.innerHTML =
+      '<div class="lbl" style="margin:0 0 6px">Así queda ('+plural(leidos.length,'línea','líneas')+')</div>'+
+      '<div class="tabla-caja" style="max-height:34vh;overflow:auto"><table><tbody>'+
+      leidos.map(function(x, i){
+        return '<tr><td style="width:26px"><input type="checkbox" id="pg_si_'+i+'" checked '+
+            'style="width:auto"></td>'+
+          '<td><strong>'+esc(x.nombre)+'</strong>'+
+            (x.usuario?'<div class="nota" style="margin:0">usuario: '+esc(x.usuario)+'</div>':'')+
+            '</td>'+
+          '<td style="width:108px"><select id="pg_tipo_'+i+'" style="padding:3px 5px;font-size:12px">'+
+            ORDEN_TIPOS.map(function(t){
+              return '<option value="'+t+'"'+(x.tipo===t?' selected':'')+'>'+
+                     TIPOS[t].icono+' '+TIPOS[t].nombre+'</option>'; }).join('')+
+            '</select></td>'+
+          '<td class="mono" style="font-size:12px;word-break:break-all">'+
+            (x.tipo==='clave' ? '••••••••' : esc(x.valor))+'</td></tr>';
+      }).join('')+'</tbody></table></div>';
+  }
+  texto.addEventListener('input', repasar);
+  ambito.addEventListener('change', repasar);
+  texto.focus();
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   IMPRIMIR
+   ══════════════════════════════════════════════════════════════
+   Un papel en el cajón vale más que una app el día que se cae el
+   internet. Sale lo que se está viendo, ordenado por trabajo y casa.
+   Las claves sólo si él lo pide: un papel con las contraseñas es un
+   papel que hay que guardar bien, y se avisa. */
+function imprimir(){
+  var lista = filtrados();
+  if(!lista.length){ avisar('No hay nada que imprimir.', true); return; }
+  var hayClaves = lista.some(function(a){ return a.tipo==='clave'; });
+
+  abrirVentana('Imprimir',
+    '<p class="nota" style="margin:0 0 10px">Se imprime lo que estás viendo: '+
+      plural(lista.length,'apunte','apuntes')+
+      (ui.ambito!=='todos' ? ' de '+AMBITOS[ui.ambito].nombre.toLowerCase() : '')+
+      (ui.tipo!=='todos' ? ' · sólo '+TIPOS[ui.tipo].plural.toLowerCase() : '')+'.</p>'+
+    (hayClaves
+      ? '<label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">'+
+        '<input type="checkbox" id="im_claves" style="width:auto;margin-top:3px">'+
+        '<span>Imprimir también <strong>las claves</strong><br>'+
+        '<span class="nota" style="margin:0">Salen escritas en el papel. Guárdalo donde guardarías '+
+        'el dinero.</span></span></label>'
+      : ''),
+    function(){
+      var conClaves = hayClaves && document.getElementById('im_claves').checked;
+      if(!conClaves){ hacerPapel(lista, {}); return; }
+      conMaestra(function(clave){
+        var claves = lista.filter(function(a){ return a.tipo==='clave'; });
+        Promise.all(claves.map(function(a){
+          if(!a.cifrada) return Promise.resolve([a.id, a.valor||'']);
+          return descifrar(a.cifrada, clave).then(function(t){ return [a.id, t]; })
+                 .catch(function(){ return [a.id, '(no se pudo abrir)']; });
+        })).then(function(pares){
+          var abiertas = {};
+          pares.forEach(function(p){ abiertas[p[0]] = p[1]; });
+          hacerPapel(lista, abiertas);
+        });
+      });
+    }, {aceptar:'Imprimir'});
+}
+
+function hacerPapel(lista, clavesAbiertas){
+  var caja = document.getElementById('imprimible');
+  if(!caja){
+    caja = document.createElement('div');
+    caja.id = 'imprimible';
+    document.body.appendChild(caja);
+  }
+  var hoy = new Date();
+  var partes = ['<h1>Agenda</h1>',
+    '<div class="cuando">'+plural(lista.length,'apunte','apuntes')+' · '+
+    hoy.getDate()+'/'+(hoy.getMonth()+1)+'/'+hoy.getFullYear()+'</div>'];
+
+  Object.keys(AMBITOS).forEach(function(amb){
+    ORDEN_TIPOS.forEach(function(tipo){
+      var suyos = lista.filter(function(a){ return a.ambito===amb && a.tipo===tipo; });
+      if(!suyos.length) return;
+      partes.push('<h2>'+AMBITOS[amb].nombre+' · '+TIPOS[tipo].plural+'</h2>');
+      partes.push('<table><tbody>'+suyos.map(function(a){
+        var dato = a.tipo==='clave'
+          ? (clavesAbiertas[a.id] !== undefined ? clavesAbiertas[a.id] : '············')
+          : (a.valor||'');
+        return '<tr><td style="width:38%"><strong>'+esc(a.nombre||'')+'</strong>'+
+          (a.usuario?'<br><span style="font-size:9pt;color:#555">usuario: '+esc(a.usuario)+'</span>':'')+
+          (a.sitio?'<br><span style="font-size:9pt;color:#555">'+esc(a.sitio)+'</span>':'')+
+          '</td><td class="dato">'+esc(dato)+
+          (a.notas?'<br><span style="font-size:9pt;color:#555">'+esc(a.notas)+'</span>':'')+
+          '</td></tr>';
+      }).join('')+'</tbody></table>');
+    });
+  });
+
+  caja.innerHTML = partes.join('');
+  window.print();
 }
 
 /* ══════════════════════════════════════════════════════════════
