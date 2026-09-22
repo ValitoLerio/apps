@@ -774,10 +774,12 @@ function pintarFormularioDia(d){
   /* Si el día cae dentro de un tramo sin retirar, más vale decirlo aquí:
      ese día el dinero se queda dentro y la amarilla va a ir subiendo. */
   var elTramo=tramoDe(ui.dia);
-  /* En un tramo sin retirar no sale nada, así que la casilla arranca en
-     cero: es la respuesta, no un hueco por rellenar. */
-  var sacaPuesto=(actual.retirado!=null && actual.retirado!=="") ? actual.retirado
-                                                                : (elTramo ? 0 : "");
+  /* La casilla arranca en cero, que es lo que pasa casi todas las
+     noches: no se saca nada. Dejarla vacía obligaba a escribir un 0 a
+     mano día tras día —y sin ese dato el día no cuadra—, así que ahora
+     el 0 ya está puesto y sólo hay que tocarla las noches que sí se
+     saque algo. */
+  var sacaPuesto=(actual.retirado!=null && actual.retirado!=="") ? actual.retirado : 0;
   caja.innerHTML=
     (elTramo
       ? '<div class="aviso-caja" style="margin-bottom:14px">Este día entra en un tramo '+
@@ -814,7 +816,7 @@ function pintarFormularioDia(d){
       '<div class="campo"><label class="lbl" for="f_saca">Se saca (€)</label>'+
       '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo que te llevas al cerrar</div>'+
         '<input type="number" class="grande" id="f_saca" min="0" step="0.01" value="'+
-        esc(sacaPuesto)+'" placeholder="sin apuntar">'+
+        esc(sacaPuesto)+'" placeholder="0,00">'+
         '<div class="nota" style="margin:4px 0 0" id="f_sacaNota"></div></div>'+
       '<div class="campo"><label class="lbl" for="f_sobra">Sobra c. amarilla (€)</label>'+
       '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">se pone solo: lo que pasa de '+
@@ -961,6 +963,8 @@ function pintarFormularioDia(d){
         sn.innerHTML = elTramo
           ? "Este día entra en un tramo sin retirar, así que va un 0."
           : "Sin esto la caja no se puede cuadrar. Si no sacaste nada, escribe un 0.";
+      } else if(saca===0 && !elTramo && (actual.retirado==null || actual.retirado==="")){
+        sn.innerHTML = "Puesto a 0: esa noche no se sacó nada. Si te llevaste algo, escríbelo.";
       } else if(!previo){
         sn.innerHTML="Éste es el primer cierre que hay, así que todavía no hay con qué compararlo.";
       } else {
