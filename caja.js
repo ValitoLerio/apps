@@ -817,8 +817,8 @@ function pintarFormularioDia(d){
         esc(sacaPuesto)+'" placeholder="sin apuntar">'+
         '<div class="nota" style="margin:4px 0 0" id="f_sacaNota"></div></div>'+
       '<div class="campo"><label class="lbl" for="f_sobra">Sobra c. amarilla (€)</label>'+
-      '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo que pasa de '+
-      eur(objetivoAmarilla())+', que ya no hace falta ah&iacute; dentro</div>'+
+      '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">se pone solo: lo que pasa de '+
+      eur(objetivoAmarilla())+'</div>'+
         '<input type="number" class="grande" id="f_sobra" step="0.01" value="'+
         esc(actual.sobrante!=null&&actual.sobrante!==""?actual.sobrante:"")+'" '+
         'placeholder="0,00"></div>'+
@@ -911,7 +911,9 @@ function pintarFormularioDia(d){
       } else {
         var dif=r2(puesto-cuenta);
         cuadre.innerHTML = Math.abs(dif)<0.005
-          ? (cuenta>0 ? 'Cuadra: es lo que pasa de '+eur(objetivo)+'.'
+          ? (cuenta>0 ? (sobraAMano ? 'Cuadra: es lo que pasa de '+eur(objetivo)+'.'
+                                    : 'Puesto solo: es lo que pasa de '+eur(objetivo)+'. '+
+                                      'Escribe encima si sacaste otra cantidad.')
                       : 'Anotado a mano; por el objetivo no sobraría nada.')
           : '<strong style="color:var(--aviso)">'+eur(puesto)+'</strong>, cuando por encima de '+
             eur(objetivo)+' saldrían '+eur(cuenta)+'.';
@@ -1037,6 +1039,26 @@ function pintarFormularioDia(d){
     efecAMano = !(tocaba!=null && Math.abs((+actual.efectivo||0)-tocaba)<0.005);
   }
   ponerEfectivo();
+  /* La cuenta de lo que sobra se escribe sola en su casilla, igual que el
+     efectivo. Antes salía en gris debajo y había que darle a «usar esa
+     cifra», así que la casilla parecía decir que no sobraba nada. Si se
+     escribe encima, manda lo escrito; si se borra, vuelve la cuenta. */
+  var sobraAMano = (sobranteAnotado(actual) != null);
+  function ponerSobra(){
+    var campo=document.getElementById("f_sobra");
+    if(!campo || sobraAMano) return;
+    var cuenta=objetivoAmarilla()>0 ? r2(Math.max(0, numero("f_amar")-objetivoAmarilla())) : 0;
+    campo.value = cuenta>0 ? cuenta : "";
+  }
+  var campoSobraSolo=document.getElementById("f_sobra");
+  if(campoSobraSolo){
+    campoSobraSolo.addEventListener("input", function(){ sobraAMano = (this.value!==""); });
+  }
+  var campoAmarSolo=document.getElementById("f_amar");
+  if(campoAmarSolo){
+    campoAmarSolo.addEventListener("input", function(){ ponerSobra(); refrescar(); });
+  }
+  ponerSobra();
   refrescar();
 
   document.getElementById("f_guardar").addEventListener("click", function(){
@@ -1055,8 +1077,15 @@ function pintarFormularioDia(d){
     registro.detalle=detalle;
     registro.gastos=r2(detalle.reduce(function(s,g){ return s+g.importe; },0));
     registro.aAmarilla=numero("f_amar");
+    /* Si lo que hay en la casilla es justo lo que sale de la cuenta, no se
+       guarda como cifra puesta a mano: así, si algún día cambia el
+       objetivo de la amarilla, los días viejos se recalculan solos. */
     var sob=document.getElementById("f_sobra");
-    registro.sobrante = (sob && sob.value!=="") ? r2(+sob.value||0) : null;
+    var cuentaSobra=objetivoAmarilla()>0
+      ? r2(Math.max(0, numero("f_amar")-objetivoAmarilla())) : 0;
+    var puestoSobra=(sob && sob.value!=="") ? r2(+sob.value||0) : null;
+    registro.sobrante = (puestoSobra==null || Math.abs(puestoSobra-cuentaSobra)<0.005)
+      ? null : puestoSobra;
     registro.fondoCaja=numero("f_fondo");
     /* Igual que el recuento del cajón: vacío es «no lo he apuntado», y un
        0 escrito es «no saqué nada». No son lo mismo para el cuadre. */
