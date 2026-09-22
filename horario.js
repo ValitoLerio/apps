@@ -705,6 +705,30 @@ function textoTramos(dias, m){
     return a === b ? a : a + '-' + b;
   }).join(', ');
 }
+/* El dia, con su mes cuando no es el de la fila: «31» o «1 mar». Lo de
+   antes, «1/3», habia que descifrarlo. */
+function diaConMes(dia, m){
+  return dia.m === m ? String(dia.d)
+       : dia.d + ' ' + MESES[dia.m].substring(0,3).toLowerCase();
+}
+/* «del 2 al 31», «del 2 al 1 mar», «el 9» o «los días 11, 18 y 25».
+   El mes solo se nombra cuando hace falta: «del 1 al 4 oct», no «del 1
+   oct al 4 oct». */
+function textoTramosClaro(dias, m){
+  var ts = tramos(dias);
+  if (!ts.length) return '';
+  var todoSueltos = ts.every(function(t){ return t[0].d === t[1].d && t[0].m === t[1].m; });
+  var partes = ts.map(function(t){
+    var a = t[0], b = t[1];
+    if (a.d === b.d && a.m === b.m) return diaConMes(a, m);
+    if (a.m === b.m) return 'del ' + a.d + ' al ' + diaConMes(b, m);
+    return 'del ' + diaConMes(a, m) + ' al ' + diaConMes(b, m);
+  });
+  var texto = partes.length === 1 ? partes[0]
+            : partes.slice(0, -1).join(', ') + ' y ' + partes[partes.length - 1];
+  if (todoSueltos) return (partes.length === 1 ? 'el ' : 'los d\u00edas ') + texto;
+  return texto;
+}
 
 /* Recoge las ausencias del mes en curso o de todo el año. */
 function recogerAusencias(){
@@ -818,8 +842,11 @@ function renderAusencias(){
       total += dias.length;
       return '<td style="padding:8px 12px;border:1px solid var(--border)">' +
              (dias.length
-               ? '<span class="tb ' + AUS_TIPOS[k].cls + '" style="cursor:default;font-size:.82rem;padding:4px 9px">' +
-                 textoTramos(dias, mes) + '<span style="opacity:.7;margin-left:5px">(' + dias.length + 'd)</span></span>'
+               ? '<span class="tb ' + AUS_TIPOS[k].cls + '" style="cursor:default;font-size:.82rem;padding:4px 9px" ' +
+                 'title="' + AUS_TIPOS[k].lbl + ': ' + dias.length + (dias.length===1?' dia':' dias') + '">' +
+                 textoTramosClaro(dias, mes) +
+                 ' <span style="opacity:.75;margin-left:6px">&middot; ' + dias.length +
+                 (dias.length === 1 ? ' d\u00eda' : ' d\u00edas') + '</span></span>'
                : '<span style="color:var(--border)">·</span>') +
              '</td>';
     }).join('');
@@ -903,13 +930,7 @@ function diasDeTipo(sid, dias, tipo){
   return dias.filter(function(dia){ return estadoDe(sid, dia) === tipo; });
 }
 function cuandoTexto(suyos, mes){
-  var ts = tramos(suyos);
-  if (!ts.length) return '';
-  if (ts.length === 1){
-    var a = etiquetaDia(ts[0][0], mes), b = etiquetaDia(ts[0][1], mes);
-    return a === b ? 'el ' + a : 'del ' + a + ' al ' + b;
-  }
-  return textoTramos(suyos, mes);
+  return textoTramosClaro(suyos, mes);
 }
 
 // Cuantos dias de un tipo tiene alguien en un mes del horario.
