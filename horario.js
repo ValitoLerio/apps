@@ -1392,6 +1392,133 @@ function renderStats() {
 }
 
 // ================================================================
+// LA GOMA: BORRAR VARIOS DIAS DE UNA VEZ
+// ================================================================
+// Vaciar dia a dia -abrir la ventana, darle a la papelera, cerrar- es
+// un suplicio cuando hay que rehacer media semana. Con la goma puesta,
+// se pasa el dedo o el raton por encima y los dias se vacian solos.
+// Nada se pierde sin remedio: lo ultimo borrado se puede devolver.
+var goma = false;
+var loBorrado = [];     // para poder devolverlo
+
+function ponerGoma(valor){
+  goma = (valor === undefined) ? !goma : !!valor;
+  document.documentElement.setAttribute('data-goma', goma ? '1' : '0');
+  var b = document.getElementById('bgoma');
+  if (b){
+    b.innerHTML = goma ? '\uD83E\uDDF9 Borrando' : '\uD83E\uDDF9 Borrar';
+    b.style.background = goma ? 'rgba(192,57,43,.25)' : 'transparent';
+  }
+  if (goma) toast('Goma puesta: pasa por encima de los dias y se vacian');
+  else if (loBorrado.length) loBorrado = [];
+}
+
+/* Vacia un dia y se guarda lo que habia, por si hay que devolverlo. */
+function borrarDia(sid, y, m, d, silencio){
+  var mes = ((sched[y] || {})[m] || {});
+  var celda = mes[sid] ? mes[sid][d] : null;
+  if (!celda) return false;
+  loBorrado.push({sid:sid, y:y, m:m, d:d, celda:celda});
+  delete mes[sid][d];
+  if (!silencio){ save(); repintarTodo(); }
+  return true;
+}
+function devolverBorrado(){
+  if (!loBorrado.length){ toast('No hay nada que devolver'); return; }
+  loBorrado.forEach(function(x){
+    if (!sched[x.y]) sched[x.y] = {};
+    if (!sched[x.y][x.m]) sched[x.y][x.m] = {};
+    if (!sched[x.y][x.m][x.sid]) sched[x.y][x.m][x.sid] = {};
+    sched[x.y][x.m][x.sid][x.d] = x.celda;
+  });
+  var n = loBorrado.length; loBorrado = [];
+  save(); repintarTodo();
+  toast(n + (n === 1 ? ' dia devuelto' : ' dias devueltos'));
+}
+function repintarTodo(){
+  renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones(); pegarCabeceras();
+}
+
+/* Toda la fila de una persona en el mes que se esta viendo. */
+function vaciarMesDe(sid){
+  var quien = staff().filter(function(x){ return x.id === sid; })[0];
+  if (!quien) return;
+  var n = 0;
+  loBorrado = [];
+  diasDelMes(curY, curM).forEach(function(dia){
+    if (borrarDia(sid, dia.y, dia.m, dia.d, true)) n++;
+  });
+  if (!n){ toast(quien.name + ' no tiene nada ese mes'); return; }
+  save(); repintarTodo();
+  avisarConDeshacer(n + (n === 1 ? ' dia vaciado de ' : ' dias vaciados de ') + quien.name);
+}
+/* Un dia entero, de todo el personal. */
+function vaciarDia(y, m, d){
+  var n = 0;
+  loBorrado = [];
+  staff().forEach(function(s){ if (borrarDia(s.id, y, m, d, true)) n++; });
+  if (!n){ toast('Ese dia ya estaba vacio'); return; }
+  save(); repintarTodo();
+  avisarConDeshacer(n + (n === 1 ? ' turno quitado' : ' turnos quitados') + ' del dia ' + d);
+}
+
+/* El aviso de siempre, pero con un boton para devolverlo. */
+function avisarConDeshacer(msg){
+  var t = document.getElementById('toast'); if (!t) return toast(msg);
+  t.innerHTML = esc(msg) +
+    '<button onclick="devolverBorrado()" style="margin-left:10px;background:transparent;' +
+    'border:1px solid currentColor;color:inherit;border-radius:5px;padding:2px 8px;cursor:pointer;' +
+    'font-family:inherit;font-size:.72rem">Deshacer</button>';
+  t.style.opacity = '1';
+  clearTimeout(t._t);
+  t._t = setTimeout(function(){ t.style.opacity = '0'; }, 6000);
+}
+
+/* Pasar el dedo o el raton por encima con la goma puesta. */
+var gomeando = false;
+function engancharGoma(tabla){
+  if (!tabla) return;
+  function tdDe(e){
+    var td = e.target.closest ? e.target.closest('td[data-sid]') : null;
+    return td && td.dataset.sid ? td : null;
+  }
+  function borrarLaDe(td){
+    if (borrarDia(td.dataset.sid, +td.dataset.y, +td.dataset.m, +td.dataset.d, true)) return true;
+    return false;
+  }
+  tabla.addEventListener('pointerdown', function(e){
+    if (!goma) return;
+    var td = tdDe(e); if (!td) return;
+    e.preventDefault();
+    gomeando = true; loBorrado = [];
+    borrarLaDe(td); save(); pintarVacio(td);
+  });
+  tabla.addEventListener('pointerover', function(e){
+    if (!goma || !gomeando) return;
+    var td = tdDe(e); if (!td) return;
+    if (borrarLaDe(td)) { save(); pintarVacio(td); }
+  });
+}
+/* Se vacia la celda a mano y el cuadro entero se repinta al soltar: si
+   se repintara a cada paso, el raton perderia la tabla de debajo. */
+function pintarVacio(td){
+  td.innerHTML = '<div class="ci"><span class="tb el">+</span></div>';
+  td.style.background = '';
+}
+function soltarGoma(){
+  if (!gomeando) return;
+  gomeando = false;
+  var n = loBorrado.length;
+  repintarTodo();
+  if (n) avisarConDeshacer(n + (n === 1 ? ' dia vaciado' : ' dias vaciados'));
+}
+document.addEventListener('pointerup', soltarGoma);
+document.addEventListener('pointercancel', soltarGoma);
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape' && goma) ponerGoma(false);
+});
+
+// ================================================================
 // MONTH TABLE
 // ================================================================
 function renderTable() {
@@ -1406,7 +1533,9 @@ function renderTable() {
   dias.forEach(function(dia){
     var we  = dia.dow===0||dia.dow===6;
     var tod = esHoy(dia, today);
-    th += '<th class="dh'+(we?' we':'')+(tod?' tod':'')+'">'+DC[dia.dow]+'<br><span style="font-size:.95rem;font-weight:700">'+etiquetaDia(dia, curM)+'</span></th>';
+    th += '<th class="dh'+(we?' we':'')+(tod?' tod':'')+'" data-coly="'+dia.y+'" data-colm="'+dia.m+
+          '" data-cold="'+dia.d+'">'+DC[dia.dow]+'<br><span style="font-size:.95rem;font-weight:700">'+
+          etiquetaDia(dia, curM)+'</span></th>';
   });
   th += '</tr></thead>';
 
@@ -1417,7 +1546,9 @@ function renderTable() {
       if (si > 0) tb += '<tr class="gs"><td colspan="'+(dias.length+1)+'"></td></tr>';
       lastR = s.role;
     }
-    tb += '<tr><td class="nc"><div style="display:flex;align-items:center;justify-content:center;gap:2px" class="nc-row">'
+    tb += '<tr><td class="nc" data-fila="'+s.id+'"'+
+       (' title="'+esc(s.name)+'"')+
+       '><div style="display:flex;align-items:center;justify-content:center;gap:2px" class="nc-row">'
        +  '<div style="text-align:center;line-height:1.15"><span style="color:'+RCOL[s.role]+';font-weight:600;font-size:.74rem">'+s.name+'</span><span class="rt r'+s.role+'">'+RLBL[s.role]+'</span></div>'
        +  (fijoDe(s.id)
              ? '<button onclick="rellenarMes(\''+s.id+'\')" class="hide-btn" title="Rellenar el mes con su turno fijo">&#9776;</button>'
@@ -1457,7 +1588,8 @@ function renderTable() {
       } else {
         inn = '<span class="tb '+cls+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">+</span>';
       }
-      tb += '<td style="'+(we?'background:rgba(30,28,20,.5)':'')+'"><div class="ci">'+inn+'</div></td>';
+      tb += '<td data-sid="'+s.id+'" data-d="'+d+'" data-m="'+dia.m+'" data-y="'+dia.y+'" '+
+            'style="'+(we?'background:rgba(30,28,20,.5)':'')+'"><div class="ci">'+inn+'</div></td>';
     });
     tb += '</tr>';
   });
@@ -1475,6 +1607,24 @@ function renderTable() {
   }
   tb += '</tbody>';
   area.innerHTML = '<table class="sched">'+th+tb+'</table>';
+
+  /* Con la goma puesta: arrastrar por las celdas las vacia, el nombre
+     vacia el mes de esa persona y el dia de arriba lo vacia para todos. */
+  var tabla = area.querySelector('table');
+  engancharGoma(tabla);
+  tabla.querySelectorAll('td.nc[data-fila]').forEach(function(td){
+    td.addEventListener('click', function(e){
+      if (!goma) return;
+      e.stopPropagation();
+      vaciarMesDe(td.dataset.fila);
+    });
+  });
+  tabla.querySelectorAll('th.dh[data-cold]').forEach(function(th2){
+    th2.addEventListener('click', function(){
+      if (!goma) return;
+      vaciarDia(+th2.dataset.coly, +th2.dataset.colm, +th2.dataset.cold);
+    });
+  });
 }
 
 // ================================================================
@@ -1572,7 +1722,7 @@ function renderWeekTable() {
       if (p) { fullCell = p.fondo; inner = p.dentro; }
 
       var wrapAlign = est==='trabajo' ? '' : 'justify-content:center;';
-      tb += '<td onclick="openCell(\''+s.id+'\','+d+',event,'+m+','+y+')" style="'+fullCell+'border:1px solid var(--border);border-bottom:2px solid var(--border);padding:0;vertical-align:middle;cursor:pointer;text-align:center" onmouseover="this.style.filter=\'brightness(1.3)\'" onmouseout="this.style.filter=\'none\'">'
+      tb += '<td data-sid="'+s.id+'" data-d="'+d+'" data-m="'+m+'" data-y="'+y+'" onclick="openCell(\''+s.id+'\','+d+',event,'+m+','+y+')" style="'+fullCell+'border:1px solid var(--border);border-bottom:2px solid var(--border);padding:0;vertical-align:middle;cursor:pointer;text-align:center" onmouseover="this.style.filter=\'brightness(1.3)\'" onmouseout="this.style.filter=\'none\'">'
           + (est==='trabajo' && cell && cell.inicio
               ? inner
               : '<div style="width:100%;height:40px;display:flex;align-items:center;'+wrapAlign+'">'+inner+'</div>')
@@ -1596,6 +1746,8 @@ function renderWeekTable() {
     + '<div id="wk-inner" style="transform-origin:top left">'
     + '<table id="wk-tbl" style="border-collapse:collapse;table-layout:auto;width:100%;font-family:\'DM Sans\',sans-serif;background:var(--bg);white-space:nowrap">'+th+tb+'</table>'
     + '</div></div>';
+
+  engancharGoma(document.getElementById('wk-tbl'));   // la goma tambien en la semana
 
   setTimeout(function(){
     var sc  = document.getElementById('wk-scaler');
@@ -1702,6 +1854,7 @@ function renderCov() {
 // ================================================================
 function openCell(sid, day, event, mo, yr) {
   event.stopPropagation();
+  if (goma) return;            // con la goma puesta, el clic borra
   var savedM = curM, savedY = curY;
   if (mo !== undefined) { curM = mo; curY = yr; }
 
