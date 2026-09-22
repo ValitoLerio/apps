@@ -207,6 +207,8 @@ function load() {
   try { var d=localStorage.getItem('rvac');   if(d){var p=JSON.parse(d);if(typeof p==='object')vac=p;}   } catch(e){}
   try { var d=localStorage.getItem('rancho');
         if (d && ANCHOS.some(function(x){ return x.id === d; })) anchoDia = d; } catch(e){}
+  try { var d2=localStorage.getItem('ralto');
+        if (d2 && ALTOS.some(function(x){ return x.id === d2; })) altoFila = d2; } catch(e){}
 }
 
 // ================================================================
@@ -240,6 +242,34 @@ var ANCHOS = [
   {id:'deveras', lbl:'Muy ancho', px:126}
 ];
 var anchoDia = 'ancho';
+
+// Lo alto que es cada fila. Con doce empleados, el cuadrante del mes no
+// cabe en la pantalla y hay que subir y bajar todo el rato perdiendo de
+// vista quien es quien. Apretando la fila caben los doce de una vez: el
+// turno sigue viendose, solo que en pequeno.
+var ALTOS = [
+  {id:'normal',   lbl:'Normal',   px:34, fs:'.73rem'},
+  {id:'justo',    lbl:'Justo',    px:25, fs:'.68rem'},
+  {id:'apretado', lbl:'Apretado', px:19, fs:'.61rem'}
+];
+var altoFila = 'normal';
+function aplicarAlto() {
+  var a = ALTOS.filter(function(x){ return x.id === altoFila; })[0] || ALTOS[0];
+  document.documentElement.style.setProperty('--fila-alto', a.px + 'px');
+  document.documentElement.style.setProperty('--fila-letra', a.fs);
+  document.documentElement.setAttribute('data-alto', a.id);
+  var b = document.getElementById('balto');
+  if (b) b.innerHTML = '\u2195 ' + a.lbl;
+}
+function cambiarAlto() {
+  var i = 0;
+  ALTOS.forEach(function(x, k){ if (x.id === altoFila) i = k; });
+  altoFila = ALTOS[(i + 1) % ALTOS.length].id;
+  try { localStorage.setItem('ralto', altoFila); } catch(e){}
+  aplicarAlto();
+  renderTable();
+  renderCov();
+}
 function aplicarAncho() {
   var a = ANCHOS.filter(function(x){ return x.id === anchoDia; })[0] || ANCHOS[2];
   document.documentElement.style.setProperty('--dia-ancho', a.px + 'px');
@@ -1331,11 +1361,11 @@ function renderTable() {
                     '%;width:1px;background:rgba(128,128,128,.16)"></div>'; };
         inn = '<div style="position:relative;width:100%;display:flex;justify-content:'+align+';'+pad+'">'
             + rayaM(33.33) + rayaM(66.66)
-            + '<span class="tb '+cls+'" style="position:relative;min-width:62%;justify-content:center;'+radius+';background:'+bgCol+';color:'+letraSobre(bgCol)+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'
+            + '<span class="tb '+cls+'" title="'+esc(textoTurno(cell)+(cell.nota?' - '+cell.nota:''))+'" style="position:relative;min-width:62%;justify-content:center;'+radius+';background:'+bgCol+';color:'+letraSobre(bgCol)+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'
             + '<span class="th">'+fmtC(cell.inicio)+'-'+fmtC(cell.fin)
             + (esPartido(cell) ? '<br>'+fmtC(cell.inicio2)+'-'+fmtC(cell.fin2) : '')
             + '</span></span></div>';
-        if (cell.nota) inn += '<div style="width:100%;display:flex;justify-content:'+align+';'+pad+'"><span style="font-size:.6rem;color:var(--text2);max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+cell.nota+'</span></div>';
+        if (cell.nota && altoFila === 'normal') inn += '<div style="width:100%;display:flex;justify-content:'+align+';'+pad+'"><span style="font-size:.6rem;color:var(--text2);max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+cell.nota+'</span></div>';
       } else if (est !== 'libre') {
         var lbl = est==='baja'?'B':est==='ausencia'?'A':EICO[est]||est;
         inn = '<span class="tb '+cls+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'+lbl+'</span>';
@@ -1559,7 +1589,12 @@ function renderCov() {
     var lbl   = (slot<10?'0':'')+slot+':00';
     if (slot===12||slot===20) html += '<tr><td colspan="'+(dias.length+1)+'" style="height:3px;background:var(--border);padding:0;border:none"></td></tr>';
     var rbg = isMid?'rgba(142,68,173,.07)':(si%2===0?'rgba(255,255,255,.013)':'transparent');
-    html += '<tr style="background:'+rbg+'"><td style="position:sticky;left:0;z-index:5;background:'+(isMid?'rgba(142,68,173,.15)':'var(--surface)')+';color:'+(isMid?'#c090e8':'var(--gold)')+';font-weight:700;font-size:.8rem;padding:6px 14px;border:1px solid var(--border);white-space:nowrap">'+lbl+(isMid?' L':'')+' </td>';
+    /* Con las filas apretadas la rejilla de las horas se aprieta igual:
+       si no, se arregla el cuadrante pero esta sigue ocupando media
+       pantalla y hay que seguir subiendo y bajando. */
+    var apr  = altoFila !== 'normal';
+    var pady = altoFila === 'apretado' ? '1px' : altoFila === 'justo' ? '3px' : '6px';
+    html += '<tr style="background:'+rbg+'"><td style="position:sticky;left:0;z-index:5;background:'+(isMid?'rgba(142,68,173,.15)':'var(--surface)')+';color:'+(isMid?'#c090e8':'var(--gold)')+';font-weight:700;font-size:'+(apr?'.72rem':'.8rem')+';padding:'+pady+' 14px;border:1px solid var(--border);white-space:nowrap">'+lbl+(isMid?' L':'')+' </td>';
     dias.forEach(function(dia, i){
       var n   = cov[slot][i];
       var col = cbg(n);
@@ -1567,8 +1602,8 @@ function renderCov() {
       /* Solo el numero: el «pers.» debajo de cada celda no decia nada que
          no dijera ya el titulo de la tabla, y hacia la rejilla el doble
          de alta. */
-      html += '<td title="'+lbl+' Dia '+etiquetaDia(dia, curM)+' - '+tip+'" style="text-align:center;padding:3px 2px;background:'+col.bg+';border:1px solid rgba(46,43,34,.35);cursor:default;transition:filter .1s" onmouseover="this.style.filter=\'brightness(1.5)\'" onmouseout="this.style.filter=\'none\'">'
-            + '<div style="color:'+col.fg+';font-size:'+(n>0?'1.05rem':'.75rem')+';font-weight:'+(n>0?'900':'400')+';line-height:1.05">'+(n>0?n:'.') +'</div>'
+      html += '<td title="'+lbl+' Dia '+etiquetaDia(dia, curM)+' - '+tip+'" style="text-align:center;padding:'+(apr?'0':'3px')+' 2px;background:'+col.bg+';border:1px solid rgba(46,43,34,.35);cursor:default;transition:filter .1s" onmouseover="this.style.filter=\'brightness(1.5)\'" onmouseout="this.style.filter=\'none\'">'
+            + '<div style="color:'+col.fg+';font-size:'+(n>0?(altoFila==='apretado'?'.8rem':apr?'.95rem':'1.05rem'):'.75rem')+';font-weight:'+(n>0?'900':'400')+';line-height:1.05">'+(n>0?n:'.') +'</div>'
             + '</td>';
     });
     html += '</tr>';
@@ -2544,7 +2579,7 @@ function closeTheme() { var el=document.getElementById('themeov'); if(el)el.clas
 // INIT
 // ================================================================
 function iniciarHorario(){
-  load(); loadTheme(); aplicarAncho();
+  load(); loadTheme(); aplicarAncho(); aplicarAlto();
   // Las vacaciones que quedaran en el cajon viejo pasan al horario.
   var pasadas = migrarVacacionesViejas();
   // Se abre por el mes al que pertenece hoy, que ya no es el del

@@ -73,11 +73,11 @@
   .sched td{border:1px solid var(--border);padding:0;vertical-align:middle;text-align:center;}
   /* Celdas justas: cuanto menos abultan, mas dias caben en la pantalla
      sin tener que ir arrastrando el cuadrante de lado. */
-  .ci{display:flex;flex-direction:column;align-items:center;gap:1px;min-height:34px;justify-content:center;padding:2px 0;width:100%;}
-  .tb{display:inline-flex;align-items:center;gap:3px;padding:2px 5px;border-radius:4px;font-size:.73rem;font-weight:600;cursor:pointer;transition:opacity .12s;white-space:nowrap;}
+  .ci{display:flex;flex-direction:column;align-items:center;gap:1px;min-height:var(--fila-alto,34px);justify-content:center;padding:2px 0;width:100%;}
+  .tb{display:inline-flex;align-items:center;gap:3px;padding:2px 5px;border-radius:4px;font-size:var(--fila-letra,.73rem);font-weight:600;cursor:pointer;transition:opacity .12s;white-space:nowrap;}
   .tb:hover{opacity:.75;}
   /* La hora hereda el color del bloque, que se calcula para que se lea. */
-  .th{font-size:.72rem;color:inherit;font-weight:700;}
+  .th{font-size:var(--fila-letra,.72rem);color:inherit;font-weight:700;}
   /* Cada estado, un solo color: de el salen el fondo y el borde. Se
      cambia en Colores y cambia aqui, en la semana y en el cuadrante. */
   .et{background:var(--est-trabajo-bg);color:var(--est-trabajo-txt);border:1px solid var(--est-trabajo-bd);}
@@ -179,6 +179,18 @@
      atributo style y si no, no hay manera de esconderlas. */
   .plegado > *:nth-child(n+2){display:none !important}
   .plegado{padding-bottom:0 !important}
+
+/* Con las filas apretadas se le quita todo lo que no sea el nombre y la
+   hora: los botones de la columna de la izquierda, el rotulo del puesto
+   y el relleno de las celdas. Asi caben los doce de una vez. */
+:root[data-alto="apretado"] .tb{padding:1px 4px;}
+:root[data-alto="apretado"] .ci{padding:0;}
+:root[data-alto="apretado"] .nc{padding:1px 6px;}
+:root[data-alto="apretado"] .nc .hide-btn{display:none;}
+:root[data-alto="apretado"] .nc .rt{display:none;}
+:root[data-alto="justo"] .ci{padding:1px 0;}
+:root[data-alto="justo"] .nc{padding:2px 7px;}
+:root[data-alto="justo"] .nc .hide-btn{font-size:.58rem;padding:0 3px;}
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="comun.css?v=202608281120">
@@ -204,6 +216,7 @@
   <button class="tbtn" style="border-color:#5b9bd5;color:#5b9bd5" onclick="openAddModal()">+ Personal</button>
   <button class="tbtn" id="bwk" style="border-color:#27ae60;color:#27ae60" onclick="toggleWeekMode()">&#128197; Vista semana</button>
   <button class="tbtn" id="banch" style="border-color:var(--gold);color:var(--gold)" onclick="cambiarAncho()" title="Lo ancho que es cada d&iacute;a en el cuadrante del mes">&#8596; Ancho</button>
+  <button class="tbtn" id="balto" style="border-color:var(--gold);color:var(--gold)" onclick="cambiarAlto()" title="Lo alto que es cada fila: apretando caben los doce empleados de una vez">&#8597; Normal</button>
   <button class="tbtn" style="border-color:#25d366;color:#4ee383" onclick="abrirSemanaWA()" title="Mandar el horario de una semana">&#128241; WhatsApp</button>
   <button class="tbtn" style="border-color:var(--gold);color:var(--gold)" onclick="openTheme()">&#127912; Colores</button>
   <button class="tbtn" style="border-color:#27ae60;color:#6dbb85" onclick="exportarHorario()" title="Descargar una copia">&#11015;&#65039; Copia</button>
@@ -530,7 +543,7 @@
 
 
 
-<script src="sync.js?v=202609212359"></script>
+<script src="sync.js?v=202609221012"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -538,7 +551,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609212359';
+    s.src = 'horario.js?v=202609221012';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
