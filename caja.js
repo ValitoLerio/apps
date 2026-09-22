@@ -1244,11 +1244,21 @@ function textoDia(fecha, opciones){
     ["Pagos",       eur(c.gastos)],
     ["Fondo caja",  eur(c.fondo)]
   ];
-  /* Como en la hoja: la casilla del sobrante se queda en blanco mientras
-     la amarilla no pase del objetivo. Sólo aparece cuando hay de más. */
-  if(c.sobrante>0.004) lineas.push(["Sobra c. am.", eur(c.sobrante)]);
-  var anchoTexto=Math.max.apply(null, lineas.map(function(x){ return x[0].length; }));
-  var anchoImporte=Math.max.apply(null, lineas.map(function(x){ return x[1].length; }));
+
+  /* Lo que sale de la caja va aparte, con su título: no es lo que se ha
+     cobrado, es dinero que se lleva alguien. Mezclado arriba parecía una
+     cifra más del cierre. */
+  var salidas=[];
+  if(c.hayRetirado) salidas.push(["Se lleva", eur(c.retirado)]);
+  /* Como en la hoja: mientras la amarilla no pase del objetivo, no sobra
+     nada y el renglón no sale. */
+  if(c.sobrante>0.004) salidas.push(["Sobra del fondo", eur(c.sobrante)]);
+
+  /* Los anchos se miden con los dos bloques juntos, para que las cifras
+     queden en la misma columna aunque estén separadas. */
+  var todas=lineas.concat(salidas);
+  var anchoTexto=Math.max.apply(null, todas.map(function(x){ return x[0].length; }));
+  var anchoImporte=Math.max.apply(null, todas.map(function(x){ return x[1].length; }));
 
   /* Dos versiones del mismo parte:
        - alineada, con letra de maquina, para copiar y pegar
@@ -1260,8 +1270,7 @@ function textoDia(fecha, opciones){
   if(libro.ajustes.nombre) l.push(libro.ajustes.nombre);
   l.push(dmy(fecha)+" - "+diaSemana(fecha));
   l.push("");
-  if(alineado) l.push("```");
-  lineas.forEach(function(x){
+  function renglon(x){
     if(alineado){
       var etiqueta=x[0]+" ".repeat(anchoTexto-x[0].length);
       var importe=" ".repeat(anchoImporte-x[1].length)+x[1];
@@ -1269,7 +1278,14 @@ function textoDia(fecha, opciones){
     } else {
       l.push(x[0]+": "+x[1]);
     }
-  });
+  }
+  if(alineado) l.push("```");
+  lineas.forEach(renglon);
+  if(salidas.length){
+    l.push("");
+    l.push(alineado ? "Sale de la caja" : "Sale de la caja:");
+    salidas.forEach(renglon);
+  }
   if(alineado) l.push("```");
   /* El desglose de los pagos sólo si dice algo que no diga ya el
      renglón de arriba: varios pagos, o uno con su concepto escrito. Un
