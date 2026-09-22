@@ -799,7 +799,8 @@ function pintarFormularioDia(d){
         '<span>% de la venta va en visa</span></div>'+
         '<div class="nota" style="margin:4px 0 0" id="f_efecNota"></div></div>'+
       '<div class="campo"><label class="lbl" for="f_efecReal">Efectivo real (€)</label>'+
-      '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo que cuentas en el cajón</div>'+
+      '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo cobrado que hay en el '+
+      'caj&oacute;n, <strong>sin el cambio</strong></div>'+
         '<input type="number" class="grande" id="f_efecReal" min="0" step="0.01" value="'+
         esc(actual.efectivoReal!=null&&actual.efectivoReal!==""?actual.efectivoReal:"")+'" '+
         'placeholder="sin contar">'+
@@ -816,6 +817,8 @@ function pintarFormularioDia(d){
         esc(sacaPuesto)+'" placeholder="sin apuntar">'+
         '<div class="nota" style="margin:4px 0 0" id="f_sacaNota"></div></div>'+
       '<div class="campo"><label class="lbl" for="f_sobra">Sobra c. amarilla (€)</label>'+
+      '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo que pasa de '+
+      eur(objetivoAmarilla())+', que ya no hace falta ah&iacute; dentro</div>'+
         '<input type="number" class="grande" id="f_sobra" step="0.01" value="'+
         esc(actual.sobrante!=null&&actual.sobrante!==""?actual.sobrante:"")+'" '+
         'placeholder="0,00"></div>'+
@@ -860,6 +863,21 @@ function pintarFormularioDia(d){
     if(e==null) return;
     document.getElementById("f_efec").value = numero("f_visa")>0 ? e : "";
   }
+
+  /* Los botones del aviso de día en negativo: uno lleva a la casilla de
+     lo que se saca al cerrar y el otro abre la ventana de la entrega con
+     el importe que haría cuadrar el día ya puesto. */
+  var irSaca=main.querySelector("[data-ir-saca]");
+  if(irSaca) irSaca.addEventListener("click", function(){
+    var campo=document.getElementById("f_saca");
+    if(!campo) return;
+    campo.scrollIntoView({block:"center", behavior:"smooth"});
+    campo.focus(); campo.select();
+  });
+  var irRet=main.querySelector("[data-ir-retirada]");
+  if(irRet) irRet.addEventListener("click", function(){
+    sacarDeAmarilla(irRet.getAttribute("data-ir-retirada"), +irRet.getAttribute("data-imp")||0);
+  });
 
   function totalG(){
     var t=0;
@@ -960,7 +978,8 @@ function pintarFormularioDia(d){
       var campoReal=document.getElementById("f_efecReal");
       var real=(campoReal && campoReal.value!=="") ? r2(+campoReal.value||0) : null;
       if(real==null){
-        rn.innerHTML="Si lo cuentas, escríbelo aquí y te digo lo que baila con el efectivo.";
+        rn.innerHTML="Cuenta sólo lo cobrado: el cambio que dejas para mañana va aparte, "+
+      "en «Caja registradora». Escríbelo y te digo lo que baila con el efectivo.";
       } else {
         var dr=r2(real-efec);
         rn.innerHTML = Math.abs(dr)<0.005
@@ -1111,6 +1130,19 @@ function tarjetaCuadre(fecha){
   var veredicto;
   if(!q.hay){
     veredicto='<div class="nota" style="margin:0">Para cuadrar el día falta '+esc(q.falta)+'.</div>';
+  } else if(q.efectivo < -0.005){
+    /* Que el efectivo del día salga negativo no es un descuadre más: es
+       imposible. Quiere decir que salió dinero de las cajas y no está
+       apuntado en ningún sitio. */
+    veredicto='<div class="aviso-caja" style="margin:0">Por las cajas salen <strong>'+
+      eur(q.efectivo)+'</strong>, y eso no puede ser: no se puede cobrar menos de nada. '+
+      'Lo que dice es que ese día salió dinero que no está apuntado — una entrega, un ingreso '+
+      'en el banco, un pago a un proveedor. Apúntalo y el día cuadra.'+
+      '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'+
+        '<button class="btn sm" data-ir-saca="1">Lo que se saca al cerrar</button>'+
+        '<button class="btn sm" data-ir-retirada="'+esc(fecha)+'" data-imp="'+
+          Math.abs(q.efectivo)+'">Apuntar una entrega de '+eur(Math.abs(q.efectivo))+'</button>'+
+      '</div></div>';
   } else if(!c.hayReal){
     veredicto='<div class="nota" style="margin:0">Por las cajas el efectivo del día es <strong>'+
       eur(q.efectivo)+'</strong>. Cuenta el cajón y escríbelo arriba: son dos caminos distintos '+
@@ -1462,6 +1494,7 @@ function verMes(main){
     '<div class="tarjeta"><div class="tarjeta-cab"><h2>Días</h2>'+
       '<span class="pista">Pulsa un día para abrirlo</span></div>'+
       '<div class="tabla-caja" id="cuadrante"></div></div>'+
+    tarjetaCuadreMes(ui.mes)+
 
     /* La hoja de papel del mes, escaneada. Sirve de respaldo y para
        contrastar cuando un número no cuadra. */
@@ -1539,11 +1572,195 @@ function verMes(main){
       '<td class="num">'+eur(t.sobrante)+'</td>'+
       '<td class="num">'+eur(t.ventas)+'</td><td></td></tr></tfoot></table>';
 
+  var botonCeros=document.getElementById("cerosMes");
+  if(botonCeros) botonCeros.addEventListener("click", function(){ ponerCerosDelMes(ui.mes); });
+
+  var listaCuadre=document.getElementById("cuadreMesLista");
+  if(listaCuadre) listaCuadre.querySelectorAll("tr[data-dia]").forEach(function(tr){
+    tr.addEventListener("click", function(){
+      ui.dia=tr.getAttribute("data-dia"); ui.vista="dia"; pintar();
+    });
+  });
+
   caja.querySelectorAll("[data-dia]").forEach(function(tr){
     tr.addEventListener("click", function(){
       ui.dia=tr.getAttribute("data-dia"); ui.vista="dia"; pintar();
     });
   });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CÓMO CUADRÓ EL MES
+   ══════════════════════════════════════════════════════════════
+   El cuadre de un día ya está, pero de uno en uno no se ve nada: hay
+   que entrar día por día para saber si el mes va bien. Esto hace la
+   cuenta de los treinta y dice las tres cosas que importan:
+
+     - cuántos días cuadran
+     - cuántos bailan y cuánto baila en total
+     - cuáles no se pueden cuadrar todavía, y qué les falta
+
+   Y un aviso aparte para los días que salen en negativo, que no es un
+   descuadre cualquiera: si por las cajas sale menos de cero, es que se
+   llevaron dinero y nadie lo apuntó. */
+/* Un cajón contado a cero en un día con ventas en metálico no es un
+   recuento: es que esa noche nadie contó. Darlo por bueno pintaría de
+   rojo el mes entero con descuadres que no existen. */
+function cajonSinContar(d, c){
+  if(!c.hayReal) return true;
+  return (Math.abs(c.efectivoReal)<0.005 && c.ventas>0.005);
+}
+function cuadreMes(ym){
+  var r={ dias:0, cuadran:0, bailan:[], sinContar:[], pendientes:[], negativos:[],
+          ceros:0, baila:0, porCajas:0, contado:0 };
+  diasDe(ym).forEach(function(d){
+    r.dias++;
+    var q=cuadreDia(d.fecha), c=cuentasDia(d);
+    if(!q || !q.hay){ r.pendientes.push({fecha:d.fecha, falta:(q&&q.falta)||"datos"}); return; }
+    r.porCajas=r2(r.porCajas+q.efectivo);
+    if(q.efectivo < -0.005) r.negativos.push({fecha:d.fecha, importe:q.efectivo});
+    if(cajonSinContar(d,c)){
+      if(c.hayReal) r.ceros++;
+      r.sinContar.push(d.fecha);
+      return;
+    }
+    r.contado=r2(r.contado+c.efectivoReal);
+    var dif=r2(c.efectivoReal-q.efectivo);
+    if(Math.abs(dif)<0.005) r.cuadran++;
+    else { r.bailan.push({fecha:d.fecha, dif:dif}); r.baila=r2(r.baila+dif); }
+  });
+  return r;
+}
+
+/* Poner un cero en «se saca» a todos los días del mes a los que les
+   falte, que es lo que separa un mes entero de poder cuadrarse. El cero
+   dice «esa noche no saqué nada», así que se pregunta antes. */
+function ponerCerosDelMes(ym){
+  var faltan=diasDe(ym).filter(function(d){ return d.retirado==null || d.retirado===""; });
+  if(!faltan.length){ avisar("No falta en ningún día de este mes."); return; }
+  confirmar("Poner 0 en lo que se saca",
+    '<p style="margin:0 0 10px">Hay <strong>'+faltan.length+'</strong> '+
+    (faltan.length===1?'día':'días')+' de '+esc(mesLargo(ym))+' sin apuntar lo que se saca al '+
+    'cerrar, y sin ese dato el día no puede cuadrar.</p>'+
+    '<p style="margin:0">Si esas noches no sacaste nada, pongo un <strong>0</strong> y el mes '+
+    'queda listo para cuadrar. Si algún día sí sacaste, lo escribes luego en ese día y ya está.</p>',
+    function(){
+      faltan.forEach(function(d){ d.retirado=0; });
+      guardar(); pintar();
+      avisar("Puestos a 0 "+faltan.length+(faltan.length===1?" día":" días")+".");
+    }, {aceptar:"Poner 0"});
+}
+
+function tarjetaCuadreMes(ym){
+  var r=cuadreMes(ym);
+  if(!r.dias) return "";
+  var conCuenta=r.cuadran+r.bailan.length;
+  var faltaSacar=diasDe(ym).filter(function(d){ return d.retirado==null || d.retirado===""; });
+
+  function fila(fecha, texto, color){
+    return '<tr data-dia="'+esc(fecha)+'" style="cursor:pointer">'+
+      '<td><strong>'+esc(dmy(fecha))+'</strong> '+
+      '<span style="color:var(--muted);font-size:12px">'+esc(diaSemana(fecha).slice(0,3))+'</span></td>'+
+      '<td'+(color?' style="color:'+color+'"':"")+'>'+texto+'</td></tr>';
+  }
+  /* Antes esto escupía treinta y una filas diciendo lo mismo. Ahora cada
+     motivo va junto, con unos cuantos días de muestra. */
+  function grupo(titulo, filas, nota){
+    if(!filas.length) return "";
+    var muestra=filas.slice(0,8), resto=filas.length-muestra.length;
+    return '<tr><td colspan="2" class="lbl" style="padding-top:12px">'+esc(titulo)+
+           ' &middot; '+filas.length+(nota?' <span style="text-transform:none;letter-spacing:0">'+
+           nota+'</span>':"")+'</td></tr>'+
+           muestra.join("")+
+           (resto>0 ? '<tr><td colspan="2" class="nota" style="padding:6px 0 0">y '+resto+
+                      (resto===1?' día más':' días más')+'.</td></tr>' : "");
+  }
+  var lista="";
+  lista+=grupo("En negativo", r.negativos.map(function(x){
+    return fila(x.fecha, 'salen <strong>'+eur(x.importe)+'</strong>: falta apuntar lo que se '+
+      'llevaron', "var(--malo)");
+  }));
+  lista+=grupo("No cuadran", r.bailan.slice()
+    .sort(function(a,b){ return Math.abs(b.dif)-Math.abs(a.dif); })
+    .map(function(x){
+      return fila(x.fecha, (x.dif<0?'faltan ':'sobran ')+'<strong>'+eur(Math.abs(x.dif))+
+        '</strong> en el cajón', colorDiferencia(x.dif));
+    }));
+
+  /* Los pendientes, por motivo: casi siempre es el mismo para todo el mes. */
+  var porMotivo={};
+  r.pendientes.forEach(function(x){ (porMotivo[x.falta]=porMotivo[x.falta]||[]).push(x.fecha); });
+  Object.keys(porMotivo).forEach(function(motivo){
+    lista+=grupo("Falta "+motivo, porMotivo[motivo].map(function(f){
+      return fila(f, 'falta '+esc(motivo), "var(--aviso)");
+    }));
+  });
+
+  lista+=grupo("Sin contar el cajón", r.sinContar.map(function(f){
+    return fila(f, 'por las cajas sale la cifra, pero el cajón no se contó', "var(--muted)");
+  }), r.ceros ? '('+r.ceros+' con un 0 escrito, que tomo como sin contar)' : "");
+
+  var veredicto;
+  if(!conCuenta){
+    veredicto='<p class="nota" style="margin:0">Todavía no se puede cuadrar ningún día de este mes. '+
+      'Con el recuento de la amarilla, lo que se saca al cerrar y el cajón contado, sale solo.</p>';
+  } else if(!r.bailan.length && !r.negativos.length){
+    veredicto='<p class="nota" style="margin:0;color:var(--ok)"><strong>El mes cuadra.</strong> '+
+      'Los '+r.cuadran+' días que se pueden comprobar dan lo mismo por el cajón que por las cajas.</p>';
+  } else {
+    /* Cuando casi todos los días bailan para el mismo lado, no son
+       treinta descuadres: es uno solo repetido treinta veces, y casi
+       siempre es la misma causa. Merece la pena decirlo. */
+    var pista="";
+    if(r.bailan.length>=3){
+      var menos=r.bailan.filter(function(x){ return x.dif<0; });
+      var mas=r.bailan.filter(function(x){ return x.dif>0; });
+      var lado=(menos.length>=r.bailan.length*0.7) ? menos
+             : (mas.length>=r.bailan.length*0.7) ? mas : null;
+      if(lado){
+        var media=r2(lado.reduce(function(t,x){ return t+Math.abs(x.dif); },0)/lado.length);
+        pista=' En '+lado.length+' de los '+r.bailan.length+' pasa lo mismo: '+
+          (lado===menos?'falta':'sobra')+' una media de <strong>'+eur(media)+'</strong>. '+
+          'Cuando se repite así no suelen ser treinta fallos, sino uno: '+
+          (lado===menos
+            ? 'algo que sale todos los días y no se apunta, o el cajón contado sin el cambio.'
+            : 'el cajón contado con el cambio de la mañana dentro, o algo que entra y no se apunta.');
+      }
+    }
+    veredicto='<p class="nota" style="margin:0">De los '+conCuenta+' días que se pueden comprobar, '+
+      '<strong>'+r.cuadran+'</strong> cuadran y <strong>'+r.bailan.length+'</strong> no. '+
+      'En total '+(r.baila<0?'faltan ':'sobran ')+'<strong>'+eur(Math.abs(r.baila))+'</strong> '+
+      'en el mes, y eso no es lo mismo que el dinero que baila cada día: unos días sobra y otros '+
+      'falta, y aquí se restan entre ellos.'+pista+'</p>';
+  }
+
+  return '<div class="tarjeta" style="margin-top:16px">'+
+    '<div class="tarjeta-cab"><h2>Cómo cuadró el mes</h2>'+
+      '<span class="pista">Pulsa un día para abrirlo</span></div>'+
+    '<div class="tarjeta-cuerpo">'+
+      '<div class="cifras" style="margin-bottom:12px">'+
+        '<div class="cifra"><div class="k">Días que cuadran</div>'+
+          '<div class="v'+(r.cuadran?' ok':'')+'">'+r.cuadran+'</div>'+
+          '<div class="n">de '+conCuenta+' comprobables</div></div>'+
+        '<div class="cifra"><div class="k">No cuadran</div>'+
+          '<div class="v'+(r.bailan.length?' malo':'')+'">'+r.bailan.length+'</div>'+
+          '<div class="n">'+(r.bailan.length?eur(Math.abs(r.baila))+' en total':'ninguno')+'</div></div>'+
+        '<div class="cifra"><div class="k">Sin poder cuadrar</div>'+
+          '<div class="v">'+(r.pendientes.length+r.sinContar.length)+'</div>'+
+          '<div class="n">les falta algún dato</div></div>'+
+        '<div class="cifra"><div class="k">Efectivo por las cajas</div>'+
+          '<div class="v acento">'+eur(r.porCajas)+'</div>'+
+          '<div class="n">lo que suben + pagos + lo que sacas</div></div>'+
+      '</div>'+
+      veredicto+
+      (faltaSacar.length
+        ? '<div style="margin-top:10px"><button class="btn sm fuerte" id="cerosMes">'+
+          'Poner 0 en los '+faltaSacar.length+' días sin apuntar</button>'+
+          '<span class="nota" style="margin-left:8px">si esas noches no sacaste nada</span></div>'
+        : "")+
+      (lista ? '<div class="tabla-caja" style="margin-top:10px" id="cuadreMesLista">'+
+               '<table><tbody>'+lista+'</tbody></table></div>' : "")+
+    '</div></div>';
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -2468,7 +2685,7 @@ function ponerAmarillaACero(){
     }, {aceptar:"Poner a cero", malo:true});
 }
 
-function sacarDeAmarilla(){
+function sacarDeAmarilla(fecha, importe){
   var guardado=amarillaGuardado();
   abrirVentana("Sacar de la caja amarilla",
     '<p class="nota">En el último recuento había <strong>'+eur(guardado)+'</strong>. '+
@@ -2476,9 +2693,10 @@ function sacarDeAmarilla(){
     'recuento que anotes en el cierre del día.</p>'+
     '<div class="rejilla">'+
       '<div class="campo"><label class="lbl" for="sa_fecha">Fecha</label>'+
-        '<input type="date" id="sa_fecha" value="'+esc(hoyISO())+'"></div>'+
+        '<input type="date" id="sa_fecha" value="'+esc(fecha||hoyISO())+'"></div>'+
       '<div class="campo"><label class="lbl" for="sa_imp">Importe (€)</label>'+
-        '<input type="number" id="sa_imp" min="0" step="0.01"></div>'+
+        '<input type="number" id="sa_imp" min="0" step="0.01"'+
+        (importe?' value="'+r2(importe)+'"':"")+'></div>'+
       '<div class="campo" style="grid-column:1/-1"><label class="lbl" for="sa_mot">Motivo</label>'+
         '<input id="sa_mot" placeholder="Ingreso en el banco, pago a proveedor…"></div>'+
     '</div>',
