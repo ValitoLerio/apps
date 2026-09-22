@@ -1245,14 +1245,14 @@ function textoDia(fecha, opciones){
     ["Fondo caja",  eur(c.fondo)]
   ];
 
-  /* Lo que sale de la caja va aparte, con su título: no es lo que se ha
-     cobrado, es dinero que se lleva alguien. Mezclado arriba parecía una
-     cifra más del cierre. */
-  var salidas=[];
-  if(c.hayRetirado) salidas.push(["Se lleva", eur(c.retirado)]);
-  /* Como en la hoja: mientras la amarilla no pase del objetivo, no sobra
+  /* Lo que sobra de la amarilla va aparte, separado del cierre: no es
+     una cifra más de lo cobrado, es el dinero que ya no hace falta en el
+     fondo. Lo que se saca al cerrar no va en el parte: eso es cuenta de
+     casa, no del cierre que se manda.
+     Como en la hoja, mientras la amarilla no pase del objetivo no sobra
      nada y el renglón no sale. */
-  if(c.sobrante>0.004) salidas.push(["Sobra del fondo", eur(c.sobrante)]);
+  var salidas=[];
+  if(c.sobrante>0.004) salidas.push(["Sobra caja amarilla", eur(c.sobrante)]);
 
   /* Los anchos se miden con los dos bloques juntos, para que las cifras
      queden en la misma columna aunque estén separadas. */
@@ -1283,7 +1283,6 @@ function textoDia(fecha, opciones){
   lineas.forEach(renglon);
   if(salidas.length){
     l.push("");
-    l.push(alineado ? "Sale de la caja" : "Sale de la caja:");
     salidas.forEach(renglon);
   }
   if(alineado) l.push("```");
