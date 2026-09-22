@@ -895,6 +895,23 @@ function estadoDe(sid, dia){
   var c = celdaDe(sid, dia);
   return c && c.estado ? c.estado : 'libre';
 }
+/* Los dias de un tipo que tiene alguien en el mes que se esta viendo,
+   dichos en cristiano: «del 4 al 27», «el 9» o «4-10, 15-27». Un numero
+   suelto no dice nada; lo que se quiere saber es cuando se va y cuando
+   vuelve. Los tramos los arma `tramos()`, el de las ausencias. */
+function diasDeTipo(sid, dias, tipo){
+  return dias.filter(function(dia){ return estadoDe(sid, dia) === tipo; });
+}
+function cuandoTexto(suyos, mes){
+  var ts = tramos(suyos);
+  if (!ts.length) return '';
+  if (ts.length === 1){
+    var a = etiquetaDia(ts[0][0], mes), b = etiquetaDia(ts[0][1], mes);
+    return a === b ? 'el ' + a : 'del ' + a + ' al ' + b;
+  }
+  return textoTramos(suyos, mes);
+}
+
 // Cuantos dias de un tipo tiene alguien en un mes del horario.
 function diasTipoMes(sid, y, m, tipo){
   var n = 0;
@@ -1224,6 +1241,37 @@ function renderVacaciones(){
     return;
   }
 
+  /* El resumen de lo que se esta mirando: si esta elegido vacaciones,
+     las vacaciones del mes de todos; si esta elegida la baja, las bajas.
+     Asi no hay que ir leyendo fila por fila. */
+  var resumen = document.getElementById('vac-resumen');
+  if (resumen) {
+    var e = VAC_EST[vacTipo];
+    var quienes = all.map(function(s){
+      return {nombre:s.name,
+              mes:diasTipoMes(s.id, curY, curM, vacTipo),
+              ano:diasTipoAno(s.id, curY, vacTipo),
+              cuando:cuandoTexto(diasDeTipo(s.id, dias, vacTipo), curM)};
+    }).filter(function(x){ return x.mes; })
+      .sort(function(a,b){ return b.mes - a.mes; });
+    var totalMes = quienes.reduce(function(a,x){ return a + x.mes; }, 0);
+    var totalAno = all.reduce(function(a,s){ return a + diasTipoAno(s.id, curY, vacTipo); }, 0);
+
+    resumen.innerHTML = quienes.length
+      ? '<div><span style="color:' + e.puro + ';font-weight:700">' + e.lbl + ' de ' + MESES[curM] +
+          '</span>: ' + totalMes + (totalMes===1?' dia':' dias') + ' entre ' +
+          quienes.length + (quienes.length===1?' persona':' personas') + '.</div>' +
+        '<div style="margin-top:3px">' + quienes.map(function(x){
+            return '<span style="white-space:nowrap"><b style="color:var(--text)">' + esc(x.nombre) + '</b> ' +
+                   x.mes + 'd' + (x.cuando ? ' (' + x.cuando + ')' : '') + '</span>';
+          }).join(' &nbsp;&middot;&nbsp; ') + '</div>' +
+        '<div style="margin-top:3px;opacity:.8">En todo ' + curY + ': ' + totalAno +
+          (totalAno===1?' dia':' dias') + '.</div>'
+      : '<div>Nadie de <span style="color:' + e.puro + ';font-weight:700">' + e.uno.toLowerCase() +
+        '</span> en ' + MESES[curM] + '. En todo ' + curY + ': ' + totalAno +
+        (totalAno===1?' dia':' dias') + '.</div>';
+  }
+
   var th = '<thead><tr><th style="background:var(--surface);color:var(--gold);font-family:Playfair Display,serif;' +
     'font-size:.82rem;padding:9px 12px;border:1px solid var(--border);text-align:left;position:sticky;left:0;' +
     'z-index:10;min-width:104px">Personal</th>';
@@ -1236,8 +1284,8 @@ function renderVacaciones(){
           '<br><span style="font-size:.82rem;font-weight:700">' + etiquetaDia(dia, curM) + '</span></th>';
   });
   th += '<th style="background:var(--total-bg);color:var(--gold2);padding:6px 10px;border:1px solid var(--border);' +
-        'text-align:center;min-width:74px;font-size:.72rem;font-weight:700">' + VAC_EST[vacTipo].lbl +
-        '<br><span style="font-size:.64rem;font-weight:500;color:var(--text2)">mes / a&ntilde;o</span></th></tr></thead>';
+        'text-align:center;min-width:104px;font-size:.72rem;font-weight:700">' + VAC_EST[vacTipo].lbl +
+        '<br><span style="font-size:.64rem;font-weight:500;color:var(--text2)">de este mes</span></th></tr></thead>';
 
   var tb = '<tbody>';
   var ultimoRol = null;
@@ -1268,21 +1316,37 @@ function renderVacaciones(){
       return '<td onclick="marcarDiaVac(\'' + s.id + '\',' + dia.y + ',' + dia.m + ',' + dia.d + ')" ' +
              'title="' + esc(s.name) + ' - ' + etiquetaDia(dia, curM) + pista + '" ' +
              'style="cursor:pointer;text-align:center;padding:4px 2px;border:1px solid var(--border);' +
-             'background:' + fondo + ';color:' + color + ';font-weight:700;font-size:.78rem;user-select:none">' +
+             'background:' + fondo + ';color:' + color + ';font-weight:700;font-size:.78rem;user-select:none' +
+             /* lo que no es lo que se esta mirando, mas flojo */
+             (e && est !== vacTipo ? ';opacity:.4' : '') + '">' +
              (trab ? '&bull;' : marca) + '</td>';
     }).join('');
     var ano = diasTipoAno(s.id, curY, vacTipo);
-    var desglose = VAC_TIPOS.map(function(t){ return VAC_EST[t].letra + cuenta[t]; }).join(' ');
+    var cuando = cuandoTexto(diasDeTipo(s.id, dias, vacTipo), curM);
+    /* Si ademas tiene dias de otra cosa en el mes, se dice aparte, para
+       que no se mezcle con lo que se esta mirando. */
+    var otros = VAC_TIPOS.filter(function(t){ return t !== vacTipo && cuenta[t]; })
+      .map(function(t){ return cuenta[t] + ' de ' + VAC_EST[t].uno.toLowerCase(); }).join(', ');
     tb += '<tr><td style="background:var(--surface);position:sticky;left:0;z-index:5;padding:4px 10px;' +
           'border:1px solid var(--border);white-space:nowrap">' +
           '<span style="color:' + RCOL[s.role] + ';font-weight:600;font-size:.8rem">' + esc(s.name) + '</span>' +
           '<span class="rt r' + s.role + '" style="margin-left:3px">' + RLBL[s.role] + '</span></td>' +
           celdas +
-          '<td style="background:var(--total-bg);padding:4px 9px;border:1px solid var(--border);text-align:center" ' +
-          'title="En este mes: ' + desglose + '">' +
-          '<div style="font-size:.9rem;font-weight:900;color:' + VAC_EST[vacTipo].puro + '">' + enElMes + 'd</div>' +
-          '<div style="font-size:.64rem;color:var(--text2);white-space:nowrap">' + ano + ' en ' + curY +
-          ' &middot; ' + desglose + '</div></td></tr>';
+          '<td style="background:var(--total-bg);padding:5px 10px;border:1px solid var(--border);text-align:left" ' +
+          'title="' + esc(s.name) + ' - ' + enElMes + ' dias de ' + VAC_EST[vacTipo].uno.toLowerCase() +
+          ' este mes y ' + ano + ' en todo ' + curY + '">' +
+          '<div style="font-size:.88rem;font-weight:900;color:' + VAC_EST[vacTipo].puro + ';line-height:1.2">' +
+            (enElMes ? enElMes + (enElMes === 1 ? ' dia' : ' dias') : 'ninguno') + '</div>' +
+          (cuando
+            ? '<div style="font-size:.7rem;color:var(--text);white-space:nowrap">' + cuando + '</div>'
+            : '') +
+          '<div style="font-size:.64rem;color:var(--text2);white-space:nowrap">' +
+            ano + ' en todo ' + curY + '</div>' +
+          (otros
+            ? '<div style="font-size:.62rem;color:var(--text2);white-space:nowrap;opacity:.85">y ' +
+              otros + '</div>'
+            : '') +
+          '</td></tr>';
   });
   tb += '</tbody>';
   tbl.innerHTML = th + tb;

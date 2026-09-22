@@ -351,6 +351,7 @@
       font-weight:600">&#128203; Pegar el cuadro del a&ntilde;o</button>
   </div>
   <div id="vac-tipos" style="display:flex;gap:8px;padding:12px 20px 0;flex-wrap:wrap"></div>
+  <div id="vac-resumen" style="padding:10px 20px 0;font-size:.75rem;color:var(--text2);line-height:1.5"></div>
   <div style="display:flex;gap:14px;padding:10px 20px 0;flex-wrap:wrap;font-size:.7rem;color:var(--text2)">
     <span><span class="ev" style="display:inline-block;width:16px;height:16px;text-align:center;font-weight:700;line-height:14px;font-size:.66rem;vertical-align:middle">V</span> vacaciones</span>
     <span><span class="ef" style="display:inline-block;width:16px;height:16px;text-align:center;font-weight:700;line-height:14px;font-size:.66rem;vertical-align:middle">F</span> festivo</span>
@@ -543,7 +544,7 @@
 
 
 
-<script src="sync.js?v=202609221012"></script>
+<script src="sync.js?v=202609221025"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -551,7 +552,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202609221012';
+    s.src = 'horario.js?v=202609221025';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
