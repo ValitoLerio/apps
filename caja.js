@@ -1271,15 +1271,28 @@ function textoDia(fecha, opciones){
     }
   });
   if(alineado) l.push("```");
-  if(c.gastos>0 && (d.detalle||[]).length){
+  /* El desglose de los pagos sólo si dice algo que no diga ya el
+     renglón de arriba: varios pagos, o uno con su concepto escrito. Un
+     único «Gasto: 567,00 €» debajo de «Pagos 567,00 €» es el mismo
+     número dos veces. */
+  var detalle=(d.detalle||[]).filter(function(g){ return (+g.importe||0)>0; });
+  var mereceDetalle = detalle.length>1 ||
+    (detalle.length===1 && (detalle[0].concepto||"").trim() &&
+     !/^gastos?$/i.test((detalle[0].concepto||"").trim()));
+  if(c.gastos>0 && mereceDetalle){
     l.push("");
     l.push("Pagos:");
-    d.detalle.forEach(function(g){ l.push("- "+g.concepto+": "+eur(g.importe)); });
+    detalle.forEach(function(g){ l.push("- "+(g.concepto||"Gasto")+": "+eur(g.importe)); });
   }
-  l.push("");
+
+  /* Y al final, de la amarilla, sólo lo que no esté ya arriba: cuánto
+     falta para el objetivo, y el saldo de hoy si el parte es de un día
+     viejo y ya no es el mismo. */
   var guardado=amarillaGuardado(), falta=faltaAmarilla();
-  l.push("Caja amarilla: "+eur(guardado));
-  if(falta>0) l.push("faltan "+eur(falta)+" para "+eur(objetivoAmarilla()));
+  var cola=[];
+  if(Math.abs(guardado-c.amarilla)>=0.005) cola.push("Hoy en la amarilla: "+eur(guardado));
+  if(falta>0) cola.push("Faltan "+eur(falta)+" para "+eur(objetivoAmarilla()));
+  if(cola.length){ l.push(""); cola.forEach(function(x){ l.push(x); }); }
   if(d.nota){ l.push(""); l.push("Nota: "+d.nota); }
   return l.join("\n");
 }
