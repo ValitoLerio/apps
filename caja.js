@@ -616,6 +616,15 @@ function verDia(main){
       '<input type="date" id="d_fecha" value="'+esc(ui.dia)+'"></div>'+
       '<button class="btn wa" id="d_wa">📱 Enviar por WhatsApp</button>')+
 
+    /* Lo primero de todo, el formulario: es lo único que hay que tocar
+       cada noche, y tenerlo al final obligaba a bajar toda la pantalla.
+       Lo demás —las cifras, el cuadre, el papel y la amarilla— es para
+       mirar, y va debajo. */
+    '<div class="tarjeta" style="margin-bottom:16px">'+
+      '<div class="tarjeta-cab"><h2>'+(d?"Editar el día":"Anotar el día")+'</h2>'+
+        '<span class="pista">lo de cada noche</span></div>'+
+      '<div class="tarjeta-cuerpo" id="formDia"></div></div>'+
+
     '<div class="cifras">'+
       '<div class="cifra"><div class="k">Ventas del día</div><div class="v acento">'+eur(c.ventas)+'</div>'+
         '<div class="n">visa + '+(pctVisa() && !difPct ? "el efectivo calculado" : "efectivo")+'</div></div>'+
@@ -755,8 +764,7 @@ function verDia(main){
           : "")+
       '</div></div>'+
 
-    '<div class="tarjeta"><div class="tarjeta-cab"><h2>'+(d?"Editar el día":"Anotar el día")+'</h2></div>'+
-      '<div class="tarjeta-cuerpo" id="formDia"></div></div>';
+    '';
 
   document.getElementById("d_fecha").addEventListener("change", function(){
     ui.dia=this.value; ui.mes=this.value.slice(0,7); pintar();
