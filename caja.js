@@ -803,9 +803,12 @@ function pintarFormularioDia(d){
       '<div class="campo"><label class="lbl" for="f_efecReal">Efectivo real (€)</label>'+
       '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo cobrado que hay en el '+
       'caj&oacute;n, <strong>sin el cambio</strong></div>'+
+        /* Arranca en 0, como la casilla de lo que se saca: un 0 con ventas
+           es «todavía no lo he contado», y la noche que se cuente se
+           escribe encima. */
         '<input type="number" class="grande" id="f_efecReal" min="0" step="0.01" value="'+
-        esc(actual.efectivoReal!=null&&actual.efectivoReal!==""?actual.efectivoReal:"")+'" '+
-        'placeholder="sin contar">'+
+        esc(actual.efectivoReal!=null&&actual.efectivoReal!==""?actual.efectivoReal:0)+'" '+
+        'placeholder="0,00">'+
         '<div class="nota" style="margin:4px 0 0" id="f_realNota"></div></div>'+
       '<div class="campo"><label class="lbl" for="f_amar">Caja amarilla (€)</label>'+
       '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo que hay dentro esta noche, contado</div>'+
