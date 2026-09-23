@@ -1382,6 +1382,16 @@ function enviarDiaPorWhatsApp(fecha){
   /* La lista de Ajustes. Se manda a uno, se vuelve y se manda al
      siguiente: WhatsApp no abre dos chats de una vez. */
   var lista=gente();
+  /* A quien se le manda queda guardado: se marca una vez con el visto y
+     las noches siguientes ya vienen marcados. WhatsApp no abre dos chats
+     a la vez, asi que se va de uno en uno: al abrir el de uno, la
+     ventana se queda y apunta al siguiente. */
+  var guardados=(libro.ajustes.enviarA||[]);
+  var marcado=lista.map(function(g,i){
+    var t=telefonoDe(g);
+    return guardados.length ? guardados.indexOf(t)>=0 : i===0;
+  });
+  var enviados=lista.map(function(){ return false; });
   var tel=telefonoDe(lista[0]);
   function enlaceApp(t){ return "https://wa.me/"+t+"?text="+encodeURIComponent(plano); }
   function enlaceWeb(t){ return "https://web.whatsapp.com/send?phone="+t+"&text="+encodeURIComponent(plano); }
@@ -1394,12 +1404,16 @@ function enviarDiaPorWhatsApp(fecha){
     '<div class="dlg-cab"><h3>Parte del '+esc(dmy(fecha))+'</h3>'+
       '<button class="btn suave" data-x>Cerrar</button></div>'+
     '<div class="dlg-cuerpo">'+
-      (lista.length>1
-        ? '<p class="nota" style="margin:0 0 6px">A quien se lo mandas:</p>'+
-          '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px">'+
+      (lista.length
+        ? '<p class="nota" style="margin:0 0 6px">A quién se lo mandas:</p>'+
+          '<div style="display:flex;gap:14px;flex-wrap:wrap;margin:0 0 10px">'+
           lista.map(function(g,i){
-            return '<button class="btn sm'+(i===0?" fuerte":"")+'" data-quien="'+i+'">'+
-                   esc(nombreDe(g))+'</button>'; }).join("")+
+            return '<label style="display:flex;gap:6px;align-items:center;cursor:pointer">'+
+              '<input type="checkbox" data-quien="'+i+'" style="width:auto"'+
+              (marcado[i]?" checked":"")+(telefonoDe(g)?"":" disabled")+'>'+
+              '<span data-nombre="'+i+'">'+esc(nombreDe(g))+
+              (telefonoDe(g)?"":' <span class="nota">(sin número)</span>')+'</span></label>';
+          }).join("")+
           '</div>'
         : "")+
       (tel
@@ -1453,16 +1467,46 @@ function enviarDiaPorWhatsApp(fecha){
     if(nota) nota.innerHTML='Se abrira el chat de <strong>'+esc(comoSeLlama)+'</strong> '+
       '<span class="mono">'+esc(bonito(t))+'</span>.';   /* el boton de al lado se queda */
   }
-  d.querySelectorAll("[data-quien]").forEach(function(b){
-    b.addEventListener("click", function(){
-      var g=lista[+b.getAttribute("data-quien")];
-      var t=telefonoDe(g);
-      if(!t){ avisar(nombreDe(g)+" no tiene numero puesto en Ajustes.", true); return; }
-      d.querySelectorAll("[data-quien]").forEach(function(o){ o.classList.remove("fuerte"); });
-      b.classList.add("fuerte");
-      apuntarA(t, nombreDe(g));
+  /* El siguiente al que toca mandarle: el primero marcado que todavia no
+     se haya mandado. */
+  function pendientes(){
+    var r=[];
+    lista.forEach(function(g,i){ if(marcado[i] && !enviados[i] && telefonoDe(g)) r.push(i); });
+    return r;
+  }
+  function refrescarDestino(){
+    lista.forEach(function(g,i){
+      var et=d.querySelector('[data-nombre="'+i+'"]');
+      if(et) et.innerHTML=esc(nombreDe(g))+(enviados[i]?' <span style="color:var(--ok)">✓</span>':"")+
+        (telefonoDe(g)?"":' <span class="nota">(sin número)</span>');
+    });
+    var quedan=pendientes();
+    var nota=d.querySelector("#aQuien");
+    if(!quedan.length){
+      var hechos=enviados.filter(Boolean).length;
+      if(nota) nota.innerHTML = hechos
+        ? 'Mandado a <strong>'+hechos+'</strong> '+(hechos===1?'persona':'personas')+'. '+
+          'Marca a alguien más si quieres seguir.'
+        : 'Marca con el visto a quién se lo mandas.';
+      return;
+    }
+    var g=lista[quedan[0]], t=telefonoDe(g);
+    apuntarA(t, nombreDe(g));
+    if(nota && quedan.length>1){
+      nota.innerHTML += ' <span style="color:var(--muted)">Después quedan '+(quedan.length-1)+': '+
+        esc(quedan.slice(1).map(function(i){ return nombreDe(lista[i]); }).join(", "))+'.</span>';
+    }
+  }
+  d.querySelectorAll("[data-quien]").forEach(function(c){
+    c.addEventListener("change", function(){
+      marcado[+c.getAttribute("data-quien")]=c.checked;
+      libro.ajustes.enviarA=lista.filter(function(g,i){ return marcado[i] && telefonoDe(g); })
+                                 .map(function(g){ return telefonoDe(g); });
+      guardar();
+      refrescarDestino();
     });
   });
+  refrescarDestino();
   var otro=d.querySelector("[data-otro]");
   if(otro) otro.addEventListener("click", function(){
     var escrito=prompt("¿A qué número lo mando? (con el prefijo del país)", bonito(tel));
@@ -1474,12 +1518,29 @@ function enviarDiaPorWhatsApp(fecha){
     avisar("Este parte ira a +"+limpio);
   });
 
-  d.querySelector("[data-abrir]").addEventListener("click", function(){
-    /* damos tiempo a que abra la pestana antes de cerrar la ventana */
+  /* Al abrir el chat de uno, ese queda marcado con su visto y la ventana
+     se queda abierta apuntando al siguiente. Cuando no quedan, se
+     cierra sola. */
+  function mandado(){
+    var quedan=pendientes();
+    if(quedan.length){
+      enviados[quedan[0]]=true;
+      var nombre=nombreDe(lista[quedan[0]]);
+      refrescarDestino();
+      var siguen=pendientes();
+      if(siguen.length){
+        avisar("Mandado a "+nombre+". Ahora toca "+nombreDe(lista[siguen[0]])+".");
+        return;
+      }
+      avisar("Mandado a "+nombre+".");
+    }
     setTimeout(function(){ if(document.getElementById("dlg")){ d.close(); d.remove(); } }, 600);
+  }
+  d.querySelector("[data-abrir]").addEventListener("click", function(){
+    setTimeout(mandado, 400);   /* da tiempo a que abra la pestaña */
   });
   d.querySelector("[data-web]").addEventListener("click", function(){
-    setTimeout(function(){ if(document.getElementById("dlg")){ d.close(); d.remove(); } }, 600);
+    setTimeout(mandado, 400);
   });
   d.showModal();
 }
