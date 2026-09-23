@@ -986,6 +986,12 @@ function pintarFormularioDia(d){
       if(real==null){
         rn.innerHTML="Cuenta sólo lo cobrado: el cambio que dejas para mañana va aparte, "+
       "en «Caja registradora». Escríbelo y te digo lo que baila con el efectivo.";
+      } else if(Math.abs(real)<0.005 && r2(visa+efec)>0.005){
+        /* Un cajón a cero en un día con ventas no es un recuento: es que
+           todavía no se ha contado. Cantar aquí «faltan 358 €» sería un
+           susto por un hueco. */
+        rn.innerHTML='Un 0 con ventas del día no es un recuento: lo tomo como '+
+          '<strong>sin contar</strong>. Cuenta el cajón y escríbelo.';
       } else {
         var dr=r2(real-efec);
         rn.innerHTML = Math.abs(dr)<0.005
