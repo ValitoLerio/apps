@@ -722,6 +722,11 @@ function verDia(main){
     tarjetaCuadre(ui.dia)+
 
     '<div class="tarjeta" style="margin-bottom:16px">'+
+      '<div class="tarjeta-cab"><h2>El papel de esta noche</h2>'+
+        '<span class="pista">la foto se manda con el parte</span></div>'+
+      '<div class="tarjeta-cuerpo" id="cajaFotoDia"></div></div>'+
+
+    '<div class="tarjeta" style="margin-bottom:16px">'+
       '<div class="tarjeta-cab"><h2>La caja amarilla</h2>'+
         '<span class="pista">'+(objetivoAmarilla()>0
           ? "Objetivo: "+eur(objetivoAmarilla())
@@ -766,6 +771,7 @@ function verDia(main){
   });
 
   pintarFormularioDia(d);
+  pintarFotoDia();
 }
 
 function pintarFormularioDia(d){
@@ -1398,6 +1404,8 @@ function enviarDiaPorWhatsApp(fecha){
   var destino=enlaceApp(tel);
   var porNavegador=enlaceWeb(tel);
 
+  var foto=fotoDelDia(fecha);
+
   var vieja=document.getElementById("dlg"); if(vieja) vieja.remove();
   var d=document.createElement("dialog"); d.id="dlg";
   d.innerHTML=
@@ -1426,6 +1434,15 @@ function enviarDiaPorWhatsApp(fecha){
          con letra de maquina, y en WhatsApp se envian igualmente. */
       '<div class="parte" id="parteTexto">'+esc(texto.split("\n").filter(function(x){
          return x.trim()!=="```"; }).join("\n"))+'</div>'+
+      (foto
+        ? '<div style="margin:12px 0 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+          '<img src="'+esc(foto)+'" alt="" style="width:74px;height:74px;object-fit:cover;'+
+          'border-radius:8px;border:1px solid var(--linea)">'+
+          '<div><div class="nota" style="margin:0">Tienes la foto del papel de esa noche.</div>'+
+          '<button class="btn sm" data-foto style="margin-top:6px">'+
+          (puedeCompartirFotos() ? 'Mandar la foto' : 'Bajar la foto para adjuntarla')+
+          '</button></div></div>'
+        : "")+
       '<p class="nota" style="margin:10px 0 0">'+(enOrdenador()
         ? 'En el ordenador, la aplicación de WhatsApp rechaza estos enlaces '+
           '(«no se pudo abrir este enlace»). Usa <strong>Abrir en el navegador</strong>, '+
@@ -1457,6 +1474,10 @@ function enviarDiaPorWhatsApp(fecha){
   });
   d.querySelector("[data-copiar]").addEventListener("click", function(){
     copiarTexto(texto, this);   /* al copiar va la version alineada */
+  });
+  var botonFoto=d.querySelector("[data-foto]");
+  if(botonFoto) botonFoto.addEventListener("click", function(){
+    mandarFoto(foto, fecha, this);
   });
   /* Reapuntar los dos enlaces al numero elegido. Los botones de abajo
      son los mismos; lo unico que cambia es a donde llevan. */
@@ -1543,6 +1564,40 @@ function enviarDiaPorWhatsApp(fecha){
     setTimeout(mandado, 400);
   });
   d.showModal();
+}
+
+/* En el móvil, el cuadro de compartir de siempre lleva la foto a
+   WhatsApp. En el ordenador no hay tal cosa, así que se baja y se
+   adjunta a mano. */
+function puedeCompartirFotos(){
+  try{
+    return !!(navigator.canShare && navigator.share &&
+              navigator.canShare({files:[new File([new Blob([1])],"x.jpg",{type:"image/jpeg"})]}));
+  }catch(e){ return false; }
+}
+function aTrozos(dataUrl){
+  var partes=String(dataUrl||"").split(",");
+  var binario=atob(partes[1]||"");
+  var bytes=new Uint8Array(binario.length);
+  for(var i=0;i<binario.length;i++) bytes[i]=binario.charCodeAt(i);
+  return new Blob([bytes], {type:"image/jpeg"});
+}
+function mandarFoto(foto, fecha, boton){
+  if(!foto) return;
+  var nombre="caja-"+String(fecha).replace(/-/g,"")+".jpg";
+  var blob=aTrozos(foto);
+  if(puedeCompartirFotos()){
+    var f=new File([blob], nombre, {type:"image/jpeg"});
+    navigator.share({files:[f], title:"Caja del "+dmy(fecha)}).catch(function(){});
+    return;
+  }
+  var u=URL.createObjectURL(blob);
+  var a=document.createElement("a"); a.href=u; a.download=nombre;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(u); }, 20000);
+  if(boton){ boton.textContent="Bajada"; setTimeout(function(){
+    boton.textContent="Bajar la foto para adjuntarla"; }, 1800); }
+  avisar("Foto bajada: adjúntala en el chat");
 }
 
 /* Copiar al portapapeles, con recambio para cuando el navegador no deja */
@@ -2432,6 +2487,87 @@ function tarjetaEnCristiano(datos, anios, haceUnAnio){
    ══════════════════════════════════════════════════════════════ */
 function hojaDelMes(ym){ return (libro.hojas||{})[ym||ui.mes] || null; }
 
+/* ── La foto del papel de la noche ────────────────────────────────
+   El cierre se escribe en un papel antes de pasarlo aquí. Con la foto
+   guardada en el propio día, el papel deja de hacer falta: queda el
+   original al lado de los números, y se puede mandar con el parte para
+   que el otro lo vea tal cual está escrito.
+   Va más pequeña que la hoja del mes —900 px— porque son muchas: una
+   por noche, y el libro entero sube a GitHub en cada cambio. */
+function fotoDelDia(fecha){ var d=diaDe(fecha||ui.dia); return d ? (d.foto||null) : null; }
+function contarFotosDia(){ return (libro.dias||[]).filter(function(d){ return d.foto; }).length; }
+function pesoFotosDia(){
+  var letras=(libro.dias||[]).reduce(function(s,d){ return s+String(d.foto||"").length; },0);
+  var bytes=Math.round(letras*0.75);
+  return bytes>1048576 ? num(bytes/1048576,1)+" MB" : num(bytes/1024,0)+" kB";
+}
+
+function pintarFotoDia(){
+  var caja=document.getElementById("cajaFotoDia"); if(!caja) return;
+  var foto=fotoDelDia();
+  var hayDia=!!diaDe(ui.dia);
+
+  caja.innerHTML = foto
+    ? '<img src="'+esc(foto)+'" alt="El papel del '+esc(dmy(ui.dia))+'" id="fotoDiaImg" '+
+      'style="width:100%;max-width:420px;border-radius:8px;border:1px solid var(--linea);'+
+      'cursor:zoom-in;display:block">'+
+      '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+
+        '<button class="btn sm" id="fd_ver">Verla grande</button>'+
+        '<button class="btn sm" id="fd_cambiar">Cambiar la foto</button>'+
+        '<button class="btn sm malo" id="fd_quitar">Quitarla</button>'+
+      '</div>'+
+      '<input type="file" id="fd_archivo" accept="image/*" capture="environment" style="display:none">'
+    : '<p class="nota" style="margin:0 0 10px">Haz una foto al papel de esta noche y se queda '+
+      'guardada con el día. Luego se puede mandar junto al parte.'+
+      (hayDia?"":' <strong>Guarda primero el día.</strong>')+'</p>'+
+      (hayDia
+        ? '<input type="file" id="fd_archivo" accept="image/*" capture="environment" style="width:auto">'
+        : "");
+
+  var archivo=document.getElementById("fd_archivo");
+  if(!archivo) return;
+  archivo.addEventListener("change", function(){
+    var f=this.files && this.files[0];
+    if(!f) return;
+    encogerFoto(f, function(dataUrl){
+      var d=diaDe(ui.dia);
+      if(!d){ avisar("Guarda primero el día.", true); return; }
+      d.foto=dataUrl;
+      guardar(); pintar();
+      avisar("Foto del papel guardada");
+    }, 900);
+  });
+
+  if(!foto) return;
+  document.getElementById("fd_cambiar").addEventListener("click", function(){ archivo.click(); });
+  document.getElementById("fd_ver").addEventListener("click", verFotoDiaGrande);
+  document.getElementById("fotoDiaImg").addEventListener("click", verFotoDiaGrande);
+  document.getElementById("fd_quitar").addEventListener("click", function(){
+    confirmar("Quitar la foto del "+dmy(ui.dia),
+      '<p style="margin:0">Se borra la foto del papel. Los números del día no se tocan.</p>',
+      function(){
+        var d=diaDe(ui.dia); if(d) delete d.foto;
+        guardar(); pintar(); avisar("Foto quitada");
+      }, {aceptar:"Quitar", malo:true});
+  });
+}
+
+function verFotoDiaGrande(){
+  var foto=fotoDelDia(); if(!foto) return;
+  var vieja=document.getElementById("dlg"); if(vieja) vieja.remove();
+  var d=document.createElement("dialog"); d.id="dlg";
+  d.style.maxWidth="min(1000px, calc(100% - 32px))";
+  d.innerHTML='<div class="dlg-cab"><h3>El papel del '+esc(dmy(ui.dia))+'</h3>'+
+    '<button class="btn suave" data-x>Cerrar</button></div>'+
+    '<div class="dlg-cuerpo" style="max-height:80vh"><img src="'+esc(foto)+'" alt="" '+
+    'style="width:100%;display:block;border-radius:6px"></div>';
+  document.body.appendChild(d);
+  d.querySelectorAll("[data-x]").forEach(function(b){
+    b.addEventListener("click", function(){ d.close(); d.remove(); });
+  });
+  d.showModal();
+}
+
 function pintarHoja(){
   var caja=document.getElementById("cajaHoja"); if(!caja) return;
   var foto=hojaDelMes();
@@ -2498,12 +2634,12 @@ function verHojaGrande(){
 /* La foto se reduce antes de guardarla: 1100 px de lado largo, que es lo
    que hace falta para leer los números a mano sin que el archivo se
    dispare. El libro entero sube a GitHub en cada cambio. */
-function encogerFoto(archivo, listo){
+function encogerFoto(archivo, listo, medida){
   var lector=new FileReader();
   lector.onload=function(){
     var img=new Image();
     img.onload=function(){
-      var max=1100;
+      var max=medida||1100;
       var ancho=img.width, alto=img.height;
       if(ancho>alto && ancho>max){ alto=Math.round(alto*max/ancho); ancho=max; }
       else if(alto>=ancho && alto>max){ ancho=Math.round(ancho*max/alto); alto=max; }
@@ -2512,7 +2648,7 @@ function encogerFoto(archivo, listo){
       var cx=cv.getContext("2d");
       cx.fillStyle="#fff"; cx.fillRect(0,0,ancho,alto);
       cx.drawImage(img,0,0,ancho,alto);
-      listo(cv.toDataURL("image/jpeg", 0.72));
+      listo(cv.toDataURL("image/jpeg", medida ? 0.68 : 0.72));
     };
     img.onerror=function(){ avisar("No he podido leer esa imagen.", true); };
     img.src=lector.result;
@@ -3232,6 +3368,12 @@ function verAjustes(main){
               ? plural(contarHojas(),"hoja guardada","hojas guardadas")+', '+pesoHojas()+
                 '. Los días anotados se quedan.'
               : "no hay ninguna foto guardada")+'</div></div>'+
+          '<div><button class="btn malo" id="b_fotosdia">Quitar las fotos de los papeles</button>'+
+            '<div class="nota" style="margin-top:4px">'+
+            (contarFotosDia()
+              ? plural(contarFotosDia(),"foto de una noche","fotos de noches")+', '+pesoFotosDia()+
+                '. Los números de esos días se quedan.'
+              : "no hay ninguna foto de papel guardada")+'</div></div>'+
           '<div><button class="btn malo" id="b_dias">Borrar los días</button>'+
             '<div class="nota" style="margin-top:4px">'+
             (contarDias()? plural(contarDias(),"cierre anotado","cierres anotados")
@@ -3356,6 +3498,20 @@ function verAjustes(main){
       '<p class="nota" style="margin:0">Los días anotados no se tocan.</p>',
       function(){
         libro.hojas={}; guardar(); pintar(); avisar("Fotos quitadas");
+      }, {aceptar:"Quitar", malo:true});
+  });
+
+  document.getElementById("b_fotosdia").addEventListener("click", function(){
+    if(!contarFotosDia()){ avisar("No hay ninguna foto de papel guardada.", true); return; }
+    confirmar("Quitar las fotos de los papeles",
+      '<p style="margin:0 0 10px">'+segunCuantos(contarFotosDia(),
+        "Se va <strong>la única foto</strong>",
+        "Se van <strong>las "+contarFotosDia()+" fotos</strong>")+
+      ' de los papeles de cada noche ('+pesoFotosDia()+').</p>'+
+      '<p class="nota" style="margin:0">Los números de esos días no se tocan.</p>',
+      function(){
+        (libro.dias||[]).forEach(function(d){ delete d.foto; });
+        guardar(); pintar(); avisar("Fotos quitadas");
       }, {aceptar:"Quitar", malo:true});
   });
 

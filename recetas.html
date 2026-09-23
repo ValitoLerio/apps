@@ -238,7 +238,7 @@ dialog::backdrop{background:rgba(20,14,11,.55)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202609230947"></script>
+<script src="sync.js?v=202609230952"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -246,7 +246,7 @@ dialog::backdrop{background:rgba(20,14,11,.55)}
 
   Sync.iniciar('recetas').then(function(){
     var s = document.createElement('script');
-    s.src = 'recetas.js?v=202609230947';
+    s.src = 'recetas.js?v=202609230952';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar recetas.js. Recarga la pagina.'; };
     document.body.appendChild(s);
