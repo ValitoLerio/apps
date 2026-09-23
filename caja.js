@@ -1412,18 +1412,19 @@ function enviarDiaPorWhatsApp(fecha){
     '<div class="dlg-cab"><h3>Parte del '+esc(dmy(fecha))+'</h3>'+
       '<button class="btn suave" data-x>Cerrar</button></div>'+
     '<div class="dlg-cuerpo">'+
-      (lista.length
-        ? '<p class="nota" style="margin:0 0 6px">A quién se lo mandas:</p>'+
-          '<div style="display:flex;gap:14px;flex-wrap:wrap;margin:0 0 10px">'+
-          lista.map(function(g,i){
-            return '<label style="display:flex;gap:6px;align-items:center;cursor:pointer">'+
-              '<input type="checkbox" data-quien="'+i+'" style="width:auto"'+
-              (marcado[i]?" checked":"")+(telefonoDe(g)?"":" disabled")+'>'+
-              '<span data-nombre="'+i+'">'+esc(nombreDe(g))+
-              (telefonoDe(g)?"":' <span class="nota">(sin número)</span>')+'</span></label>';
-          }).join("")+
-          '</div>'
-        : "")+
+      '<p class="nota" style="margin:0 0 6px">A quién se lo mandas:</p>'+
+      '<div id="listaGente" style="display:flex;gap:14px;flex-wrap:wrap;margin:0 0 8px"></div>'+
+      '<div style="margin:0 0 10px">'+
+        '<button class="btn suave sm" data-masgente>+ Añadir a alguien</button>'+
+        '<div id="altaGente" style="display:none;margin-top:8px;gap:8px;flex-wrap:wrap;'+
+          'align-items:flex-end">'+
+          '<div class="campo" style="min-width:130px"><label class="lbl" for="ng_nom">Nombre</label>'+
+            '<input id="ng_nom" placeholder="Nombre y apellidos"></div>'+
+          '<div class="campo" style="min-width:150px"><label class="lbl" for="ng_tel">Teléfono</label>'+
+            '<input id="ng_tel" placeholder="+34 600 00 00 00" inputmode="tel"></div>'+
+          '<button class="btn sm fuerte" data-guardagente>Añadir</button>'+
+        '</div>'+
+      '</div>'+
       (tel
         ? '<p class="nota"><span id="aQuien">Se abrira el chat de <strong>'+esc(nombreDe(lista[0]))+
           '</strong> <span class="mono">'+esc(bonito(tel))+'</span>.</span> '+
@@ -1499,7 +1500,7 @@ function enviarDiaPorWhatsApp(fecha){
     lista.forEach(function(g,i){
       var et=d.querySelector('[data-nombre="'+i+'"]');
       if(et) et.innerHTML=esc(nombreDe(g))+(enviados[i]?' <span style="color:var(--ok)">✓</span>':"")+
-        (telefonoDe(g)?"":' <span class="nota">(sin número)</span>');
+        (telefonoDe(g)?"":' <span class="nota">(sin n\u00famero)</span>');
     });
     var quedan=pendientes();
     var nota=d.querySelector("#aQuien");
@@ -1518,15 +1519,53 @@ function enviarDiaPorWhatsApp(fecha){
         esc(quedan.slice(1).map(function(i){ return nombreDe(lista[i]); }).join(", "))+'.</span>';
     }
   }
-  d.querySelectorAll("[data-quien]").forEach(function(c){
-    c.addEventListener("change", function(){
-      marcado[+c.getAttribute("data-quien")]=c.checked;
-      libro.ajustes.enviarA=lista.filter(function(g,i){ return marcado[i] && telefonoDe(g); })
-                                 .map(function(g){ return telefonoDe(g); });
-      guardar();
-      refrescarDestino();
+  function guardarMarcados(){
+    libro.ajustes.enviarA=lista.filter(function(g,i){ return marcado[i] && telefonoDe(g); })
+                               .map(function(g){ return telefonoDe(g); });
+    guardar();
+  }
+  /* La lista se pinta cada vez: al añadir a alguien entra sin cerrar el
+     parte y sin perder los vistos de los que ya se han mandado. */
+  function pintarLista(){
+    var caja=d.querySelector("#listaGente"); if(!caja) return;
+    caja.innerHTML = lista.length
+      ? lista.map(function(g,i){
+          return '<label style="display:flex;gap:6px;align-items:center;cursor:pointer">'+
+            '<input type="checkbox" data-quien="'+i+'" style="width:auto"'+
+            (marcado[i]?" checked":"")+(telefonoDe(g)?"":" disabled")+'>'+
+            '<span data-nombre="'+i+'">'+esc(nombreDe(g))+'</span></label>';
+        }).join("")
+      : '<span class="nota">Todavía no hay nadie. Añade a quien quieras aquí mismo.</span>';
+    caja.querySelectorAll("[data-quien]").forEach(function(c){
+      c.addEventListener("change", function(){
+        marcado[+c.getAttribute("data-quien")]=c.checked;
+        guardarMarcados();
+        refrescarDestino();
+      });
     });
+  }
+  var abrirAlta=d.querySelector("[data-masgente]");
+  var cajaAlta=d.querySelector("#altaGente");
+  if(abrirAlta) abrirAlta.addEventListener("click", function(){
+    var abierta=(cajaAlta.style.display!=="none");
+    cajaAlta.style.display = abierta ? "none" : "flex";
+    if(!abierta){ var n=d.querySelector("#ng_nom"); if(n) n.focus(); }
   });
+  var guardarAlta=d.querySelector("[data-guardagente]");
+  if(guardarAlta) guardarAlta.addEventListener("click", function(){
+    var nom=(d.querySelector("#ng_nom").value||"").trim();
+    var tel=soloNumero(d.querySelector("#ng_tel").value||"");
+    if(tel.length<6){ avisar("Ese teléfono no vale. Ponlo entero, con el país.", true); return; }
+    var nuevo={id:uid(), nombre:nom||("+"+tel), telefono:"+"+tel};
+    libro.ajustes.gente=(libro.ajustes.gente||[]).concat([nuevo]);
+    lista.push(nuevo); marcado.push(true); enviados.push(false);
+    guardarMarcados();
+    d.querySelector("#ng_nom").value=""; d.querySelector("#ng_tel").value="";
+    cajaAlta.style.display="none";
+    pintarLista(); refrescarDestino();
+    avisar(nombreDe(nuevo)+" añadido. Le llegará este parte.");
+  });
+  pintarLista();
   refrescarDestino();
   var otro=d.querySelector("[data-otro]");
   if(otro) otro.addEventListener("click", function(){
