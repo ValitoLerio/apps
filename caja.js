@@ -731,11 +731,6 @@ function verDia(main){
     tarjetaCuadre(ui.dia)+
 
     '<div class="tarjeta" style="margin-bottom:16px">'+
-      '<div class="tarjeta-cab"><h2>El papel de esta noche</h2>'+
-        '<span class="pista">la foto se manda con el parte</span></div>'+
-      '<div class="tarjeta-cuerpo" id="cajaFotoDia"></div></div>'+
-
-    '<div class="tarjeta" style="margin-bottom:16px">'+
       '<div class="tarjeta-cab"><h2>La caja amarilla</h2>'+
         '<span class="pista">'+(objetivoAmarilla()>0
           ? "Objetivo: "+eur(objetivoAmarilla())
@@ -778,7 +773,7 @@ function verDia(main){
     enviarDiaPorWhatsApp(ui.dia);
   });
 
-  pintarFormularioDia(d);
+  pintarFormularioDia(d);   /* el hueco de la foto va dentro */
   pintarFotoDia();
 }
 
@@ -795,6 +790,11 @@ function pintarFormularioDia(d){
      saque algo. */
   var sacaPuesto=(actual.retirado!=null && actual.retirado!=="") ? actual.retirado : 0;
   caja.innerHTML=
+    /* El papel, aquí arriba: es de donde se copian los números, así que
+       tiene que estar delante y no en una tarjeta al final. La foto se
+       abre a lo ancho con un toque, se mira y se van escribiendo las
+       cifras debajo. */
+    '<div id="cajaFotoDia" style="margin-bottom:14px"></div>'+
     (elTramo
       ? '<div class="aviso-caja" style="margin-bottom:14px">Este día entra en un tramo '+
         'sin retirar'+(elTramo.motivo?" ("+esc(elTramo.motivo)+")":"")+', desde el '+
@@ -2555,21 +2555,29 @@ function pintarFotoDia(){
   var hayDia=!!diaDe(ui.dia);
 
   caja.innerHTML = foto
-    ? '<img src="'+esc(foto)+'" alt="El papel del '+esc(dmy(ui.dia))+'" id="fotoDiaImg" '+
-      'style="width:100%;max-width:420px;border-radius:8px;border:1px solid var(--linea);'+
-      'cursor:zoom-in;display:block">'+
-      '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+
-        '<button class="btn sm" id="fd_ver">Verla grande</button>'+
-        '<button class="btn sm" id="fd_cambiar">Cambiar la foto</button>'+
-        '<button class="btn sm malo" id="fd_quitar">Quitarla</button>'+
+    ? '<div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">'+
+        '<img src="'+esc(foto)+'" alt="El papel del '+esc(dmy(ui.dia))+'" id="fotoDiaImg" '+
+        'style="width:96px;height:96px;object-fit:cover;border-radius:8px;'+
+        'border:1px solid var(--linea);cursor:zoom-in;display:block">'+
+        '<div style="flex:1;min-width:150px">'+
+          '<div class="lbl" style="margin-bottom:4px">El papel de esta noche</div>'+
+          '<div class="nota" style="margin:0 0 6px">Tócala para verla a lo ancho y ve copiando '+
+          'los números aquí debajo.</div>'+
+          '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+            '<button type="button" class="btn sm" id="fd_ver">Verla grande</button>'+
+            '<button type="button" class="btn suave sm" id="fd_cambiar">Otra foto</button>'+
+            '<button type="button" class="btn suave sm malo" id="fd_quitar">Quitarla</button>'+
+          '</div>'+
+        '</div>'+
       '</div>'+
+      '<img src="'+esc(foto)+'" alt="" id="fotoDiaAncha" style="display:none;width:100%;'+
+      'margin-top:10px;border-radius:8px;border:1px solid var(--linea);cursor:zoom-out">'+
       '<input type="file" id="fd_archivo" accept="image/*" capture="environment" style="display:none">'
-    : '<p class="nota" style="margin:0 0 10px">Haz una foto al papel de esta noche y se queda '+
-      'guardada con el día. Luego se puede mandar junto al parte.'+
-      (hayDia?"":' <strong>Guarda primero el día.</strong>')+'</p>'+
-      (hayDia
-        ? '<input type="file" id="fd_archivo" accept="image/*" capture="environment" style="width:auto">'
-        : "");
+    : (hayDia
+        ? '<button type="button" class="btn" id="fd_hacer">📷 Foto del papel</button>'+
+          '<span class="nota" style="margin-left:8px">para copiar de ahí los números</span>'+
+          '<input type="file" id="fd_archivo" accept="image/*" capture="environment" style="display:none">'
+        : '<p class="nota" style="margin:0">Guarda primero el día y luego le haces la foto al papel.</p>');
 
   var archivo=document.getElementById("fd_archivo");
   if(!archivo) return;
@@ -2585,10 +2593,25 @@ function pintarFotoDia(){
     }, 900);
   });
 
+  var hacer=document.getElementById("fd_hacer");
+  if(hacer) hacer.addEventListener("click", function(){ archivo.click(); });
+
   if(!foto) return;
   document.getElementById("fd_cambiar").addEventListener("click", function(){ archivo.click(); });
   document.getElementById("fd_ver").addEventListener("click", verFotoDiaGrande);
-  document.getElementById("fotoDiaImg").addEventListener("click", verFotoDiaGrande);
+  /* Un toque la abre a lo ancho, aquí mismo, encima de las casillas:
+     así se lee mientras se escribe, sin tapar el formulario. */
+  function abrirAncha(){
+    var ancha=document.getElementById("fotoDiaAncha");
+    var chica=document.getElementById("fotoDiaImg");
+    if(!ancha) return;
+    var abierta=(ancha.style.display!=="none");
+    ancha.style.display = abierta ? "none" : "block";
+    if(chica) chica.style.opacity = abierta ? "1" : ".5";
+  }
+  document.getElementById("fotoDiaImg").addEventListener("click", abrirAncha);
+  var ancha=document.getElementById("fotoDiaAncha");
+  if(ancha) ancha.addEventListener("click", abrirAncha);
   document.getElementById("fd_quitar").addEventListener("click", function(){
     confirmar("Quitar la foto del "+dmy(ui.dia),
       '<p style="margin:0">Se borra la foto del papel. Los números del día no se tocan.</p>',
