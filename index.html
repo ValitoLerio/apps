@@ -182,13 +182,23 @@
   .mover{display:none;gap:.4rem;align-items:center;margin-top:1rem;
          padding-top:.9rem;border-top:1px dashed var(--linea)}
   .colocando .mover{display:flex}
+
+  /* Una tarjeta apagada desaparece del escritorio. Colocando sí se ve,
+     atenuada, porque es justo donde hay que poder volver a encenderla. */
+  .puerta.apagada{display:none}
+  .colocando .puerta.apagada{display:flex;opacity:.4}
+  .colocando .puerta.apagada .cifra,
+  .colocando .puerta.apagada .tira{filter:grayscale(1)}
+  .mover .ojo{margin-left:auto;width:auto;padding:0 .7rem;font-size:.8rem;
+              font-family:var(--texto);white-space:nowrap}
+  .puerta.apagada .ojo{border-color:var(--tono);color:var(--tono)}
   .mover button{border:1px solid var(--linea);background:var(--sup);color:var(--tinta);
                 width:44px;height:40px;border-radius:9px;cursor:pointer;font-size:1.1rem;
                 line-height:1;display:flex;align-items:center;justify-content:center}
   .mover button:hover:not(:disabled){border-color:var(--tono);color:var(--tono)}
   .mover button:disabled{opacity:.3;cursor:default}
   .mover .sitio{font-family:var(--mono);font-size:.72rem;color:var(--tinta2);
-                letter-spacing:.08em;margin-left:auto}
+                letter-spacing:.08em}
   .aviso-colocar{background:var(--sup);border:1px solid var(--tono,var(--linea));
                  border-left:4px solid var(--piso);border-radius:12px;
                  padding:1rem 1.2rem;margin-bottom:1.2rem;display:none;
@@ -378,10 +388,12 @@
 
     <div class="aviso-colocar">
       <p><strong>Estás colocando el escritorio.</strong> Mueve cada tarjeta con las flechas
-         hasta dejarlas como quieras. Se guarda en tu repositorio, así que el orden lo tendrás
-         también en el móvil.</p>
+         hasta dejarlas como quieras, y apaga con <em>Ocultar</em> las que no uses: dejan de
+         salir en el escritorio. Se guarda en tu repositorio, así que lo tendrás también
+         en el móvil.</p>
       <div style="display:flex;gap:.6rem;flex-wrap:wrap">
         <button type="button" class="icono conletra" id="btn-orden-original" title="Volver al orden de siempre">Deshacer</button>
+        <button type="button" class="icono conletra" id="btn-ver-todas" title="Volver a enseñar todas las tarjetas">Enseñar todas</button>
         <button type="button" class="icono conletra" id="btn-colocar-fin">Ya está</button>
       </div>
     </div>
@@ -766,6 +778,7 @@
      dedo y con la página haciendo scroll a la vez, es una pelea. Dos
      botones grandes no fallan en ningún sitio. */
   var ORDEN_KEY = 'escritorio.orden';
+  var OCULTAS_KEY = 'escritorio.ocultas';
 
   function cajaPuertas(){ return document.querySelector('.puertas'); }
   function puertas(){
@@ -773,6 +786,22 @@
   }
   function ordenActual(){
     return puertas().map(function(p){ return p.getAttribute('data-app'); });
+  }
+  /* Las apagadas se guardan por nombre, no por sitio: así se respeta
+     aunque mañana cambie el orden o aparezca una app nueva. */
+  function ocultasActual(){
+    return puertas().filter(function(p){ return p.classList.contains('apagada'); })
+                    .map(function(p){ return p.getAttribute('data-app'); });
+  }
+  /* Una app que no esté en la lista se queda encendida: lo nuevo se ve
+     solo, y nadie pierde una tarjeta por no estar apuntada. */
+  function aplicarOcultas(ocultas){
+    var apagadas = {};
+    (ocultas || []).forEach(function(n){ apagadas[n] = true; });
+    puertas().forEach(function(p){
+      p.classList.toggle('apagada', !!apagadas[p.getAttribute('data-app')]);
+    });
+    pintarSitios();
   }
   /* Las que no estén en la lista guardada se quedan al final y en su
      orden de siempre: así una app nueva aparece sin que haya que tocar
@@ -790,10 +819,14 @@
   }
   function guardarOrden(){
     var orden = ordenActual();
-    try { localStorage.setItem(ORDEN_KEY, JSON.stringify(orden)); } catch (e) {}
+    var ocultas = ocultasActual();
+    try {
+      localStorage.setItem(ORDEN_KEY, JSON.stringify(orden));
+      localStorage.setItem(OCULTAS_KEY, JSON.stringify(ocultas));
+    } catch (e) {}
     if (!Sync.conectado()) return;
-    Sync.guardarEscritorio({orden: orden}).catch(function(err){
-      avisarColocar('No he podido guardar el orden: ' + err.message);
+    Sync.guardarEscritorio({orden: orden, ocultas: ocultas}).catch(function(err){
+      avisarColocar('No he podido guardar el escritorio: ' + err.message);
     });
   }
   function avisarColocar(texto){
@@ -811,15 +844,27 @@
       barra.innerHTML =
         '<button type="button" data-mover="antes" title="Moverla antes" aria-label="Moverla antes">←</button>' +
         '<button type="button" data-mover="despues" title="Moverla después" aria-label="Moverla después">→</button>' +
-        '<span class="sitio"></span>';
+        '<span class="sitio"></span>' +
+        '<button type="button" class="ojo" data-ojo="1"></button>';
       p.appendChild(barra);
       barra.addEventListener('click', function(ev){
+        var o = ev.target.closest('[data-ojo]');
+        if (o) {
+          ev.preventDefault(); ev.stopPropagation();
+          apagar(p);
+          return;
+        }
         var b = ev.target.closest('[data-mover]');
         if (!b) return;
         ev.preventDefault(); ev.stopPropagation();
         mover(p, b.getAttribute('data-mover') === 'antes' ? -1 : 1);
       });
     });
+  }
+  function apagar(tarjeta){
+    tarjeta.classList.toggle('apagada');
+    pintarSitios();
+    guardarOrden();
   }
   function mover(tarjeta, paso){
     var lista = puertas();
@@ -835,12 +880,19 @@
   function pintarSitios(){
     var lista = puertas();
     lista.forEach(function(p, i){
+      var apagada = p.classList.contains('apagada');
       var s = p.querySelector('.sitio');
-      if (s) s.textContent = (i + 1) + ' de ' + lista.length;
+      if (s) s.textContent = apagada ? 'oculta' : (i + 1) + ' de ' + lista.length;
       var antes = p.querySelector('[data-mover="antes"]');
       var desp  = p.querySelector('[data-mover="despues"]');
       if (antes) antes.disabled = (i === 0);
       if (desp)  desp.disabled  = (i === lista.length - 1);
+      var ojo = p.querySelector('[data-ojo]');
+      if (ojo) {
+        ojo.textContent = apagada ? 'Enseñar' : 'Ocultar';
+        ojo.title = apagada ? 'Volver a enseñarla en el escritorio'
+                            : 'Quitarla del escritorio';
+      }
     });
   }
   /* Colocando, una tarjeta no es un enlace: si no, la primera flecha que
@@ -877,6 +929,10 @@
       var g = localStorage.getItem(ORDEN_KEY);
       if (g) aplicarOrden(JSON.parse(g));
     } catch (e) {}
+    try {
+      var h = localStorage.getItem(OCULTAS_KEY);
+      if (h) aplicarOcultas(JSON.parse(h));
+    } catch (e) {}
 
     var bc = document.getElementById('btn-colocar');
     if (bc) bc.addEventListener('click', function(){
@@ -890,6 +946,12 @@
       pintarSitios();
       guardarOrden();
       avisarColocar('Vuelto al orden de siempre.');
+    });
+    var bt = document.getElementById('btn-ver-todas');
+    if (bt) bt.addEventListener('click', function(){
+      aplicarOcultas([]);
+      guardarOrden();
+      avisarColocar('Ya se ven todas las tarjetas.');
     });
   });
 
@@ -1299,6 +1361,7 @@
       Object.keys(seguridad).forEach(function(sec){ if (seguridad[sec]) ocultarCifras(sec); });
       pintarCandados();
       aplicarOrden((datos.escritorio || {}).orden);
+      aplicarOcultas((datos.escritorio || {}).ocultas);
       pon('ultimo-guardado', haceCuanto(datos.actualizado));
     }, function(err){
       pon('ultimo-guardado', 'no he podido leer los datos: ' + err.message);
