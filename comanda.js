@@ -1235,6 +1235,30 @@ function engancharEnvio(d, inv){
         engancharEnvio(d, inv);
       });
     });
+  /* Los correos escritos a mano son de un envío. Con este botón se
+     quedan en la ficha de la empresa y la próxima vez salen ya marcados,
+     que es lo que uno quiere cuando manda siempre a los mismos. */
+  var bg=d.querySelector("[data-guardar-correos]");
+  if(bg) bg.addEventListener("click", function(){
+    var campo=d.querySelector("#otroCorreo");
+    var escritos=(campo && campo.value || "").split(/[;,\s]+/)
+                   .map(function(x){ return x.trim(); })
+                   .filter(function(x){ return x && x.indexOf("@")>0; });
+    if(!escritos.length){ toast("Escribe primero el correo en el hueco de al lado.", true); return; }
+    var viva=company(inv.companyId);
+    if(!viva){ toast("Esta factura no apunta a ninguna empresa guardada.", true); return; }
+    var ya=correosDe(viva);
+    var nuevos=escritos.filter(function(x){ return ya.indexOf(x)<0; });
+    if(!nuevos.length){ toast("Esos correos ya los tenía la empresa."); if(campo) campo.value=""; return; }
+    viva.emails=ya.concat(nuevos);
+    delete viva.email;              /* a partir de aquí manda la lista */
+    touch();
+    if(campo) campo.value="";
+    render();
+    toast(nuevos.length===1 ? "Correo guardado en "+(viva.name||"la empresa")
+                            : nuevos.length+" correos guardados en "+(viva.name||"la empresa"));
+  });
+
   d.querySelector("[data-wa]").addEventListener("click", function(){ openWhatsApp(inv); });
   var sh=d.querySelector("[data-share]");
   if(sh) sh.addEventListener("click", function(){ shareInvoice(inv); });
@@ -1278,8 +1302,13 @@ function sendBoxHTML(inv){
     '<div style="margin:0 0 10px">'+
       '<div class="lbl" style="margin-bottom:6px">Destinatarios</div>'+
       casillas+
-      '<input id="otroCorreo" placeholder="Otro correo para este envío (opcional)" '+
-      'style="margin-top:6px" autocomplete="off">'+
+      '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">'+
+        '<input id="otroCorreo" placeholder="Más correos, separados por comas" '+
+        'style="flex:1;min-width:220px" autocomplete="off">'+
+        '<button class="btn ghost" data-guardar-correos '+
+        'title="Dejarlos guardados en esta empresa para los próximos envíos" '+
+        'style="padding:5px 10px;font-size:12.5px">Guardar en la empresa</button>'+
+      "</div>"+
     "</div>"+
     (remitentes.length
       ? '<div style="margin:0 0 10px">'+
