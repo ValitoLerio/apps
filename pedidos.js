@@ -393,14 +393,7 @@ function lineasPedido(){
 function esCadaDia(p){ return esDiario(p); }
 
 function verCadaDia(main){
-  var puestos=libro.productos.filter(esCadaDia);
-  var hay=puestos.length;
-  var secs={};
-  puestos.forEach(function(p){
-    var n=String(p.seccion||"Sin sección").toUpperCase();
-    secs[n]=(secs[n]||0)+1;
-  });
-  var nombres=Object.keys(secs).sort();
+  var hay=libro.productos.filter(esCadaDia).length;
 
   main.innerHTML=
     cabecera("El repaso",
@@ -416,16 +409,11 @@ function verCadaDia(main){
             'placeholder="Afina dentro del repaso…" value="'+esc(ui.q)+'">'+
             '<button class="limpiar'+(ui.q?" hay":"")+'" id="q_limpiar" title="Limpiar">✕</button>'+
           '</div>'+
+          /* Sin chapas por sección: cada ficha ya lleva la suya escrita a
+             la derecha, y la lista es corta por definición. */
           '<div class="chips">'+
             '<button class="chip" data-sec="" aria-pressed="'+(!ui.seccion)+'">Todo'+
               '<span class="n">'+hay+'</span></button>'+
-            (nombres.length>1
-              ? nombres.map(function(n){
-                  return '<button class="chip" data-sec="'+esc(n)+'" aria-pressed="'+
-                         (ui.seccion===n)+'">'+esc(n.charAt(0)+n.slice(1).toLowerCase())+
-                         '<span class="n">'+secs[n]+'</span></button>';
-                }).join("")
-              : "")+
             '<button class="chip" id="ch_pedido" aria-pressed="'+ui.soloPedido+'">En el pedido'+
               '<span class="n">'+lineasPedido()+'</span></button>'+
           '</div>'+
