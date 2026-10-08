@@ -338,6 +338,7 @@ function pctGuardado(m,k){
 }
 
 function calcular(){
+  sincronizarDetalle();
   const alq=n('r-alq');
 
   // Calefacción y agua: por lecturas
@@ -1149,6 +1150,7 @@ function guardarCfg(){
     depRecibido: parseFloat(document.getElementById('c-depRecibido').value)||0,
   };
   LS.set('piso_cfg',cfg);flash('flash-cfg');
+  sincronizarDetalle();
   renderDesgloseInversion();
 }
 
@@ -1670,6 +1672,21 @@ function getDatosFactura(){
    ve o no lo decide él en Ajustes. Lo que se oculta es sólo lo que se le
    manda: aquí dentro el saldo se sigue llevando igual. */
 function saldoVisible(){ return cfg.verSaldo!==false; }
+
+/* El mismo interruptor, a mano: en la pantalla del recibo, al lado de
+   la factura, para poder pasar de una copia a otra y ver el cambio sin
+   irse a Ajustes. Es el mismo ajuste, así que queda guardado. */
+function cambiarDetalle(marcado){
+  cfg.verSaldo = !!marcado;
+  LS.set('piso_cfg', cfg);
+  var enAjustes=document.getElementById('c-verSaldo');
+  if(enAjustes) enAjustes.checked = !!marcado;
+  calcular();
+}
+function sincronizarDetalle(){
+  var aqui=document.getElementById('r-detallado');
+  if(aqui) aqui.checked = saldoVisible();
+}
 
 function n(id){return parseFloat(document.getElementById(id).value)||0}
 function set(id,v){document.getElementById(id).value=v}

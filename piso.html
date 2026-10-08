@@ -238,6 +238,16 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
     <div>
       <div class="section-title">Factura para WhatsApp</div>
       <div class="card" style="padding:1rem">
+        <label style="display:flex;gap:9px;align-items:flex-start;cursor:pointer;
+                      background:var(--accent-bg);border:1px solid var(--accent-light);
+                      border-radius:8px;padding:10px 12px;margin-bottom:12px">
+          <input type="checkbox" id="r-detallado" style="width:auto;margin-top:3px" onchange="cambiarDetalle(this.checked)">
+          <span style="font-size:13px;line-height:1.45">
+            <strong>Recibo detallado</strong>
+            <span style="display:block;color:var(--muted);margin-top:2px">
+              Quitándolo le llega una sola cifra, alquiler y gastos juntos. Tu copia no cambia.
+            </span></span>
+        </label>
         <canvas id="factura-canvas" style="width:100%;border-radius:8px;border:1px solid var(--border);display:block"></canvas>
         <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
           <button class="btn btn-primary btn-full" style="font-size:15px;padding:13px" onclick="descargarFactura()">⬇️ Guardar imagen para WhatsApp</button>
