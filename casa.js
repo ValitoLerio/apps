@@ -8,7 +8,6 @@
               devuelve el seguro, y si ya está todo cobrado
    Coche      seguro, ITV, repostajes y revisiones con sus piezas
    Fijos      luz, agua, internet, móvil, seguros… los de cada mes
-   Viajes     un viaje agrupa sus hoteles, comidas y gasolina
    Otros      gimnasio, negocio y lo que no cae en los demás
 
    Los datos los guarda sync.js en el repositorio privado.
@@ -30,12 +29,12 @@ function libroVacio(){
     compras:[], medico:[],
     coches:[],
     repostajes:[], revisiones:[],
-    fijos:[], viajes:[], otros:[]
+    fijos:[], otros:[]
   };
 }
 
 var libro = libroVacio();
-var ui = { vista:"resumen", mes:hoyISO().slice(0,7), viaje:null, coche:null };
+var ui = { vista:"resumen", mes:hoyISO().slice(0,7), coche:null };
 
 /* ── Dinero, fechas y textos ──────────────────────────────────── */
 function r2(n){ return Math.round((n+Number.EPSILON)*100)/100; }
@@ -365,7 +364,6 @@ function repartirDevoluciones(){
   });
   if(tocado) guardar();
 }
-function totalViaje(v){ return suma(v.gastos, "importe"); }
 
 /* Gasto de un mes, apartado por apartado */
 function gastoDelMes(ym){
@@ -375,11 +373,9 @@ function gastoDelMes(ym){
     coche:    r2(suma(delMes(libro.repostajes, ym), "importe") +
                  suma(delMes(libro.revisiones, ym).map(function(r){ return {x:costeRevision(r)}; }), "x")),
     fijos:    suma(delMes(libro.fijos, ym), "importe"),
-    viajes:   r2((libro.viajes||[]).reduce(function(s,v){
-                   return s + suma(delMes(v.gastos, ym), "importe"); },0)),
     otros:    suma(delMes(libro.otros, ym), "importe")
   };
-  g.total = r2(g.compra+g.medico+g.coche+g.fijos+g.viajes+g.otros);
+  g.total = r2(g.compra+g.medico+g.coche+g.fijos+g.otros);
   return g;
 }
 
@@ -446,7 +442,6 @@ var APARTADOS=[
   {id:"medico",  nombre:"Médico"},
   {id:"coche",   nombre:"Coche"},
   {id:"fijos",   nombre:"Gastos fijos"},
-  {id:"viajes",  nombre:"Viajes"},
   {id:"otros",   nombre:"Otros"}
 ];
 
@@ -458,7 +453,6 @@ function cuentas(){
     medico: delMes(libro.medico, ym).length,
     coche:  delMes(libro.repostajes, ym).length + delMes(libro.revisiones, ym).length,
     fijos:  delMes(libro.fijos, ym).length,
-    viajes: (libro.viajes||[]).length,
     otros:  delMes(libro.otros, ym).length
   };
 }
@@ -487,7 +481,7 @@ function pintar(){
 
   var main=document.getElementById("main");
   ({resumen:verResumen, compra:verCompra, medico:verMedico, coche:verCoche,
-    fijos:verFijos, viajes:verViajes, otros:verOtros})[ui.vista](main);
+    fijos:verFijos, otros:verOtros})[ui.vista](main);
 }
 
 function cabecera(titulo, sub, derecha){
@@ -515,7 +509,6 @@ function verResumen(main){
     {k:"fijos",  nombre:"Gastos fijos",ir:"fijos"},
     {k:"coche",  nombre:"Coche",       ir:"coche"},
     {k:"medico", nombre:"Médico",      ir:"medico"},
-    {k:"viajes", nombre:"Viajes",      ir:"viajes"},
     {k:"otros",  nombre:"Otros",       ir:"otros"}
   ];
   var mayor=Math.max.apply(null, apartados.map(function(a){ return g[a.k]; }).concat([1]));
@@ -589,11 +582,6 @@ function verResumen(main){
   });
   (libro.otros||[]).forEach(function(o){
     movs.push({fecha:o.fecha, que:o.tipo||"Otros", detalle:o.concepto, importe:+o.importe||0});
-  });
-  (libro.viajes||[]).forEach(function(v){
-    (v.gastos||[]).forEach(function(x){
-      movs.push({fecha:x.fecha, que:"Viaje", detalle:v.nombre+" · "+(x.concepto||x.tipo), importe:+x.importe||0});
-    });
   });
   movs.sort(function(a,b){ return (b.fecha||"").localeCompare(a.fecha||""); });
   movs=movs.slice(0,12);
@@ -3422,160 +3410,6 @@ function repetirFijo(id){
   ui.mes=nueva.slice(0,7);
   pintar();
   avisar("Copiado a "+mesLargo(ui.mes)+". Ajusta el importe si cambió.");
-}
-
-/* ══════════════════════════════════════════════════════════════
-   VIAJES
-   ══════════════════════════════════════════════════════════════ */
-var TIPOS_VIAJE=["Hotel","Restaurante","Comida","Bebida","Gasolina","Entradas","Transporte","Otro"];
-
-function verViajes(main){
-  var viajes=(libro.viajes||[]).slice().sort(function(a,b){ return (b.desde||"").localeCompare(a.desde||""); });
-
-  if(ui.viaje){
-    var v=viajes.filter(function(x){ return x.id===ui.viaje; })[0];
-    if(v){ verUnViaje(main, v); return; }
-    ui.viaje=null;
-  }
-
-  main.innerHTML=
-    cabecera("Viajes",
-      "Cada viaje con lo suyo: hoteles, restaurantes, gasolina… Así sabes lo que costó de verdad.",
-      '<button class="btn fuerte" id="nuevoViaje">Nuevo viaje</button>')+
-    '<div class="tarjeta"><div class="tabla-caja" id="tablaViajes"></div></div>';
-
-  document.getElementById("nuevoViaje").addEventListener("click", function(){ editarViaje(null); });
-
-  var caja=document.getElementById("tablaViajes");
-  if(!viajes.length){
-    caja.innerHTML='<div class="vacio"><strong>Ningún viaje anotado</strong>'+
-      'Crea uno y ve metiendo los gastos según pasen.</div>';
-    return;
-  }
-  caja.innerHTML='<table><thead><tr><th>Viaje</th><th>Fechas</th><th class="num">Gastos</th>'+
-    '<th class="num">Total</th><th></th></tr></thead><tbody>'+
-    viajes.map(function(v){
-      return '<tr><td><strong>'+esc(v.nombre)+"</strong></td>"+
-        "<td>"+(v.desde?esc(dmy(v.desde)):"—")+(v.hasta?" – "+esc(dmy(v.hasta)):"")+"</td>"+
-        '<td class="num">'+((v.gastos||[]).length)+"</td>"+
-        '<td class="num"><strong>'+eur(totalViaje(v))+"</strong></td>"+
-        '<td><div class="acciones-fila">'+
-          '<button class="btn sm" data-vabrir="'+v.id+'">Abrir</button>'+
-          '<button class="btn suave sm" data-vedit="'+v.id+'">Editar</button>'+
-          '<button class="btn suave sm malo" data-vdel="'+v.id+'">Borrar</button></div></td></tr>';
-    }).join("")+"</tbody></table>";
-
-  caja.querySelectorAll("[data-vabrir]").forEach(function(b){
-    b.addEventListener("click", function(){ ui.viaje=b.getAttribute("data-vabrir"); pintar(); });
-  });
-  caja.querySelectorAll("[data-vedit]").forEach(function(b){
-    b.addEventListener("click", function(){ editarViaje(b.getAttribute("data-vedit")); });
-  });
-  caja.querySelectorAll("[data-vdel]").forEach(function(b){
-    b.addEventListener("click", function(){
-      var id=b.getAttribute("data-vdel");
-      var v=(libro.viajes||[]).filter(function(x){return x.id===id;})[0];
-      confirmar("Borrar viaje",
-        '<p style="margin:0">Se borra <strong>'+esc(v?v.nombre:"")+'</strong> con sus '+
-        ((v&&v.gastos||[]).length)+' gastos.</p>', function(){
-        libro.viajes=(libro.viajes||[]).filter(function(x){ return x.id!==id; });
-        guardar(); pintar(); avisar("Viaje borrado");
-      }, {aceptar:"Borrar", malo:true});
-    });
-  });
-}
-
-function verUnViaje(main, v){
-  var gastos=(v.gastos||[]).slice().sort(function(a,b){ return (b.fecha||"").localeCompare(a.fecha||""); });
-  var porTipo={};
-  gastos.forEach(function(g){ porTipo[g.tipo]=r2((porTipo[g.tipo]||0)+(+g.importe||0)); });
-  var total=totalViaje(v);
-
-  main.innerHTML=
-    cabecera(v.nombre,
-      (v.desde?dmy(v.desde):"")+(v.hasta?" – "+dmy(v.hasta):"")+" · "+eur(total)+" en total",
-      '<button class="btn" id="volverViajes">← Todos los viajes</button>'+
-      '<button class="btn fuerte" id="nuevoGasto">Añadir gasto</button>')+
-    '<div class="cifras">'+
-      Object.keys(porTipo).sort(function(a,b){ return porTipo[b]-porTipo[a]; }).slice(0,5).map(function(t){
-        return '<div class="cifra"><div class="k">'+esc(t)+'</div><div class="v">'+eur(porTipo[t])+'</div>'+
-               '<div class="n">'+num(total>0?porTipo[t]/total*100:0,0)+'% del viaje</div></div>';
-      }).join("")+
-    '</div>'+
-    '<div class="tarjeta"><div class="tarjeta-cab"><h2>Gastos del viaje</h2></div>'+
-      '<div class="tabla-caja" id="tablaGastosViaje"></div></div>';
-
-  document.getElementById("volverViajes").addEventListener("click", function(){ ui.viaje=null; pintar(); });
-  document.getElementById("nuevoGasto").addEventListener("click", function(){ editarGastoViaje(v, null); });
-
-  var caja=document.getElementById("tablaGastosViaje");
-  caja.innerHTML = !gastos.length
-    ? '<div class="vacio">Aún no hay gastos en este viaje.</div>'
-    : '<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th class="num">Importe</th><th></th></tr></thead><tbody>'+
-      gastos.map(function(g){
-        return "<tr><td>"+esc(dmy(g.fecha))+"</td><td>"+esc(g.tipo)+"</td>"+
-          "<td>"+esc(g.concepto||"—")+'</td><td class="num">'+eur(g.importe)+"</td>"+
-          '<td><div class="acciones-fila">'+
-            '<button class="btn suave sm" data-ged="'+g.id+'">Editar</button>'+
-            '<button class="btn suave sm malo" data-gde="'+g.id+'">Borrar</button></div></td></tr>';
-      }).join("")+
-      '</tbody><tfoot><tr><td colspan="3">'+gastos.length+' gastos</td>'+
-      '<td class="num">'+eur(total)+'</td><td></td></tr></tfoot></table>';
-
-  caja.querySelectorAll("[data-ged]").forEach(function(b){
-    b.addEventListener("click", function(){ editarGastoViaje(v, b.getAttribute("data-ged")); });
-  });
-  caja.querySelectorAll("[data-gde]").forEach(function(b){
-    b.addEventListener("click", function(){
-      v.gastos=(v.gastos||[]).filter(function(g){ return g.id!==b.getAttribute("data-gde"); });
-      guardar(); pintar(); avisar("Gasto borrado");
-    });
-  });
-}
-
-function editarViaje(id){
-  var v=id?(libro.viajes||[]).filter(function(x){return x.id===id;})[0]
-          :{id:uid(), nombre:"", desde:hoyISO(), hasta:"", gastos:[]};
-  abrirVentana(id?"Editar viaje":"Nuevo viaje",
-    '<div class="rejilla">'+
-      '<div class="campo" style="grid-column:1/-1"><label class="lbl" for="vj_nom">Nombre</label>'+
-        '<input id="vj_nom" value="'+esc(v.nombre)+'" placeholder="Portugal, julio"></div>'+
-      '<div class="campo"><label class="lbl" for="vj_des">Desde</label>'+
-        '<input type="date" id="vj_des" value="'+esc(v.desde||"")+'"></div>'+
-      '<div class="campo"><label class="lbl" for="vj_has">Hasta</label>'+
-        '<input type="date" id="vj_has" value="'+esc(v.hasta||"")+'"></div>'+
-    '</div>',
-    function(){
-      var n=valor("vj_nom");
-      if(!n){ avisar("Ponle nombre al viaje.", true); return true; }
-      v.nombre=n; v.desde=valor("vj_des"); v.hasta=valor("vj_has");
-      if(!id){ libro.viajes.push(v); ui.viaje=v.id; }
-      guardar(); pintar(); avisar(id?"Viaje actualizado":"Viaje creado");
-    });
-}
-
-function editarGastoViaje(v, id){
-  var g=id?(v.gastos||[]).filter(function(x){return x.id===id;})[0]
-          :{id:uid(), fecha:v.desde||hoyISO(), tipo:"Restaurante", concepto:"", importe:0};
-  abrirVentana(id?"Editar gasto":"Añadir gasto al viaje",
-    '<div class="rejilla">'+
-      '<div class="campo"><label class="lbl" for="gv_fecha">Fecha</label>'+
-        '<input type="date" id="gv_fecha" value="'+esc(g.fecha)+'"></div>'+
-      '<div class="campo"><label class="lbl" for="gv_tipo">Tipo</label><select id="gv_tipo">'+
-        TIPOS_VIAJE.map(function(t){ return '<option'+(g.tipo===t?" selected":"")+">"+esc(t)+"</option>"; }).join("")+
-      '</select></div>'+
-      '<div class="campo" style="grid-column:1/-1"><label class="lbl" for="gv_conc">Concepto</label>'+
-        '<input id="gv_conc" value="'+esc(g.concepto||"")+'" placeholder="Hotel Mar, cena del sábado…"></div>'+
-      '<div class="campo"><label class="lbl" for="gv_imp">Importe (€)</label>'+
-        '<input type="number" id="gv_imp" min="0" step="0.01" value="'+esc(g.importe||"")+'"></div>'+
-    '</div>',
-    function(){
-      g.fecha=valor("gv_fecha")||hoyISO();
-      g.tipo=valor("gv_tipo"); g.concepto=valor("gv_conc"); g.importe=numero("gv_imp");
-      if(!g.importe){ avisar("Pon el importe.", true); return true; }
-      if(!id){ v.gastos=v.gastos||[]; v.gastos.push(g); }
-      guardar(); pintar(); avisar(id?"Gasto actualizado":"Gasto añadido");
-    });
 }
 
 /* ══════════════════════════════════════════════════════════════
