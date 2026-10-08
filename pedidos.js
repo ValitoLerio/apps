@@ -894,8 +894,15 @@ function pintarResultado(){
 function fichaProducto(g){
   var enPedido=g.ofertas.some(function(o){ return hayPedido(delPedido(o.id)); });
   var total=r2(g.ofertas.reduce(function(s,o){ return s+importeLinea(o); },0));
-  return '<article class="prod'+(enPedido?" pedido":"")+'">'+
-    '<div class="prod-cab"><h3>'+esc(g.nombre)+'</h3>'+
+  /* El repaso es del producto, no de cada proveedor: si está marcado en
+     una de sus ofertas, lo está la ficha entera. */
+  var enRepaso=g.ofertas.some(esDiario);
+  return '<article class="prod'+(enPedido?" pedido":"")+(enRepaso?" repaso":"")+'">'+
+    '<div class="prod-cab">'+
+      '<button class="estrella'+(enRepaso?" on":"")+'" data-repaso="'+esc(g.llave)+'" '+
+        'title="'+(enRepaso?"Quitar del repaso":"Poner en el repaso")+'" '+
+        'aria-pressed="'+enRepaso+'">'+(enRepaso?"★":"☆")+'</button>'+
+      '<h3>'+esc(g.nombre)+'</h3>'+
       '<span class="sec">'+esc((g.seccion||"").toLowerCase())+'</span></div>'+
     g.ofertas.map(function(o){ return lineaOferta(o, g); }).join("")+
     (total>0
@@ -974,6 +981,31 @@ function selectorUnidad(id, campo, etiquetaCaja){
    número, el color de la línea y la barra de abajo— porque con 573
    fichas un repintado se nota y, peor, se lleva el foco del buscador. */
 function engancharFichas(caja){
+  /* La estrella pone o quita la ficha entera del repaso: todos los
+     proveedores de ese producto a la vez, que el repaso va de qué miras,
+     no de a quién se lo compras. */
+  caja.querySelectorAll("[data-repaso]").forEach(function(b){
+    b.addEventListener("click", function(ev){
+      ev.preventDefault(); ev.stopPropagation();
+      var llave=b.getAttribute("data-repaso");
+      var del=libro.productos.filter(function(p){ return llaveDe(p)===llave; });
+      if(!del.length) return;
+      var poner=!del.some(esDiario);
+      del.forEach(function(p){ p.diario=poner; });
+      guardar();
+      /* En «El repaso» la ficha deja de pertenecer a la lista, así que
+         hay que repintarla entera; en Precios basta con la estrella. */
+      if(ui.vista==="cadadia"){ pintar(); }
+      else {
+        b.classList.toggle("on", poner);
+        b.textContent = poner ? "★" : "☆";
+        b.setAttribute("aria-pressed", poner);
+        b.title = poner ? "Quitar del repaso" : "Poner en el repaso";
+        b.closest(".prod").classList.toggle("repaso", poner);
+      }
+      avisar(poner ? "Puesto en el repaso" : "Quitado del repaso");
+    });
+  });
   caja.querySelectorAll("[data-cnt]").forEach(function(c){
     var partes=c.getAttribute("data-cnt").split("|");
     var id=partes[0], campo=partes[1];

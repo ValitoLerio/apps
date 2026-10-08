@@ -114,7 +114,15 @@ main{padding:22px 24px 120px;max-width:1180px;min-width:0}
 .prod.pedido{border-color:var(--acento);box-shadow:0 0 0 1px var(--acento),var(--sombra)}
 .prod-cab{padding:9px 13px 7px;border-bottom:1px solid var(--linea-suave);
           display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
-.prod-cab h3{font-size:15.5px;line-height:1.2}
+.prod-cab h3{font-size:15.5px;line-height:1.2;flex:1}
+
+/* La estrella del repaso. Apagada casi no se ve, para no ensuciar la
+   rejilla; encendida es lo primero que canta en la ficha. */
+.prod-cab .estrella{background:none;border:0;padding:0 2px;margin:-1px 0 0;cursor:pointer;
+                    font-size:16px;line-height:1;color:var(--linea);transition:color .13s}
+.prod-cab .estrella:hover{color:var(--acento,#b8860b)}
+.prod-cab .estrella.on{color:#e8a020}
+.prod.repaso{box-shadow:inset 3px 0 0 #e8a020}
 .prod-cab .sec{font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;
                color:var(--muted);white-space:nowrap;padding-top:4px}
 
