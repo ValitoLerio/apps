@@ -379,6 +379,82 @@ function lineasPedido(){
 }
 
 /* ══════════════════════════════════════════════════════════════
+   VERDURAS Y CARNE — lo que se pide casi a diario
+   ══════════════════════════════════════════════════════════════
+   El fresco no se busca, se repasa: se mira la cámara y se va
+   apuntando. Por eso tiene pantalla propia, con las dos secciones a la
+   vista y sin tener que escribir nada en el buscador. El resto de la
+   lista sigue en Precios, que ahí sí se busca.
+   ══════════════════════════════════════════════════════════════ */
+var SECCIONES_FRESCO=["VERDURAS","CARNE"];
+function esCadaDia(p){
+  return SECCIONES_FRESCO.indexOf(String((p&&p.seccion)||"").toUpperCase())>=0;
+}
+
+function verCadaDia(main){
+  var hay=libro.productos.filter(esCadaDia).length;
+  var cuenta={};
+  SECCIONES_FRESCO.forEach(function(n){
+    cuenta[n]=libro.productos.filter(function(p){
+      return String(p.seccion||"").toUpperCase()===n; }).length;
+  });
+
+  main.innerHTML=
+    cabecera("Verduras y carne",
+      hay ? "Lo de todos los días, a la vista. Repasa la cámara y ve apuntando."
+          : "Todavía no hay nada en Verduras ni en Carne.",
+      '<button class="btn" id="cd_nuevo">+ Producto</button>')+
+
+    '<div class="buscar">'+
+      '<div class="buscar-caja">'+
+        '<span class="lupa">⌕</span>'+
+        '<input id="q" type="search" autocomplete="off" spellcheck="false" '+
+        'placeholder="Afina dentro de verduras y carne…" value="'+esc(ui.q)+'">'+
+        '<button class="limpiar'+(ui.q?" hay":"")+'" id="q_limpiar" title="Limpiar">✕</button>'+
+      '</div>'+
+      '<div class="chips">'+
+        '<button class="chip" data-sec="" aria-pressed="'+(!ui.seccion)+'">Las dos'+
+          '<span class="n">'+hay+'</span></button>'+
+        SECCIONES_FRESCO.map(function(n){
+          return '<button class="chip" data-sec="'+esc(n)+'" aria-pressed="'+
+                 (ui.seccion===n)+'">'+esc(n.charAt(0)+n.slice(1).toLowerCase())+
+                 '<span class="n">'+cuenta[n]+'</span></button>';
+        }).join("")+
+        '<button class="chip" id="ch_pedido" aria-pressed="'+ui.soloPedido+'">En el pedido'+
+          '<span class="n">'+lineasPedido()+'</span></button>'+
+      '</div>'+
+    '</div>'+
+    '<div id="resultado"></div>';
+
+  var campo=document.getElementById("q");
+  campo.addEventListener("input", function(){
+    ui.q=this.value;
+    document.getElementById("q_limpiar").classList.toggle("hay", !!this.value);
+    pintarResultado();
+  });
+  campo.addEventListener("keydown", function(e){
+    if(e.key==="Escape" && this.value){ e.preventDefault(); this.value=""; ui.q="";
+      document.getElementById("q_limpiar").classList.remove("hay"); pintarResultado(); }
+  });
+  document.getElementById("q_limpiar").addEventListener("click", function(){
+    ui.q=""; campo.value=""; this.classList.remove("hay"); pintarResultado(); campo.focus();
+  });
+  main.querySelectorAll("[data-sec]").forEach(function(b){
+    b.addEventListener("click", function(){
+      ui.seccion=b.getAttribute("data-sec"); ui.soloPedido=false; pintar();
+    });
+  });
+  document.getElementById("ch_pedido").addEventListener("click", function(){
+    ui.soloPedido=!ui.soloPedido; if(ui.soloPedido) ui.seccion=""; pintar();
+  });
+  var bn=document.getElementById("cd_nuevo");
+  if(bn) bn.addEventListener("click", function(){ editarProducto(null); });
+
+  pintarResultado();
+  if(!("ontouchstart" in window)) campo.focus();
+}
+
+/* ══════════════════════════════════════════════════════════════
    REVISAR — lo que impide que un pedido salga bien
    ══════════════════════════════════════════════════════════════
    No son manías de orden: cada cosa de esta lista rompe algo de
@@ -501,7 +577,9 @@ var APARTADOS=[
   {id:"proveedores", nombre:"Proveedores"},
   {id:"revisar",     nombre:"Revisar", cuenta:function(){ return avisos().total; }},
   {id:"ajustes",     nombre:"Ajustes"},
-  {id:"telefonos",   nombre:"Teléfonos"}
+  {id:"telefonos",   nombre:"Teléfonos"},
+  {id:"cadadia",     nombre:"Verduras y carne",
+   cuenta:function(){ return libro.productos.filter(esCadaDia).length; }}
 ];
 function pintar(){
   var root=document.getElementById("root");
@@ -523,13 +601,21 @@ function pintar(){
     '<main id="main"></main>';
 
   root.querySelectorAll("[data-ir]").forEach(function(b){
-    b.addEventListener("click", function(){ ui.vista=b.getAttribute("data-ir"); pintar(); });
+    b.addEventListener("click", function(){
+      var destino=b.getAttribute("data-ir");
+      /* Precios y «Verduras y carne» usan el mismo buscador y los mismos
+         chips. Al saltar de una a la otra se limpian: si no, entras en
+         Precios y sólo ves carne porque era lo que tenías filtrado. */
+      var fresco=function(v){ return v==="cadadia"; };
+      if(fresco(destino)!==fresco(ui.vista)){ ui.q=""; ui.seccion=""; ui.soloPedido=false; }
+      ui.vista=destino; pintar();
+    });
   });
   if(window.Sync && Sync.mostrarEstadoEn) Sync.mostrarEstadoEn(document.getElementById("sync-estado"));
 
   ({precios:verPrecios, pedido:verPedido, proveedores:verProveedores,
     proveedor:verProveedor, revisar:verRevisar, ajustes:verAjustes,
-    telefonos:verTelefonos})[ui.vista](document.getElementById("main"));
+    telefonos:verTelefonos, cadadia:verCadaDia})[ui.vista](document.getElementById("main"));
 
   pintarBarra();
 }
@@ -581,7 +667,9 @@ function pintarBarra(){
 function filtrados(){
   var q=norm(ui.q);
   var trozos=q?q.split(" "):[];
+  var soloFresco = (ui.vista==="cadadia");
   return libro.productos.filter(function(p){
+    if(soloFresco && !esCadaDia(p)) return false;
     if(ui.seccion==="__diario"){ if(!esDiario(p)) return false; }
     else if(ui.seccion && p.seccion!==ui.seccion) return false;
     if(ui.soloPedido && !hayPedido(delPedido(p.id))) return false;
