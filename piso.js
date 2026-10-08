@@ -412,6 +412,7 @@ function calcular(){
   const mesesAnteriores = [...meses].filter(m => m.mes < mes && m.mes >= desde);
   const numMeses = mesesAnteriores.length;
 
+  if(saldoVisible()){
   lines.push('*─────────────────────────────*');
   lines.push('📊 *ESTADO CUENTA CONSUMO*');
   lines.push('*─────────────────────────────*');
@@ -457,6 +458,7 @@ function calcular(){
   }
   lines.push('*─────────────────────────────*');
   lines.push('');
+  }
   lines.push('_' + (cfg.cierre || 'Muchas gracias 🙏') + '_');
 
   document.getElementById('preview').textContent = lines.join('\n');
@@ -628,6 +630,7 @@ function textoReciboCompleto(m){
   const mesesAntRec=[...meses].filter(r=>r.mes<m.mes && r.mes>=desdeRec);
   const numMesesRec=mesesAntRec.length;
 
+  if(saldoVisible()){
   lines.push('*─────────────────────────────*');
   lines.push('📊 *ESTADO CUENTA CONSUMO*');
   lines.push('*─────────────────────────────*');
@@ -672,6 +675,7 @@ function textoReciboCompleto(m){
   }
   lines.push('*─────────────────────────────*');
   lines.push('');
+  }
   lines.push('_' + (cfg.cierre||'Muchas gracias 🙏') + '_');
   return lines.join('\n');
 }
@@ -1094,6 +1098,9 @@ function loadCfg(){
   document.getElementById('c-agua').value       = cfg.agua||'';
   document.getElementById('c-elec').value       = cfg.elec||'';
   document.getElementById('c-cierre').value     = cfg.cierre||'Muchas gracias 🙏';
+  /* Por defecto se enseña: es como ha ido siempre, y quien no toque
+     esto no se encuentra el recibo cambiado de un día para otro. */
+  document.getElementById('c-verSaldo').checked = (cfg.verSaldo!==false);
   document.getElementById('c-invCompra').value = cfg.invCompra||'';
   document.getElementById('c-invNotario').value = cfg.invNotario||'';
   document.getElementById('c-invImpuesto').value = cfg.invImpuesto||'';
@@ -1115,6 +1122,7 @@ function guardarCfg(){
     agua:       parseFloat(document.getElementById('c-agua').value)||0,
     elec:       parseFloat(document.getElementById('c-elec').value)||0,
     cierre:     document.getElementById('c-cierre').value||'Muchas gracias 🙏',
+    verSaldo:   document.getElementById('c-verSaldo').checked,
     invCompra: parseFloat(document.getElementById('c-invCompra').value)||0,
     invNotario: parseFloat(document.getElementById('c-invNotario').value)||0,
     invImpuesto: parseFloat(document.getElementById('c-invImpuesto').value)||0,
@@ -1282,6 +1290,10 @@ function dibujarFactura(datos, lienzo){
   y+=70;
 
   // ── BLOQUE 2: CUENTA CONSUMO
+  /* Si no se le enseña el saldo, la factura se queda en el cargo del
+     mes. El alto del lienzo se reajusta solo al final, así que saltarse
+     este bloque entero no deja hueco en blanco. */
+  if(saldoVisible()){
   y+=4; y=seccion('ESTADO CUENTA DE CONSUMO',y);
 
   // Info cuota
@@ -1348,6 +1360,7 @@ function dibujarFactura(datos, lienzo){
   // Línea decorativa derecha
   c.fillStyle='rgba(255,255,255,.15)'; c.fillRect(R-90,y+10,2,50);
   y+=84;
+  }
 
   // ── PIE
   y+=4; ln(y,BD); y+=16;
@@ -1469,10 +1482,12 @@ function textoWhatsApp(m){
            'Alquiler: '+fmt(d.alq)+' €',
            'Fondo gastos consumo: '+fmt(d.cuota)+' €',
            '*Total: '+fmt(d.alq+d.cuota)+' €*'];
-  if(d.totalConsumo>0) l.push('Gastos del mes: '+fmt(d.totalConsumo)+' €');
-  l.push(d.saldoFinal>0.004 ? 'Saldo a tu favor: '+fmt(d.saldoFinal)+' €'
-       : d.saldoFinal<-0.004 ? 'Saldo a favor del propietario: '+fmt(Math.abs(d.saldoFinal))+' €'
-       : 'Cuenta de consumo al día');
+  if(saldoVisible()){
+    if(d.totalConsumo>0) l.push('Gastos del mes: '+fmt(d.totalConsumo)+' €');
+    l.push(d.saldoFinal>0.004 ? 'Saldo a tu favor: '+fmt(d.saldoFinal)+' €'
+         : d.saldoFinal<-0.004 ? 'Saldo a favor del propietario: '+fmt(Math.abs(d.saldoFinal))+' €'
+         : 'Cuenta de consumo al día');
+  }
   l.push('', 'Te adjunto la factura.');
   return l.join('\n');
 }
@@ -1629,6 +1644,11 @@ function getDatosFactura(){
 }
 
 // ── UTILS ─────────────────────────────────────────────────────────────────────
+/* El saldo acumulado es cosa de las cuentas de casa; si el inquilino lo
+   ve o no lo decide él en Ajustes. Lo que se oculta es sólo lo que se le
+   manda: aquí dentro el saldo se sigue llevando igual. */
+function saldoVisible(){ return cfg.verSaldo!==false; }
+
 function n(id){return parseFloat(document.getElementById(id).value)||0}
 function set(id,v){document.getElementById(id).value=v}
 function fmt(x){return(Math.round((x||0)*100)/100).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}

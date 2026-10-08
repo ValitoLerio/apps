@@ -72,7 +72,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
 @media(max-width:640px){header .logo{font-size:16px}}
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="comun.css?v=202608281120">
+<link rel="stylesheet" href="comun.css?v=202610081708">
 </head>
 <body>
 
@@ -411,6 +411,18 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
       <input type="text" id="c-cierre" placeholder="Muchas gracias 🙏">
     </div>
 
+    <div class="form-group" style="margin-bottom:1.5rem">
+      <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-weight:400">
+        <input type="checkbox" id="c-verSaldo" checked style="width:auto;margin-top:3px">
+        <span><strong>Enseñarle el saldo al inquilino</strong>
+        <span style="display:block;font-size:12.5px;color:var(--muted);margin-top:3px">
+          Es el bloque «Estado cuenta consumo» del recibo: lo que lleva ingresado, los gastos
+          del mes y el saldo que queda a su favor o al tuyo. Quitándolo, el recibo enseña sólo
+          el alquiler y el fondo de gastos. Tus cuentas no cambian: el saldo se sigue llevando
+          igual aquí dentro.</span></span>
+      </label>
+    </div>
+
     <div class="card-title" style="font-size:15px;margin-bottom:.5rem">La inversión</div>
     <div style="background:var(--info-bg);border:1px solid #b5d4f4;border-radius:8px;padding:11px;font-size:13px;color:var(--info);margin-bottom:1rem">
       Lo que te costó el piso. Con esto se calcula cuánto llevas recuperado en la pestaña Inversión.
@@ -465,7 +477,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
 </div>
 
 
-<script src="sync.js?v=202609231026"></script>
+<script src="sync.js?v=202610081708"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -473,7 +485,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
 
   Sync.iniciar('piso').then(function(){
     var s = document.createElement('script');
-    s.src = 'piso.js?v=202609231026';
+    s.src = 'piso.js?v=202610081708';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
