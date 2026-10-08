@@ -399,6 +399,11 @@ function esCadaDia(p){ return esFresco(p) || esDiario(p); }
 function verCadaDia(main){
   var hay=libro.productos.filter(esCadaDia).length;
   var marcados=libro.productos.filter(esDiario).length;
+  var cuenta={};
+  SECCIONES_FRESCO.forEach(function(n){
+    cuenta[n]=libro.productos.filter(function(p){
+      return String(p.seccion||"").toUpperCase()===n; }).length;
+  });
 
   main.innerHTML=
     cabecera("Verduras y carne",
@@ -417,11 +422,15 @@ function verCadaDia(main){
           '</div>'+
           /* Sin chapas por sección: cada ficha ya lleva la suya escrita a
              la derecha, y la lista es corta por definición. */
-          /* Sin chapas por sección: cada ficha ya lleva la suya escrita a
-             la derecha. La del repaso sí, que es la que no se adivina. */
           '<div class="chips">'+
             '<button class="chip" data-sec="" aria-pressed="'+(!ui.seccion)+'">Todo'+
               '<span class="n">'+hay+'</span></button>'+
+            SECCIONES_FRESCO.map(function(n){
+              if(!cuenta[n]) return "";
+              return '<button class="chip" data-sec="'+esc(n)+'" aria-pressed="'+
+                     (ui.seccion===n)+'">'+esc(n.charAt(0)+n.slice(1).toLowerCase())+
+                     '<span class="n">'+cuenta[n]+'</span></button>';
+            }).join("")+
             (marcados
               ? '<button class="chip" data-sec="__diario" aria-pressed="'+(ui.seccion==="__diario")+'">'+
                 '★ Repaso<span class="n">'+marcados+'</span></button>'
