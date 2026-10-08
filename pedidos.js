@@ -382,34 +382,36 @@ function lineasPedido(){
    VERDURAS Y CARNE — lo que se pide casi a diario
    ══════════════════════════════════════════════════════════════
    El fresco no se busca, se repasa: se mira la cámara y se va
-   apuntando. Por eso tiene pantalla propia, con las dos secciones a la
-   vista y sin tener que escribir nada en el buscador. El resto de la
-   lista sigue en Precios, que ahí sí se busca.
-   ══════════════════════════════════════════════════════════════ */
-/* La verdura y la carne están siempre: es lo que se mira en la cámara
-   todos los días. Dentro va además el repaso —lo que él marca con la
-   estrella—, que es para lo que no es ni verdura ni carne y se acaba
-   sin avisar: el hielo, el papel de horno, las servilletas. */
-var SECCIONES_FRESCO=["VERDURAS","CARNE"];
-function esFresco(p){
-  return SECCIONES_FRESCO.indexOf(String((p&&p.seccion)||"").toUpperCase())>=0;
-}
-function esCadaDia(p){ return esFresco(p) || esDiario(p); }
+   apuntando. Por eso tienen apartado propio y están los dos a la vista
+   sin escribir nada. El resto de la lista sigue en Precios, que ahí sí
+   se busca.
 
-function verCadaDia(main){
-  var hay=libro.productos.filter(esCadaDia).length;
+   Y dentro de cada uno va el repaso —lo que él marca con la estrella—,
+   que es para lo que no es ni verdura ni carne pero se acaba sin
+   avisar: el hielo, el papel de horno, las servilletas.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Verduras y Carne son dos apartados del menú, no uno con pestañas
+   dentro: se repasa la cámara de verdura, se apunta, y luego la de
+   carne. Mezclarlas obliga a ir saltando una de otra.
+
+   Las dos pantallas son la misma, cambiando qué sección enseñan y qué
+   nombre llevan. Dentro de cada una está el repaso —lo marcado con la
+   estrella—, que es lo que no es ni verdura ni carne y se acaba sin
+   avisar. */
+function verVerduras(main){ verFresco(main, "VERDURAS", "Verduras"); }
+function verCarne(main){    verFresco(main, "CARNE",    "Carne"); }
+
+function verFresco(main, seccion, titulo){
+  var dela=libro.productos.filter(function(p){
+    return String(p.seccion||"").toUpperCase()===seccion; }).length;
   var marcados=libro.productos.filter(esDiario).length;
-  var cuenta={};
-  SECCIONES_FRESCO.forEach(function(n){
-    cuenta[n]=libro.productos.filter(function(p){
-      return String(p.seccion||"").toUpperCase()===n; }).length;
-  });
+  var hay=dela+marcados;
 
   main.innerHTML=
-    cabecera("Verduras y carne",
-      hay ? "Lo de todos los días a la vista. Dentro va también el repaso: lo que marques "+
-            "con la estrella sale aquí aunque no sea ni verdura ni carne."
-          : "Todavía no hay nada en Verduras ni en Carne.",
+    cabecera(titulo,
+      dela ? "Lo de todos los días a la vista. Con «★ Repaso» ves lo que marcaste aparte."
+           : "Todavía no hay nada en "+esc(titulo)+".",
       '<button class="btn fuerte" id="cd_poner">+ Poner en el repaso</button>')+
 
     (hay
@@ -417,20 +419,12 @@ function verCadaDia(main){
           '<div class="buscar-caja">'+
             '<span class="lupa">⌕</span>'+
             '<input id="q" type="search" autocomplete="off" spellcheck="false" '+
-            'placeholder="Afina dentro de la lista…" value="'+esc(ui.q)+'">'+
+            'placeholder="Afina dentro de '+esc(titulo.toLowerCase())+'…" value="'+esc(ui.q)+'">'+
             '<button class="limpiar'+(ui.q?" hay":"")+'" id="q_limpiar" title="Limpiar">✕</button>'+
           '</div>'+
-          /* Sin chapas por sección: cada ficha ya lleva la suya escrita a
-             la derecha, y la lista es corta por definición. */
           '<div class="chips">'+
-            '<button class="chip" data-sec="" aria-pressed="'+(!ui.seccion)+'">Todo'+
-              '<span class="n">'+hay+'</span></button>'+
-            SECCIONES_FRESCO.map(function(n){
-              if(!cuenta[n]) return "";
-              return '<button class="chip" data-sec="'+esc(n)+'" aria-pressed="'+
-                     (ui.seccion===n)+'">'+esc(n.charAt(0)+n.slice(1).toLowerCase())+
-                     '<span class="n">'+cuenta[n]+'</span></button>';
-            }).join("")+
+            '<button class="chip" data-sec="" aria-pressed="'+(!ui.seccion)+'">'+esc(titulo)+
+              '<span class="n">'+dela+'</span></button>'+
             (marcados
               ? '<button class="chip" data-sec="__diario" aria-pressed="'+(ui.seccion==="__diario")+'">'+
                 '★ Repaso<span class="n">'+marcados+'</span></button>'
@@ -440,8 +434,7 @@ function verCadaDia(main){
           '</div>'+
         '</div>'
       : '<div class="tarjeta"><div class="vacio"><strong>Todavía no hay nada</strong>'+
-        '<div class="nota">No hay productos en Verduras ni en Carne. Con «Poner en el repaso» '+
-        'puedes traer aquí cualquier otro.</div></div></div>')+
+        '<div class="nota">No hay ningún producto en '+esc(titulo)+'.</div></div></div>')+
 
     '<div id="resultado"></div>';
 
@@ -695,8 +688,12 @@ var APARTADOS=[
   {id:"revisar",     nombre:"Revisar", cuenta:function(){ return avisos().total; }},
   {id:"ajustes",     nombre:"Ajustes"},
   {id:"telefonos",   nombre:"Teléfonos"},
-  {id:"cadadia",     nombre:"Verduras y carne",
-   cuenta:function(){ return libro.productos.filter(esCadaDia).length; }}
+  {id:"verduras",    nombre:"Verduras",
+   cuenta:function(){ return libro.productos.filter(function(p){
+     return String(p.seccion||"").toUpperCase()==="VERDURAS"; }).length; }},
+  {id:"carne",       nombre:"Carne",
+   cuenta:function(){ return libro.productos.filter(function(p){
+     return String(p.seccion||"").toUpperCase()==="CARNE"; }).length; }}
 ];
 /* El orden de los botones lo pone él: cada uno abre esto varias veces
    al día y lo primero no es lo mismo para todos. Lo que no esté en la
@@ -740,8 +737,10 @@ function pintar(){
       /* Precios y «Verduras y carne» usan el mismo buscador y los mismos
          chips. Al saltar de una a la otra se limpian: si no, entras en
          Precios y sólo ves carne porque era lo que tenías filtrado. */
-      var fresco=function(v){ return v==="cadadia"; };
-      if(fresco(destino)!==fresco(ui.vista)){ ui.q=""; ui.seccion=""; ui.soloPedido=false; }
+      /* Precios, Verduras y Carne comparten buscador y chapas: al saltar
+         de una a otra se limpian, que si no entras en Precios y sólo ves
+         carne porque era lo que tenías filtrado. */
+      if(destino!==ui.vista){ ui.q=""; ui.seccion=""; ui.soloPedido=false; }
       ui.vista=destino; pintar();
     });
   });
@@ -749,7 +748,8 @@ function pintar(){
 
   ({precios:verPrecios, pedido:verPedido, proveedores:verProveedores,
     proveedor:verProveedor, revisar:verRevisar, ajustes:verAjustes,
-    telefonos:verTelefonos, cadadia:verCadaDia})[ui.vista](document.getElementById("main"));
+    telefonos:verTelefonos, verduras:verVerduras,
+    carne:verCarne})[ui.vista](document.getElementById("main"));
 
   pintarBarra();
 }
@@ -801,10 +801,16 @@ function pintarBarra(){
 function filtrados(){
   var q=norm(ui.q);
   var trozos=q?q.split(" "):[];
-  var soloFresco = (ui.vista==="cadadia");
+  /* En Verduras y en Carne la pantalla ya acota la sección; la chapa
+     «★ Repaso» de dentro enseña lo marcado, que no tiene por qué ser de
+     esa sección. */
+  var fresco = {verduras:"VERDURAS", carne:"CARNE"}[ui.vista];
   return libro.productos.filter(function(p){
-    if(soloFresco && !esCadaDia(p)) return false;
-    if(ui.seccion==="__diario"){ if(!esDiario(p)) return false; }
+    if(fresco){
+      if(ui.seccion==="__diario"){ if(!esDiario(p)) return false; }
+      else if(String(p.seccion||"").toUpperCase()!==fresco) return false;
+    }
+    else if(ui.seccion==="__diario"){ if(!esDiario(p)) return false; }
     else if(ui.seccion && p.seccion!==ui.seccion) return false;
     if(ui.soloPedido && !hayPedido(delPedido(p.id))) return false;
     if(!trozos.length) return true;
