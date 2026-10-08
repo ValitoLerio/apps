@@ -398,10 +398,17 @@ function calcular(){
   lines.push('*─────────────────────────────*');
   lines.push('💰 *IMPORTE A PAGAR*');
   lines.push('*─────────────────────────────*');
-  lines.push('🏡 Alquiler mensual:       *' + fmt(alq) + ' €*');
-  lines.push('📦 Fondo gastos consumo:   *' + fmt(cuota) + ' €*');
-  lines.push('*─────────────────────────────*');
-  lines.push('✅ *TOTAL:   ' + fmt(alq + cuota) + ' €*');
+  if(saldoVisible()){
+    lines.push('🏡 Alquiler mensual:       *' + fmt(alq) + ' €*');
+    lines.push('📦 Fondo gastos consumo:   *' + fmt(cuota) + ' €*');
+    lines.push('*─────────────────────────────*');
+    lines.push('✅ *TOTAL:   ' + fmt(alq + cuota) + ' €*');
+  } else {
+    /* Sin saldo a la vista, el desglose sobra: lo que se le pide es una
+       cifra, alquiler y gastos juntos. */
+    lines.push('🏡 Alquiler, gastos incluidos:');
+    lines.push('✅ *' + fmt(alq + cuota) + ' €*');
+  }
   lines.push('');
 
   // BLOQUE 2 — CUENTA CONSUMO
@@ -593,7 +600,12 @@ function delMes(mes){
 }
 
 // ── MIS RECIBOS ───────────────────────────────────────────────────────────────
-function textoReciboCompleto(m){
+/* El mismo recibo, dos copias. La suya lleva el desglose entero y la
+   cuenta de consumo: es su archivo. La del inquilino puede ir reducida
+   a una cifra —alquiler y gastos juntos—, según el interruptor de
+   Ajustes. Antes había una sola y lo que veía uno veía el otro. */
+function textoReciboCompleto(m, paraMi){
+  var completo = paraMi || saldoVisible();
   const SEP='═══════════════════════════════════';
   const sep='───────────────────────────────────';
   const W=33;
@@ -613,10 +625,15 @@ function textoReciboCompleto(m){
   lines.push('*─────────────────────────────*');
   lines.push('💰 *IMPORTE A PAGAR*');
   lines.push('*─────────────────────────────*');
-  lines.push('🏡 Alquiler mensual:       *' + fmt(m.alq) + ' €*');
-  lines.push('📦 Fondo gastos consumo:   *' + fmt(cuota) + ' €*');
-  lines.push('*─────────────────────────────*');
-  lines.push('✅ *TOTAL:   ' + fmt(m.alq + cuota) + ' €*');
+  if(completo){
+    lines.push('🏡 Alquiler mensual:       *' + fmt(m.alq) + ' €*');
+    lines.push('📦 Fondo gastos consumo:   *' + fmt(cuota) + ' €*');
+    lines.push('*─────────────────────────────*');
+    lines.push('✅ *TOTAL:   ' + fmt(m.alq + cuota) + ' €*');
+  } else {
+    lines.push('🏡 Alquiler, gastos incluidos:');
+    lines.push('✅ *' + fmt(m.alq + cuota) + ' €*');
+  }
   lines.push('');
 
   // BLOQUE 2 — CUENTA CONSUMO
@@ -630,7 +647,7 @@ function textoReciboCompleto(m){
   const mesesAntRec=[...meses].filter(r=>r.mes<m.mes && r.mes>=desdeRec);
   const numMesesRec=mesesAntRec.length;
 
-  if(saldoVisible()){
+  if(completo){
   lines.push('*─────────────────────────────*');
   lines.push('📊 *ESTADO CUENTA CONSUMO*');
   lines.push('*─────────────────────────────*');
@@ -732,7 +749,7 @@ function editarRecibo(mes){
 
 function verRecibo(mes){
   const m=meses.find(r=>r.mes===mes);
-  document.getElementById('modal-texto').textContent=textoReciboCompleto(m);
+  document.getElementById('modal-texto').textContent=textoReciboCompleto(m, true);
   document.getElementById('modal-titulo').textContent='Recibo de '+fmtMes(mes);
   const wa=document.getElementById('modal-wa');
   if(wa) wa.onclick=function(){ whatsappRecibo(mes); };
@@ -1280,12 +1297,14 @@ function dibujarFactura(datos, lienzo){
 
   // ── BLOQUE 1: CARGO MENSUAL
   y=seccion('CARGO MENSUAL',y);
-  y=row('Alquiler mensual',fmt(datos.alq)+' €',y);
-  y=row('Fondo gastos consumo',fmt(datos.cuota)+' €',y);
-  ln(y); y+=12;
+  if(saldoVisible()){
+    y=row('Alquiler mensual',fmt(datos.alq)+' €',y);
+    y=row('Fondo gastos consumo',fmt(datos.cuota)+' €',y);
+    ln(y); y+=12;
+  }
   // Total grande
   box(L-4,y,CW+8,56,6,G);
-  t('TOTAL A PAGAR',L+12,y+20,GB,10,700);
+  t(saldoVisible()?'TOTAL A PAGAR':'ALQUILER · GASTOS INCLUIDOS',L+12,y+20,GB,10,700);
   t(fmt(datos.alq+datos.cuota)+' €',R-8,y+40,WH,26,700,'right');
   y+=70;
 
@@ -1478,10 +1497,13 @@ function soloNumero(bruto){
 
 function textoWhatsApp(m){
   const d=datosFacturaDeRecibo(m);
-  const l=['🏠 *Recibo de '+d.mes+'*',
-           'Alquiler: '+fmt(d.alq)+' €',
-           'Fondo gastos consumo: '+fmt(d.cuota)+' €',
-           '*Total: '+fmt(d.alq+d.cuota)+' €*'];
+  const l=saldoVisible()
+    ? ['🏠 *Recibo de '+d.mes+'*',
+       'Alquiler: '+fmt(d.alq)+' €',
+       'Fondo gastos consumo: '+fmt(d.cuota)+' €',
+       '*Total: '+fmt(d.alq+d.cuota)+' €*']
+    : ['🏠 *Recibo de '+d.mes+'*',
+       'Alquiler, gastos incluidos: *'+fmt(d.alq+d.cuota)+' €*'];
   if(saldoVisible()){
     if(d.totalConsumo>0) l.push('Gastos del mes: '+fmt(d.totalConsumo)+' €');
     l.push(d.saldoFinal>0.004 ? 'Saldo a tu favor: '+fmt(d.saldoFinal)+' €'
