@@ -379,12 +379,127 @@ function lineasPedido(){
 }
 
 /* ══════════════════════════════════════════════════════════════
+   REVISAR — lo que impide que un pedido salga bien
+   ══════════════════════════════════════════════════════════════
+   No son manías de orden: cada cosa de esta lista rompe algo de
+   verdad. Un proveedor sin teléfono no recibe el pedido. Un producto
+   sin proveedor no se le puede pedir a nadie. Un precio de hace dos
+   años hace que la chapa del más barato mienta.
+   ══════════════════════════════════════════════════════════════ */
+function diasDesde(f){
+  if(!f) return null;
+  var d=new Date(String(f).slice(0,10));
+  if(isNaN(d)) return null;
+  return Math.floor((Date.now()-d.getTime())/86400000);
+}
+function avisos(){
+  var provSinTel=[], sinProveedor=[], sinPrecio=[], viejos=[];
+  var tope=(+libro.ajustes.mesesViejo||24)*30;
+
+  Object.keys(libro.proveedores||{}).sort().forEach(function(n){
+    var f=libro.proveedores[n]||{};
+    if(!soloNumero(f.movil) && !soloNumero(f.telefono)) provSinTel.push(n);
+  });
+  (libro.productos||[]).forEach(function(p){
+    if(!(p.proveedor||"").trim()){ sinProveedor.push(p); return; }
+    if(!(+p.precio>0)){ sinPrecio.push(p); return; }
+    var d=diasDesde(p.fecha);
+    if(d===null || d>tope) viejos.push({p:p, dias:d});
+  });
+  viejos.sort(function(a,b){
+    if(a.dias===null) return -1;
+    if(b.dias===null) return 1;
+    return b.dias-a.dias;
+  });
+  return {
+    provSinTel:provSinTel, sinProveedor:sinProveedor,
+    sinPrecio:sinPrecio, viejos:viejos,
+    total: provSinTel.length+sinProveedor.length+sinPrecio.length+viejos.length
+  };
+}
+
+function verRevisar(main){
+  var a=avisos();
+  var meses=+libro.ajustes.mesesViejo||24;
+
+  function bloque(titulo, porque, cuantos, cuerpo){
+    if(!cuantos) return "";
+    return '<div class="tarjeta" style="margin-bottom:14px">'+
+      '<div class="tarjeta-cab"><h2>'+esc(titulo)+' <span class="cuenta">'+cuantos+'</span></h2></div>'+
+      '<p class="nota" style="margin:0 14px 10px">'+porque+'</p>'+
+      '<div class="tabla-caja">'+cuerpo+'</div></div>';
+  }
+  function filas(lista, pinta){
+    return '<table><tbody>'+lista.map(pinta).join("")+'</tbody></table>';
+  }
+
+  main.innerHTML=
+    cabecera("Revisar",
+      a.total ? "Lo que hay que tocar para que los pedidos salgan bien. De arriba abajo, de lo que más estorba a lo que menos."
+              : "Nada que revisar. Todos los proveedores tienen teléfono y los precios están al día.")+
+
+    (a.total ? "" : '<div class="tarjeta"><div class="vacio"><strong>Todo en orden</strong>'+
+      '<div class="nota">Ni un proveedor sin teléfono, ni un producto sin precio.</div></div></div>')+
+
+    bloque("Proveedores sin teléfono",
+      "A estos no se les puede mandar el pedido: no hay a dónde.",
+      a.provSinTel.length,
+      filas(a.provSinTel, function(n){
+        return '<tr><td><strong>'+esc(n)+'</strong></td>'+
+          '<td class="num"><button class="btn suave sm" data-ir-prov="'+esc(n)+'">Ponerle teléfono</button></td></tr>';
+      }))+
+
+    bloque("Productos sin proveedor",
+      "Nadie se los vende: si los apuntas en el pedido, no salen en ningún grupo.",
+      a.sinProveedor.length,
+      filas(a.sinProveedor, function(p){
+        return '<tr><td><strong>'+esc(p.nombre)+'</strong> <span class="nota">'+esc(p.seccion||"")+'</span></td>'+
+          '<td class="num"><button class="btn suave sm" data-ed="'+p.id+'">Asignar proveedor</button></td></tr>';
+      }))+
+
+    bloque("Productos sin precio",
+      "Entran en el pedido pero no suman: el total sale corto.",
+      a.sinPrecio.length,
+      filas(a.sinPrecio, function(p){
+        return '<tr><td><strong>'+esc(p.nombre)+'</strong> <span class="nota">'+esc(p.proveedor||"")+'</span></td>'+
+          '<td class="num"><button class="btn suave sm" data-ed="'+p.id+'">Poner precio</button></td></tr>';
+      }))+
+
+    bloque("Precios viejos",
+      "Más de "+meses+" meses sin tocar. La chapa del «más barato» los compara como si fueran de hoy. "+
+      "El plazo se cambia en Ajustes.",
+      a.viejos.length,
+      filas(a.viejos, function(v){
+        var cuando = v.dias===null ? "sin fecha"
+                   : v.dias>730 ? Math.floor(v.dias/365)+" años"
+                   : Math.floor(v.dias/30)+" meses";
+        return '<tr><td><strong>'+esc(v.p.nombre)+'</strong> <span class="nota">'+esc(v.p.proveedor||"")+'</span></td>'+
+          '<td class="num"><span class="nota">'+esc(cuando)+'</span> '+
+          '<button class="btn suave sm" data-ed="'+v.p.id+'">Actualizar</button></td></tr>';
+      }));
+
+  main.querySelectorAll("[data-ir-prov]").forEach(function(b){
+    b.addEventListener("click", function(){
+      ui.prov=b.getAttribute("data-ir-prov"); ui.vista="proveedor"; pintar(); window.scrollTo(0,0);
+    });
+  });
+  main.querySelectorAll("[data-ed]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var id=b.getAttribute("data-ed");
+      var p=(libro.productos||[]).filter(function(x){ return x.id===id; })[0];
+      if(p) editarProducto(p);
+    });
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
    ARMAZÓN
    ══════════════════════════════════════════════════════════════ */
 var APARTADOS=[
   {id:"precios",     nombre:"Precios"},
   {id:"pedido",      nombre:"El pedido", cuenta:function(){ return lineasPedido(); }},
   {id:"proveedores", nombre:"Proveedores"},
+  {id:"revisar",     nombre:"Revisar", cuenta:function(){ return avisos().total; }},
   {id:"ajustes",     nombre:"Ajustes"},
   {id:"telefonos",   nombre:"Teléfonos"}
 ];
@@ -413,7 +528,7 @@ function pintar(){
   if(window.Sync && Sync.mostrarEstadoEn) Sync.mostrarEstadoEn(document.getElementById("sync-estado"));
 
   ({precios:verPrecios, pedido:verPedido, proveedores:verProveedores,
-    proveedor:verProveedor, ajustes:verAjustes,
+    proveedor:verProveedor, revisar:verRevisar, ajustes:verAjustes,
     telefonos:verTelefonos})[ui.vista](document.getElementById("main"));
 
   pintarBarra();
