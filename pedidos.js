@@ -689,13 +689,30 @@ var APARTADOS=[
   {id:"cadadia",     nombre:"El repaso",
    cuenta:function(){ return libro.productos.filter(esCadaDia).length; }}
 ];
+/* El orden de los botones lo pone él: cada uno abre esto varias veces
+   al día y lo primero no es lo mismo para todos. Lo que no esté en la
+   lista guardada se queda al final y en su sitio de siempre, para que
+   un apartado nuevo aparezca sin tener que tocar nada. */
+function apartadosEnOrden(){
+  var guardado=libro.ajustes.ordenMenu;
+  if(!Array.isArray(guardado) || !guardado.length) return APARTADOS.slice();
+  var porId={};
+  APARTADOS.forEach(function(a){ porId[a.id]=a; });
+  var puestos=[];
+  guardado.forEach(function(id){
+    if(porId[id]){ puestos.push(porId[id]); delete porId[id]; }
+  });
+  APARTADOS.forEach(function(a){ if(porId[a.id]) puestos.push(a); });
+  return puestos;
+}
+
 function pintar(){
   var root=document.getElementById("root");
   root.innerHTML=
     '<nav class="rail">'+
       '<div class="marca"><span class="nom">Pedidos</span>'+
         '<span class="sub">'+esc(libro.ajustes.nombre||"Restaurante")+'</span></div>'+
-      APARTADOS.map(function(a){
+      apartadosEnOrden().map(function(a){
         var c=a.cuenta?a.cuenta():0;
         var puesto=(ui.vista===a.id) || (a.id==="proveedores" && ui.vista==="proveedor");
         return '<button class="nav" data-ir="'+a.id+'" aria-current="'+puesto+'">'+
@@ -2180,6 +2197,27 @@ function verAjustes(main){
     cabecera("Ajustes", "Cómo se llama la casa y cómo sale el pedido que se manda.")+
 
     '<div class="tarjeta" style="margin-bottom:16px">'+
+      '<div class="tarjeta-cab"><h2>Orden del menú</h2></div>'+
+      '<div class="tarjeta-cuerpo">'+
+        '<p class="nota" style="margin:0 0 12px">Sube lo que más uses. Se guarda en el '+
+        'repositorio, así que el orden que pongas aquí lo tienes también en el móvil.</p>'+
+        apartadosEnOrden().map(function(a,i,todos){
+          return '<div style="display:flex;align-items:center;gap:9px;padding:8px 2px;'+
+            'border-bottom:1px solid var(--linea)">'+
+            '<span class="nota" style="font-family:var(--mono);min-width:22px">'+(i+1)+'</span>'+
+            '<b style="flex:1">'+esc(a.nombre)+'</b>'+
+            '<button class="btn suave sm" data-sube="'+a.id+'"'+(i===0?" disabled":"")+
+              ' title="Subirlo">↑</button>'+
+            '<button class="btn suave sm" data-baja="'+a.id+'"'+(i===todos.length-1?" disabled":"")+
+              ' title="Bajarlo">↓</button>'+
+            '</div>';
+        }).join("")+
+        '<button class="btn suave sm" id="aj_orden_reset" style="margin-top:12px">'+
+        'Volver al orden de siempre</button>'+
+      '</div>'+
+    '</div>'+
+
+    '<div class="tarjeta" style="margin-bottom:16px">'+
       '<div class="tarjeta-cab"><h2>La casa</h2></div>'+
       '<div class="tarjeta-cuerpo">'+
         '<div class="rejilla">'+
@@ -2257,6 +2295,45 @@ function verAjustes(main){
     guardar(); pintar();
     avisar(vaAMi() ? "Ajustes guardados: el botón de tu móvil va primero" : "Ajustes guardados");
   });
+  /* Las flechas del menú guardan al momento: un orden a medias no tiene
+     sentido, y obligar a darle a Guardar después de mover una fila es
+     justo lo que a uno se le olvida. */
+  function moverApartado(id, paso){
+    var ids=apartadosEnOrden().map(function(a){ return a.id; });
+    var i=ids.indexOf(id), j=i+paso;
+    if(i<0 || j<0 || j>=ids.length) return;
+    ids.splice(j, 0, ids.splice(i, 1)[0]);
+    libro.ajustes.ordenMenu=ids;
+    /* Repintar borraría lo que estuviera escrito y sin guardar en los
+       campos de abajo. Se recoge antes y se devuelve después. */
+    var escrito={};
+    ["aj_nom","aj_meses","aj_movil"].forEach(function(k){
+      var el=document.getElementById(k); if(el) escrito[k]=el.value;
+    });
+    var marcas={};
+    ["aj_imp","aj_ami"].forEach(function(k){
+      var el=document.getElementById(k); if(el) marcas[k]=el.checked;
+    });
+    guardar(); pintar();
+    Object.keys(escrito).forEach(function(k){
+      var el=document.getElementById(k); if(el) el.value=escrito[k];
+    });
+    Object.keys(marcas).forEach(function(k){
+      var el=document.getElementById(k); if(el) el.checked=marcas[k];
+    });
+  }
+  main.querySelectorAll("[data-sube]").forEach(function(b){
+    b.addEventListener("click", function(){ moverApartado(b.getAttribute("data-sube"), -1); });
+  });
+  main.querySelectorAll("[data-baja]").forEach(function(b){
+    b.addEventListener("click", function(){ moverApartado(b.getAttribute("data-baja"), 1); });
+  });
+  document.getElementById("aj_orden_reset").addEventListener("click", function(){
+    delete libro.ajustes.ordenMenu;
+    guardar(); pintar();
+    avisar("Menú en el orden de siempre");
+  });
+
   main.querySelectorAll("[data-editar2]").forEach(function(b){
     b.addEventListener("click", function(){ editarProducto(productoPorId(b.getAttribute("data-editar2"))); });
   });
