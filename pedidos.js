@@ -386,83 +386,180 @@ function lineasPedido(){
    vista y sin tener que escribir nada en el buscador. El resto de la
    lista sigue en Precios, que ahí sí se busca.
    ══════════════════════════════════════════════════════════════ */
-var SECCIONES_FRESCO=["VERDURAS","CARNE"];
-function esFresco(p){
-  return SECCIONES_FRESCO.indexOf(String((p&&p.seccion)||"").toUpperCase())>=0;
-}
-/* Entra la verdura y la carne por ser lo que son, y además cualquier
-   cosa que él haya marcado como de repasar: el papel de horno, el hielo,
-   lo que se acaba sin avisar y no se ve en la cámara. */
-function esCadaDia(p){ return esFresco(p) || esDiario(p); }
+/* La lista la hace él y nadie más. Se probó a meter de oficio toda la
+   verdura y toda la carne, y lo que salía era otra vez la lista entera:
+   28 verduras y 26 carnes que hay que ir saltando. Lo que sirve para
+   repasar es lo corto, así que aquí sólo está lo que él ha puesto. */
+function esCadaDia(p){ return esDiario(p); }
 
 function verCadaDia(main){
-  var hay=libro.productos.filter(esCadaDia).length;
-  var cuenta={};
-  SECCIONES_FRESCO.forEach(function(n){
-    cuenta[n]=libro.productos.filter(function(p){
-      return String(p.seccion||"").toUpperCase()===n; }).length;
+  var puestos=libro.productos.filter(esCadaDia);
+  var hay=puestos.length;
+  var secs={};
+  puestos.forEach(function(p){
+    var n=String(p.seccion||"Sin sección").toUpperCase();
+    secs[n]=(secs[n]||0)+1;
   });
-  var marcados=libro.productos.filter(function(p){ return esDiario(p) && !esFresco(p); }).length;
+  var nombres=Object.keys(secs).sort();
 
   main.innerHTML=
-    cabecera("Verduras y carne",
-      hay ? "Lo de todos los días, a la vista. Repasa la cámara y ve apuntando. "+
-            "Lo que no sea verdura ni carne pero no se te pueda olvidar, márcalo "+
-            "en su ficha con «Lo pido cada día» y aparece aquí."
-          : "Aquí sale la verdura, la carne y lo que marques como de cada día.",
-      '<button class="btn" id="cd_nuevo">+ Producto</button>')+
+    cabecera("El repaso",
+      hay ? "Lo que miras cada día antes de pedir. La lista la pones tú."
+          : "Está vacía. Pon aquí lo que repasas cada día y no quieres que se te olvide.",
+      '<button class="btn fuerte" id="cd_poner">+ Poner productos</button>')+
 
-    '<div class="buscar">'+
-      '<div class="buscar-caja">'+
-        '<span class="lupa">⌕</span>'+
-        '<input id="q" type="search" autocomplete="off" spellcheck="false" '+
-        'placeholder="Afina dentro de verduras y carne…" value="'+esc(ui.q)+'">'+
-        '<button class="limpiar'+(ui.q?" hay":"")+'" id="q_limpiar" title="Limpiar">✕</button>'+
-      '</div>'+
-      '<div class="chips">'+
-        '<button class="chip" data-sec="" aria-pressed="'+(!ui.seccion)+'">Las dos'+
-          '<span class="n">'+hay+'</span></button>'+
-        SECCIONES_FRESCO.map(function(n){
-          return '<button class="chip" data-sec="'+esc(n)+'" aria-pressed="'+
-                 (ui.seccion===n)+'">'+esc(n.charAt(0)+n.slice(1).toLowerCase())+
-                 '<span class="n">'+cuenta[n]+'</span></button>';
-        }).join("")+
-        (marcados
-          ? '<button class="chip" data-sec="__diario" aria-pressed="'+(ui.seccion==="__diario")+'">Marcados'+
-            '<span class="n">'+marcados+'</span></button>'
-          : "")+
-        '<button class="chip" id="ch_pedido" aria-pressed="'+ui.soloPedido+'">En el pedido'+
-          '<span class="n">'+lineasPedido()+'</span></button>'+
-      '</div>'+
-    '</div>'+
+    (hay
+      ? '<div class="buscar">'+
+          '<div class="buscar-caja">'+
+            '<span class="lupa">⌕</span>'+
+            '<input id="q" type="search" autocomplete="off" spellcheck="false" '+
+            'placeholder="Afina dentro del repaso…" value="'+esc(ui.q)+'">'+
+            '<button class="limpiar'+(ui.q?" hay":"")+'" id="q_limpiar" title="Limpiar">✕</button>'+
+          '</div>'+
+          '<div class="chips">'+
+            '<button class="chip" data-sec="" aria-pressed="'+(!ui.seccion)+'">Todo'+
+              '<span class="n">'+hay+'</span></button>'+
+            (nombres.length>1
+              ? nombres.map(function(n){
+                  return '<button class="chip" data-sec="'+esc(n)+'" aria-pressed="'+
+                         (ui.seccion===n)+'">'+esc(n.charAt(0)+n.slice(1).toLowerCase())+
+                         '<span class="n">'+secs[n]+'</span></button>';
+                }).join("")
+              : "")+
+            '<button class="chip" id="ch_pedido" aria-pressed="'+ui.soloPedido+'">En el pedido'+
+              '<span class="n">'+lineasPedido()+'</span></button>'+
+          '</div>'+
+        '</div>'
+      : '<div class="tarjeta"><div class="vacio"><strong>Todavía no has puesto nada</strong>'+
+        '<div class="nota">Dale a «Poner productos» y elige los que repasas: la verdura y la '+
+        'carne de cada día, y lo que se acaba sin avisar y no se ve en la cámara.</div></div></div>')+
+
     '<div id="resultado"></div>';
 
-  var campo=document.getElementById("q");
-  campo.addEventListener("input", function(){
-    ui.q=this.value;
-    document.getElementById("q_limpiar").classList.toggle("hay", !!this.value);
-    pintarResultado();
-  });
-  campo.addEventListener("keydown", function(e){
-    if(e.key==="Escape" && this.value){ e.preventDefault(); this.value=""; ui.q="";
-      document.getElementById("q_limpiar").classList.remove("hay"); pintarResultado(); }
-  });
-  document.getElementById("q_limpiar").addEventListener("click", function(){
-    ui.q=""; campo.value=""; this.classList.remove("hay"); pintarResultado(); campo.focus();
-  });
-  main.querySelectorAll("[data-sec]").forEach(function(b){
-    b.addEventListener("click", function(){
-      ui.seccion=b.getAttribute("data-sec"); ui.soloPedido=false; pintar();
-    });
-  });
-  document.getElementById("ch_pedido").addEventListener("click", function(){
-    ui.soloPedido=!ui.soloPedido; if(ui.soloPedido) ui.seccion=""; pintar();
-  });
-  var bn=document.getElementById("cd_nuevo");
-  if(bn) bn.addEventListener("click", function(){ editarProducto(null); });
+  document.getElementById("cd_poner").addEventListener("click", elegirDelRepaso);
 
-  pintarResultado();
-  if(!("ontouchstart" in window)) campo.focus();
+  var campo=document.getElementById("q");
+  if(campo){
+    campo.addEventListener("input", function(){
+      ui.q=this.value;
+      document.getElementById("q_limpiar").classList.toggle("hay", !!this.value);
+      pintarResultado();
+    });
+    campo.addEventListener("keydown", function(e){
+      if(e.key==="Escape" && this.value){ e.preventDefault(); this.value=""; ui.q="";
+        document.getElementById("q_limpiar").classList.remove("hay"); pintarResultado(); }
+    });
+    document.getElementById("q_limpiar").addEventListener("click", function(){
+      ui.q=""; campo.value=""; this.classList.remove("hay"); pintarResultado(); campo.focus();
+    });
+    main.querySelectorAll("[data-sec]").forEach(function(b){
+      b.addEventListener("click", function(){
+        ui.seccion=b.getAttribute("data-sec"); ui.soloPedido=false; pintar();
+      });
+    });
+    document.getElementById("ch_pedido").addEventListener("click", function(){
+      ui.soloPedido=!ui.soloPedido; if(ui.soloPedido) ui.seccion=""; pintar();
+    });
+  }
+
+  if(hay) pintarResultado();
+  if(campo && !("ontouchstart" in window)) campo.focus();
+}
+
+/* Marcar de uno en uno desde la ficha de cada producto era imposible:
+   para montar un repaso de treinta cosas hay que abrir treinta fichas.
+   Aquí salen todos, por secciones y con su casilla: se baja la lista y
+   se va marcando, sin escribir nada. El buscador de arriba está por si
+   algún día se busca uno suelto, pero no hace falta tocarlo. */
+function elegirDelRepaso(){
+  var elegidos={};
+  libro.productos.forEach(function(p){ if(esDiario(p)) elegidos[p.id]=true; });
+
+  function filas(q){
+    var t=norm(q||"");
+    var trozos=t?t.split(" "):[];
+    var lista=libro.productos.filter(function(p){
+      if(!trozos.length) return true;
+      var heno=norm(p.nombre)+" "+norm(p.proveedor)+" "+norm(p.seccion);
+      return trozos.every(function(x){ return heno.indexOf(x)>=0; });
+    });
+    if(!lista.length) return '<div class="vacio">Nada con «'+esc(q)+'».</div>';
+
+    var porSec={};
+    lista.forEach(function(p){
+      var n=String(p.seccion||"Sin sección").toUpperCase();
+      (porSec[n]=porSec[n]||[]).push(p);
+    });
+    return Object.keys(porSec).sort().map(function(n){
+      var del=porSec[n].slice().sort(function(a,b){
+        return String(a.nombre||"").localeCompare(String(b.nombre||""), "es"); });
+      var puestos=del.filter(function(p){ return elegidos[p.id]; }).length;
+      return '<div style="margin:0 0 4px">'+
+        '<div style="display:flex;align-items:center;gap:9px;position:sticky;top:0;'+
+          'background:var(--sup,#fff);padding:9px 2px 6px;border-bottom:1px solid var(--linea);z-index:1">'+
+          '<b style="flex:1">'+esc(n.charAt(0)+n.slice(1).toLowerCase())+'</b>'+
+          '<span class="nota">'+puestos+' de '+del.length+'</span>'+
+          '<button type="button" class="btn suave sm" data-toda="'+esc(n)+'">'+
+            (puestos===del.length ? 'Quitar todo' : 'Marcar todo')+'</button>'+
+        '</div>'+
+        del.map(function(p){
+          return '<label class="check" style="display:flex;gap:9px;align-items:flex-start;'+
+            'padding:7px 2px;border-bottom:1px solid var(--linea)">'+
+            '<input type="checkbox" data-rep="'+p.id+'" style="width:auto;margin-top:3px"'+
+            (elegidos[p.id]?" checked":"")+'>'+
+            '<span><b>'+esc(p.nombre)+'</b>'+
+            (p.proveedor?'<div class="nota" style="margin:1px 0 0">'+esc(p.proveedor)+'</div>':"")+
+            '</span></label>';
+        }).join("")+
+        '</div>';
+    }).join("");
+  }
+
+  abrirVentana("Poner en el repaso",
+    '<input id="rep_q" type="search" placeholder="Busca si quieres, o baja la lista…" '+
+      'autocomplete="off" style="margin-bottom:10px">'+
+    '<div id="rep_lista" style="max-height:56vh;overflow:auto">'+filas("")+'</div>',
+    function(){
+      libro.productos.forEach(function(p){ p.diario=!!elegidos[p.id]; });
+      guardar(); pintar();
+      var n=Object.keys(elegidos).length;
+      avisar(n ? "El repaso tiene "+n+" productos" : "Repaso vacío");
+    },
+    {aceptar:"Guardar el repaso"});
+
+  var caja=document.getElementById("rep_lista");
+  var campo=document.getElementById("rep_q");
+
+  function repintar(){
+    var arriba=caja.scrollTop;
+    caja.innerHTML=filas(campo.value);
+    enganchar();
+    caja.scrollTop=arriba;
+  }
+  function enganchar(){
+    caja.querySelectorAll("[data-rep]").forEach(function(c){
+      c.addEventListener("change", function(){
+        var id=this.getAttribute("data-rep");
+        if(this.checked) elegidos[id]=true; else delete elegidos[id];
+        repintar();
+      });
+    });
+    /* Marcar una sección entera de golpe: la verdura se repasa toda. */
+    caja.querySelectorAll("[data-toda]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var sec=this.getAttribute("data-toda");
+        var del=libro.productos.filter(function(p){
+          return String(p.seccion||"Sin sección").toUpperCase()===sec; });
+        var todos=del.every(function(p){ return elegidos[p.id]; });
+        del.forEach(function(p){
+          if(todos) delete elegidos[p.id]; else elegidos[p.id]=true;
+        });
+        repintar();
+      });
+    });
+  }
+  enganchar();
+  campo.addEventListener("input", function(){ caja.innerHTML=filas(this.value); enganchar(); });
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -589,7 +686,7 @@ var APARTADOS=[
   {id:"revisar",     nombre:"Revisar", cuenta:function(){ return avisos().total; }},
   {id:"ajustes",     nombre:"Ajustes"},
   {id:"telefonos",   nombre:"Teléfonos"},
-  {id:"cadadia",     nombre:"Verduras y carne",
+  {id:"cadadia",     nombre:"El repaso",
    cuenta:function(){ return libro.productos.filter(esCadaDia).length; }}
 ];
 function pintar(){
