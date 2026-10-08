@@ -386,41 +386,53 @@ function lineasPedido(){
    vista y sin tener que escribir nada en el buscador. El resto de la
    lista sigue en Precios, que ahí sí se busca.
    ══════════════════════════════════════════════════════════════ */
-/* La lista la hace él y nadie más. Se probó a meter de oficio toda la
-   verdura y toda la carne, y lo que salía era otra vez la lista entera:
-   28 verduras y 26 carnes que hay que ir saltando. Lo que sirve para
-   repasar es lo corto, así que aquí sólo está lo que él ha puesto. */
-function esCadaDia(p){ return esDiario(p); }
+/* La verdura y la carne están siempre: es lo que se mira en la cámara
+   todos los días. Dentro va además el repaso —lo que él marca con la
+   estrella—, que es para lo que no es ni verdura ni carne y se acaba
+   sin avisar: el hielo, el papel de horno, las servilletas. */
+var SECCIONES_FRESCO=["VERDURAS","CARNE"];
+function esFresco(p){
+  return SECCIONES_FRESCO.indexOf(String((p&&p.seccion)||"").toUpperCase())>=0;
+}
+function esCadaDia(p){ return esFresco(p) || esDiario(p); }
 
 function verCadaDia(main){
   var hay=libro.productos.filter(esCadaDia).length;
+  var marcados=libro.productos.filter(esDiario).length;
 
   main.innerHTML=
-    cabecera("El repaso",
-      hay ? "Lo que miras cada día antes de pedir. La lista la pones tú."
-          : "Está vacía. Pon aquí lo que repasas cada día y no quieres que se te olvide.",
-      '<button class="btn fuerte" id="cd_poner">+ Poner productos</button>')+
+    cabecera("Verduras y carne",
+      hay ? "Lo de todos los días a la vista. Dentro va también el repaso: lo que marques "+
+            "con la estrella sale aquí aunque no sea ni verdura ni carne."
+          : "Todavía no hay nada en Verduras ni en Carne.",
+      '<button class="btn fuerte" id="cd_poner">+ Poner en el repaso</button>')+
 
     (hay
       ? '<div class="buscar">'+
           '<div class="buscar-caja">'+
             '<span class="lupa">⌕</span>'+
             '<input id="q" type="search" autocomplete="off" spellcheck="false" '+
-            'placeholder="Afina dentro del repaso…" value="'+esc(ui.q)+'">'+
+            'placeholder="Afina dentro de la lista…" value="'+esc(ui.q)+'">'+
             '<button class="limpiar'+(ui.q?" hay":"")+'" id="q_limpiar" title="Limpiar">✕</button>'+
           '</div>'+
           /* Sin chapas por sección: cada ficha ya lleva la suya escrita a
              la derecha, y la lista es corta por definición. */
+          /* Sin chapas por sección: cada ficha ya lleva la suya escrita a
+             la derecha. La del repaso sí, que es la que no se adivina. */
           '<div class="chips">'+
             '<button class="chip" data-sec="" aria-pressed="'+(!ui.seccion)+'">Todo'+
               '<span class="n">'+hay+'</span></button>'+
+            (marcados
+              ? '<button class="chip" data-sec="__diario" aria-pressed="'+(ui.seccion==="__diario")+'">'+
+                '★ Repaso<span class="n">'+marcados+'</span></button>'
+              : "")+
             '<button class="chip" id="ch_pedido" aria-pressed="'+ui.soloPedido+'">En el pedido'+
               '<span class="n">'+lineasPedido()+'</span></button>'+
           '</div>'+
         '</div>'
-      : '<div class="tarjeta"><div class="vacio"><strong>Todavía no has puesto nada</strong>'+
-        '<div class="nota">Dale a «Poner productos» y elige los que repasas: la verdura y la '+
-        'carne de cada día, y lo que se acaba sin avisar y no se ve en la cámara.</div></div></div>')+
+      : '<div class="tarjeta"><div class="vacio"><strong>Todavía no hay nada</strong>'+
+        '<div class="nota">No hay productos en Verduras ni en Carne. Con «Poner en el repaso» '+
+        'puedes traer aquí cualquier otro.</div></div></div>')+
 
     '<div id="resultado"></div>';
 
@@ -674,7 +686,7 @@ var APARTADOS=[
   {id:"revisar",     nombre:"Revisar", cuenta:function(){ return avisos().total; }},
   {id:"ajustes",     nombre:"Ajustes"},
   {id:"telefonos",   nombre:"Teléfonos"},
-  {id:"cadadia",     nombre:"El repaso",
+  {id:"cadadia",     nombre:"Verduras y carne",
    cuenta:function(){ return libro.productos.filter(esCadaDia).length; }}
 ];
 /* El orden de los botones lo pone él: cada uno abre esto varias veces
