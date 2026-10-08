@@ -387,9 +387,13 @@ function lineasPedido(){
    lista sigue en Precios, que ahí sí se busca.
    ══════════════════════════════════════════════════════════════ */
 var SECCIONES_FRESCO=["VERDURAS","CARNE"];
-function esCadaDia(p){
+function esFresco(p){
   return SECCIONES_FRESCO.indexOf(String((p&&p.seccion)||"").toUpperCase())>=0;
 }
+/* Entra la verdura y la carne por ser lo que son, y además cualquier
+   cosa que él haya marcado como de repasar: el papel de horno, el hielo,
+   lo que se acaba sin avisar y no se ve en la cámara. */
+function esCadaDia(p){ return esFresco(p) || esDiario(p); }
 
 function verCadaDia(main){
   var hay=libro.productos.filter(esCadaDia).length;
@@ -398,11 +402,14 @@ function verCadaDia(main){
     cuenta[n]=libro.productos.filter(function(p){
       return String(p.seccion||"").toUpperCase()===n; }).length;
   });
+  var marcados=libro.productos.filter(function(p){ return esDiario(p) && !esFresco(p); }).length;
 
   main.innerHTML=
     cabecera("Verduras y carne",
-      hay ? "Lo de todos los días, a la vista. Repasa la cámara y ve apuntando."
-          : "Todavía no hay nada en Verduras ni en Carne.",
+      hay ? "Lo de todos los días, a la vista. Repasa la cámara y ve apuntando. "+
+            "Lo que no sea verdura ni carne pero no se te pueda olvidar, márcalo "+
+            "en su ficha con «Lo pido cada día» y aparece aquí."
+          : "Aquí sale la verdura, la carne y lo que marques como de cada día.",
       '<button class="btn" id="cd_nuevo">+ Producto</button>')+
 
     '<div class="buscar">'+
@@ -420,6 +427,10 @@ function verCadaDia(main){
                  (ui.seccion===n)+'">'+esc(n.charAt(0)+n.slice(1).toLowerCase())+
                  '<span class="n">'+cuenta[n]+'</span></button>';
         }).join("")+
+        (marcados
+          ? '<button class="chip" data-sec="__diario" aria-pressed="'+(ui.seccion==="__diario")+'">Marcados'+
+            '<span class="n">'+marcados+'</span></button>'
+          : "")+
         '<button class="chip" id="ch_pedido" aria-pressed="'+ui.soloPedido+'">En el pedido'+
           '<span class="n">'+lineasPedido()+'</span></button>'+
       '</div>'+
@@ -1967,8 +1978,8 @@ function editarProducto(p){
       '<input type="checkbox" id="ep_diario" style="width:auto;margin-top:3px"'+
       (p.diario?" checked":"")+'>'+
       '<span><b>Lo pido cada día</b>'+
-      '<div class="nota" style="margin:2px 0 0">Sale en la pantalla de <strong>Cada día</strong>, '+
-      'con la verdura y la carne, en vez de haber que buscarlo.</div></span></label>'+
+      '<div class="nota" style="margin:2px 0 0">Sale en <strong>Verduras y carne</strong> aunque no '+
+      'sea ni lo uno ni lo otro, para repasarlo sin tener que acordarse de buscarlo.</div></span></label>'+
     '<p class="nota" style="margin:14px 0 0" id="ep_cuenta"></p>'+
     (nuevo?"":'<p class="nota" style="margin:10px 0 0">Si le cambias el precio, la fecha se pone '+
       'sola en la de hoy. <button type="button" class="btn suave sm malo" id="ep_borrar" '+
