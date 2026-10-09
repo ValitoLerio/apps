@@ -425,6 +425,22 @@
         <div class="entrar">Abrir <span class="flecha">→</span></div>
       </a>
 
+      <a class="puerta p-piso" data-app="piso-corto" href="piso-corto.html">
+        <span class="rotulo">Alquiler</span>
+        <h2>Piso Soldeu · corto</h2>
+        <p class="que">Los mismos datos, pero al inquilino le llega sólo el alquiler con los gastos incluidos.</p>
+        <div class="cifra">
+          <span class="n" id="d-cobrado-c">—</span>
+          <span class="u">cobrado</span>
+        </div>
+        <div class="tira">
+          <div class="celda"><span class="k">Recibos</span><span class="v" id="d-recibos-c">—</span></div>
+          <div class="celda"><span class="k">Último</span><span class="v" id="d-ultimo-mes-c">—</span></div>
+          <div class="celda"><span class="k">Inquilino</span><span class="v" id="d-inquilino-c">—</span></div>
+        </div>
+        <div class="entrar">Abrir <span class="flecha">→</span></div>
+      </a>
+
       <a class="puerta p-resto" data-app="horario" href="horario.html">
         <span class="rotulo">Personal</span>
         <h2>Horario Restaurante</h2>
@@ -609,7 +625,7 @@
 
 </div>
 
-<script src="sync.js?v=202610081254"></script>
+<script src="sync.js?v=202610091040"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
@@ -717,16 +733,20 @@
     var inqs  = leer(seccion.piso_inq, []);
 
     var total = meses.reduce(function(s,m){ return s + (m.total || 0); }, 0);
-    pon('d-cobrado', meses.length ? euros(total) : '0 €');
-    pon('d-recibos', String(meses.length));
-
-    var ultimo = meses.map(function(m){ return m.mes; }).sort().pop();
-    pon('d-ultimo-mes', mesCorto(ultimo));
-
     var activo = inqs.filter(function(i){
       return !i.salida || new Date(i.salida) >= new Date();
     })[0];
-    pon('d-inquilino', activo ? primerNombre(activo.nombre) : (primerNombre(cfg.inq) || '—'));
+    var ultimo = meses.map(function(m){ return m.mes; }).sort().pop();
+    var quien  = activo ? primerNombre(activo.nombre) : (primerNombre(cfg.inq) || '—');
+
+    /* Las dos tarjetas de piso —la de siempre y la del recibo corto—
+       son los mismos datos: se rellenan las dos de una vez. */
+    ['', '-c'].forEach(function(suf){
+      pon('d-cobrado'+suf,    meses.length ? euros(total) : '0 €');
+      pon('d-recibos'+suf,    String(meses.length));
+      pon('d-ultimo-mes'+suf, mesCorto(ultimo));
+      pon('d-inquilino'+suf,  quien);
+    });
   }
 
   function resumenHorario(seccion){
@@ -986,6 +1006,7 @@
   });
 
   // ── Candados ───────────────────────────────────────────
+  /* El candado de piso tapa sus dos tarjetas: son los mismos datos. */
   var TARJETAS = {piso:'.p-piso', horario:'.p-resto', comanda:'.p-comanda',
                   casa:'.p-casa', caja:'.p-caja',
                   patrimonio:'.p-patrimonio', pedidos:'.p-pedidos',
@@ -1019,7 +1040,8 @@
   function ocultarCifras(sec){
     // Con candado, el escritorio tampoco enseña los números
     var ids = {
-      piso:    ['d-cobrado','d-recibos','d-ultimo-mes','d-inquilino'],
+      piso:    ['d-cobrado','d-recibos','d-ultimo-mes','d-inquilino',
+                'd-cobrado-c','d-recibos-c','d-ultimo-mes-c','d-inquilino-c'],
       horario: ['d-horas','d-personal','d-turnos'],
       comanda: ['d-pendiente','d-empresas','d-servicios','d-facturas'],
       casa:    ['d-casa-mes','d-casa-fijos','d-casa-compra','d-casa-avisos'],
@@ -1424,7 +1446,7 @@
     Sync.probar().then(function(){
       decir('Conectado. Entrando…', 'ok');
       var volver = new URLSearchParams(location.search).get('volver');
-      var destino = (volver === 'piso.html' || volver === 'horario.html') ? volver : null;
+      var destino = (volver === 'piso.html' || volver === 'piso-corto.html' || volver === 'horario.html') ? volver : null;
       setTimeout(function(){
         if (destino) location.href = destino;
         else { mostrar(); decir('', ''); }
