@@ -72,7 +72,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
 @media(max-width:640px){header .logo{font-size:16px}}
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="comun.css?v=202610081717">
+<link rel="stylesheet" href="comun.css?v=202610091029">
 </head>
 <body>
 
@@ -238,16 +238,6 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
     <div>
       <div class="section-title">Factura para WhatsApp</div>
       <div class="card" style="padding:1rem">
-        <label style="display:flex;gap:9px;align-items:flex-start;cursor:pointer;
-                      background:var(--accent-bg);border:1px solid var(--accent-light);
-                      border-radius:8px;padding:10px 12px;margin-bottom:12px">
-          <input type="checkbox" id="r-detallado" style="width:auto;margin-top:3px" onchange="cambiarDetalle(this.checked)">
-          <span style="font-size:13px;line-height:1.45">
-            <strong>Recibo detallado</strong>
-            <span style="display:block;color:var(--muted);margin-top:2px">
-              Quitándolo le llega una sola cifra, alquiler y gastos juntos. Tu copia no cambia.
-            </span></span>
-        </label>
         <canvas id="factura-canvas" style="width:100%;border-radius:8px;border:1px solid var(--border);display:block"></canvas>
         <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
           <button class="btn btn-primary btn-full" style="font-size:15px;padding:13px" onclick="descargarFactura()">⬇️ Guardar imagen para WhatsApp</button>
@@ -421,20 +411,6 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
       <input type="text" id="c-cierre" placeholder="Muchas gracias 🙏">
     </div>
 
-    <div class="form-group" style="margin-bottom:1.5rem">
-      <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-weight:400">
-        <input type="checkbox" id="c-verSaldo" checked style="width:auto;margin-top:3px">
-        <span><strong>Recibo detallado para el inquilino</strong>
-        <span style="display:block;font-size:12.5px;color:var(--muted);margin-top:3px">
-          Marcado, al inquilino le llega el recibo entero: alquiler y fondo de gastos por
-          separado, lo que lleva ingresado, los gastos del mes y el saldo que queda a favor
-          de uno u otro.<br>
-          Sin marcar, le llega una sola cifra —<em>alquiler, gastos incluidos</em>— y nada
-          más. Tu copia en «Mis recibos» sigue saliendo entera, y las cuentas de dentro no
-          cambian: el saldo se lleva igual.</span></span>
-      </label>
-    </div>
-
     <div class="card-title" style="font-size:15px;margin-bottom:.5rem">La inversión</div>
     <div style="background:var(--info-bg);border:1px solid #b5d4f4;border-radius:8px;padding:11px;font-size:13px;color:var(--info);margin-bottom:1rem">
       Lo que te costó el piso. Con esto se calcula cuánto llevas recuperado en la pestaña Inversión.
@@ -489,7 +465,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
 </div>
 
 
-<script src="sync.js?v=202610081717"></script>
+<script src="sync.js?v=202610091029"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -497,7 +473,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
 
   Sync.iniciar('piso').then(function(){
     var s = document.createElement('script');
-    s.src = 'piso.js?v=202610081717';
+    s.src = 'piso.js?v=202610091029';
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
