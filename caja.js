@@ -380,6 +380,52 @@ function pctVisa(){
   var p=+libro.ajustes.pctVisa;
   return (isFinite(p) && p>0 && p<100) ? p : 0;
 }
+/* ── El % de visas de verdad ───────────────────────────────────────
+   El de Ajustes lo pone él y es el que se usa para rellenar el efectivo:
+   aquí no se toca, ni se guarda nada. Esto es sólo para mirar: las visas
+   del datáfono partido por las visas más el efectivo CONTADO. Con el
+   efectivo que pone la app no vale, porque sale del propio porcentaje y
+   devolvería siempre el mismo número.
+   Tampoco va en el parte de WhatsApp: textoDia() no lo usa. */
+function pctVisaReal(visa, efectivo){
+  visa=+visa||0; efectivo=+efectivo||0;
+  var total=r2(visa+efectivo);
+  if(visa<=0 || efectivo<0 || total<=0) return null;
+  return r2(visa/total*100);
+}
+/* El de un día: con el recuento del cajón si lo hay y, si no, con el
+   efectivo que sale de las cajas. Un 0 contado en un día con visas es
+   «sin contar», como en el resto de la app. */
+function visaRealDia(fecha){
+  var d=diaDe(fecha);
+  if(!d) return null;
+  var c=cuentasDia(d);
+  if(c.visa<=0) return null;
+  if(c.hayReal && c.efectivoReal>0.004)
+    return {pct:pctVisaReal(c.visa, c.efectivoReal), efectivo:c.efectivoReal, origen:"cajon"};
+  var q=cuadreDia(fecha);
+  if(q && q.hay && q.efectivo>0.004)
+    return {pct:pctVisaReal(c.visa, q.efectivo), efectivo:q.efectivo, origen:"cajas"};
+  return null;
+}
+/* El de varios días juntos: sólo cuentan los días con el cajón contado,
+   con sus visas y su efectivo; los demás no entran ni arriba ni abajo. */
+function visaRealDe(dias){
+  var visa=0, efectivo=0, n=0;
+  (dias||[]).forEach(function(d){
+    var c=cuentasDia(d);
+    if(c.visa>0 && c.hayReal && c.efectivoReal>0.004){
+      visa=r2(visa+c.visa); efectivo=r2(efectivo+c.efectivoReal); n++;
+    }
+  });
+  if(!n) return null;
+  return {pct:pctVisaReal(visa, efectivo), visa:visa, efectivo:efectivo, dias:n};
+}
+function casillaVisaReal(r, nota){
+  return '<div class="cifra"><div class="k">% visas real</div>'+
+    '<div class="v">'+(r && r.pct!=null ? num(r.pct,1)+" %" : "—")+'</div>'+
+    '<div class="n">'+nota+'</div></div>';
+}
 /* "faltan 40 €" / "sobran 12 €", que es como se mira de verdad. */
 function textoDiferencia(dif){
   if(Math.abs(dif)<0.005) return "cuadra";
@@ -589,6 +635,7 @@ function verDia(main){
   /* Si el efectivo escrito es el que salía por el %, no hay nada
      que contar: la cifra ya lo dice todo. */
   var difPct = !!pctVisa() && c.visa>0 && Math.abs(c.difEfectivo)>=0.005;
+  var vr=visaRealDia(ui.dia);
   /* Aquí se enseñaba SIEMPRE el último recuento de todos, sin fecha:
      abrías cualquier día —el 2, el 6, el de hace un mes— y salía el
      mismo número, uno que a lo mejor se contó una semana después. De ahí
@@ -656,6 +703,11 @@ function verDia(main){
         '</div></div>'+
       '<div class="cifra"><div class="k">Pagos</div><div class="v malo">'+eur(c.gastos)+'</div>'+
         '<div class="n">'+((d&&(d.detalle||[]).length)?d.detalle.length+" apuntes":"pagados de caja")+'</div></div>'+
+      /* Sólo para mirar: no cambia el % puesto ni sale en el parte. */
+      casillaVisaReal(vr, vr
+        ? (vr.origen==="cajon" ? "con lo contado en el cajón" : "con el efectivo de las cajas")+
+          (pctVisa() ? " · tú tienes puesto "+num(pctVisa(),0)+" %" : "")
+        : "sale al contar el cajón")+
     '</div>'+
 
     '<div class="tarjeta" style="margin-bottom:16px">'+
@@ -823,7 +875,8 @@ function pintarFormularioDia(d){
         '<input type="number" class="grande" id="f_efecReal" min="0" step="0.01" value="'+
         esc(actual.efectivoReal!=null&&actual.efectivoReal!==""?actual.efectivoReal:0)+'" '+
         'placeholder="0,00">'+
-        '<div class="nota" style="margin:4px 0 0" id="f_realNota"></div></div>'+
+        '<div class="nota" style="margin:4px 0 0" id="f_realNota"></div>'+
+        '<div class="nota" style="margin:4px 0 0" id="f_visaReal"></div></div>'+
       '<div class="campo"><label class="lbl" for="f_amar">Caja amarilla (€)</label>'+
       '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo que hay dentro esta noche, contado</div>'+
         '<input type="number" class="grande" id="f_amar" min="0" step="0.01" value="'+esc(actual.aAmarilla)+'"></div>'+
@@ -1016,6 +1069,18 @@ function pintarFormularioDia(d){
           : 'Contra el efectivo de al lado ('+eur(efec)+'), <span style="color:'+
             colorDiferencia(dr)+'">'+esc(textoDiferencia(dr))+'</span>.';
       }
+    }
+    /* El % de visas de verdad, según se escribe. Es sólo un letrero: no
+       toca la casilla del % ni el efectivo que sale de ella. */
+    var vrn=document.getElementById("f_visaReal");
+    if(vrn){
+      var cr2=document.getElementById("f_efecReal");
+      var contado=(cr2 && cr2.value!=="") ? r2(+cr2.value||0) : 0;
+      var pr=contado>0.004 ? pctVisaReal(visa, contado) : null;
+      vrn.innerHTML = pr!=null
+        ? "De verdad hoy: <strong>"+num(pr,1)+" % en visas</strong> y "+num(r2(100-pr),1)+
+          " % en efectivo. Sólo para mirar: tu % no cambia."
+        : "";
     }
     document.getElementById("f_resumen").innerHTML=
       "Visas <strong>"+eur(visa)+"</strong> · "+
@@ -1692,6 +1757,7 @@ function copiarAMano(texto, hecho){
 function verMes(main){
   var dias=diasDe(ui.mes);
   var t=sumaCuentas(dias);
+  var vrMes=visaRealDe(dias);
   var cierreMes=recuentoHasta(ui.mes);
 
   main.innerHTML=
@@ -1715,6 +1781,10 @@ function verMes(main){
                              :"lo que cuentas en el cajón")+'</div></div>'+
       '<div class="cifra"><div class="k">Pagos</div><div class="v malo">'+eur(t.gastos)+'</div>'+
         '<div class="n">pagados de caja</div></div>'+
+      casillaVisaReal(vrMes, vrMes
+        ? vrMes.dias+(vrMes.dias===1?" día contado":" días contados")+
+          (pctVisa() ? " · tú tienes puesto "+num(pctVisa(),0)+" %" : "")
+        : "sale al contar el cajón")+
       /* El recuento con el que se cierra ESTE mes, no el de hoy: mirando
          un mes de hace medio año salía el saldo de ahora. */
       '<div class="cifra"><div class="k">C. amarilla</div><div class="v amarilla">'+
