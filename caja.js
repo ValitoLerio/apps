@@ -422,7 +422,7 @@ function visaRealDe(dias){
   return {pct:pctVisaReal(visa, efectivo), visa:visa, efectivo:efectivo, dias:n};
 }
 function casillaVisaReal(r, nota){
-  return '<div class="cifra"><div class="k">% visas real</div>'+
+  return '<div class="cifra"><div class="k">% de visas real</div>'+
     '<div class="v">'+(r && r.pct!=null ? num(r.pct,1)+" %" : "—")+'</div>'+
     '<div class="n">'+nota+'</div></div>';
 }
@@ -705,9 +705,9 @@ function verDia(main){
         '<div class="n">'+((d&&(d.detalle||[]).length)?d.detalle.length+" apuntes":"pagados de caja")+'</div></div>'+
       /* Sólo para mirar: no cambia el % puesto ni sale en el parte. */
       casillaVisaReal(vr, vr
-        ? (vr.origen==="cajon" ? "con lo contado en el cajón" : "con el efectivo de las cajas")+
-          (pctVisa() ? " · tú tienes puesto "+num(pctVisa(),0)+" %" : "")
-        : "sale al contar el cajón")+
+        ? eur(c.visa)+" de visas de "+eur(r2(c.visa+vr.efectivo))+" vendidos ("+
+          (vr.origen==="cajon" ? "visas + efectivo real" : "visas + efectivo de las cajas")+")"
+        : "sale cuando escribes el efectivo real")+
     '</div>'+
 
     '<div class="tarjeta" style="margin-bottom:16px">'+
@@ -1082,8 +1082,10 @@ function pintarFormularioDia(d){
       var contado=(cr2 && cr2.value!=="") ? r2(+cr2.value||0) : 0;
       var pr=contado>0.004 ? pctVisaReal(visa, contado) : null;
       vrn.innerHTML = pr!=null
-        ? "De verdad hoy: <strong>"+num(pr,1)+" % en visas</strong> y "+num(r2(100-pr),1)+
-          " % en efectivo. Sólo para mirar: tu % no cambia."
+        ? "Hoy has vendido "+eur(r2(visa+contado))+": "+eur(visa)+" en visas y "+eur(contado)+
+          " en efectivo. O sea, de cada 100 € vendidos, <strong>"+num(pr,1)+
+          " € son de visas</strong> y "+num(r2(100-pr),1)+" € de efectivo. "+
+          "Es sólo para verlo: no cambia nada."
         : "";
     }
     document.getElementById("f_resumen").innerHTML=
@@ -1786,9 +1788,9 @@ function verMes(main){
       '<div class="cifra"><div class="k">Pagos</div><div class="v malo">'+eur(t.gastos)+'</div>'+
         '<div class="n">pagados de caja</div></div>'+
       casillaVisaReal(vrMes, vrMes
-        ? vrMes.dias+(vrMes.dias===1?" día contado":" días contados")+
-          (pctVisa() ? " · tú tienes puesto "+num(pctVisa(),0)+" %" : "")
-        : "sale al contar el cajón")+
+        ? eur(vrMes.visa)+" de visas de "+eur(r2(vrMes.visa+vrMes.efectivo))+" vendidos, en "+
+          vrMes.dias+(vrMes.dias===1?" día":" días")+" con efectivo real"
+        : "sale cuando escribes el efectivo real")+
       /* El recuento con el que se cierra ESTE mes, no el de hoy: mirando
          un mes de hace medio año salía el saldo de ahora. */
       '<div class="cifra"><div class="k">C. amarilla</div><div class="v amarilla">'+
