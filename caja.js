@@ -826,7 +826,7 @@ function verDia(main){
   });
 
   pintarFormularioDia(d);   /* el hueco de la foto va dentro */
-  pintarFotoDia();
+  /* La foto del papel se quitó del día: no la usa. */
 }
 
 function pintarFormularioDia(d){
@@ -846,7 +846,6 @@ function pintarFormularioDia(d){
        tiene que estar delante y no en una tarjeta al final. La foto se
        abre a lo ancho con un toque, se mira y se van escribiendo las
        cifras debajo. */
-    '<div id="cajaFotoDia" style="margin-bottom:14px"></div>'+
     (elTramo
       ? '<div class="aviso-caja" style="margin-bottom:14px">Este día entra en un tramo '+
         'sin retirar'+(elTramo.motivo?" ("+esc(elTramo.motivo)+")":"")+', desde el '+
