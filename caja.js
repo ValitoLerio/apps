@@ -856,16 +856,7 @@ function pintarFormularioDia(d){
     '<div class="rejilla">'+
       '<div class="campo"><label class="lbl" for="f_visa">Visa (€)</label>'+
         '<input type="number" class="grande" id="f_visa" min="0" step="0.01" value="'+esc(actual.visa)+'"></div>'+
-      '<div class="campo"><label class="lbl" for="f_efec">Efectivo (€)</label>'+
-      '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">se pone solo</div>'+
-        '<input type="number" class="grande" id="f_efec" min="0" step="0.01" value="'+esc(actual.efectivo)+'">'+
-        '<div style="font-size:12px;color:var(--muted);margin:6px 0 0;display:flex;'+
-        'align-items:center;gap:6px;flex-wrap:wrap">'+
-        '<input type="number" id="f_pct" min="1" max="99" step="1" value="'+
-        esc(libro.ajustes.pctVisa!=null?libro.ajustes.pctVisa:80)+'" '+
-        'style="width:56px;padding:3px 6px;font-size:12px">'+
-        '<span>% de la venta va en visa</span></div>'+
-        '<div class="nota" style="margin:4px 0 0" id="f_efecNota"></div></div>'+
+      /* Primero el que cuenta él; el que pone la app va detrás. */
       '<div class="campo"><label class="lbl" for="f_efecReal">Efectivo real (€)</label>'+
       '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo cobrado que hay en el '+
       'caj&oacute;n, <strong>sin el cambio</strong></div>'+
@@ -877,6 +868,16 @@ function pintarFormularioDia(d){
         'placeholder="0,00">'+
         '<div class="nota" style="margin:4px 0 0" id="f_realNota"></div>'+
         '<div class="nota" style="margin:4px 0 0" id="f_visaReal"></div></div>'+
+      '<div class="campo"><label class="lbl" for="f_efec">Efectivo (€)</label>'+
+      '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">se pone solo</div>'+
+        '<input type="number" class="grande" id="f_efec" min="0" step="0.01" value="'+esc(actual.efectivo)+'">'+
+        '<div style="font-size:12px;color:var(--muted);margin:6px 0 0;display:flex;'+
+        'align-items:center;gap:6px;flex-wrap:wrap">'+
+        '<input type="number" id="f_pct" min="1" max="99" step="1" value="'+
+        esc(libro.ajustes.pctVisa!=null?libro.ajustes.pctVisa:80)+'" '+
+        'style="width:56px;padding:3px 6px;font-size:12px">'+
+        '<span>% de la venta va en visa</span></div>'+
+        '<div class="nota" style="margin:4px 0 0" id="f_efecNota"></div></div>'+
     '</div>'+
     /* El orden de escribir es el de la hoja: visas, efectivo, pagos,
        amarilla y fondo de caja; lo demás va detrás. */
