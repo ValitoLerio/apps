@@ -877,6 +877,13 @@ function pintarFormularioDia(d){
         'placeholder="0,00">'+
         '<div class="nota" style="margin:4px 0 0" id="f_realNota"></div>'+
         '<div class="nota" style="margin:4px 0 0" id="f_visaReal"></div></div>'+
+    '</div>'+
+    /* El orden de escribir es el de la hoja: visas, efectivo, pagos,
+       amarilla y fondo de caja; lo demás va detrás. */
+    '<p class="nota" style="margin:16px 0 8px;font-weight:600;color:var(--tinta2)">Pagos hechos con dinero de la caja</p>'+
+    '<div id="gastos"></div>'+
+    '<button class="btn sm" id="masGasto" style="margin-top:8px">+ Añadir gasto</button>'+
+    '<div class="rejilla" style="margin-top:16px">'+
       '<div class="campo"><label class="lbl" for="f_amar">Caja amarilla (€)</label>'+
       '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo que hay dentro esta noche, contado</div>'+
         '<input type="number" class="grande" id="f_amar" min="0" step="0.01" value="'+esc(actual.aAmarilla)+'"></div>'+
@@ -897,9 +904,6 @@ function pintarFormularioDia(d){
     '</div>'+
     '<p class="nota" style="margin:6px 0 0" id="f_cuadre"></p>'+
     '<p class="nota" style="margin:6px 0 0" id="f_fondoTotal"></p>'+
-    '<p class="nota" style="margin:16px 0 8px">Pagos hechos con dinero de la caja</p>'+
-    '<div id="gastos"></div>'+
-    '<button class="btn sm" id="masGasto" style="margin-top:8px">+ Añadir gasto</button>'+
     '<div class="campo" style="margin-top:16px"><label class="lbl" for="f_nota">Nota del día</label>'+
       '<input id="f_nota" value="'+esc(actual.nota||"")+'" placeholder="Fiesta mayor, cerrado por la tarde…"></div>'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;'+
