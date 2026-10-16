@@ -321,9 +321,22 @@ function render(){
 function head(title, sub, right){
   return '<div class="page-head"><div><h1>'+esc(title)+'</h1>'+(sub?'<p>'+sub+'</p>':"")+'</div><div class="toolbar" style="margin:0">'+(right||"")+'</div></div>';
 }
+/* Orden de empresas: primero las fijadas (★), luego las más usadas, luego por nombre */
+function companyUses(id){ var n=0; state.services.forEach(function(s){ if(s.companyId===id) n++; }); return n; }
+function companiesByUse(){
+  var uso={};
+  state.services.forEach(function(s){ if(s.companyId) uso[s.companyId]=(uso[s.companyId]||0)+1; });
+  return state.companies.slice().sort(function(a,b){
+    var pa=a.pinned?1:0, pb=b.pinned?1:0;
+    if(pa!==pb) return pb-pa;
+    var ua=uso[a.id]||0, ub=uso[b.id]||0;
+    if(ua!==ub) return ub-ua;
+    return a.name.localeCompare(b.name,"es");
+  });
+}
 function companyOptions(sel, placeholder){
   var o='<option value="">'+esc(placeholder||"Todas las empresas")+'</option>';
-  state.companies.slice().sort(function(a,b){return a.name.localeCompare(b.name,"es");}).forEach(function(c){
+  companiesByUse().forEach(function(c){
     o+='<option value="'+c.id+'"'+(sel===c.id?" selected":"")+">"+esc(c.name)+"</option>";
   });
   return o;
@@ -530,10 +543,12 @@ function viewEmpresas(main){
     box.innerHTML='<div class="empty"><strong>Todavía no hay empresas</strong>Da de alta la primera para poder anotarle servicios.</div>';
     return;
   }
-  var rows=state.companies.slice().sort(function(a,b){return a.name.localeCompare(b.name,"es");}).map(function(c){
+  var rows=companiesByUse().map(function(c){
     var pend=totalsOf(state.services.filter(function(s){ return s.companyId===c.id && (s.status||"pendiente")==="pendiente"; }));
     return "<tr>"+
+      '<td style="width:34px;padding-right:0"><button class="pin-btn'+(c.pinned?' on':'')+'" data-cpin="'+c.id+'" title="'+(c.pinned?'Quitar de arriba':'Fijar arriba')+'" aria-pressed="'+(c.pinned?'true':'false')+'">'+(c.pinned?'★':'☆')+'</button></td>'+
       "<td><strong>"+esc(c.name)+"</strong></td>"+
+      '<td class="num">'+num(companyUses(c.id))+"</td>"+
       '<td class="mono">'+esc(c.nrt||"—")+"</td>"+
       "<td>"+esc(correosDe(c).join(", ")||"—")+"</td>"+
       "<td>"+esc(c.contact||"—")+"</td>"+
@@ -544,10 +559,15 @@ function viewEmpresas(main){
         '<button class="btn ghost sm danger" data-cdel="'+c.id+'">Borrar</button>'+
       "</div></td></tr>";
   }).join("");
-  box.innerHTML='<table><thead><tr><th>Empresa</th><th>NRT / CIF</th><th>Correo de facturación</th><th>Contacto</th>'+
+  box.innerHTML='<table><thead><tr><th></th><th>Empresa</th><th class="num">Usos</th><th>NRT / CIF</th><th>Correo de facturación</th><th>Contacto</th>'+
     '<th class="num">€/persona</th><th class="num">Pendiente de facturar</th><th></th></tr></thead><tbody>'+rows+"</tbody></table>";
   box.querySelectorAll("[data-cedit]").forEach(function(b){ b.addEventListener("click",function(){ editCompany(b.getAttribute("data-cedit")); }); });
   box.querySelectorAll("[data-cdel]").forEach(function(b){ b.addEventListener("click",function(){ delCompany(b.getAttribute("data-cdel")); }); });
+  box.querySelectorAll("[data-cpin]").forEach(function(b){ b.addEventListener("click",function(){
+    var c=company(b.getAttribute("data-cpin")); if(!c) return;
+    c.pinned=!c.pinned; touch(); render();
+    toast(c.pinned?c.name+" fijada arriba":c.name+" vuelve a su orden por uso");
+  }); });
 }
 function delCompany(id){
   var nombre=companyName(id);
@@ -917,10 +937,18 @@ function viewFacturas(main){
     box.innerHTML='<div class="empty"><strong>Aún no has emitido ninguna factura</strong>Ve a «Facturar» cuando cierres el mes.</div>';
     return;
   }
-  var list=state.invoices.slice().sort(function(a,b){ return a.number<b.number?1:-1; });
+  var curYM=todayISO().slice(0,7);
+  function isOld(i){ return i.status==="cobrada" && (i.period||"")<curYM; }
+  var list=state.invoices.slice().sort(function(a,b){
+    var oa=isOld(a)?1:0, ob=isOld(b)?1:0;
+    if(oa!==ob) return oa-ob;
+    return a.number<b.number?1:-1;
+  });
+  var sepDone=false;
   var rows=list.map(function(i){
-    var repetida=repes.indexOf(i.number)>=0;
-    return '<tr'+(repetida?' style="background:var(--warn-soft)"':'')+'>'+
+    var repetida=repes.indexOf(i.number)>=0, old=isOld(i), sep="";
+    if(old && !sepDone){ sepDone=true; sep='<tr class="inv-sep"><td colspan="10">Cobradas de meses anteriores</td></tr>'; }
+    return sep+'<tr'+(old?' class="inv-old"':'')+(repetida?' style="background:var(--warn-soft)"':'')+'>'+
       '<td class="mono"><strong>'+esc(i.number)+"</strong>"+
       (repetida?' <span class="pill fact" title="Este número aparece en más de una factura">repetido</span>':'')+"</td>"+
       "<td>"+esc(dmy(i.date))+"</td>"+
