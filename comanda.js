@@ -169,6 +169,26 @@ function svcAmounts(s){
 /* Valores con los que llega relleno el formulario. El precio pactado con una
    empresa manda sobre el precio general; ambos se pueden pisar en cada línea. */
 function defaultDesc(){ return state.settings.defaultDesc || "Menú del día"; }
+/* Tipos de servicio que se eligen al anotar. Cada línea lleva el suyo, así que en
+   una misma factura pueden ir menús del día, bocadillos, etc. mezclados. */
+var TIPOS_SERVICIO=["Menú del día","Menú bocadillo","Medio menú","Menú cena"];
+function tiposServicio(){
+  var l=TIPOS_SERVICIO.slice(), d=defaultDesc();
+  if(l.indexOf(d)<0) l.unshift(d);
+  return l;
+}
+/* Último precio usado para ese tipo en esa empresa (o en cualquiera); si no hay, el de la empresa */
+function precioTipo(companyId, desc){
+  var best=null, any=null;
+  state.services.forEach(function(s){
+    if(s.desc!==desc || !s.price) return;
+    if(s.companyId===companyId && (!best || s.date>=best.date)) best=s;
+    if(!any || s.date>=any.date) any=s;
+  });
+  var s=best||any;
+  if(s) return (+s.price).toFixed(2);
+  return precioPara(companyId);
+}
 function precioPara(companyId){
   var c=company(companyId);
   var p=(c && c.price) ? c.price : state.settings.defaultPrice;
@@ -366,11 +386,14 @@ function viewServicios(main){
     '<div class="card-body"><form id="quickForm" class="quick">'+
       '<div class="field"><label class="lbl" for="q_date">Fecha</label><input type="date" id="q_date" value="'+esc(todayISO())+'" required></div>'+
       '<div class="field"><label class="lbl" for="q_comp">Empresa</label><select id="q_comp" required>'+companyOptions(ui.fCompany,"— elegir —")+'</select></div>'+
-      '<div class="field"><label class="lbl" for="q_desc">Descripción</label><input id="q_desc" placeholder="'+esc(defaultDesc())+'" value="'+esc(defaultDesc())+'"></div>'+
+      '<div class="field"><label class="lbl" for="q_tipo">Descripción</label><select id="q_tipo">'+
+        tiposServicio().map(function(t){ return '<option'+(t===(ui.lastTipo||defaultDesc())?" selected":"")+'>'+esc(t)+'</option>'; }).join("")+
+        '<option value="__otro">Otro…</option></select>'+
+        '<input id="q_desc" placeholder="Escribe la descripción" style="display:none; margin-top:6px"></div>'+
       '<div class="field"><label class="lbl" for="q_ext">Extras (€)</label><input type="number" id="q_ext" min="0" step="0.01" placeholder="0,00"></div>'+
       '<div class="field"><label class="lbl" for="q_alb">Nº albarán</label><input id="q_alb" class="mono" placeholder="ALB-0001"></div>'+
       '<div class="field"><label class="lbl" for="q_din">Comens.</label><input type="number" id="q_din" min="0" step="1" value="1" required></div>'+
-      '<div class="field"><label class="lbl" for="q_pri">€/persona'+(state.settings.pricesIncludeIgi?" (IGI incl.)":"")+'</label><input type="number" id="q_pri" min="0" step="0.01" value="'+esc(precioPara(ui.fCompany))+'" required></div>'+
+      '<div class="field"><label class="lbl" for="q_pri">€/persona'+(state.settings.pricesIncludeIgi?" (IGI incl.)":"")+'</label><input type="number" id="q_pri" min="0" step="0.01" value="'+esc(precioTipo(ui.fCompany, ui.lastTipo||defaultDesc()))+'" required></div>'+
       '<div style="display:flex; gap:10px; align-items:end"><span class="total-preview" id="q_total">—</span>'+
       '<button class="btn primary" type="submit">Añadir</button></div>'+
     '</form></div></div>'+
@@ -389,7 +412,15 @@ function viewServicios(main){
   var f=document.getElementById("quickForm");
   var qc=document.getElementById("q_comp"), qp=document.getElementById("q_pri"),
       qd=document.getElementById("q_din"), qt=document.getElementById("q_total"), qa=document.getElementById("q_alb"),
-      qe=document.getElementById("q_ext");
+      qe=document.getElementById("q_ext"), qtipo=document.getElementById("q_tipo"), qdesc=document.getElementById("q_desc");
+  function descActual(){ return qtipo.value==="__otro" ? qdesc.value.trim() : qtipo.value; }
+  qtipo.addEventListener("change", function(){
+    var otro=qtipo.value==="__otro";
+    qdesc.style.display=otro?"":"none";
+    if(otro){ qdesc.focus(); return; }
+    qp.value=precioTipo(qc.value, qtipo.value);
+    refreshPreview();
+  });
   function refreshPreview(){
     var importe=r2((+qd.value||0)*(+qp.value||0) + (+qe.value||0));
     if(!importe){ qt.textContent="—"; return; }
@@ -398,7 +429,7 @@ function viewServicios(main){
     qt.title="Total con IGI";
   }
   qc.addEventListener("change", function(){
-    qp.value=precioPara(qc.value);
+    qp.value=qtipo.value==="__otro" ? precioPara(qc.value) : precioTipo(qc.value, qtipo.value);
     refreshPreview();
   });
   qd.addEventListener("input", refreshPreview); qp.addEventListener("input", refreshPreview);
@@ -411,7 +442,7 @@ function viewServicios(main){
     if(!qc.value){ toast("Elige la empresa a la que se apunta el servicio.", true); qc.focus(); return; }
     var s={
       id:uid(), date:document.getElementById("q_date").value, companyId:qc.value,
-      desc:document.getElementById("q_desc").value.trim()||defaultDesc(),
+      desc:descActual()||defaultDesc(),
       albaran:qa.value.trim(), diners:+qd.value||0, price:+qp.value||0,
       extra:+qe.value||0,
       igi:state.settings.igi, gross:!!state.settings.pricesIncludeIgi,
@@ -420,6 +451,7 @@ function viewServicios(main){
     if(!s.diners){ toast("Pon cuántos comensales han comido.", true); qd.focus(); return; }
     state.services.push(s); touch();
     ui.month=s.date.slice(0,7);
+    ui.lastTipo=tiposServicio().indexOf(s.desc)>=0 ? s.desc : "";
     render();
     var nq=document.getElementById("q_comp"); if(nq){ nq.value=s.companyId; nq.dispatchEvent(new Event("change")); }
     var nd=document.getElementById("q_date"); if(nd) nd.value=s.date;
@@ -504,7 +536,7 @@ function editService(id){
     '<div class="grid2">'+
       '<div class="field"><label class="lbl" for="e_date">Fecha</label><input type="date" id="e_date" value="'+esc(s.date)+'"></div>'+
       '<div class="field"><label class="lbl" for="e_comp">Empresa</label><select id="e_comp">'+companyOptions(s.companyId,"— elegir —")+'</select></div>'+
-      '<div class="field" style="grid-column:1/-1"><label class="lbl" for="e_desc">Descripción</label><input id="e_desc" value="'+esc(s.desc)+'"></div>'+
+      '<div class="field" style="grid-column:1/-1"><label class="lbl" for="e_desc">Descripción</label><input id="e_desc" list="e_tipos" value="'+esc(s.desc)+'"><datalist id="e_tipos">'+tiposServicio().map(function(t){ return '<option value="'+esc(t)+'">'; }).join("")+'</datalist></div>'+
       '<div class="field"><label class="lbl" for="e_ext">Extras (€)</label><input type="number" id="e_ext" min="0" step="0.01" value="'+esc(extraDe(s)||"")+'"></div>'+
       '<div class="field"><label class="lbl" for="e_alb">Nº albarán</label><input id="e_alb" class="mono" value="'+esc(s.albaran||"")+'"></div>'+
       '<div class="field"><label class="lbl" for="e_din">Comensales</label><input type="number" id="e_din" min="0" step="1" value="'+esc(s.diners)+'"></div>'+
