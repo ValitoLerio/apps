@@ -224,6 +224,18 @@ function nAlb(list){
   });
   return n;
 }
+/* ¿Esta línea sigue el mismo albarán que la anterior (misma fecha, mismo nº, misma empresa)?
+   Entonces la fecha y el albarán solo se ponen una vez y debajo van sus líneas. */
+function sigueAlb(prev, cur){
+  return !!(prev && cur && cur.albaran && prev.date===cur.date && prev.albaran===cur.albaran &&
+    (prev.companyId||"")===(cur.companyId||""));
+}
+function grpCls(list, ix){
+  var c=[];
+  if(sigueAlb(list[ix-1], list[ix])) c.push("grp-cont");
+  if(sigueAlb(list[ix], list[ix+1])) c.push("grp-open");
+  return c.length?' class="'+c.join(" ")+'"':"";
+}
 function totalsOf(list){
   var t={diners:0,base:0,igi:0,total:0,extras:0,count:list.length,taxes:[],gross:false}, byRate={};
   list.forEach(function(s){
@@ -511,14 +523,14 @@ function paintServices(list,t){
     box.innerHTML='<div class="empty"><strong>Ningún servicio en '+esc(monthLabel(ui.month))+'</strong>Anota el primero con el formulario de arriba.</div>';
     return;
   }
-  var rows=list.map(function(s){
-    var a=svcAmounts(s);
-    return '<tr data-id="'+s.id+'">'+
-      "<td>"+esc(dmy(s.date))+"</td>"+
-      "<td>"+esc(companyName(s.companyId))+"</td>"+
+  var rows=list.map(function(s,ix){
+    var a=svcAmounts(s), cont=sigueAlb(list[ix-1], s);
+    return '<tr data-id="'+s.id+'"'+grpCls(list,ix)+'>'+
+      "<td>"+(cont?"":esc(dmy(s.date)))+"</td>"+
+      "<td>"+(cont?"":esc(companyName(s.companyId)))+"</td>"+
       "<td>"+esc(s.desc)+"</td>"+
       '<td class="num">'+(extraDe(s)?eur(extraDe(s)):"—")+"</td>"+
-      '<td class="mono">'+esc(s.albaran||"—")+"</td>"+
+      '<td class="mono">'+(cont?"":esc(s.albaran||"—"))+"</td>"+
       '<td class="num">'+num(s.diners)+"</td>"+
       '<td class="num">'+eur(s.price)+"</td>"+
       '<td class="num">'+eur(a.base)+"</td>"+
@@ -819,8 +831,8 @@ function miniTable(list,t){
   return "<table><thead><tr><th>Fecha</th><th>Nº albarán</th><th>Descripción</th>"+
     '<th class="num">Com.</th><th class="num">€/pers.</th><th class="num">Extras</th>'+
     '<th class="num">Importe</th></tr></thead><tbody>'+
-    list.map(function(s){ var a=svcAmounts(s);
-      return "<tr><td>"+esc(dmy(s.date))+'</td><td class="mono">'+esc(s.albaran||"—")+"</td><td>"+esc(s.desc)+
+    list.map(function(s,ix){ var a=svcAmounts(s), cont=sigueAlb(list[ix-1], s);
+      return "<tr"+grpCls(list,ix)+"><td>"+(cont?"":esc(dmy(s.date)))+'</td><td class="mono">'+(cont?"":esc(s.albaran||"—"))+"</td><td>"+esc(s.desc)+
       '</td><td class="num">'+num(s.diners)+'</td><td class="num">'+eur(s.price)+
       '</td><td class="num">'+(extraDe(s)?eur(extraDe(s)):"—")+'</td><td class="num">'+
       eur(a.gross?a.total:a.base)+"</td></tr>";
@@ -1538,8 +1550,9 @@ function invTaxes(inv){
 }
 function invoiceHTML(inv){
   var i=inv.issuer||{}, c=inv.client||{};
-  var rows=inv.lines.map(function(l){
-    return "<tr><td>"+esc(dmy(l.date))+'</td><td class="mono">'+esc(l.albaran||"—")+"</td><td>"+esc(l.desc)+
+  var rows=inv.lines.map(function(l,ix){
+    var cont=sigueAlb(inv.lines[ix-1], l);
+    return "<tr"+grpCls(inv.lines,ix)+"><td>"+(cont?"":esc(dmy(l.date)))+'</td><td class="mono">'+(cont?"":esc(l.albaran||"—"))+"</td><td>"+esc(l.desc)+
       '</td><td class="num">'+num(l.diners)+'</td><td class="num">'+eur(l.price)+
       '</td><td class="num">'+((+l.extra||0)?eur(l.extra):"—")+'</td><td class="num">'+
       eur(l.amount==null?l.base:l.amount)+"</td></tr>";
@@ -1682,19 +1695,24 @@ function layoutInvoice(inv, opts){
   tableHead();
   var reserve=opts.paper?95:0;           /* sitio para firma y sello al pie */
   var maxY=PAGE.h-PAGE.m-120-reserve;
-  inv.lines.forEach(function(l){
+  inv.lines.forEach(function(l,ix){
+    var cont=sigueAlb(inv.lines[ix-1], l), abre=sigueAlb(l, inv.lines[ix+1]);
     if(y>maxY){
+      cont=false;
       T("Continúa en la página siguiente", R, PAGE.h-PAGE.m-10, 8, false, C_MUT, "right");
       pages.push(ops); ops=[]; y=PAGE.m+10; tableHead(); maxY=PAGE.h-PAGE.m-60-reserve;
     }
-    T(dmy(l.date), COL.fecha+2, y, 9);
-    T(l.albaran||"—", COL.alb, y, 9);
+    if(!cont){
+      T(dmy(l.date), COL.fecha+2, y, 9);
+      T(l.albaran||"—", COL.alb, y, 9);
+    }
     T(clip(l.desc||"", 26), COL.desc, y, 9);
     T(num(l.diners), COL.com+38, y, 9, false, C_INK, "right");
     T(eur(l.price), COL.pri+52, y, 9, false, C_INK, "right");
     T((+l.extra||0)?eur(l.extra):"—", COL.ext+52, y, 9, false, C_INK, "right");
     T(eur(l.amount==null?l.base:l.amount), COL.imp-2, y, 9, false, C_INK, "right");
-    y+=5; LN(L,y,R,y,0.35,[0.9,0.88,0.87]); y+=12;
+    if(abre){ y+=14; }
+    else { y+=5; LN(L,y,R,y,0.35,[0.9,0.88,0.87]); y+=12; }
   });
 
   /* totals */
