@@ -153,7 +153,8 @@ tr.inv-sep:hover td{background:var(--line-soft)}
 .pin-btn.on{color:var(--warn)}
 
 /* ---------- quick add ---------- */
-.quick{display:grid; grid-template-columns:120px minmax(140px,1.2fr) minmax(160px,1.8fr) 92px 120px 74px 96px auto; gap:10px; align-items:end}
+.quick{display:grid; grid-template-columns:120px minmax(140px,1.2fr) minmax(160px,1.8fr) 92px 120px 74px 96px; gap:10px; align-items:end}
+.quick > div:last-child{grid-column:1/-1; justify-content:flex-end; padding-top:2px}
 .quick .total-preview{
   font-variant-numeric:tabular-nums; font-weight:600; font-size:15px; padding-bottom:8px; white-space:nowrap; color:var(--accent);
 }
@@ -273,7 +274,7 @@ dialog::backdrop{background:rgba(20,14,15,.5)}
 
   Sync.iniciar('comanda').then(function(){
     var s = document.createElement('script');
-    s.src = 'comanda.js?v=202610161045';
+    s.src = 'comanda.js?v=202610161055';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar comanda.js. Recarga la pagina.'; };
     document.body.appendChild(s);

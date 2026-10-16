@@ -210,6 +210,17 @@ function servicesOf(ym, companyId, status){
 }
 /* El IGI se liquida sobre la base de cada tipo, no sumando los redondeos de cada línea:
    así la factura cuadra si alguien recalcula el porcentaje sobre la base impresa. */
+/* Albaranes distintos: varias líneas (menú del día, bocadillo…) pueden ir en el mismo albarán firmado */
+function nAlb(list){
+  var seen={}, n=0;
+  (list||[]).forEach(function(s){
+    var k=(s.albaran||"").trim();
+    if(!k){ n++; return; }
+    k=(s.date||"")+"|"+k;
+    if(!seen[k]){ seen[k]=1; n++; }
+  });
+  return n;
+}
 function totalsOf(list){
   var t={diners:0,base:0,igi:0,total:0,extras:0,count:list.length,taxes:[],gross:false}, byRate={};
   list.forEach(function(s){
@@ -395,7 +406,8 @@ function viewServicios(main){
       '<div class="field"><label class="lbl" for="q_din">Comens.</label><input type="number" id="q_din" min="0" step="1" value="1" required></div>'+
       '<div class="field"><label class="lbl" for="q_pri">€/persona'+(state.settings.pricesIncludeIgi?" (IGI incl.)":"")+'</label><input type="number" id="q_pri" min="0" step="0.01" value="'+esc(precioTipo(ui.fCompany, ui.lastTipo||defaultDesc()))+'" required></div>'+
       '<div style="display:flex; gap:10px; align-items:end"><span class="total-preview" id="q_total">—</span>'+
-      '<button class="btn primary" type="submit">Añadir</button></div>'+
+      '<button class="btn" type="button" id="q_more" title="Guarda esta línea y deja el mismo albarán abierto para añadir otra cosa (p. ej. bocadillos)">+ Otra línea</button>'+
+      '<button class="btn primary" type="submit" id="q_add">Añadir</button></div>'+
     '</form></div></div>'+
 
     '<div class="card"><div class="card-head">'+
@@ -437,8 +449,15 @@ function viewServicios(main){
   qa.value=nextAlbaran();
   refreshPreview();
 
+  var masLineas=false;
+  document.getElementById("q_more").addEventListener("click", function(){
+    masLineas=true;
+    if(f.requestSubmit) f.requestSubmit(); else f.dispatchEvent(new Event("submit",{cancelable:true}));
+  });
+  document.getElementById("q_add").addEventListener("click", function(){ masLineas=false; });
   f.addEventListener("submit", function(ev){
     ev.preventDefault();
+    var seguir=masLineas; masLineas=false;
     if(!qc.value){ toast("Elige la empresa a la que se apunta el servicio.", true); qc.focus(); return; }
     var s={
       id:uid(), date:document.getElementById("q_date").value, companyId:qc.value,
@@ -455,10 +474,17 @@ function viewServicios(main){
     render();
     var nq=document.getElementById("q_comp"); if(nq){ nq.value=s.companyId; nq.dispatchEvent(new Event("change")); }
     var nd=document.getElementById("q_date"); if(nd) nd.value=s.date;
-    var na=document.getElementById("q_alb"); if(na) na.value=nextAlbaran();
+    var na=document.getElementById("q_alb"); if(na) na.value=seguir ? s.albaran : nextAlbaran();
     var ne=document.getElementById("q_ext"); if(ne) ne.value="";
-    document.getElementById("q_din").focus();
-    toast("Servicio anotado: "+eur(svcAmounts(s).total));
+    if(seguir){
+      var lineas=state.services.filter(function(x){ return x.companyId===s.companyId && x.date===s.date && s.albaran && x.albaran===s.albaran; });
+      var tot=totalsOf(lineas).total;
+      document.getElementById("q_tipo").focus();
+      toast("Línea añadida al albarán "+(s.albaran||"")+" · "+lineas.length+" líneas · "+eur(tot)+". Elige la siguiente.");
+    } else {
+      document.getElementById("q_din").focus();
+      toast("Servicio anotado: "+eur(svcAmounts(s).total));
+    }
   });
 
   document.getElementById("f_month").addEventListener("change", function(){ ui.month=this.value; render(); });
@@ -774,7 +800,7 @@ function viewFacturar(main){
   zone.innerHTML=aviso+ids.map(function(id){
     var list=sortedServices(byComp[id]), t=totalsOf(list), c=company(id);
     return '<div class="card" style="margin-bottom:18px"><div class="card-head">'+
-      "<div><h2>"+esc(companyName(id))+'</h2><span class="hint">'+num(t.count)+" albaranes · "+num(t.diners)+" comensales · "+esc(monthLabel(ym))+"</span></div>"+
+      "<div><h2>"+esc(companyName(id))+'</h2><span class="hint">'+num(nAlb(list))+" albaranes · "+num(t.diners)+" comensales · "+esc(monthLabel(ym))+"</span></div>"+
       '<div class="toolbar" style="margin:0">'+
         '<span style="font-weight:600; font-size:16px; font-variant-numeric:tabular-nums">'+eur(t.total)+"</span>"+
         '<button class="btn" data-preview="'+id+'">Ver borrador</button>'+
@@ -920,8 +946,8 @@ function emitInvoice(cid, ym){
       (mismas.length>1?'<strong>'+mismas.length+' facturas</strong>':'la factura <strong class="mono">'+esc(mismas[0].number)+'</strong>')+
       ' de <strong>'+esc(monthLabel(ym))+'</strong>'+
       (mismas.length>1?'':' por <strong>'+eur(mismas[0].total)+'</strong>')+'.</p>'+
-      '<p class="section-note" style="margin:12px 0 0">Esta llevaría '+inv.lines.length+
-      (inv.lines.length>1?' albaranes nuevos':' albarán nuevo')+
+      '<p class="section-note" style="margin:12px 0 0">Esta llevaría '+nAlb(inv.lines)+
+      (nAlb(inv.lines)>1?' albaranes nuevos':' albarán nuevo')+
       ' que aún no estaban facturados. Si es una factura complementaria, adelante; '+
       'si te has confundido, mejor revisa antes en «Facturas».</p>',
       function(){
@@ -986,7 +1012,7 @@ function viewFacturas(main){
       "<td>"+esc(dmy(i.date))+"</td>"+
       "<td>"+esc(i.client&&i.client.name?i.client.name:companyName(i.companyId))+"</td>"+
       "<td>"+esc(monthLabel(i.period))+"</td>"+
-      '<td class="num">'+num(i.lines.length)+"</td>"+
+      '<td class="num">'+num(nAlb(i.lines))+"</td>"+
       '<td class="num">'+eur(i.base)+"</td>"+
       '<td class="num">'+eur(i.igi)+"</td>"+
       '<td class="num"><strong>'+eur(i.total)+"</strong></td>"+
@@ -1515,7 +1541,7 @@ function invoiceHTML(inv){
       (c.address?"<div>"+esc(c.address)+(c.city?", "+esc(c.city):"")+"</div>":"")+
     "</div>"+
     '<p style="margin:14px 0 0; font-size:12.5px; color:#5B4E50">Servicio de comidas para personal — periodo de <strong>'+esc(monthLabel(inv.period))+
-      "</strong>. "+num(inv.lines.length)+" albaranes, "+num(inv.diners)+" comensales."+
+      "</strong>. "+num(nAlb(inv.lines))+" albaranes, "+num(inv.diners)+" comensales."+
       (gross?" Importes con el IGI incluido.":"")+"</p>"+
     '<div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Nº albarán</th><th>Concepto</th>'+
       '<th class="num">Comens.</th><th class="num">€/pers.</th><th class="num">Extras</th>'+
@@ -1547,7 +1573,7 @@ function mailText(inv, destinos){
   var body=(state.settings.mailIntro||"")+"\n\n"+
     "Factura: "+inv.number+"\n"+
     "Periodo: "+monthLabel(inv.period)+"\n"+
-    "Albaranes: "+inv.lines.length+"  ·  Comensales: "+num(inv.diners)+"\n"+
+    "Albaranes: "+nAlb(inv.lines)+"  ·  Comensales: "+num(inv.diners)+"\n"+
     "Subtotal (base imponible): "+eur(inv.base)+"\n"+
     invTaxes(inv).map(function(tx){ return "IGI "+pct(tx.rate)+": "+eur(tx.amount)+"\n"; }).join("")+
     "TOTAL: "+eur(inv.total)+"\n"+
@@ -1617,7 +1643,7 @@ function layoutInvoice(inv, opts){
 
   T("Servicio de comidas para personal — periodo de "+monthLabel(inv.period)+"."+
     (gross?" Importes con el IGI incluido.":""), L, y, 9.2, false, C_MUT);
-  T(inv.lines.length+" albaranes · "+num(inv.diners)+" comensales", R, y, 9.2, false, C_MUT, "right");
+  T(nAlb(inv.lines)+" albaranes · "+num(inv.diners)+" comensales", R, y, 9.2, false, C_MUT, "right");
   y+=16;
 
   /* table */
