@@ -179,6 +179,9 @@ function tiposServicio(){
 }
 /* Último precio usado para ese tipo en esa empresa (o en cualquiera); si no hay, el de la empresa */
 function precioTipo(companyId, desc){
+  if(desc===defaultDesc()) return precioPara(companyId);
+  var tp=(state.settings.tipoPrices||{})[desc];
+  if(tp) return (+tp).toFixed(2);
   var best=null, any=null;
   state.services.forEach(function(s){
     if(s.desc!==desc || !s.price) return;
@@ -1068,6 +1071,13 @@ function viewAjustes(main){
         '<div class="field"><label class="lbl" for="s_dprice">Precio por persona (€)</label><input type="number" id="s_dprice" min="0" step="0.01" value="'+esc(s.defaultPrice)+'"></div>'+
         '<div class="field"><label class="lbl" for="s_ddesc">Descripción</label><input id="s_ddesc" value="'+esc(s.defaultDesc)+'"></div>'+
       "</div>"+
+      '<div class="grid3" style="margin-top:13px">'+
+        tiposServicio().filter(function(t){ return t!==defaultDesc(); }).map(function(t,ix){
+          var v=(s.tipoPrices||{})[t];
+          return '<div class="field"><label class="lbl" for="s_tp'+ix+'">'+esc(t)+' (€/persona)</label>'+
+            '<input type="number" id="s_tp'+ix+'" data-tipo="'+esc(t)+'" min="0" step="0.01" value="'+(v?esc((+v).toFixed(2)):"")+'" placeholder="'+esc(num(+s.defaultPrice||0,2))+'"></div>';
+        }).join("")+
+      "</div>"+
       '<p class="section-note" style="margin:13px 0 0">Si a una empresa le has puesto un precio propio en su ficha, ese manda sobre este.</p>'+
     "</div></div>"+
 
@@ -1122,6 +1132,14 @@ function viewAjustes(main){
     var k={s_igi:"igi",s_due:"dueDays",s_dprice:"defaultPrice"}[id];
     var el=document.getElementById(id); if(!el) return;
     el.addEventListener("change", function(){ state.settings[k]=+this.value||0; touch(); render(); });
+  });
+  main.querySelectorAll("[data-tipo]").forEach(function(el){
+    el.addEventListener("change", function(){
+      var tp=state.settings.tipoPrices||(state.settings.tipoPrices={});
+      var v=+this.value||0, t=this.getAttribute("data-tipo");
+      if(v) tp[t]=v; else delete tp[t];
+      touch();
+    });
   });
   document.getElementById("addProf").addEventListener("click", function(){ editarPerfil(null); });
   pintarPerfiles();
