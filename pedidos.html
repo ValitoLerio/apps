@@ -144,6 +144,18 @@ main{padding:22px 24px 120px;max-width:1180px;min-width:0}
 .of-por{font-size:12px;font-weight:500;color:var(--muted);letter-spacing:0;margin-left:2px}
 .of-precio.mejor{color:var(--ok)}
 .of-precio.sin{color:var(--muted);font-size:15px;font-weight:500}
+/* Precio de venta, descuento, precio con descuento e IGI: las cuatro
+   cifras que hay detrás del precio gordo, en fila y pequeñas. */
+.desglose{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;margin-top:6px;
+          background:var(--linea-suave);border:1px solid var(--linea-suave);border-radius:7px;overflow:hidden}
+.desglose>div{background:var(--sup);padding:4px 7px;min-width:0}
+.oferta.mejor .desglose>div{background:var(--ok-suave)}
+.oferta.encargada .desglose>div{background:var(--acento-suave)}
+.desglose .k{display:block;font-family:var(--mono);font-size:9px;letter-spacing:.07em;
+             text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.desglose b{display:block;font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.desglose b.dto{color:var(--ok)}
+.desglose b.nada{color:var(--muted);font-weight:500}
 .of-info{font-size:11.5px;color:var(--muted);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap}
 .of-info .viejo{color:var(--aviso);font-weight:600}
 .of-acciones{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
@@ -409,7 +421,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('pedidos').then(function(){
     var s = document.createElement('script');
-    s.src = 'pedidos.js?v=202610081702';
+    s.src = 'pedidos.js?v=202610170745';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar pedidos.js. Recarga la pagina.'; };
     document.body.appendChild(s);

@@ -52,7 +52,7 @@ function libroVacio(){
   return {
     v:1, actualizado:new Date().toISOString(),
     ajustes:{ nombre:"", conImportes:false, mesesViejo:24 },
-    productos:[],     /* {id, seccion, nombre, proveedor, precio, fecha, igi, udsCaja} */
+    productos:[],     /* {id, seccion, nombre, proveedor, precio, dto, fecha, igi, udsCaja} */
     proveedores:{},   /* "INTERPESCA": {movil, telefono, contacto, nota} */
     pedido:{},        /* id del producto -> {cajas, kg, litros, uds} */
     enviados:[]       /* {id, fecha, proveedor, lineas:[{nombre,pedido,texto,importe}], total} */
@@ -144,9 +144,31 @@ function avisar(mensaje, malo){
 /* El precio que hay que mirar es el neto: el del proveedor con su IGI
    encima. Comparar precios sin el impuesto engaña, porque no todas las
    secciones llevan el mismo: la comida va al 1 % y la bebida al 4,5 %. */
+/* El precio de venta es el que él escribe; si el proveedor le hace un
+   tanto por ciento de descuento, el IGI va sobre el precio ya rebajado. */
+function conDto(p){
+  if(!p || !p.precio) return 0;
+  return r2(p.precio * (1 - (+p.dto||0)/100));
+}
+function cuotaIgi(p){
+  if(!p || !p.precio) return 0;
+  return r2(conDto(p) * (+p.igi||0)/100);
+}
 function conIgi(p){
   if(!p || !p.precio) return 0;
-  return r2(p.precio * (1 + (+p.igi||0)/100));
+  return r2(conDto(p) + cuotaIgi(p));
+}
+/* Las cuatro cifras de cada producto, debajo del precio gordo. */
+function desglose(o){
+  if(!(+o.precio>0)) return "";
+  var dto=+o.dto||0;
+  return '<div class="desglose">'+
+    '<div><span class="k">P. venta</span><b>'+eur(o.precio)+'</b></div>'+
+    '<div><span class="k">Dto.</span><b'+(dto?' class="dto"':' class="nada"')+'>'+
+      (dto?"−"+num(dto, dto%1?1:0)+" %":"sin dto.")+'</b></div>'+
+    '<div><span class="k">Con dto.</span><b'+(dto?"":' class="nada"')+'>'+eur(conDto(o))+'</b></div>'+
+    '<div><span class="k">IGI '+num(o.igi, (+o.igi)%1?1:0)+' %</span><b>'+eur(cuotaIgi(o))+'</b></div>'+
+  '</div>';
 }
 function precioCaja(p){
   var u=+p.udsCaja||0;
@@ -956,7 +978,6 @@ function lineaOferta(o, g){
                         (meses!=null && meses>=12 ? ' · hace '+Math.floor(meses/12)+' año'+(meses>=24?"s":"") : "")+
                         '</span>');
   else info.push('<span class="viejo">sin fecha</span>');
-  if(neto) info.push('<span>'+num(o.igi,1)+' % IGI</span>');
   if(caja>0) info.push('<span>'+esc(deCaja(o))+' · '+eur(precioCaja(o))+'</span>');
   /* Las cajas se pueden pedir siempre, pero si nadie ha dicho cuántas
      unidades trae la caja no hay precio que ponerle: se avisa aquí, que
@@ -969,7 +990,8 @@ function lineaOferta(o, g){
         (esMejor?' <span class="chapa ok" style="font-size:10.5px">más barato</span>':"")+'</div>'+
       '<div class="of-precio'+(esMejor?" mejor":"")+(neto?"":" sin")+'">'+
         (neto?eur(neto):"sin precio")+
-        (neto?'<span class="of-por">/'+esc(unidadDe(o)||"ud")+'</span>':"")+'</div>'+
+        (neto?'<span class="of-por">/'+esc(unidadDe(o)||"ud")+' con IGI</span>':"")+'</div>'+
+      desglose(o)+
       '<div class="of-info">'+info.join("")+
         ' <button class="btn suave sm" data-editar="'+esc(o.id)+'" '+
         'style="padding:0 4px;font-size:11.5px;text-decoration:underline">cambiar</button></div>'+
@@ -2095,7 +2117,7 @@ function editarProducto(p){
   var secs=secciones().map(function(s){ return s.nombre; });
   if(!secs.length) secs=["CONGELADOS","BEBIDAS","COMIDAS","LIMPIEZA","TABACO"];
   var provs=listaProveedores().map(function(x){ return x.nombre; });
-  p=p||{seccion:secs[0], nombre:"", proveedor:"", precio:null, fecha:hoyISO(), igi:1, udsCaja:null};
+  p=p||{seccion:secs[0], nombre:"", proveedor:"", precio:null, dto:null, fecha:hoyISO(), igi:1, udsCaja:null};
 
   abrirVentana(nuevo?"Producto nuevo":p.nombre,
     '<div class="rejilla">'+
@@ -2107,9 +2129,12 @@ function editarProducto(p){
         provs.map(function(x){ return '<option value="'+esc(x)+'">'; }).join("")+'</datalist></div>'+
     '</div>'+
     '<div class="rejilla" style="margin-top:12px">'+
-      '<div class="campo"><label class="lbl" for="ep_precio">Precio del proveedor (€)</label>'+
+      '<div class="campo"><label class="lbl" for="ep_precio">Precio de venta (€)</label>'+
         '<input type="number" id="ep_precio" class="grande" min="0" step="0.01" '+
         'value="'+(p.precio!=null?esc(p.precio):"")+'" placeholder="0,00"></div>'+
+      '<div class="campo"><label class="lbl" for="ep_dto">Descuento (%)</label>'+
+        '<input type="number" id="ep_dto" class="grande" min="0" max="100" step="0.5" '+
+        'value="'+(+p.dto?esc(p.dto):"")+'" placeholder="sin dto."></div>'+
       '<div class="campo"><label class="lbl" for="ep_igi">IGI (%)</label>'+
         '<input type="number" id="ep_igi" min="0" max="30" step="0.5" value="'+esc(p.igi)+'"></div>'+
       '<div class="campo"><label class="lbl" for="ep_uds">Unidades por caja</label>'+
@@ -2154,6 +2179,7 @@ function editarProducto(p){
       p.proveedor=valor("ep_prov");
       p.seccion=valor("ep_sec");
       p.igi=numero("ep_igi");
+      p.dto=numero("ep_dto")||null;
       p.udsCaja=(document.getElementById("ep_uds").value!=="") ? +numero("ep_uds") : null;
       p.fecha=valor("ep_fecha");
       p.diario=document.getElementById("ep_diario").checked;
@@ -2177,14 +2203,20 @@ function editarProducto(p){
       var fecha=document.getElementById("ep_fecha");
       fecha.addEventListener("input", function(){ this.dataset.tocada="1"; });
       function cuenta(){
-        var pr=numero("ep_precio"), igi=numero("ep_igi"), uds=numero("ep_uds");
-        var neto=r2(pr*(1+igi/100));
+        var pr=numero("ep_precio"), igi=numero("ep_igi"), uds=numero("ep_uds"), dto=numero("ep_dto");
+        var rebajado=r2(pr*(1-dto/100));
+        var cuota=r2(rebajado*igi/100);
+        var neto=r2(rebajado+cuota);
         var t=document.getElementById("ep_cuenta");
         if(!pr){ t.innerHTML="Sin precio, este proveedor no entra en la comparación."; return; }
-        t.innerHTML="Con el IGI: <strong>"+eur(neto)+"</strong>"+
+        t.innerHTML="Precio de venta <strong>"+eur(pr)+"</strong>"+
+          (dto ? " · descuento "+num(dto, dto%1?1:0)+" % → con dto. <strong>"+eur(rebajado)+"</strong>"
+               : " · sin descuento")+
+          " · IGI <strong>"+eur(cuota)+"</strong>"+
+          ". Con el IGI: <strong>"+eur(neto)+"</strong>"+
           (uds>0 ? ". La caja de "+num(uds, uds%1?1:0)+" sale a <strong>"+eur(r2(neto*uds))+"</strong>." : ".");
       }
-      ["ep_precio","ep_igi","ep_uds"].forEach(function(id){
+      ["ep_precio","ep_dto","ep_igi","ep_uds"].forEach(function(id){
         document.getElementById(id).addEventListener("input", cuenta);
       });
       cuenta();
@@ -2287,10 +2319,11 @@ function verAjustes(main){
 
     '<div class="tarjeta"><div class="tarjeta-cab"><h2>De dónde sale cada número</h2></div>'+
       '<div class="tarjeta-cuerpo"><div class="nota" style="max-width:78ch">'+
-        '<p style="margin:0 0 8px">El <strong style="color:var(--tinta)">precio</strong> es el del '+
-        'proveedor, tal cual te lo pasa. Es lo único que se escribe.</p>'+
+        '<p style="margin:0 0 8px">El <strong style="color:var(--tinta)">precio de venta</strong> es el '+
+        'que pones tú. Si tiene <strong style="color:var(--tinta)">descuento</strong>, el tanto por ciento '+
+        'se le quita y sale el <strong style="color:var(--tinta)">precio con descuento</strong>.</p>'+
         '<p style="margin:0 0 8px">El <strong style="color:var(--tinta)">precio con IGI</strong> —el que '+
-        'sale gordo en cada ficha— es ése con su impuesto: 1 % la comida, 4,5 % la bebida, la limpieza '+
+        'sale gordo en cada ficha— es el precio con descuento más su impuesto: 1 % la comida, 4,5 % la bebida, la limpieza '+
         'y el tabaco. Es el que hay que comparar, porque sin él dos precios de secciones distintas no '+
         'se pueden poner uno al lado del otro.</p>'+
         '<p style="margin:0 0 8px">El <strong style="color:var(--tinta)">precio de la caja</strong> es el '+
