@@ -165,7 +165,7 @@ function desglose(o){
   return '<div class="desglose">'+
     '<div><span class="k">P. venta</span><b>'+eur(o.precio)+'</b></div>'+
     '<div><span class="k">Dto.</span><b'+(dto?' class="dto"':' class="nada"')+'>'+
-      (dto?"−"+num(dto, dto%1?1:0)+" %":"sin dto.")+'</b></div>'+
+      (dto?"−"+num(dto, dto%1?1:0)+" %":"&nbsp;")+'</b></div>'+
     '<div><span class="k">Con dto.</span><b'+(dto?"":' class="nada"')+'>'+eur(conDto(o))+'</b></div>'+
     '<div><span class="k">IGI '+num(o.igi, (+o.igi)%1?1:0)+' %</span><b>'+eur(cuotaIgi(o))+'</b></div>'+
   '</div>';
