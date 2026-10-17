@@ -167,7 +167,7 @@ function desglose(o){
     '<div><span class="k">Dto.</span><b'+(dto?' class="dto"':' class="nada"')+'>'+
       (dto?"−"+num(dto, dto%1?1:0)+" %":"&nbsp;")+'</b></div>'+
     '<div><span class="k">Con dto.</span><b'+(dto?"":' class="nada"')+'>'+eur(conDto(o))+'</b></div>'+
-    '<div><span class="k">IGI '+num(o.igi, (+o.igi)%1?1:0)+' %</span><b>'+eur(cuotaIgi(o))+'</b></div>'+
+    '<div><span class="k">Con IGI '+num(o.igi, (+o.igi)%1?1:0)+' %</span><b>'+eur(conIgi(o))+'</b></div>'+
   '</div>';
 }
 function precioCaja(p){
@@ -2212,8 +2212,7 @@ function editarProducto(p){
         t.innerHTML="Precio de venta <strong>"+eur(pr)+"</strong>"+
           (dto ? " · descuento "+num(dto, dto%1?1:0)+" % → con dto. <strong>"+eur(rebajado)+"</strong>"
                : " · sin descuento")+
-          " · IGI <strong>"+eur(cuota)+"</strong>"+
-          ". Con el IGI: <strong>"+eur(neto)+"</strong>"+
+          " · con IGI "+num(igi, igi%1?1:0)+" %: <strong>"+eur(neto)+"</strong>"+
           (uds>0 ? ". La caja de "+num(uds, uds%1?1:0)+" sale a <strong>"+eur(r2(neto*uds))+"</strong>." : ".");
       }
       ["ep_precio","ep_dto","ep_igi","ep_uds"].forEach(function(id){
