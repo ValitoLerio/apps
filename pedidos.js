@@ -1884,7 +1884,8 @@ function verProveedor(main){
     '<div class="tarjeta"><div class="tarjeta-cab">'+
       '<h2>Su lista</h2><span class="pista">escribe la cantidad y ya queda apuntado</span></div>'+
       '<div class="tabla-caja pegada"><table class="hoja"><thead><tr>'+
-        '<th>Producto</th><th class="num">Precio</th><th class="num">Cuánto</th>'+
+        '<th>Producto</th><th class="num">P. venta</th><th class="num">Dto.</th>'+
+        '<th class="num">Con dto.</th><th class="num">Con IGI</th><th class="num">Cuánto</th>'+
       '</tr></thead><tbody>'+
       suyos.sort(function(a,b){
         return (a.seccion||"").localeCompare(b.seccion||"") ||
@@ -1900,6 +1901,12 @@ function verProveedor(main){
               (caro?' · <span style="color:var(--malo);font-weight:600">'+
                     esc(caro.mejor.proveedor)+' lo tiene a '+eur(conIgi(caro.mejor))+'</span>':"")+
             '</div></td>'+
+          (conIgi(p)
+            ? '<td class="num">'+eur(p.precio)+'</td>'+
+              '<td class="num" style="color:var(--ok);font-weight:600">'+
+                (+p.dto?"−"+num(p.dto, p.dto%1?1:0)+" %":"")+'</td>'+
+              '<td class="num">'+(+p.dto?eur(conDto(p)):"")+'</td>'
+            : '<td></td><td></td><td></td>')+
           '<td class="num">'+(conIgi(p)
             ? '<strong>'+eur(conIgi(p))+'</strong>'
             : '<span style="color:var(--muted)">sin precio</span>')+
