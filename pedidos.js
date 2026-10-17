@@ -167,7 +167,7 @@ function desglose(o){
     '<div><span class="k">Dto.</span><b'+(dto?' class="dto"':' class="nada"')+'>'+
       (dto?"−"+num(dto, dto%1?1:0)+" %":"&nbsp;")+'</b></div>'+
     '<div><span class="k">Con dto.</span><b'+(dto?"":' class="nada"')+'>'+eur(conDto(o))+'</b></div>'+
-    '<div><span class="k">Neto +IGI '+num(o.igi, (+o.igi)%1?1:0)+' %</span><b class="neto">'+eur(conIgi(o))+'</b></div>'+
+    '<div><span class="k">Neto final</span><b class="neto">'+eur(conIgi(o))+'</b></div>'+
   '</div>';
 }
 function precioCaja(p){
@@ -1885,7 +1885,7 @@ function verProveedor(main){
       '<h2>Su lista</h2><span class="pista">escribe la cantidad y ya queda apuntado</span></div>'+
       '<div class="tabla-caja pegada"><table class="hoja"><thead><tr>'+
         '<th>Producto</th><th class="num">P. venta</th><th class="num">Dto.</th>'+
-        '<th class="num">Con dto.</th><th class="num">Neto +IGI</th><th class="num">Cuánto</th>'+
+        '<th class="num">Con dto.</th><th class="num">Neto final</th><th class="num">Cuánto</th>'+
       '</tr></thead><tbody>'+
       suyos.sort(function(a,b){
         return (a.seccion||"").localeCompare(b.seccion||"") ||
