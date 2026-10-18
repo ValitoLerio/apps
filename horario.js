@@ -913,6 +913,29 @@ var VAC_EST = {
 // Lo que se esta poniendo ahora mismo al pulsar un dia.
 var vacTipo = 'vacaciones';
 function setVacTipo(t){ if (!VAC_EST[t]) return; vacTipo = t; renderVacaciones(); }
+// El cuadrante se mira por meses —donde se ponen los dias— o el año
+// entero de un vistazo: una fila por persona y una columna por mes.
+var vacVista = 'mes';
+try { if (localStorage.getItem('rvacvista') === 'ano') vacVista = 'ano'; } catch(e){}
+function setVacVista(v){
+  vacVista = (v === 'ano') ? 'ano' : 'mes';
+  try { localStorage.setItem('rvacvista', vacVista); } catch(e){}
+  renderVacaciones();
+}
+// Los dias de vacaciones que le tocan a cada uno al año. Van en su ficha
+// del personal; mientras no se ponga, no se cuenta lo que queda.
+function vacDelAno(s){ var n = +s.vacAno; return n > 0 ? n : null; }
+function setVacDelAno(sid, val){
+  var n = Math.max(0, Math.round(+String(val).replace(',', '.') || 0));
+  staff().forEach(function(s){ if (s.id === sid) s.vacAno = n || null; });
+  save();
+  renderVacaciones();
+}
+function irAlMesVac(m){
+  vacVista = 'mes';
+  try { localStorage.setItem('rvacvista', 'mes'); } catch(e){}
+  selMonth(m);
+}
 
 // La celda del horario de un dia cualquiera, sin tocar el mes en curso.
 function celdaDe(sid, dia){
@@ -1244,8 +1267,18 @@ function renderVacaciones(){
 
   // Los botones de que se esta poniendo.
   var barra = document.getElementById('vac-tipos');
+  var boton = function(v, txt){
+    var on = (vacVista === v);
+    return '<button onclick="setVacVista(\'' + v + '\')" ' +
+      'style="cursor:pointer;font-family:inherit;font-size:.74rem;font-weight:700;padding:5px 14px;' +
+      'border:1px solid ' + (on ? 'var(--gold)' : 'var(--border)') + ';' +
+      'background:' + (on ? 'var(--gold)' : 'transparent') + ';color:' + (on ? 'var(--bg)' : 'var(--text2)') + ';' +
+      (v === 'mes' ? 'border-radius:14px 0 0 14px;' : 'border-radius:0 14px 14px 0;margin-left:-1px;') + '">' + txt + '</button>';
+  };
   if (barra) {
-    barra.innerHTML = VAC_TIPOS.map(function(t){
+    barra.innerHTML = '<span style="display:inline-flex;margin-right:10px">' +
+      boton('mes', 'Mes') + boton('ano', 'A&ntilde;o ' + curY) + '</span>' +
+      VAC_TIPOS.map(function(t){
       var e = VAC_EST[t], on = (t === vacTipo);
       return '<button onclick="setVacTipo(\'' + t + '\')" ' +
         'title="Poner ' + e.uno.toLowerCase() + ' al pulsar un dia" ' +
@@ -1261,6 +1294,10 @@ function renderVacaciones(){
       'Aun no hay personal dado de alta.</td></tr></tbody>';
     return;
   }
+
+  var leyenda = document.getElementById('vac-leyenda');
+  if (leyenda) leyenda.style.display = (vacVista === 'ano') ? 'none' : 'flex';
+  if (vacVista === 'ano') { ponerChapa('vac-rango', 'Todo ' + curY); renderVacAno(tbl, all); return; }
 
   /* El resumen de lo que se esta mirando: si esta elegido vacaciones,
      las vacaciones del mes de todos; si esta elegida la baja, las bajas.
@@ -1370,6 +1407,88 @@ function renderVacaciones(){
           '</td></tr>';
   });
   tb += '</tbody>';
+  tbl.innerHTML = th + tb;
+}
+
+// ── El año entero ─────────────────────────────────────────────────
+// Solo para mirar: los dias se ponen en el mes. Cada casilla dice
+// cuantos dias de lo elegido tiene esa persona ese mes, y cuantos mas,
+// mas color. Abajo, cuanta gente falta cada mes. Pulsando un mes se va
+// a ese mes para cambiar dias.
+function renderVacAno(tbl, all){
+  var e = VAC_EST[vacTipo];
+  var esVac = (vacTipo === 'vacaciones');
+  var hoyM = mesDeFecha(new Date());
+  var cab = 'background:var(--surface);color:var(--text2);padding:7px 4px;border:1px solid var(--border);' +
+            'text-align:center;font-size:.7rem;font-weight:700;white-space:nowrap';
+
+  var resumen = document.getElementById('vac-resumen');
+  if (resumen) {
+    var total = all.reduce(function(a,s){ return a + diasTipoAno(s.id, curY, vacTipo); }, 0);
+    resumen.innerHTML = '<div><span style="color:' + e.puro + ';font-weight:700">' + e.lbl + ' de ' + curY +
+      '</span>: ' + total + (total === 1 ? ' dia' : ' dias') + ' entre todos. ' +
+      'Pulsa un mes para ir a &eacute;l y cambiar d&iacute;as.</div>';
+  }
+
+  var th = '<thead><tr><th style="' + cab + ';color:var(--gold);font-family:Playfair Display,serif;font-size:.82rem;' +
+           'text-align:left;padding:7px 12px;position:sticky;left:0;z-index:10;min-width:110px">Personal</th>';
+  for (var m = 0; m < 12; m++) {
+    var esHoyM = (hoyM.y === curY && hoyM.m === m);
+    th += '<th onclick="irAlMesVac(' + m + ')" title="Ir a ' + MESES[m] + '" style="' + cab + ';cursor:pointer;min-width:46px;' +
+          (esHoyM ? 'background:rgba(201,168,76,.18);color:var(--gold2)' : '') + '">' + MESES[m].substring(0,3) + '</th>';
+  }
+  th += '<th style="' + cab + ';background:var(--total-bg);color:var(--gold2);min-width:56px">Total</th>';
+  if (esVac) th += '<th style="' + cab + ';background:var(--total-bg);min-width:62px" title="Dias que le tocan al año. Se cambia pulsando el numero.">Le tocan</th>' +
+                   '<th style="' + cab + ';background:var(--total-bg);color:var(--gold2);min-width:58px">Quedan</th>';
+  th += '</tr></thead>';
+
+  var fuera = [0,0,0,0,0,0,0,0,0,0,0,0];
+  var tb = '<tbody>', ultimoRol = null, cols = 14 + (esVac ? 2 : 0);
+  all.forEach(function(s){
+    if (s.role !== ultimoRol) {
+      if (ultimoRol !== null) tb += '<tr><td colspan="' + cols + '" style="height:3px;background:var(--border);padding:0;border:none"></td></tr>';
+      ultimoRol = s.role;
+    }
+    var tot = 0, celdas = '';
+    for (var m = 0; m < 12; m++) {
+      var n = diasTipoMes(s.id, curY, m, vacTipo);
+      tot += n; if (n) fuera[m]++;
+      var fuerza = n ? Math.min(1, .35 + n / 20) : 0;
+      celdas += '<td onclick="irAlMesVac(' + m + ')" title="' + esc(s.name) + ' - ' + MESES[m] + ': ' +
+        (n ? n + (n === 1 ? ' dia' : ' dias') + ' de ' + e.uno.toLowerCase() : 'nada') + '" ' +
+        'style="cursor:pointer;text-align:center;padding:3px;border:1px solid var(--border)">' +
+        (n ? '<div style="background:' + e.bg + ';color:' + e.col + ';opacity:' + fuerza.toFixed(2) + ';border-radius:5px;' +
+             'font-weight:800;font-size:.8rem;padding:4px 0">' + n + '</div>'
+           : '<span style="color:var(--border)">&middot;</span>') + '</td>';
+    }
+    var fila = '<tr><td style="background:var(--surface);position:sticky;left:0;z-index:5;padding:5px 10px;' +
+      'border:1px solid var(--border);white-space:nowrap">' +
+      '<span style="color:' + RCOL[s.role] + ';font-weight:600;font-size:.8rem">' + esc(s.name) + '</span>' +
+      '<span class="rt r' + s.role + '" style="margin-left:3px">' + RLBL[s.role] + '</span></td>' + celdas +
+      '<td style="background:var(--total-bg);border:1px solid var(--border);text-align:center;font-weight:900;' +
+      'color:' + e.puro + ';font-size:.9rem">' + tot + '</td>';
+    if (esVac) {
+      var toca = vacDelAno(s), quedan = (toca == null) ? null : toca - tot;
+      fila += '<td style="background:var(--total-bg);border:1px solid var(--border);text-align:center;padding:3px">' +
+        '<input type="number" min="0" step="1" value="' + (toca == null ? '' : toca) + '" placeholder="?" onchange="setVacDelAno(\'' + s.id + '\', this.value)" ' +
+        'style="width:46px;text-align:center;font-family:inherit;font-size:.8rem;font-weight:700;padding:3px 2px;' +
+        'background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px"></td>' +
+        '<td style="background:var(--total-bg);border:1px solid var(--border);text-align:center;font-weight:900;font-size:.9rem;' +
+        'color:' + (quedan == null ? 'var(--text2)' : quedan < 0 ? '#e5776a' : (quedan === 0 ? 'var(--text2)' : '#4caf7a')) + '" ' +
+        'title="' + (quedan == null ? 'Pon los dias que le tocan' : quedan < 0 ? 'Se ha pasado ' + (-quedan) + ' dias' : 'Le quedan ' + quedan + ' dias') + '">' +
+        (quedan == null ? '&ndash;' : quedan) + '</td>';
+    }
+    tb += fila + '</tr>';
+  });
+  tb += '</tbody><tfoot><tr><td style="background:var(--surface);position:sticky;left:0;z-index:5;padding:5px 10px;' +
+        'border:1px solid var(--border);font-size:.72rem;color:var(--text2);white-space:nowrap" ' +
+        'title="Cuanta gente tiene algun dia de ' + e.uno.toLowerCase() + ' ese mes">Fuera ese mes</td>';
+  for (var m = 0; m < 12; m++) {
+    tb += '<td style="text-align:center;border:1px solid var(--border);font-size:.78rem;font-weight:700;' +
+          'color:' + (fuera[m] >= 3 ? '#e0b168' : (fuera[m] ? 'var(--text)' : 'var(--border)')) + '">' +
+          (fuera[m] || '&middot;') + '</td>';
+  }
+  tb += '<td colspan="' + (esVac ? 3 : 1) + '" style="border:1px solid var(--border)"></td></tr></tfoot>';
   tbl.innerHTML = th + tb;
 }
 
