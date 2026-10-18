@@ -1103,7 +1103,7 @@ function loadCfg(){
   document.getElementById('c-depRecibido').value = cfg.depRecibido||'';
 }
 function guardarCfg(){
-  cfg={
+  cfg=Object.assign({}, cfg, {
     inq:        document.getElementById('c-inq').value.trim(),
     alq:        parseFloat(document.getElementById('c-alq').value)||0,
     cuota:      parseFloat(document.getElementById('c-cuota').value)||0,
@@ -1122,7 +1122,7 @@ function guardarCfg(){
     invInicial: parseFloat(document.getElementById('c-invInicial').value)||0,
     invReforma: parseFloat(document.getElementById('c-invReforma').value)||0,
     depRecibido: parseFloat(document.getElementById('c-depRecibido').value)||0,
-  };
+  });
   LS.set('piso_cfg',cfg);flash('flash-cfg');
   renderDesgloseInversion();
 }
@@ -1477,49 +1477,29 @@ function textoWhatsApp(m){
   return l.join('\n');
 }
 
-/* Manda la factura por WhatsApp. En el movil, si el aparato deja
-   compartir archivos, va la imagen dentro del propio envio. Si no, se
-   descarga la imagen y se abre el chat con el texto puesto, para
-   adjuntarla a mano: ni WhatsApp Web ni wa.me admiten adjuntos. */
+/* Manda la factura por WhatsApp, eligiendo a quién: a mí o al inquilino
+   (Paula). Sale una ventana con los dos, cada uno con su número, que se
+   puede cambiar ahí mismo y se queda guardado. En el ordenador la imagen
+   se descarga para arrastrarla al chat (ni wa.me ni WhatsApp Web admiten
+   adjuntos); en el móvil hay además un botón para compartirla con la
+   imagen dentro. */
 function whatsappRecibo(mes){
   const m=meses.find(r=>r.mes===mes);
   if(!m){ alert('No encuentro ese recibo.'); return; }
   const nombre='recibo-'+mes+'.png';
-  const texto=textoWhatsApp(m);
-  const tel=telefonoInquilino();
-
   let blob=null;
   try{ blob=imagenDeRecibo(m); }
   catch(err){ alert('No he podido generar la factura: '+err.message); return; }
 
-  // 1) Movil: compartir la imagen directamente, con el texto dentro.
-  //    Solo en aparatos de dedo. El Mac tambien dice que sabe compartir
-  //    archivos, pero lo que abre es el menu de compartir del sistema,
-  //    donde no esta WhatsApp: se acaba en el panel de Extensiones sin
-  //    haber enviado nada.
-  if(esAparatoDeDedo()){
-    try{
-      const file=new File([blob], nombre, {type:'image/png'});
-      if(navigator.canShare && navigator.share && navigator.canShare({files:[file]})){
-        navigator.share({files:[file], text:texto, title:'Recibo '+fmtMes(mes)})
-          .catch(()=>{ ventanaWhatsApp(texto, tel, nombre); });
-        return;
-      }
-    }catch(err){ /* seguimos por el otro camino */ }
+  const movil=esAparatoDeDedo();
+  if(!movil){
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=nombre;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
   }
-
-  // 2) Ordenador: bajamos la imagen y abrimos una ventana con el texto y
-  //    los enlaces. Antes se abria el chat de golpe, y cuando no habia
-  //    telefono guardado el enlace salia sin numero —wa.me/?text=…—, que
-  //    es justo el que WhatsApp rechaza con "no se pudo abrir este
-  //    enlace". Ahora los enlaces solo se ponen si hay numero.
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url; a.download=nombre;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(url), 4000);
-
-  ventanaWhatsApp(texto, tel, nombre);
+  ventanaWhatsApp(m, blob, nombre, movil);
 }
 
 /* Movil o tableta: pantalla de dedo. En el Mac el puntero es fino
@@ -1531,74 +1511,122 @@ function esAparatoDeDedo(){
   }catch(e){ return false; }
 }
 
-/* La ventana de envio: el texto a la vista, los enlaces cuando hay
-   numero, y un hueco para escribirlo cuando no lo hay. */
-function ventanaWhatsApp(texto, tel, nombre){
+function nombreInq(){ return ((cfg.inq||'').trim().split(/\s+/)[0]) || 'Inquilino'; }
+function miTelefono(){ return soloNumero(cfg.miTel||'') || '376341459'; }
+function telDelInq(){ return soloNumero(cfg.inqTel||'') || telefonoInquilino(); }
+function guardarTel(clave, valor){
+  cfg[clave]=valor; LS.set('piso_cfg', cfg);
+}
+function bonitoTel(n){
+  n=soloNumero(n);
+  if(n.indexOf('376')===0 && n.length===9) return '+376 '+n.slice(3,6)+' '+n.slice(6);
+  if(n.indexOf('34')===0 && n.length===11) return '+34 '+n.slice(2,5)+' '+n.slice(5,8)+' '+n.slice(8);
+  return n ? '+'+n : '';
+}
+
+/* La ventana de envio: a quién, con su número, y el texto a la vista. */
+function ventanaWhatsApp(m, blob, nombre, movil){
   const previo=document.getElementById('wa-aviso');
   if(previo) previo.remove();
-
-  const enlaces=(num)=>
-    '<a href="https://wa.me/'+num+'?text='+encodeURIComponent(texto)+'" target="_blank" '+
-      'rel="noopener" class="btn btn-primary" data-wa '+
-      'style="background:#25D366;color:#0b3d24;text-decoration:none;display:inline-block">'+
-      'Abrir WhatsApp</a> '+
-    '<a href="https://web.whatsapp.com/send?phone='+num+'&text='+encodeURIComponent(texto)+'" '+
-      'target="_blank" rel="noopener" class="btn btn-secondary" data-web '+
-      'style="text-decoration:none;display:inline-block">Abrir en el navegador</a>';
+  const inq=nombreInq();
+  const textoPara=(quien)=>{
+    const t=textoWhatsApp(m);
+    /* Al mio me llegan los de todos al mismo chat: arriba, de quién es. */
+    return quien==='yo' ? '*Recibo de '+(cfg.inq||inq)+'*\n\n'+t : t;
+  };
+  let quien='inq';
 
   const caja=document.createElement('div');
   caja.id='wa-aviso';
   caja.style.cssText='position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2000;'+
     'background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;'+
-    'box-shadow:0 24px 60px -20px rgba(0,0,0,.45);max-width:min(460px,92vw);font-size:13.5px';
+    'box-shadow:0 24px 60px -20px rgba(0,0,0,.45);width:min(480px,92vw);font-size:13.5px';
+  const fila=(id, etiqueta, num)=>
+    '<label data-quien="'+id+'" style="display:flex;align-items:center;gap:10px;padding:10px 12px;'+
+      'border:1.5px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:pointer">'+
+      '<input type="radio" name="wa-quien" value="'+id+'" style="width:auto;margin:0;accent-color:#25D366">'+
+      '<b style="min-width:70px">'+etiqueta+'</b>'+
+      '<input type="tel" inputmode="tel" data-tel="'+id+'" value="'+(num?bonitoTel(num):'')+'" '+
+        'placeholder="+376 300 000" style="flex:1;min-width:0;padding:6px 9px;border:1px solid var(--border);'+
+        'border-radius:7px;background:var(--bg);color:inherit;font-size:13.5px"></label>';
   caja.innerHTML=
-    '<div style="font-weight:600;margin-bottom:6px">La factura ya está descargada</div>'+
-    '<div style="color:var(--muted);margin-bottom:12px">Se llama <strong>'+nombre+'</strong>. '+
-    'WhatsApp no deja adjuntar archivos desde un enlace, así que el texto va puesto y '+
-    'la imagen la arrastras al chat.</div>'+
+    '<div style="font-weight:600;font-size:15px;margin-bottom:10px">Mandar el recibo de '+fmtMes(m.mes)+'</div>'+
+    '<div style="color:var(--muted);margin-bottom:8px">¿A quién?</div>'+
+    fila('yo','A mí', miTelefono())+
+    fila('inq','A '+inq, telDelInq())+
     '<div style="white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);'+
-      'border-radius:10px;padding:10px;max-height:34vh;overflow:auto;margin-bottom:12px;'+
+      'border-radius:10px;padding:10px;max-height:28vh;overflow:auto;margin:6px 0 10px;'+
       'font-size:12.5px" id="wa-texto"></div>'+
-    (tel
-      ? '<div style="color:var(--muted);margin-bottom:8px">Se abrirá el chat de '+
-        '<strong>+'+tel+'</strong>.</div><div>'+enlaces(tel)+'</div>'
-      : '<div style="color:var(--muted);margin-bottom:8px">No hay ningún teléfono guardado, '+
-        'y sin número WhatsApp rechaza el enlace. Escríbelo aquí con el código del país, '+
-        'o guárdalo en <strong>Inquilinos</strong> para no repetirlo cada mes.</div>'+
-        '<div style="display:flex;gap:8px;margin-bottom:10px">'+
-        '<input id="wa-num" type="tel" inputmode="tel" autocomplete="tel" '+
-        'placeholder="+376 800100" style="flex:1;padding:7px 10px;'+
-        'border:1px solid var(--border);border-radius:8px;background:var(--bg);color:inherit">'+
-        '<button class="btn btn-primary" id="wa-usar">Usar</button></div>'+
-        '<div id="wa-enlaces"></div>')+
-    '<div style="margin-top:12px;display:flex;gap:8px">'+
+    '<div id="wa-nota" style="color:var(--muted);font-size:12.5px;margin-bottom:10px">'+
+      (movil ? '' : 'La factura ya está descargada (<strong>'+nombre+'</strong>): arrástrala al chat.')+'</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      '<button class="btn btn-primary" id="wa-abrir" style="background:#25D366;color:#0b3d24">Abrir WhatsApp</button>'+
+      (movil ? '<button class="btn btn-secondary" id="wa-compartir">Compartir con la factura</button>'
+             : '<button class="btn btn-secondary" id="wa-web">Abrir en el navegador</button>')+
       '<button class="btn btn-secondary" id="wa-copiar">Copiar el texto</button>'+
       '<button class="btn btn-secondary" id="wa-cerrar">Cerrar</button></div>';
   document.body.appendChild(caja);
-  document.getElementById('wa-texto').textContent=texto;
 
+  function elegir(q){
+    quien=q;
+    caja.querySelectorAll('[data-quien]').forEach(l=>{
+      const on=l.getAttribute('data-quien')===q;
+      l.style.borderColor=on?'#25D366':'var(--border)';
+      l.style.background=on?'rgba(37,211,102,.08)':'transparent';
+      l.querySelector('input[type=radio]').checked=on;
+    });
+    document.getElementById('wa-texto').textContent=textoPara(q);
+  }
+  function numDe(q){
+    const campo=caja.querySelector('[data-tel="'+q+'"]');
+    const v=campo.value||'';
+    if(/[a-zA-Z@]/.test(v)) return '';
+    return soloNumero(v);
+  }
+  caja.querySelectorAll('[data-quien]').forEach(l=>{
+    l.addEventListener('click', e=>{ elegir(l.getAttribute('data-quien')); });
+  });
+  caja.querySelectorAll('[data-tel]').forEach(c=>{
+    c.addEventListener('change', ()=>{
+      const q=c.getAttribute('data-tel');
+      guardarTel(q==='yo'?'miTel':'inqTel', soloNumero(c.value));
+    });
+  });
+  function abrir(web){
+    const num=numDe(quien);
+    if(!num){
+      const c=caja.querySelector('[data-tel="'+quien+'"]');
+      c.style.borderColor='var(--danger)'; c.focus();
+      document.getElementById('wa-nota').innerHTML='<span style="color:var(--danger)">Pon el número de '+
+        (quien==='yo'?'tu móvil':inq)+', empezando por el país.</span>';
+      return;
+    }
+    guardarTel(quien==='yo'?'miTel':'inqTel', num);
+    const t=encodeURIComponent(textoPara(quien));
+    window.open(web ? 'https://web.whatsapp.com/send?phone='+num+'&text='+t
+                    : 'https://wa.me/'+num+'?text='+t, '_blank', 'noopener');
+  }
+  document.getElementById('wa-abrir').onclick=()=>abrir(false);
+  const web=document.getElementById('wa-web'); if(web) web.onclick=()=>abrir(true);
+  const comp=document.getElementById('wa-compartir');
+  if(comp) comp.onclick=function(){
+    try{
+      const file=new File([blob], nombre, {type:'image/png'});
+      if(navigator.canShare && navigator.share && navigator.canShare({files:[file]})){
+        navigator.share({files:[file], text:textoPara(quien), title:'Recibo '+fmtMes(m.mes)}).catch(()=>{});
+        return;
+      }
+    }catch(e){}
+    abrir(false);
+  };
   document.getElementById('wa-cerrar').onclick=()=>caja.remove();
   document.getElementById('wa-copiar').onclick=function(){
-    const boton=this;
+    const boton=this, texto=textoPara(quien);
     const fin=()=>{ boton.textContent='Copiado'; setTimeout(()=>boton.textContent='Copiar el texto',1800); };
     try{ navigator.clipboard.writeText(texto).then(fin, fin); }
     catch(e){ fin(); }
   };
-  const usar=document.getElementById('wa-usar');
-  if(usar) usar.onclick=function(){
-    const campo=document.getElementById('wa-num');
-    const escrito=campo.value||'';
-    /* el movil a veces rellena el correo aqui; con letras no hay numero */
-    if(/[a-zA-Z@]/.test(escrito)){
-      document.getElementById('wa-enlaces').innerHTML=
-        '<div style="color:var(--danger)">Eso no es un teléfono. Borra lo que hay '+
-        'y escribe sólo el número, empezando por el país.</div>';
-      campo.focus(); return;
-    }
-    const num=soloNumero(escrito);
-    if(!num){ campo.focus(); return; }
-    document.getElementById('wa-enlaces').innerHTML=enlaces(num);
-  };
+  elegir('inq');
 }
 
 function getDatosFactura(){
