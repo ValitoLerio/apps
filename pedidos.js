@@ -1623,6 +1623,34 @@ function telWhatsApp(prov){
 }
 /* Para decirlo en la pantalla sin mentir: no sé si ese número es fijo o
    móvil, sólo sé que no me ha dicho cuál es el del comercial. */
+/* Si un número es de móvil se sabe por cómo empieza: en Andorra los
+   móviles son de seis cifras y empiezan por 3, 4 o 6; en España, de
+   nueve y por 6 o 7. Se mira en las dos casillas, que hay móviles
+   apuntados donde el fijo. */
+function esMovil(n){
+  n=soloNumero(n);
+  if(!n) return false;
+  if(n.indexOf("376")===0 && n.length===9) n=n.slice(3);
+  if(n.length===6) return /^[346]/.test(n);
+  if(n.indexOf("34")===0 && n.length===11) n=n.slice(2);
+  if(n.length===9) return /^[67]/.test(n);
+  return false;
+}
+function movilesDe(prov){
+  var d=libro.proveedores[prov]||{}, out=[];
+  [d.movil, d.telefono].forEach(function(x){
+    var n=soloNumero(x);
+    if(n && esMovil(n) && out.indexOf(n)<0) out.push(n);
+  });
+  return out;
+}
+function bonito(n){
+  n=soloNumero(n);
+  if(n.indexOf("376")===0 && n.length===9) return "+376 "+n.slice(3,6)+" "+n.slice(6);
+  if(n.length===6) return "+376 "+n.slice(0,3)+" "+n.slice(3);
+  if(n.indexOf("34")===0 && n.length===11) return "+34 "+n.slice(2,5)+" "+n.slice(5,8)+" "+n.slice(8);
+  return (n.length>9?"+":"")+n;
+}
 function esSoloFijo(prov){
   return !movilDe(prov) && !!fijoDe(prov);
 }
@@ -2429,12 +2457,15 @@ function verTelefonos(main){
     return norm(p.nombre+" "+(d.contacto||"")+" "+(d.movil||"")+" "+(d.telefono||"")+" "+(d.nota||""))
            .indexOf(norm(texto))>=0;
   });
-  var conMovil=lista.filter(function(p){ return movilDe(p.nombre); }).length;
+  var conMovil=lista.filter(function(p){ return movilesDe(p.nombre).length; }).length;
   var sinNada=lista.filter(function(p){ return !telWhatsApp(p.nombre); });
+  var soloMoviles=(ui.telModo!=="todos");
+  if(soloMoviles) salen=salen.filter(function(p){ return movilesDe(p.nombre).length; });
 
   main.innerHTML=
     cabecera("Teléfonos",
-      "Todos los proveedores, para llamar. Pulsa un número y se marca solo.",
+      soloMoviles ? "Los móviles de los proveedores, con su comercial. Pulsa un número y se marca solo."
+                  : "Todos los proveedores, para llamar. Pulsa un número y se marca solo.",
       '<button class="btn" id="tel_copiar">Copiar la lista</button>'+
       '<button class="btn" id="tel_imprimir">Imprimir</button>')+
 
@@ -2449,6 +2480,10 @@ function verTelefonos(main){
         '<div class="n">'+(sinNada.length?"no se les puede llamar":"todos localizables")+'</div></div>'+
     '</div>'+
 
+    '<div class="chips no-imprimir" style="margin:0 0 12px">'+
+      '<button class="chip" data-telmodo="moviles" aria-pressed="'+soloMoviles+'">Móviles<span class="n">'+conMovil+'</span></button>'+
+      '<button class="chip" data-telmodo="todos" aria-pressed="'+(!soloMoviles)+'">Todos<span class="n">'+lista.length+'</span></button>'+
+    '</div>'+
     '<div class="filtros no-imprimir">'+
       '<input class="buscador" id="tel_busca" placeholder="Buscar por nombre, comercial o número…" '+
         'value="'+esc(ui.qTel||"")+'" style="max-width:340px">'+
@@ -2457,6 +2492,22 @@ function verTelefonos(main){
     (!salen.length
       ? '<div class="tarjeta"><div class="vacio"><strong>Ninguno se llama así</strong>'+
         'Prueba con otra cosa.</div></div>'
+      : soloMoviles
+      ? '<div class="tarjeta"><div class="tabla-caja"><table class="agenda">'+
+        '<thead><tr><th>Proveedor</th><th>Comercial</th><th>Móvil</th><th class="no-imprimir"></th></tr></thead><tbody>'+
+        salen.map(function(p){
+          var d=libro.proveedores[p.nombre]||{};
+          return '<tr>'+
+            '<td><strong>'+esc(p.nombre)+'</strong></td>'+
+            '<td>'+(d.contacto?esc(d.contacto):'<span class="tel-nota">sin comercial</span>')+'</td>'+
+            '<td>'+movilesDe(p.nombre).map(function(n){
+              return '<div><a class="tel-num" href="tel:+'+esc(n.length===6?"376"+n:n)+'">'+esc(bonito(n))+'</a></div>';
+            }).join("")+'</td>'+
+            '<td class="num no-imprimir"><button class="btn suave sm" data-teledit="'+
+              esc(p.nombre)+'">Cambiar</button></td>'+
+          '</tr>';
+        }).join("")+
+        '</tbody></table></div></div>'
       : '<div class="tarjeta"><div class="tabla-caja"><table class="agenda"><tbody>'+
         salen.map(function(p){
           var d=libro.proveedores[p.nombre]||{};
@@ -2478,7 +2529,7 @@ function verTelefonos(main){
         }).join("")+
         '</tbody></table></div></div>')+
 
-    (sinNada.length
+    (sinNada.length && !soloMoviles
       ? '<p class="nota no-imprimir" style="margin:12px 0 0">Sin ningún teléfono: '+
         esc(sinNada.map(function(p){ return p.nombre; }).join(", "))+'.</p>'
       : "");
@@ -2493,19 +2544,28 @@ function verTelefonos(main){
     var otra=document.getElementById("tel_busca");
     if(otra){ otra.focus(); otra.setSelectionRange(otra.value.length, otra.value.length); }
   });
+  main.querySelectorAll("[data-telmodo]").forEach(function(b){
+    b.addEventListener("click", function(){ ui.telModo=b.getAttribute("data-telmodo"); verTelefonos(main); });
+  });
   main.querySelectorAll("[data-teledit]").forEach(function(b){
     b.addEventListener("click", function(){ editarProveedor(b.getAttribute("data-teledit")); });
   });
   document.getElementById("tel_imprimir").addEventListener("click", function(){ window.print(); });
   document.getElementById("tel_copiar").addEventListener("click", function(){
-    var t=lista.map(function(p){
+    var t=(soloMoviles
+      ? lista.filter(function(p){ return movilesDe(p.nombre).length; }).map(function(p){
+          var d=libro.proveedores[p.nombre]||{};
+          return [p.nombre].concat(d.contacto?[d.contacto]:[])
+            .concat(movilesDe(p.nombre).map(bonito)).join(" · ");
+        })
+      : lista.map(function(p){
       var d=libro.proveedores[p.nombre]||{};
       var trozos=[p.nombre];
       if(d.contacto) trozos.push(d.contacto);
       if(movilDe(p.nombre)) trozos.push("+"+movilDe(p.nombre));
       if(fijoDe(p.nombre)) trozos.push("empresa +"+fijoDe(p.nombre));
       return trozos.join(" · ");
-    }).join("\n");
+    })).join("\n");
     if(navigator.clipboard && navigator.clipboard.writeText){
       navigator.clipboard.writeText(t).then(
         function(){ avisar("Lista copiada: "+plural(lista.length,"proveedor","proveedores")); },
