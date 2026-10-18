@@ -1276,8 +1276,12 @@ function renderVacaciones(){
       (v === 'mes' ? 'border-radius:14px 0 0 14px;' : 'border-radius:0 14px 14px 0;margin-left:-1px;') + '">' + txt + '</button>';
   };
   if (barra) {
-    barra.innerHTML = '<span style="display:inline-flex;margin-right:10px">' +
-      boton('mes', 'Mes') + boton('ano', 'A&ntilde;o ' + curY) + '</span>' +
+    /* Mes / Año va en la barra del titulo, que se queda pegada arriba
+       al bajar: asi se ve siempre. */
+    var vista = document.getElementById('vac-vista');
+    if (vista) vista.innerHTML = boton('mes', 'Mes') + boton('ano', 'A&ntilde;o ' + curY);
+    barra.innerHTML = (vista ? '' : '<span style="display:inline-flex;margin-right:10px">' +
+      boton('mes', 'Mes') + boton('ano', 'A&ntilde;o ' + curY) + '</span>') +
       VAC_TIPOS.map(function(t){
       var e = VAC_EST[t], on = (t === vacTipo);
       return '<button onclick="setVacTipo(\'' + t + '\')" ' +
