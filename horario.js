@@ -1082,6 +1082,91 @@ function diasTipoAno(sid, y, tipo){
 // quita. Si el dia tenia un turno con horas, el turno se va: estar de
 // vacaciones y trabajar a la vez no puede ser, y se avisa de lo que se
 // ha llevado por delante.
+/* ── Arrastrar para poner o quitar muchos días de una vez ───────────
+   Se pulsa un día y, sin soltar, se corre por la fila: todos los días
+   por los que se pasa se ponen (o se quitan, si el primero ya lo tenía).
+   Un toque solo sigue siendo un día, como antes. Va sólo por la fila de
+   la persona en la que se empieza, para no tocar a otro sin querer.
+   Funciona con el ratón y con el dedo. */
+var vacArrastre = null;
+function vacCeldaEn(x, y){
+  var el = document.elementFromPoint(x, y);
+  return el && el.closest ? el.closest('td[data-vac]') : null;
+}
+function vacPartes(td){ var p = td.getAttribute('data-vac').split('|'); return {sid:p[0], y:+p[1], m:+p[2], d:+p[3]}; }
+function vacPintarPrevia(td){
+  var e = VAC_EST[vacTipo];
+  if (vacArrastre.accion === 'poner') {
+    td.style.background = e.bg; td.style.color = e.col; td.style.opacity = '1';
+    td.textContent = e.letra;
+  } else {
+    td.style.background = 'transparent'; td.style.color = 'transparent'; td.textContent = '';
+  }
+  td.style.outline = '2px solid var(--gold)'; td.style.outlineOffset = '-2px';
+}
+function vacSumar(td){
+  if (!vacArrastre || !td) return;
+  var p = vacPartes(td);
+  if (p.sid !== vacArrastre.sid) return;
+  var k = p.y + '-' + p.m + '-' + p.d;
+  if (vacArrastre.vistos[k]) return;
+  // Del primero al de ahora, sin saltarse ninguno aunque se corra deprisa.
+  var fila = td.parentNode;
+  var todas = Array.prototype.slice.call(fila.querySelectorAll('td[data-vac]'));
+  var a = todas.indexOf(vacArrastre.primera), b = todas.indexOf(td);
+  if (a < 0 || b < 0) return;
+  var desde = Math.min(a, b), hasta = Math.max(a, b);
+  for (var i = desde; i <= hasta; i++) {
+    var c = todas[i], q = vacPartes(c), kk = q.y + '-' + q.m + '-' + q.d;
+    if (vacArrastre.vistos[kk]) continue;
+    vacArrastre.vistos[kk] = q; vacPintarPrevia(c);
+  }
+}
+document.addEventListener('pointerdown', function(ev){
+  var td = ev.target && ev.target.closest ? ev.target.closest('td[data-vac]') : null;
+  if (!td || (ev.button != null && ev.button > 0)) return;
+  ev.preventDefault();
+  var p = vacPartes(td);
+  var celda = celdaDe(p.sid, {y:p.y, m:p.m, d:p.d});
+  var est = celda && celda.estado ? celda.estado : 'libre';
+  vacArrastre = {sid:p.sid, accion:(est === vacTipo ? 'quitar' : 'poner'), vistos:{}, primera:td};
+  vacSumar(td);
+});
+document.addEventListener('pointermove', function(ev){
+  if (!vacArrastre) return;
+  vacSumar(vacCeldaEn(ev.clientX, ev.clientY));
+});
+function vacTerminar(){
+  if (!vacArrastre) return;
+  var a = vacArrastre; vacArrastre = null;
+  var lista = Object.keys(a.vistos).map(function(k){ return a.vistos[k]; });
+  if (lista.length === 1) { var u = lista[0]; marcarDiaVac(u.sid, u.y, u.m, u.d); return; }
+  var savedM = curM, savedY = curY, quitados = 0;
+  lista.forEach(function(q){
+    var celda = celdaDe(q.sid, {y:q.y, m:q.m, d:q.d});
+    var est = celda && celda.estado ? celda.estado : 'libre';
+    if (a.accion === 'quitar') {
+      if (est !== vacTipo) return;
+      var mes = (sched[q.y] || {})[q.m] || {};
+      if (mes[q.sid]) delete mes[q.sid][q.d];
+    } else {
+      if (est === vacTipo) return;
+      if (est === 'trabajo' && celda && celda.inicio) quitados++;
+      if (!sched[q.y]) sched[q.y] = {};
+      if (!sched[q.y][q.m]) sched[q.y][q.m] = {};
+      if (!sched[q.y][q.m][q.sid]) sched[q.y][q.m][q.sid] = {};
+      sched[q.y][q.m][q.sid][q.d] = {estado: vacTipo, nota: (celda && celda.nota) || ''};
+    }
+  });
+  curM = savedM; curY = savedY;
+  save();
+  toast(VAC_EST[vacTipo].uno + ': ' + lista.length + ' días ' + (a.accion === 'quitar' ? 'quitados' : 'puestos') +
+        (quitados ? ' (se han quitado ' + quitados + (quitados === 1 ? ' turno)' : ' turnos)') : ''));
+  renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones(); pegarCabeceras();
+}
+document.addEventListener('pointerup', vacTerminar);
+document.addEventListener('pointercancel', vacTerminar);
+
 function marcarDiaVac(sid, y, m, d){
   var dia = {y:y, m:m, d:d};
   var celda = celdaDe(sid, dia);
@@ -1494,9 +1579,9 @@ function renderVacaciones(){
         : (trab && celda && celda.inicio
             ? ' - turno ' + textoTurno(celda) + ' (pulsa y se cambia por ' + VAC_EST[vacTipo].uno.toLowerCase() + ')'
             : ' - poner ' + VAC_EST[vacTipo].uno.toLowerCase());
-      return '<td onclick="marcarDiaVac(\'' + s.id + '\',' + dia.y + ',' + dia.m + ',' + dia.d + ')" ' +
+      return '<td data-vac="' + s.id + '|' + dia.y + '|' + dia.m + '|' + dia.d + '" ' +
              'title="' + esc(s.name) + ' - ' + etiquetaDia(dia, curM) + pista + '" ' +
-             'style="cursor:pointer;text-align:center;padding:4px 2px;border:1px solid var(--border);' +
+             'style="cursor:pointer;touch-action:none;text-align:center;padding:4px 2px;border:1px solid var(--border);' +
              'background:' + fondo + ';color:' + color + ';font-weight:700;font-size:.78rem;user-select:none' +
              /* lo que no es lo que se esta mirando, mas flojo */
              (e && est !== vacTipo ? ';opacity:.4' : '') + '">' +
@@ -1602,10 +1687,10 @@ function renderVacAno(tbl, all){
       var we = dia.dow === 0 || dia.dow === 6;
       if (est === vacTipo) { tot++; fuera[k]++; }
       var fondo = es ? es.bg : (we ? 'rgba(128,128,128,.10)' : 'transparent');
-      celdas += '<td onclick="marcarDiaVac(\'' + s.id + '\',' + dia.y + ',' + dia.m + ',' + dia.d + ')" ' +
+      celdas += '<td data-vac="' + s.id + '|' + dia.y + '|' + dia.m + '|' + dia.d + '" ' +
         'title="' + esc(s.name) + ' - ' + DC_FULL[dia.dow] + ' ' + dia.d + ' de ' + MESES[dia.m] +
         (es ? ' - ' + es.uno : '') + '" ' +
-        'style="cursor:pointer;height:24px;padding:0;text-align:center;font-size:.6rem;font-weight:800;user-select:none;' +
+        'style="cursor:pointer;touch-action:none;height:24px;padding:0;text-align:center;font-size:.6rem;font-weight:800;user-select:none;' +
         'border:1px solid var(--border);' + (dia.d === 1 ? 'border-left:2px solid var(--gold);' : '') +
         'background:' + fondo + ';color:' + (es ? es.col : 'transparent') +
         (es && est !== vacTipo ? ';opacity:.4' : '') + '">' + (es ? es.letra : '') + '</td>';
