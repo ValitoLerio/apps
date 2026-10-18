@@ -127,6 +127,13 @@ function cargar(){
     });
     libro.v=2; tocado=true;
   }
+  /* Los huevos van en cajas de docenas, no de kilos. */
+  if(!libro.ajustes.huevosDocenas){
+    libro.productos.forEach(function(p){
+      if(/huevos/i.test(p.nombre||"") && !/liquid/i.test(p.nombre||"") && !p.udCaja) p.udCaja="doc";
+    });
+    libro.ajustes.huevosDocenas=true; tocado=true;
+  }
   /* Lo que se pidió en cajas de un producto que no tiene caja pero sí
      garrafa, era garrafa. */
   Object.keys(libro.pedido).forEach(function(id){
@@ -352,14 +359,21 @@ function cantidadConUnidad(n, u){
    kilos, litros si va por litros y unidades si no. Y la garrafa, aparte,
    en litros. Cada una se cambia en la ficha, que no todas las cajas
    pesan lo mismo ni todas las garrafas traen los mismos litros. */
-/* La caja va siempre en kilos, y la garrafa en litros. */
-function udCaja(p){ return "kg"; }
+/* La caja va en kilos, salvo que se diga otra cosa en la ficha
+   (los huevos van en cajas de docenas); la garrafa, en litros. */
+var UDS_CAJA=[["kg","kg","kg"],["doc","doc","docenas"],["uds","uds","unidades"]];
+function udCaja(p){ var u=(p&&p.udCaja)||"kg"; return u; }
+function udCajaLarga(p){
+  var u=udCaja(p);
+  for(var i=0;i<UDS_CAJA.length;i++) if(UDS_CAJA[i][0]===u) return UDS_CAJA[i][2];
+  return u;
+}
 function etiquetaEnvase(p){
   var c=+(p&&p.udsCaja)||0;
   if(!(c>1)) return "";
   return "caj "+num(c, c%1?1:0)+(udCaja(p)?" "+udCaja(p):"");
 }
-function lblCaja(u){ return "Kilos por caja"; }
+function lblCaja(u){ return "Caja de"; }
 function litrosGarrafa(p){ return +(p&&p.garrafa)||0; }
 function etiquetaGarrafa(p){
   var g=litrosGarrafa(p);
@@ -376,7 +390,7 @@ function precioGarrafa(p){
 }
 function deCaja(p){
   var c=+(p&&p.udsCaja)||0;
-  if(c>1) return "caja de "+num(c, c%1?1:0)+(udCaja(p)?" "+udCaja(p):"");
+  if(c>1) return "caja de "+num(c, c%1?1:0)+" "+udCajaLarga(p);
   return c>1 ? "caja de "+num(c, c%1?1:0) : (c>0 ? "caja" : "");
 }
 function productoPorId(id){
@@ -418,7 +432,7 @@ function trozosPedidos(p, l){
     var n=l[m.campo]; if(!n) return;
     var t=num(n, n%1?1:0)+" "+(n===1?m.uno:m.varios);
     if(m.campo==="cajas" && (+p.udsCaja||0)>1)
-      t+=" de "+num(+p.udsCaja, (+p.udsCaja)%1?1:0)+(udCaja(p)?" "+udCaja(p):"");
+      t+=" de "+num(+p.udsCaja, (+p.udsCaja)%1?1:0)+" "+udCajaLarga(p);
     if(m.campo==="garrafas" && litrosGarrafa(p)>0)
       t+=" de "+num(litrosGarrafa(p), litrosGarrafa(p)%1?1:0)+" L";
     fuera.push(t);
@@ -1030,7 +1044,9 @@ function lineaOferta(o, g){
   info.push('<span class="envase">caja de '+
       '<input type="number" min="0" step="0.1" inputmode="decimal" data-envase="caja|'+esc(o.id)+'" '+
       'value="'+(caja>0?esc(caja):"")+'" placeholder="–" aria-label="Lo que trae la caja"> '+
-      'kg'+
+      '<select class="ud-caja" data-udcaja="'+esc(o.id)+'" aria-label="En qué va la caja">'+
+        UDS_CAJA.map(function(u){ return '<option value="'+u[0]+'"'+(udCaja(o)===u[0]?" selected":"")+'>'+u[1]+'</option>'; }).join("")+
+      '</select>'+
       '<span data-envase-precio="caja|'+esc(o.id)+'">'+(caja>0&&neto?' · '+eur(precioCaja(o)):"")+'</span></span>');
   var garr=litrosGarrafa(o);
   info.push('<span class="envase">garrafa de '+
@@ -1153,6 +1169,21 @@ function engancharFichas(caja){
       pintarBarra();
     });
   });
+  caja.querySelectorAll("[data-udcaja]").forEach(function(sel){
+    ["click","mousedown","touchstart"].forEach(function(ev){
+      sel.addEventListener(ev, function(e){ e.stopPropagation(); });
+    });
+    sel.addEventListener("change", function(){
+      var id=sel.getAttribute("data-udcaja"), p=productoPorId(id);
+      if(!p) return;
+      p.udCaja = sel.value==="kg" ? null : sel.value;
+      guardar();
+      var c=document.querySelector('.contador[data-cnt^="'+id+'|"]');
+      var o1=c && c.querySelector('.ud option[value="cajas"]');
+      if(o1) o1.textContent=etiquetaEnvase(p)||"caj";
+      avisar("Caja en "+udCajaLarga(p));
+    });
+  });
   caja.querySelectorAll("[data-envase]").forEach(function(inp){
     ["click","mousedown","touchstart","focus"].forEach(function(ev){
       inp.addEventListener(ev, function(e){ e.stopPropagation(); });
@@ -1204,7 +1235,7 @@ function engancharFichas(caja){
       refrescarFicha(id);
       pintarBarra();
       avisar(que==="caja"
-        ? (v>0 ? "Caja de "+num(v, v%1?1:0)+(udCaja(p)?" "+udCaja(p):" uds") : "Caja sin tamaño")
+        ? (v>0 ? "Caja de "+num(v, v%1?1:0)+" "+udCajaLarga(p) : "Caja sin tamaño")
         : (v>0 ? "Garrafa de "+num(v, v%1?1:0)+" L" : "Garrafa sin litros"));
     }
   });
@@ -2294,6 +2325,10 @@ function editarProducto(p){
       '<div class="campo"><label class="lbl" for="ep_uds" id="ep_uds_lbl">'+lblCaja(unidadDe(p))+'</label>'+
         '<input type="number" id="ep_uds" min="0" step="0.1" '+
         'value="'+(p.udsCaja!=null?esc(p.udsCaja):"")+'" placeholder="sueltas"></div>'+
+      '<div class="campo"><label class="lbl" for="ep_udcaja">La caja va en</label>'+
+        '<select id="ep_udcaja">'+UDS_CAJA.map(function(u){
+          return '<option value="'+u[0]+'"'+(udCaja(p)===u[0]?" selected":"")+'>'+u[2]+'</option>'; }).join("")+
+        '</select></div>'+
       '<div class="campo"><label class="lbl" for="ep_garr">Litros por garrafa</label>'+
         '<input type="number" id="ep_garr" min="0" step="0.5" '+
         'value="'+(+p.garrafa?esc(p.garrafa):"")+'" placeholder="sin garrafa"></div>'+
@@ -2340,6 +2375,7 @@ function editarProducto(p){
       p.dtoEn=valor("ep_dtoen")==="€" ? "€" : "%";
       p.udsCaja=(document.getElementById("ep_uds").value!=="") ? +numero("ep_uds") : null;
       p.garrafa=numero("ep_garr")||null;
+      p.udCaja = valor("ep_udcaja")==="kg" ? null : valor("ep_udcaja");
       p.fecha=valor("ep_fecha");
       p.diario=document.getElementById("ep_diario").checked;
       p.ud=valor("ep_ud");
@@ -2373,7 +2409,7 @@ function editarProducto(p){
           (dto ? " · descuento <strong>−"+(enEur?eur(dto):num(dto, dto%1?1:0)+" %")+"</strong>" : "")+
           " · IGI <strong>"+num(igi, igi%1?1:0)+" %</strong>"+
           " · precio neto <strong>"+eur(neto)+"</strong>"+
-          (uds>0 ? ". La caja de "+num(uds, uds%1?1:0)+" kg"+" sale a <strong>"+eur(r2(neto*uds))+"</strong>" : "")+
+          (uds>0 ? ". La caja de "+num(uds, uds%1?1:0)+" "+({kg:"kg",doc:"docenas",uds:"unidades"}[valor("ep_udcaja")]||"kg")+" sale a <strong>"+eur(r2(neto*uds))+"</strong>" : "")+
           (function(){ var g=numero("ep_garr"), u=valor("ep_ud");
             if(!(g>0)) return "";
             var pg = u==="L" ? r2(neto*g) : u==="" ? neto : 0;
@@ -2383,7 +2419,7 @@ function editarProducto(p){
       document.getElementById("ep_ud").addEventListener("change", function(){
         document.getElementById("ep_uds_lbl").textContent = lblCaja(this.value);
       });
-      ["ep_precio","ep_dto","ep_dtoen","ep_igi","ep_uds","ep_ud","ep_garr"].forEach(function(id){
+      ["ep_precio","ep_dto","ep_dtoen","ep_igi","ep_uds","ep_ud","ep_garr","ep_udcaja"].forEach(function(id){
         document.getElementById(id).addEventListener("input", cuenta);
       });
       cuenta();
