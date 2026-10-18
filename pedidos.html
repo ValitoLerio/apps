@@ -159,12 +159,12 @@ main{padding:22px 24px 120px;max-width:1180px;min-width:0}
 .desglose b.neto{color:var(--acento);font-weight:700}
 .desglose b.nada{color:var(--muted);font-weight:500}
 .of-info{font-size:11.5px;color:var(--muted);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap}
-.of-info .garrafa{display:inline-flex;align-items:center;gap:3px}
-.of-info .garrafa input{width:46px;padding:1px 4px;font-size:11.5px;font-weight:600;text-align:center;
+.of-info .envase{display:inline-flex;align-items:center;gap:3px}
+.of-info .envase input{width:46px;padding:1px 4px;font-size:11.5px;font-weight:600;text-align:center;
                         border-radius:5px;border:1px solid var(--linea);background:var(--sup)}
-.of-info .garrafa input::-webkit-inner-spin-button,.of-info .garrafa input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
-.of-info .garrafa input{-moz-appearance:textfield}
-.of-info .garrafa input::placeholder{color:var(--aviso)}
+.of-info .envase input::-webkit-inner-spin-button,.of-info .envase input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.of-info .envase input{-moz-appearance:textfield}
+.of-info .envase input::placeholder{color:var(--aviso)}
 .of-info .viejo{color:var(--aviso);font-weight:600}
 .of-acciones{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
 
@@ -429,7 +429,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('pedidos').then(function(){
     var s = document.createElement('script');
-    s.src = 'pedidos.js?v=202610181125';
+    s.src = 'pedidos.js?v=202610181135';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar pedidos.js. Recarga la pagina.'; };
     document.body.appendChild(s);
