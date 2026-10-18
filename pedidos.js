@@ -339,13 +339,14 @@ function cantidadConUnidad(n, u){
    kilos, litros si va por litros y unidades si no. Y la garrafa, aparte,
    en litros. Cada una se cambia en la ficha, que no todas las cajas
    pesan lo mismo ni todas las garrafas traen los mismos litros. */
-function udCaja(p){ var u=unidadDe(p); return u==="kg"?"kg":u==="L"?"L":""; }
+/* La caja va siempre en kilos, y la garrafa en litros. */
+function udCaja(p){ return "kg"; }
 function etiquetaEnvase(p){
   var c=+(p&&p.udsCaja)||0;
   if(!(c>1)) return "";
   return "caj "+num(c, c%1?1:0)+(udCaja(p)?" "+udCaja(p):"");
 }
-function lblCaja(u){ return u==="kg" ? "Kilos por caja" : u==="L" ? "Litros por caja" : "Unidades por caja"; }
+function lblCaja(u){ return "Kilos por caja"; }
 function litrosGarrafa(p){ return +(p&&p.garrafa)||0; }
 function etiquetaGarrafa(p){
   var g=litrosGarrafa(p);
@@ -1016,10 +1017,10 @@ function lineaOferta(o, g){
   info.push('<span class="envase">caja de '+
       '<input type="number" min="0" step="0.1" inputmode="decimal" data-envase="caja|'+esc(o.id)+'" '+
       'value="'+(caja>0?esc(caja):"")+'" placeholder="–" aria-label="Lo que trae la caja"> '+
-      (udCaja(o)||"uds")+
+      'kg'+
       '<span data-envase-precio="caja|'+esc(o.id)+'">'+(caja>0&&neto?' · '+eur(precioCaja(o)):"")+'</span></span>');
   var garr=litrosGarrafa(o);
-  if(garr>0 || unidadDe(o)==="L") info.push('<span class="envase">garrafa de '+
+  info.push('<span class="envase">garrafa de '+
       '<input type="number" min="0" step="0.5" inputmode="decimal" data-envase="garrafa|'+esc(o.id)+'" '+
       'value="'+(garr>0?esc(garr):"")+'" placeholder="–" aria-label="Litros de la garrafa"> L'+
       '<span data-envase-precio="garrafa|'+esc(o.id)+'">'+(garr>0&&precioGarrafa(o)?' · '+eur(precioGarrafa(o)):"")+'</span></span>');
@@ -2340,7 +2341,7 @@ function editarProducto(p){
           (dto ? " · descuento <strong>−"+(enEur?eur(dto):num(dto, dto%1?1:0)+" %")+"</strong>" : "")+
           " · IGI <strong>"+num(igi, igi%1?1:0)+" %</strong>"+
           " · precio neto <strong>"+eur(neto)+"</strong>"+
-          (uds>0 ? ". La caja de "+num(uds, uds%1?1:0)+(valor("ep_ud")==="kg"?" kg":valor("ep_ud")==="L"?" L":"")+" sale a <strong>"+eur(r2(neto*uds))+"</strong>" : "")+
+          (uds>0 ? ". La caja de "+num(uds, uds%1?1:0)+" kg"+" sale a <strong>"+eur(r2(neto*uds))+"</strong>" : "")+
           (function(){ var g=numero("ep_garr"), u=valor("ep_ud");
             if(!(g>0)) return "";
             var pg = u==="L" ? r2(neto*g) : u==="" ? neto : 0;
