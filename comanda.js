@@ -171,7 +171,13 @@ function svcAmounts(s){
 function defaultDesc(){ return state.settings.defaultDesc || "Menú del día"; }
 /* Tipos de servicio que se eligen al anotar. Cada línea lleva el suyo, así que en
    una misma factura pueden ir menús del día, bocadillos, etc. mezclados. */
-var TIPOS_SERVICIO=["Menú del día","Menú bocadillo","Medio menú","Menú cena"];
+var TIPOS_SERVICIO=["Menú del día","Menú bocadillo","Medio menú","Menú cena","Desayuno completo"];
+/* Precio de partida de un tipo mientras no se ponga otro en Ajustes. */
+var PRECIO_TIPO_INICIAL={"Desayuno completo":7.5};
+function precioTipoAjustes(t){
+  var tp=state.settings.tipoPrices||{};
+  return tp[t]!=null ? tp[t] : PRECIO_TIPO_INICIAL[t];
+}
 function tiposServicio(){
   var l=TIPOS_SERVICIO.slice(), d=defaultDesc();
   if(l.indexOf(d)<0) l.unshift(d);
@@ -180,7 +186,7 @@ function tiposServicio(){
 /* Último precio usado para ese tipo en esa empresa (o en cualquiera); si no hay, el de la empresa */
 function precioTipo(companyId, desc){
   if(desc===defaultDesc()) return precioPara(companyId);
-  var tp=(state.settings.tipoPrices||{})[desc];
+  var tp=precioTipoAjustes(desc);
   if(tp) return (+tp).toFixed(2);
   var best=null, any=null;
   state.services.forEach(function(s){
@@ -1085,7 +1091,7 @@ function viewAjustes(main){
       "</div>"+
       '<div class="grid3" style="margin-top:13px">'+
         tiposServicio().filter(function(t){ return t!==defaultDesc(); }).map(function(t,ix){
-          var v=(s.tipoPrices||{})[t];
+          var v=precioTipoAjustes(t);
           return '<div class="field"><label class="lbl" for="s_tp'+ix+'">'+esc(t)+' (€/persona)</label>'+
             '<input type="number" id="s_tp'+ix+'" data-tipo="'+esc(t)+'" min="0" step="0.01" value="'+(v?esc((+v).toFixed(2)):"")+'" placeholder="'+esc(num(+s.defaultPrice||0,2))+'"></div>';
         }).join("")+
