@@ -996,7 +996,7 @@ function lineaOferta(o, g){
         (esMejor?' <span class="chapa ok" style="font-size:10.5px">más barato</span>':"")+'</div>'+
       '<div class="of-precio'+(esMejor?" mejor":"")+(neto?"":" sin")+'">'+
         (neto?eur(o.precio):"sin precio")+
-        (neto?'<span class="of-por">/'+esc(unidadDe(o)||"ud")+' sin IGI</span>':"")+'</div>'+
+        (neto?'<span class="of-por">/'+esc(unidadDe(o)||"ud")+'</span><span class="of-sin">sin IGI</span>':"")+'</div>'+
       desglose(o)+
       '<div class="of-info">'+info.join("")+
         ' <button class="btn suave sm" data-editar="'+esc(o.id)+'" '+
