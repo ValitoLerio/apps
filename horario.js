@@ -1295,6 +1295,8 @@ function renderVacaciones(){
     return;
   }
 
+  var resumenV = document.getElementById('vac-resumen');
+  if (resumenV) resumenV.style.display = 'none';
   var leyenda = document.getElementById('vac-leyenda');
   if (leyenda) leyenda.style.display = (vacVista === 'ano') ? 'none' : 'flex';
   // En el año el cuadro va pegado al borde de su caja: con el margen
