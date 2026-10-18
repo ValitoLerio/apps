@@ -534,6 +534,80 @@ function ponerAnoVac(y){
 }
 window.ponerAnoVac = ponerAnoVac;
 
+/* ── Fiestas de España, Cataluña y la Comunidad Valenciana ─────────
+   Solo para verlas en el calendario: no ponen ni quitan turnos. De ahí
+   viene la gente, así que conviene saber qué días tienen fiesta.
+   2025 y 2026 van con el calendario oficial publicado. De 2027 en
+   adelante todavía no hay calendario oficial: se ponen las de siempre y
+   se avisa de que son previstas. Los festivos locales no entran. */
+var FIESTA_ZONAS = {
+  ES:  {nombre:'España',              corto:'ES',  bg:'#c8102e', col:'#fff'},
+  CAT: {nombre:'Cataluña',            corto:'CAT', bg:'#f2c200', col:'#3a2a00'},
+  CV:  {nombre:'Comunidad Valenciana',corto:'CV',  bg:'#2a6fdb', col:'#fff'}
+};
+function pascuaDe(y){
+  var a=y%19, b=Math.floor(y/100), c=y%100, d=Math.floor(b/4), e=b%4,
+      f=Math.floor((b+8)/25), g=Math.floor((b-f+1)/3), h=(19*a+b-d-g+15)%30,
+      i=Math.floor(c/4), k=c%4, l=(32+2*e+2*i-h-k)%7, m=Math.floor((a+11*h+22*l)/451);
+  return new Date(y, Math.floor((h+l-7*m+114)/31)-1, ((h+l-7*m+114)%31)+1);
+}
+var _fiestasCache = {};
+function fiestasDelAno(y){
+  if (_fiestasCache[y]) return _fiestasCache[y];
+  var t = {}, previsto = y >= 2027;
+  var pon = function(m, d, z, nombre){
+    var k = m + '-' + d;
+    (t[k] = t[k] || []).push({z:z, nombre:nombre + (previsto ? ' (previsto)' : '')});
+  };
+  var pas = pascuaDe(y);
+  var vs = new Date(pas); vs.setDate(vs.getDate() - 2);
+  var lp = new Date(pas); lp.setDate(lp.getDate() + 1);
+  // España: los nacionales, que son de todos.
+  pon(0,1,'ES','Año Nuevo'); pon(0,6,'ES','Reyes');
+  pon(vs.getMonth(), vs.getDate(), 'ES', 'Viernes Santo');
+  pon(4,1,'ES','Fiesta del Trabajo'); pon(7,15,'ES','La Asunción');
+  pon(9,12,'ES','Fiesta Nacional'); pon(10,1,'ES','Todos los Santos');
+  pon(11,6,'ES','Constitución'); pon(11,8,'ES','Inmaculada'); pon(11,25,'ES','Navidad');
+  // Cataluña: las suyas, todos los años igual.
+  pon(lp.getMonth(), lp.getDate(), 'CAT', 'Lunes de Pascua');
+  pon(5,24,'CAT','Sant Joan'); pon(8,11,'CAT','Diada'); pon(11,26,'CAT','Sant Esteve');
+  // Comunidad Valenciana: cambian cada año.
+  if (y === 2026) {
+    pon(lp.getMonth(), lp.getDate(), 'CV', 'Lunes de Pascua');
+    pon(5,24,'CV','San Juan'); pon(9,9,'CV','Día de la Comunitat');
+    pon(10,2,'CV','Todos los Santos (trasladado)'); pon(11,7,'CV','Constitución (trasladado)');
+  } else {
+    pon(2,19,'CV','San José');
+    pon(lp.getMonth(), lp.getDate(), 'CV', 'Lunes de Pascua');
+    pon(5,24,'CV','San Juan'); pon(9,9,'CV','Día de la Comunitat');
+  }
+  return (_fiestasCache[y] = t);
+}
+function fiestasDe(y, m, d){ return fiestasDelAno(y)[m + '-' + d] || []; }
+function textoFiestas(f){
+  return f.map(function(x){ return FIESTA_ZONAS[x.z].corto + ': ' + x.nombre; }).join(' · ');
+}
+/* La marca: chapitas con ES / CAT / CV; en el cuadro del año, que va
+   muy estrecho, sólo una rayita de color por zona. */
+function marcaFiestas(y, m, d, estrecho){
+  var f = fiestasDe(y, m, d);
+  if (!f.length) return '';
+  var zs = [];
+  f.forEach(function(x){ if (zs.indexOf(x.z) < 0) zs.push(x.z); });
+  if (estrecho) return '<div style="display:flex;gap:1px;margin-top:1px">' + zs.map(function(z){
+    return '<i style="flex:1;height:3px;background:' + FIESTA_ZONAS[z].bg + ';display:block"></i>'; }).join('') + '</div>';
+  return '<div style="display:flex;flex-direction:column;gap:1px;margin-top:2px;align-items:center">' + zs.map(function(z){
+    var e = FIESTA_ZONAS[z];
+    return '<span style="font-size:.5rem;font-weight:800;line-height:1.25;padding:0 3px;border-radius:3px;' +
+      'background:' + e.bg + ';color:' + e.col + '">' + e.corto + '</span>'; }).join('') + '</div>';
+}
+function leyendaFiestas(){
+  return '<span style="display:inline-flex;align-items:center;gap:6px;font-size:.7rem;color:var(--text2)">Fiestas:' +
+    ['ES','CAT','CV'].map(function(z){ var e = FIESTA_ZONAS[z];
+      return '<span title="' + e.nombre + '" style="font-size:.6rem;font-weight:800;padding:1px 5px;border-radius:3px;' +
+        'background:' + e.bg + ';color:' + e.col + '">' + e.corto + '</span>'; }).join('') + '</span>';
+}
+
 function renderAll() {
   var yr = document.getElementById('yr');
   if (yr) curY = parseInt(yr.value);
@@ -1326,7 +1400,7 @@ function renderVacaciones(){
         'border-radius:14px;border:1px solid ' + (on ? e.puro : 'var(--border)') + ';' +
         'background:' + (on ? e.bg : 'transparent') + ';color:' + (on ? e.col : 'var(--text2)') + ';">' +
         '<span style="font-weight:900">' + e.letra + '</span> ' + e.uno + '</button>';
-    }).join('');
+    }).join('') + '<span style="margin-left:auto;align-self:center">' + leyendaFiestas() + '</span>';
   }
 
   if (!all.length) {
@@ -1385,8 +1459,10 @@ function renderVacaciones(){
     var tod = esHoy(dia, hoy);
     th += '<th style="background:' + (tod?'rgba(201,168,76,.18)':(we?'#1e1c14':'var(--surface)')) + ';color:' +
           (tod?'var(--gold2)':(we?'var(--gold)':'var(--text2)')) + ';padding:6px 3px;border:1px solid var(--border);' +
-          'text-align:center;min-width:34px;font-size:.66rem;white-space:nowrap">' + DC[dia.dow] +
-          '<br><span style="font-size:.82rem;font-weight:700">' + etiquetaDia(dia, curM) + '</span></th>';
+          'text-align:center;min-width:34px;font-size:.66rem;white-space:nowrap;vertical-align:top"' +
+          (fiestasDe(dia.y, dia.m, dia.d).length ? ' title="' + textoFiestas(fiestasDe(dia.y, dia.m, dia.d)) + '"' : '') + '>' + DC[dia.dow] +
+          '<br><span style="font-size:.82rem;font-weight:700">' + etiquetaDia(dia, curM) + '</span>' +
+          marcaFiestas(dia.y, dia.m, dia.d) + '</th>';
   });
   th += '<th style="background:var(--total-bg);color:var(--gold2);padding:6px 10px;border:1px solid var(--border);' +
         'text-align:center;min-width:104px;font-size:.72rem;font-weight:700">' + VAC_EST[vacTipo].lbl +
@@ -1507,8 +1583,9 @@ function renderVacAno(tbl, all){
     th += '<th style="min-width:' + W + 'px;max-width:' + W + 'px;padding:2px 0;font-size:.58rem;font-weight:600;' +
           'border:1px solid var(--border);' + (dia.d === 1 ? 'border-left:2px solid var(--gold);' : '') +
           'background:' + (tod ? 'var(--gold)' : (we ? 'rgba(128,128,128,.12)' : 'var(--surface)')) + ';' +
-          'color:' + (tod ? 'var(--bg)' : 'var(--text2)') + '" title="' + DC_FULL[dia.dow] + ' ' + dia.d + ' de ' + MESES[dia.m] + '">' +
-          dia.d + '</th>';
+          'color:' + (tod ? 'var(--bg)' : 'var(--text2)') + ';vertical-align:top" title="' + DC_FULL[dia.dow] + ' ' + dia.d + ' de ' + MESES[dia.m] +
+          (fiestasDe(dia.y, dia.m, dia.d).length ? ' — ' + textoFiestas(fiestasDe(dia.y, dia.m, dia.d)) : '') + '">' +
+          dia.d + marcaFiestas(dia.y, dia.m, dia.d, true) + '</th>';
   });
   th += '</tr></thead>';
 
@@ -1744,8 +1821,9 @@ function renderTable() {
     var we  = dia.dow===0||dia.dow===6;
     var tod = esHoy(dia, today);
     th += '<th class="dh'+(we?' we':'')+(tod?' tod':'')+'" data-coly="'+dia.y+'" data-colm="'+dia.m+
-          '" data-cold="'+dia.d+'">'+DC[dia.dow]+'<br><span style="font-size:.95rem;font-weight:700">'+
-          etiquetaDia(dia, curM)+'</span></th>';
+          '" data-cold="'+dia.d+'"'+(fiestasDe(dia.y,dia.m,dia.d).length?' title="'+textoFiestas(fiestasDe(dia.y,dia.m,dia.d))+'"':'')+
+          '>'+DC[dia.dow]+'<br><span style="font-size:.95rem;font-weight:700">'+
+          etiquetaDia(dia, curM)+'</span>'+marcaFiestas(dia.y, dia.m, dia.d)+'</th>';
   });
   th += '</tr></thead>';
 
@@ -1864,6 +1942,12 @@ function renderWeekTable() {
     th += '<th style="background:'+bg+';color:'+col+';padding:6px 4px;border:1px solid var(--border);border-bottom:3px solid '+(we?'var(--gold)':'var(--border)')+';text-align:center;min-width:140px">'
         + '<div style="font-weight:900;font-size:1rem;letter-spacing:.04em">'+DC_FULL[dow].substring(0,3)+'</div>'
         + '<div style="font-size:.78rem;opacity:.85;margin-top:2px">'+dd.getDate()+'/'+(dd.getMonth()+1)+'</div>'
+        + (fiestasDe(dd.getFullYear(),dd.getMonth(),dd.getDate()).length
+            ? '<div style="font-size:.62rem;font-weight:600;margin-top:3px;white-space:normal;line-height:1.25">'+
+              fiestasDe(dd.getFullYear(),dd.getMonth(),dd.getDate()).map(function(x){
+                var e=FIESTA_ZONAS[x.z];
+                return '<span style="padding:0 4px;border-radius:3px;background:'+e.bg+';color:'+e.col+'">'+e.corto+'</span> '+x.nombre;
+              }).join('<br>')+'</div>' : '')
         + '</th>';
   });
   th += '</tr></thead>';
