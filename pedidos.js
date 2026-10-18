@@ -334,8 +334,17 @@ function cantidadConUnidad(n, u){
   return n+" "+u;
 }
 /* "caja de 12". Una caja de una unidad no es una caja de nada: se calla. */
+/* Lo que va por litros viene en garrafa, no en caja: la «caja de 25» de
+   un precio por litro son 25 litros de garrafa. */
+function esGarrafa(p){ return unidadDe(p)==="L"; }
+function etiquetaEnvase(p){
+  var c=+(p&&p.udsCaja)||0;
+  if(!(c>1)) return "";
+  return esGarrafa(p) ? "garr "+num(c, c%1?1:0)+" L" : "caj "+num(c, c%1?1:0);
+}
 function deCaja(p){
   var c=+(p&&p.udsCaja)||0;
+  if(esGarrafa(p)) return c>0 ? "garrafa de "+num(c, c%1?1:0)+" L" : "";
   return c>1 ? "caja de "+num(c, c%1?1:0) : (c>0 ? "caja" : "");
 }
 function productoPorId(id){
@@ -375,9 +384,10 @@ function trozosPedidos(p, l){
   var fuera=[];
   MODOS.forEach(function(m){
     var n=l[m.campo]; if(!n) return;
-    var t=num(n, n%1?1:0)+" "+(n===1?m.uno:m.varios);
+    var garr=(m.campo==="cajas" && esGarrafa(p));
+    var t=num(n, n%1?1:0)+" "+(garr?(n===1?"garrafa":"garrafas"):(n===1?m.uno:m.varios));
     if(m.campo==="cajas" && (+p.udsCaja||0)>1)
-      t+=" de "+num(+p.udsCaja, (+p.udsCaja)%1?1:0);
+      t+=" de "+num(+p.udsCaja, (+p.udsCaja)%1?1:0)+(garr?" L":"");
     fuera.push(t);
   });
   return fuera;
@@ -984,7 +994,11 @@ function lineaOferta(o, g){
                         (meses!=null && meses>=12 ? ' · hace '+Math.floor(meses/12)+' año'+(meses>=24?"s":"") : "")+
                         '</span>');
   else info.push('<span class="viejo">sin fecha</span>');
-  if(caja>0) info.push('<span>'+esc(deCaja(o))+' · '+eur(precioCaja(o))+'</span>');
+  if(esGarrafa(o)) info.push('<span class="garrafa">garrafa de '+
+      '<input type="number" min="0" step="0.5" inputmode="decimal" data-garrafa="'+esc(o.id)+'" '+
+      'value="'+(caja>0?esc(caja):"")+'" placeholder="?" aria-label="Litros de la garrafa"> L'+
+      '<span data-garrafa-precio="'+esc(o.id)+'">'+(caja>0&&neto?' · '+eur(precioCaja(o)):"")+'</span></span>');
+  else if(caja>0) info.push('<span>'+esc(deCaja(o))+' · '+eur(precioCaja(o))+'</span>');
   /* Las cajas se pueden pedir siempre, pero si nadie ha dicho cuántas
      unidades trae la caja no hay precio que ponerle: se avisa aquí, que
      es donde está el botón de arreglarlo. */
@@ -1006,7 +1020,7 @@ function lineaOferta(o, g){
       (function(){
         var campo=unidadPuesta(o, l);
         var otros=loOtroQueLleva(o, l);
-        return contador(o.id, campo, l[campo], caja>1 ? "caj "+num(caja, caja%1?1:0) : "")+
+        return contador(o.id, campo, l[campo], etiquetaEnvase(o))+
           (otros.length
             ? '<span class="nota" style="align-self:center;margin:0">y '+
               esc(otros.join(" y "))+'</span>'
@@ -1096,6 +1110,23 @@ function engancharFichas(caja){
       c.classList.toggle("activo", !!l[campo]);
       refrescarFicha(id);
       pintarBarra();
+    });
+  });
+  caja.querySelectorAll("[data-garrafa]").forEach(function(inp){
+    inp.addEventListener("click", function(e){ e.stopPropagation(); });
+    inp.addEventListener("change", function(){
+      var id=inp.getAttribute("data-garrafa"), p=productoPorId(id);
+      if(!p) return;
+      var v=+String(inp.value).replace(",",".")||0;
+      p.udsCaja = v>0 ? v : null;
+      guardar();
+      var pr=document.querySelector('[data-garrafa-precio="'+id+'"]');
+      if(pr) pr.textContent=(v>0&&conIgi(p)) ? " · "+eur(precioCaja(p)) : "";
+      var sel=document.querySelector('.contador[data-cnt^="'+id+'|"] .ud option[value="cajas"]');
+      if(sel) sel.textContent=etiquetaEnvase(p)||"caj";
+      refrescarFicha(id);
+      pintarBarra();
+      avisar("Garrafa de "+num(v, v%1?1:0)+" L");
     });
   });
   caja.querySelectorAll("[data-editar]").forEach(function(b){
@@ -1261,8 +1292,7 @@ function tarjetaProveedorPedido(g){
           var campo=unidadPuesta(l.p, l.l);
           var caja=+l.p.udsCaja||0;
           var otros=loOtroQueLleva(l.p, l.l);
-          return '<td class="num">'+casillaPedido(l.p.id, campo, l.l[campo],
-                   caja>1 ? "caj "+num(caja, caja%1?1:0) : "")+
+          return '<td class="num">'+casillaPedido(l.p.id, campo, l.l[campo], etiquetaEnvase(l.p))+
                  (otros.length?'<div style="font-size:11px;color:var(--muted)">y '+
                    esc(otros.join(" y "))+'</div>':"")+'</td>';
         })()+
@@ -1944,12 +1974,11 @@ function verProveedor(main){
           '<td class="num">'+(conIgi(p)
             ? '<strong>'+eur(conIgi(p))+'</strong>'
             : '<span style="color:var(--muted)">sin precio</span>')+
-            (caja>0&&conIgi(p)?'<div style="font-size:11px;color:var(--muted)">caja '+
+            (caja>0&&conIgi(p)?'<div style="font-size:11px;color:var(--muted)">'+(esGarrafa(p)?"garrafa ":"caja ")+
               eur(precioCaja(p))+'</div>':"")+'</td>'+
           (function(){
             var campo=unidadPuesta(p, l);
-            return '<td class="num">'+casillaProv(p.id, campo, l[campo],
-                     caja>1 ? "caj "+num(caja, caja%1?1:0) : "")+'</td>';
+            return '<td class="num">'+casillaProv(p.id, campo, l[campo], etiquetaEnvase(p))+'</td>';
           })()+
         '</tr>';
       }).join("")+
@@ -2183,7 +2212,7 @@ function editarProducto(p){
         '</select></div></div>'+
       '<div class="campo"><label class="lbl" for="ep_igi">IGI (%)</label>'+
         '<input type="number" id="ep_igi" min="0" max="30" step="0.5" value="'+esc(p.igi)+'"></div>'+
-      '<div class="campo"><label class="lbl" for="ep_uds">Unidades por caja</label>'+
+      '<div class="campo"><label class="lbl" for="ep_uds" id="ep_uds_lbl">'+(esGarrafa(p)?"Litros por garrafa":"Unidades por caja")+'</label>'+
         '<input type="number" id="ep_uds" min="0" step="0.1" '+
         'value="'+(p.udsCaja!=null?esc(p.udsCaja):"")+'" placeholder="sueltas"></div>'+
       '<div class="campo"><label class="lbl" for="ep_ud">El precio es por</label>'+
@@ -2261,9 +2290,13 @@ function editarProducto(p){
           (dto ? " · descuento <strong>−"+(enEur?eur(dto):num(dto, dto%1?1:0)+" %")+"</strong>" : "")+
           " · IGI <strong>"+num(igi, igi%1?1:0)+" %</strong>"+
           " · precio neto <strong>"+eur(neto)+"</strong>"+
-          (uds>0 ? ". La caja de "+num(uds, uds%1?1:0)+" sale a <strong>"+eur(r2(neto*uds))+"</strong>." : ".");
+          (uds>0 ? (valor("ep_ud")==="L" ? ". La garrafa de "+num(uds, uds%1?1:0)+" L sale a" : ". La caja de "+num(uds, uds%1?1:0)+" sale a")+" <strong>"+eur(r2(neto*uds))+"</strong>." : ".");
       }
-      ["ep_precio","ep_dto","ep_dtoen","ep_igi","ep_uds"].forEach(function(id){
+      document.getElementById("ep_ud").addEventListener("change", function(){
+        document.getElementById("ep_uds_lbl").textContent =
+          this.value==="L" ? "Litros por garrafa" : "Unidades por caja";
+      });
+      ["ep_precio","ep_dto","ep_dtoen","ep_igi","ep_uds","ep_ud"].forEach(function(id){
         document.getElementById(id).addEventListener("input", cuenta);
       });
       cuenta();
