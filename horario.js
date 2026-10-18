@@ -34,6 +34,20 @@ SLOTS.push(0); SLOTS.push(1); SLOTS.push(2);
 // STATE
 // ================================================================
 var curM = new Date().getMonth(), curY = 2026, curS = 'verano';
+// Los años que se pueden elegir: del 2025 hasta cinco por delante. Se
+// ponen desde aqui y no en el HTML, que el navegador guarda el HTML un
+// rato y los años nuevos tardaban en salir.
+(function ponerAnos(){
+  var hasta = Math.max(2030, new Date().getFullYear() + 4);
+  ['yr', 'hours-year-sel'].forEach(function(id){
+    var sel = document.getElementById(id); if (!sel) return;
+    var elegido = sel.value || String(curY);
+    var html = '';
+    for (var y = 2025; y <= hasta; y++)
+      html += '<option value="' + y + '"' + (String(y) === elegido ? ' selected' : '') + '>' + y + '</option>';
+    sel.innerHTML = html;
+  });
+})();
 var sched = {};
 // El cajon viejo del cuadrante de vacaciones, de cuando iba por su
 // cuenta. Ya no se escribe en el: ahora el cuadrante guarda en `sched`,
