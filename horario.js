@@ -512,30 +512,27 @@ function montarBarraBloques(){
   ordenarBloques();
 }
 
-/* El año del cuadro de vacaciones se cambia aqui mismo, con dos
-   flechas al lado de «Año». Mueven el selector de año de arriba, asi
-   que todo el horario pasa al mismo año. */
+/* El año del cuadro de vacaciones se cambia aqui mismo, con un solo
+   desplegable al lado de «Año» con todos los años (hasta 2030). Mueve el
+   selector de año de arriba, asi que todo el horario pasa al mismo año. */
 function flechasAnoVac(){
   var sel = document.getElementById('yr');
-  var hay = function(y){ return !!(sel && sel.querySelector('option[value="' + y + '"]')); };
-  var f = function(d, txt, tit){
-    var ok = hay(curY + d);
-    return '<button onclick="cambiarAnoVac(' + d + ')" title="' + tit + '"' + (ok ? '' : ' disabled') +
-      ' style="cursor:' + (ok ? 'pointer' : 'default') + ';font-family:inherit;font-size:.8rem;font-weight:700;' +
-      'padding:4px 11px;border-radius:14px;border:1px solid var(--border);background:var(--surface);' +
-      'color:var(--text2);opacity:' + (ok ? '1' : '.35') + ';margin-left:' + (d < 0 ? '10px' : '4px') + '">' +
-      txt + '</button>';
-  };
-  return f(-1, '&lsaquo; ' + (curY - 1), 'Ir a ' + (curY - 1)) + f(1, (curY + 1) + ' &rsaquo;', 'Ir a ' + (curY + 1));
+  if (!sel) return '';
+  var ops = Array.prototype.map.call(sel.options, function(o){
+    return '<option value="' + o.value + '"' + (+o.value === curY ? ' selected' : '') + '>' + o.value + '</option>';
+  }).join('');
+  return '<select onchange="ponerAnoVac(this.value)" title="Elegir el a&ntilde;o" ' +
+    'style="cursor:pointer;font-family:inherit;font-size:.78rem;font-weight:700;padding:4px 10px;' +
+    'border-radius:14px;border:1px solid var(--gold);background:var(--surface);color:var(--gold2);' +
+    'margin-left:10px">' + ops + '</select>';
 }
-function cambiarAnoVac(d){
+function ponerAnoVac(y){
   var sel = document.getElementById('yr');
-  var y = curY + d;
   if (!sel || !sel.querySelector('option[value="' + y + '"]')) return;
   sel.value = String(y);
   renderAll();
 }
-window.cambiarAnoVac = cambiarAnoVac;
+window.ponerAnoVac = ponerAnoVac;
 
 function renderAll() {
   var yr = document.getElementById('yr');
