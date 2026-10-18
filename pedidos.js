@@ -1139,8 +1139,20 @@ function engancharFichas(caja){
     });
   });
   caja.querySelectorAll("[data-envase]").forEach(function(inp){
-    inp.addEventListener("click", function(e){ e.stopPropagation(); });
-    inp.addEventListener("change", function(){
+    ["click","mousedown","touchstart","focus"].forEach(function(ev){
+      inp.addEventListener(ev, function(e){ e.stopPropagation(); });
+    });
+    /* Se guarda al escribir, sin tener que salir de la casilla: en el
+       Safari el «change» no salta hasta que pulsas fuera. */
+    var espera=null, ultimo=inp.value;
+    inp.addEventListener("input", function(){
+      clearTimeout(espera);
+      espera=setTimeout(function(){ if(inp.value!==ultimo) guardarEnvase(); }, 700);
+    });
+    inp.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); inp.blur(); } });
+    inp.addEventListener("change", function(){ clearTimeout(espera); if(inp.value!==ultimo) guardarEnvase(); });
+    function guardarEnvase(){
+      ultimo=inp.value;
       var k=inp.getAttribute("data-envase").split("|"), que=k[0], id=k[1], p=productoPorId(id);
       if(!p) return;
       var v=+String(inp.value).replace(",",".")||0;
@@ -1161,7 +1173,7 @@ function engancharFichas(caja){
       avisar(que==="caja"
         ? (v>0 ? "Caja de "+num(v, v%1?1:0)+(udCaja(p)?" "+udCaja(p):" uds") : "Caja sin tamaño")
         : (v>0 ? "Garrafa de "+num(v, v%1?1:0)+" L" : "Garrafa sin litros"));
-    });
+    }
   });
   caja.querySelectorAll("[data-editar]").forEach(function(b){
     b.addEventListener("click", function(e){
