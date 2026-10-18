@@ -1297,6 +1297,11 @@ function renderVacaciones(){
 
   var leyenda = document.getElementById('vac-leyenda');
   if (leyenda) leyenda.style.display = (vacVista === 'ano') ? 'none' : 'flex';
+  // En el año el cuadro va pegado al borde de su caja: con el margen
+  // de dentro, los dias que pasan por debajo de los nombres asomaban.
+  var cajaV = tbl.parentNode;
+  if (cajaV) { cajaV.style.padding = (vacVista === 'ano') ? '12px 0 0' : '12px 20px 0';
+               cajaV.style.margin  = (vacVista === 'ano') ? '0 20px' : '0'; }
   if (vacVista === 'ano') { ponerChapa('vac-rango', 'Todo ' + curY); renderVacAno(tbl, all); return; }
 
   /* El resumen de lo que se esta mirando: si esta elegido vacaciones,
@@ -1411,85 +1416,129 @@ function renderVacaciones(){
 }
 
 // ── El año entero ─────────────────────────────────────────────────
-// Solo para mirar: los dias se ponen en el mes. Cada casilla dice
-// cuantos dias de lo elegido tiene esa persona ese mes, y cuantos mas,
-// mas color. Abajo, cuanta gente falta cada mes. Pulsando un mes se va
-// a ese mes para cambiar dias.
+// Como el cuadro de la hoja de calculo: una fila por persona y todos
+// los dias del año seguidos, de enero a diciembre. Se pulsa un dia y se
+// pone o se quita lo elegido arriba, igual que en el mes.
+var vacAnoScroll = null;
 function renderVacAno(tbl, all){
   var e = VAC_EST[vacTipo];
   var esVac = (vacTipo === 'vacaciones');
-  var hoyM = mesDeFecha(new Date());
-  var cab = 'background:var(--surface);color:var(--text2);padding:7px 4px;border:1px solid var(--border);' +
-            'text-align:center;font-size:.7rem;font-weight:700;white-space:nowrap';
+  var hoy = new Date();
+  var dias = [];
+  for (var m = 0; m < 12; m++) {
+    var n = new Date(curY, m + 1, 0).getDate();
+    for (var d = 1; d <= n; d++) dias.push({y:curY, m:m, d:d, dow:new Date(curY, m, d).getDay()});
+  }
+  var W = 15;   // ancho de cada dia
 
   var resumen = document.getElementById('vac-resumen');
   if (resumen) {
-    var total = all.reduce(function(a,s){ return a + diasTipoAno(s.id, curY, vacTipo); }, 0);
+    var total = 0;
+    all.forEach(function(s){ dias.forEach(function(dia){ if (estadoDe(s.id, dia) === vacTipo) total++; }); });
     resumen.innerHTML = '<div><span style="color:' + e.puro + ';font-weight:700">' + e.lbl + ' de ' + curY +
       '</span>: ' + total + (total === 1 ? ' dia' : ' dias') + ' entre todos. ' +
-      'Pulsa un mes para ir a &eacute;l y cambiar d&iacute;as.</div>';
+      'Pulsa un d&iacute;a para poner o quitar ' + e.uno.toLowerCase() + '.</div>';
   }
 
-  var th = '<thead><tr><th style="' + cab + ';color:var(--gold);font-family:Playfair Display,serif;font-size:.82rem;' +
-           'text-align:left;padding:7px 12px;position:sticky;left:0;z-index:10;min-width:110px">Personal</th>';
+  var fijo = 'position:sticky;z-index:6;background:var(--surface);border:1px solid var(--border);';
+  var colN = 'left:0;min-width:104px;max-width:104px;';
+  var colT = 'left:104px;min-width:48px;max-width:48px;';
+  var colQ = 'left:152px;min-width:52px;max-width:52px;';
+  var izq  = esVac ? 3 : 2;
+
+  // Primera fila: los meses
+  var th = '<thead><tr>' +
+    '<th rowspan="2" style="' + fijo + colN + 'color:var(--gold);font-family:Playfair Display,serif;font-size:.82rem;text-align:left;padding:6px 10px;z-index:11">Personal</th>' +
+    '<th rowspan="2" style="' + fijo + colT + 'background-color:var(--surface);background-image:linear-gradient(var(--total-bg),var(--total-bg));color:var(--gold2);font-size:.66rem;z-index:11">Total</th>' +
+    (esVac ? '<th rowspan="2" style="' + fijo + colQ + 'background-color:var(--surface);background-image:linear-gradient(var(--total-bg),var(--total-bg));color:var(--gold2);font-size:.66rem;z-index:11;line-height:1.1" ' +
+             'title="Lo que le queda. Pulsa para poner los dias que le tocan al año.">Quedan</th>' : '');
   for (var m = 0; m < 12; m++) {
-    var esHoyM = (hoyM.y === curY && hoyM.m === m);
-    th += '<th onclick="irAlMesVac(' + m + ')" title="Ir a ' + MESES[m] + '" style="' + cab + ';cursor:pointer;min-width:46px;' +
-          (esHoyM ? 'background:rgba(201,168,76,.18);color:var(--gold2)' : '') + '">' + MESES[m].substring(0,3) + '</th>';
+    var nd = new Date(curY, m + 1, 0).getDate();
+    th += '<th colspan="' + nd + '" style="background:var(--surface);color:var(--gold2);font-size:.72rem;font-weight:700;' +
+          'padding:5px 0;border:1px solid var(--border);border-left:2px solid var(--gold);text-align:left;padding-left:6px">' +
+          MESES[m] + '</th>';
   }
-  th += '<th style="' + cab + ';background:var(--total-bg);color:var(--gold2);min-width:56px">Total</th>';
-  if (esVac) th += '<th style="' + cab + ';background:var(--total-bg);min-width:62px" title="Dias que le tocan al año. Se cambia pulsando el numero.">Le tocan</th>' +
-                   '<th style="' + cab + ';background:var(--total-bg);color:var(--gold2);min-width:58px">Quedan</th>';
+  th += '</tr><tr>';
+  // Segunda fila: el numero del dia
+  dias.forEach(function(dia){
+    var we = dia.dow === 0 || dia.dow === 6, tod = esHoy(dia, hoy);
+    th += '<th style="min-width:' + W + 'px;max-width:' + W + 'px;padding:2px 0;font-size:.58rem;font-weight:600;' +
+          'border:1px solid var(--border);' + (dia.d === 1 ? 'border-left:2px solid var(--gold);' : '') +
+          'background:' + (tod ? 'var(--gold)' : (we ? 'rgba(128,128,128,.12)' : 'var(--surface)')) + ';' +
+          'color:' + (tod ? 'var(--bg)' : 'var(--text2)') + '" title="' + DC_FULL[dia.dow] + ' ' + dia.d + ' de ' + MESES[dia.m] + '">' +
+          dia.d + '</th>';
+  });
   th += '</tr></thead>';
 
-  var fuera = [0,0,0,0,0,0,0,0,0,0,0,0];
-  var tb = '<tbody>', ultimoRol = null, cols = 14 + (esVac ? 2 : 0);
+  var fuera = dias.map(function(){ return 0; });
+  var tb = '<tbody>', ultimoRol = null;
   all.forEach(function(s){
     if (s.role !== ultimoRol) {
-      if (ultimoRol !== null) tb += '<tr><td colspan="' + cols + '" style="height:3px;background:var(--border);padding:0;border:none"></td></tr>';
+      if (ultimoRol !== null) tb += '<tr><td colspan="' + (dias.length + izq) + '" style="height:3px;background:var(--border);padding:0;border:none"></td></tr>';
       ultimoRol = s.role;
     }
     var tot = 0, celdas = '';
-    for (var m = 0; m < 12; m++) {
-      var n = diasTipoMes(s.id, curY, m, vacTipo);
-      tot += n; if (n) fuera[m]++;
-      var fuerza = n ? Math.min(1, .35 + n / 20) : 0;
-      celdas += '<td onclick="irAlMesVac(' + m + ')" title="' + esc(s.name) + ' - ' + MESES[m] + ': ' +
-        (n ? n + (n === 1 ? ' dia' : ' dias') + ' de ' + e.uno.toLowerCase() : 'nada') + '" ' +
-        'style="cursor:pointer;text-align:center;padding:3px;border:1px solid var(--border)">' +
-        (n ? '<div style="background:' + e.bg + ';color:' + e.col + ';opacity:' + fuerza.toFixed(2) + ';border-radius:5px;' +
-             'font-weight:800;font-size:.8rem;padding:4px 0">' + n + '</div>'
-           : '<span style="color:var(--border)">&middot;</span>') + '</td>';
-    }
-    var fila = '<tr><td style="background:var(--surface);position:sticky;left:0;z-index:5;padding:5px 10px;' +
-      'border:1px solid var(--border);white-space:nowrap">' +
-      '<span style="color:' + RCOL[s.role] + ';font-weight:600;font-size:.8rem">' + esc(s.name) + '</span>' +
-      '<span class="rt r' + s.role + '" style="margin-left:3px">' + RLBL[s.role] + '</span></td>' + celdas +
-      '<td style="background:var(--total-bg);border:1px solid var(--border);text-align:center;font-weight:900;' +
-      'color:' + e.puro + ';font-size:.9rem">' + tot + '</td>';
+    dias.forEach(function(dia, k){
+      var est = estadoDe(s.id, dia), es = VAC_EST[est];
+      var we = dia.dow === 0 || dia.dow === 6;
+      if (est === vacTipo) { tot++; fuera[k]++; }
+      var fondo = es ? es.bg : (we ? 'rgba(128,128,128,.10)' : 'transparent');
+      celdas += '<td onclick="marcarDiaVac(\'' + s.id + '\',' + dia.y + ',' + dia.m + ',' + dia.d + ')" ' +
+        'title="' + esc(s.name) + ' - ' + DC_FULL[dia.dow] + ' ' + dia.d + ' de ' + MESES[dia.m] +
+        (es ? ' - ' + es.uno : '') + '" ' +
+        'style="cursor:pointer;height:24px;padding:0;text-align:center;font-size:.6rem;font-weight:800;user-select:none;' +
+        'border:1px solid var(--border);' + (dia.d === 1 ? 'border-left:2px solid var(--gold);' : '') +
+        'background:' + fondo + ';color:' + (es ? es.col : 'transparent') +
+        (es && est !== vacTipo ? ';opacity:.4' : '') + '">' + (es ? es.letra : '') + '</td>';
+    });
+    var fila = '<tr>' +
+      '<td style="' + fijo + colN + 'padding:3px 8px;white-space:nowrap;overflow:hidden">' +
+        '<span style="color:' + RCOL[s.role] + ';font-weight:600;font-size:.78rem">' + esc(s.name) + '</span>' +
+        '<span class="rt r' + s.role + '" style="margin-left:3px">' + RLBL[s.role] + '</span></td>' +
+      '<td style="' + fijo + colT + 'background-color:var(--surface);background-image:linear-gradient(var(--total-bg),var(--total-bg));text-align:center;font-weight:900;font-size:.86rem;color:' + e.puro + '">' + tot + '</td>';
     if (esVac) {
-      var toca = vacDelAno(s), quedan = (toca == null) ? null : toca - tot;
-      fila += '<td style="background:var(--total-bg);border:1px solid var(--border);text-align:center;padding:3px">' +
-        '<input type="number" min="0" step="1" value="' + (toca == null ? '' : toca) + '" placeholder="?" onchange="setVacDelAno(\'' + s.id + '\', this.value)" ' +
-        'style="width:46px;text-align:center;font-family:inherit;font-size:.8rem;font-weight:700;padding:3px 2px;' +
-        'background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px"></td>' +
-        '<td style="background:var(--total-bg);border:1px solid var(--border);text-align:center;font-weight:900;font-size:.9rem;' +
-        'color:' + (quedan == null ? 'var(--text2)' : quedan < 0 ? '#e5776a' : (quedan === 0 ? 'var(--text2)' : '#4caf7a')) + '" ' +
-        'title="' + (quedan == null ? 'Pon los dias que le tocan' : quedan < 0 ? 'Se ha pasado ' + (-quedan) + ' dias' : 'Le quedan ' + quedan + ' dias') + '">' +
-        (quedan == null ? '&ndash;' : quedan) + '</td>';
+      var toca = vacDelAno(s);
+      var quedan = (toca == null) ? null : toca - tot;
+      fila += '<td onclick="pedirVacDelAno(\'' + s.id + '\')" title="' +
+        (toca == null ? 'Pulsa para poner los dias que le tocan' : 'Le tocan ' + toca + '. Pulsa para cambiarlo') + '" ' +
+        'style="' + fijo + colQ + 'background-color:var(--surface);background-image:linear-gradient(var(--total-bg),var(--total-bg));text-align:center;cursor:pointer;line-height:1.05">' +
+        '<div style="font-weight:900;font-size:.86rem;color:' +
+          (quedan == null ? 'var(--text2)' : quedan < 0 ? '#e5776a' : quedan === 0 ? 'var(--text2)' : '#4caf7a') + '">' +
+          (quedan == null ? '?' : quedan) + '</div>' +
+        '<div style="font-size:.56rem;color:var(--text2)">' + (toca == null ? 'poner' : 'de ' + toca) + '</div></td>';
     }
-    tb += fila + '</tr>';
+    tb += fila + celdas + '</tr>';
   });
-  tb += '</tbody><tfoot><tr><td style="background:var(--surface);position:sticky;left:0;z-index:5;padding:5px 10px;' +
-        'border:1px solid var(--border);font-size:.72rem;color:var(--text2);white-space:nowrap" ' +
-        'title="Cuanta gente tiene algun dia de ' + e.uno.toLowerCase() + ' ese mes">Fuera ese mes</td>';
-  for (var m = 0; m < 12; m++) {
-    tb += '<td style="text-align:center;border:1px solid var(--border);font-size:.78rem;font-weight:700;' +
-          'color:' + (fuera[m] >= 3 ? '#e0b168' : (fuera[m] ? 'var(--text)' : 'var(--border)')) + '">' +
-          (fuera[m] || '&middot;') + '</td>';
-  }
-  tb += '<td colspan="' + (esVac ? 3 : 1) + '" style="border:1px solid var(--border)"></td></tr></tfoot>';
+
+  // Ultima fila: cuanta gente falta cada dia
+  tb += '</tbody><tfoot><tr><td colspan="' + izq + '" style="' + fijo + 'left:0;padding:4px 8px;font-size:.7rem;color:var(--text2);white-space:nowrap" ' +
+        'title="Cuanta gente tiene ' + e.uno.toLowerCase() + ' ese dia">Fuera ese d&iacute;a</td>';
+  dias.forEach(function(dia, k){
+    var n = fuera[k];
+    tb += '<td style="text-align:center;font-size:.6rem;font-weight:800;border:1px solid var(--border);' +
+          (dia.d === 1 ? 'border-left:2px solid var(--gold);' : '') +
+          'color:' + (n >= 3 ? '#c9832e' : (n ? 'var(--text)' : 'transparent')) + '">' + (n || '') + '</td>';
+  });
+  tb += '</tr></tfoot>';
   tbl.innerHTML = th + tb;
+
+  // La primera vez, el cuadro se abre en el mes de hoy, no en enero.
+  var caja = tbl.parentNode;
+  if (caja && vacAnoScroll !== curY) {
+    vacAnoScroll = curY;
+    if (hoy.getFullYear() === curY) {
+      var antes = 0;
+      for (var mm = 0; mm < hoy.getMonth(); mm++) antes += new Date(curY, mm + 1, 0).getDate();
+      caja.scrollLeft = Math.max(0, antes * (W + 1) - 20);
+    }
+  }
+}
+function pedirVacDelAno(sid){
+  var s = staff().filter(function(x){ return x.id === sid; })[0];
+  if (!s) return;
+  var v = prompt('Dias de vacaciones que le tocan a ' + s.name + ' al año:', vacDelAno(s) || '');
+  if (v === null) return;
+  setVacDelAno(sid, v);
 }
 
 function renderNav() {
