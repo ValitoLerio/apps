@@ -148,7 +148,10 @@ function avisar(mensaje, malo){
    tanto por ciento de descuento, el IGI va sobre el precio ya rebajado. */
 function conDto(p){
   if(!p || !p.precio) return 0;
-  return r2(p.precio * (1 - (+p.dto||0)/100));
+  var d=+p.dto||0;
+  /* El descuento suele ir en %, pero hay quien lo hace en euros. */
+  if(p.dtoEn==="€") return r2(Math.max(0, p.precio - d));
+  return r2(p.precio * (1 - d/100));
 }
 function cuotaIgi(p){
   if(!p || !p.precio) return 0;
@@ -159,15 +162,18 @@ function conIgi(p){
   return r2(conDto(p) + cuotaIgi(p));
 }
 /* Las cuatro cifras de cada producto, debajo del precio gordo. */
+function textoDto(o){
+  var d=+o.dto||0;
+  if(!d) return "";
+  return o.dtoEn==="€" ? "−"+eur(d) : "−"+num(d, d%1?1:0)+" %";
+}
 function desglose(o){
   if(!(+o.precio>0)) return "";
   var dto=+o.dto||0;
   return '<div class="desglose">'+
-    '<div><span class="k">P. venta</span><b>'+eur(o.precio)+'</b></div>'+
-    '<div><span class="k">Dto.</span><b'+(dto?' class="dto"':' class="nada"')+'>'+
-      (dto?"−"+num(dto, dto%1?1:0)+" %":"&nbsp;")+'</b></div>'+
-    '<div><span class="k">Con dto.</span><b'+(dto?"":' class="nada"')+'>'+eur(conDto(o))+'</b></div>'+
-    '<div><span class="k">Neto final</span><b class="neto">'+eur(conIgi(o))+'</b></div>'+
+    '<div><span class="k">Descuento</span><b class="dto">'+(dto?textoDto(o):"&nbsp;")+'</b></div>'+
+    '<div><span class="k">IGI</span><b>'+num(o.igi, (+o.igi)%1?1:0)+' %</b></div>'+
+    '<div><span class="k">Precio neto</span><b class="neto">'+eur(conIgi(o))+'</b></div>'+
   '</div>';
 }
 function precioCaja(p){
@@ -1884,8 +1890,8 @@ function verProveedor(main){
     '<div class="tarjeta"><div class="tarjeta-cab">'+
       '<h2>Su lista</h2><span class="pista">escribe la cantidad y ya queda apuntado</span></div>'+
       '<div class="tabla-caja pegada"><table class="hoja"><thead><tr>'+
-        '<th>Producto</th><th class="num">P. venta</th><th class="num">Dto.</th>'+
-        '<th class="num">Con dto.</th><th class="num">Neto final</th><th class="num">Cuánto</th>'+
+        '<th>Producto</th><th class="num">P. venta</th><th class="num">Descuento</th>'+
+        '<th class="num">IGI</th><th class="num">Precio neto</th><th class="num">Cuánto</th>'+
       '</tr></thead><tbody>'+
       suyos.sort(function(a,b){
         return (a.seccion||"").localeCompare(b.seccion||"") ||
@@ -1904,8 +1910,8 @@ function verProveedor(main){
           (conIgi(p)
             ? '<td class="num">'+eur(p.precio)+'</td>'+
               '<td class="num" style="color:var(--ok);font-weight:600">'+
-                (+p.dto?"−"+num(p.dto, p.dto%1?1:0)+" %":"")+'</td>'+
-              '<td class="num">'+(+p.dto?eur(conDto(p)):"")+'</td>'
+                textoDto(p)+'</td>'+
+              '<td class="num">'+num(p.igi, (+p.igi)%1?1:0)+' %</td>'
             : '<td></td><td></td><td></td>')+
           '<td class="num">'+(conIgi(p)
             ? '<strong>'+eur(conIgi(p))+'</strong>'
@@ -2139,9 +2145,14 @@ function editarProducto(p){
       '<div class="campo"><label class="lbl" for="ep_precio">Precio de venta (€)</label>'+
         '<input type="number" id="ep_precio" class="grande" min="0" step="0.01" '+
         'value="'+(p.precio!=null?esc(p.precio):"")+'" placeholder="0,00"></div>'+
-      '<div class="campo"><label class="lbl" for="ep_dto">Descuento (%)</label>'+
-        '<input type="number" id="ep_dto" class="grande" min="0" max="100" step="0.5" '+
-        'value="'+(+p.dto?esc(p.dto):"")+'" placeholder="sin dto."></div>'+
+      '<div class="campo"><label class="lbl" for="ep_dto">Descuento</label>'+
+        '<div style="display:flex;gap:6px">'+
+        '<input type="number" id="ep_dto" class="grande" min="0" step="0.01" '+
+        'value="'+(+p.dto?esc(p.dto):"")+'" placeholder="sin dto.">'+
+        '<select id="ep_dtoen" style="width:72px;flex:none;font-size:17px;font-weight:600;padding:10px 8px">'+
+          '<option value="%"'+(p.dtoEn==="€"?"":" selected")+'>%</option>'+
+          '<option value="€"'+(p.dtoEn==="€"?" selected":"")+'>€</option>'+
+        '</select></div></div>'+
       '<div class="campo"><label class="lbl" for="ep_igi">IGI (%)</label>'+
         '<input type="number" id="ep_igi" min="0" max="30" step="0.5" value="'+esc(p.igi)+'"></div>'+
       '<div class="campo"><label class="lbl" for="ep_uds">Unidades por caja</label>'+
@@ -2187,6 +2198,7 @@ function editarProducto(p){
       p.seccion=valor("ep_sec");
       p.igi=numero("ep_igi");
       p.dto=numero("ep_dto")||null;
+      p.dtoEn=valor("ep_dtoen")==="€" ? "€" : "%";
       p.udsCaja=(document.getElementById("ep_uds").value!=="") ? +numero("ep_uds") : null;
       p.fecha=valor("ep_fecha");
       p.diario=document.getElementById("ep_diario").checked;
@@ -2211,18 +2223,19 @@ function editarProducto(p){
       fecha.addEventListener("input", function(){ this.dataset.tocada="1"; });
       function cuenta(){
         var pr=numero("ep_precio"), igi=numero("ep_igi"), uds=numero("ep_uds"), dto=numero("ep_dto");
-        var rebajado=r2(pr*(1-dto/100));
+        var enEur=valor("ep_dtoen")==="€";
+        var rebajado=enEur ? r2(Math.max(0,pr-dto)) : r2(pr*(1-dto/100));
         var cuota=r2(rebajado*igi/100);
         var neto=r2(rebajado+cuota);
         var t=document.getElementById("ep_cuenta");
         if(!pr){ t.innerHTML="Sin precio, este proveedor no entra en la comparación."; return; }
         t.innerHTML="Precio de venta <strong>"+eur(pr)+"</strong>"+
-          (dto ? " · descuento "+num(dto, dto%1?1:0)+" % → con dto. <strong>"+eur(rebajado)+"</strong>"
-               : " · sin descuento")+
-          " · neto con IGI "+num(igi, igi%1?1:0)+" %: <strong>"+eur(neto)+"</strong>"+
+          (dto ? " · descuento <strong>−"+(enEur?eur(dto):num(dto, dto%1?1:0)+" %")+"</strong>" : "")+
+          " · IGI <strong>"+num(igi, igi%1?1:0)+" %</strong>"+
+          " · precio neto <strong>"+eur(neto)+"</strong>"+
           (uds>0 ? ". La caja de "+num(uds, uds%1?1:0)+" sale a <strong>"+eur(r2(neto*uds))+"</strong>." : ".");
       }
-      ["ep_precio","ep_dto","ep_igi","ep_uds"].forEach(function(id){
+      ["ep_precio","ep_dto","ep_dtoen","ep_igi","ep_uds"].forEach(function(id){
         document.getElementById(id).addEventListener("input", cuenta);
       });
       cuenta();

@@ -146,7 +146,7 @@ main{padding:22px 24px 120px;max-width:1180px;min-width:0}
 .of-precio.sin{color:var(--muted);font-size:15px;font-weight:500}
 /* Precio de venta, descuento, precio con descuento e IGI: las cuatro
    cifras que hay detrás del precio gordo, en fila y pequeñas. */
-.desglose{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;margin-top:6px;
+.desglose{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;margin-top:6px;
           background:var(--linea-suave);border:1px solid var(--linea-suave);border-radius:7px;overflow:hidden}
 .desglose>div{background:var(--sup);padding:4px 7px;min-width:0}
 .oferta.mejor .desglose>div{background:var(--ok-suave)}
@@ -422,7 +422,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
   Sync.iniciar('pedidos').then(function(){
     var s = document.createElement('script');
-    s.src = 'pedidos.js?v=202610181055';
+    s.src = 'pedidos.js?v=202610181100';
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar pedidos.js. Recarga la pagina.'; };
     document.body.appendChild(s);
