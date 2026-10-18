@@ -127,6 +127,15 @@ function cargar(){
     });
     libro.v=2; tocado=true;
   }
+  /* Lo que se pidió en cajas de un producto que no tiene caja pero sí
+     garrafa, era garrafa. */
+  Object.keys(libro.pedido).forEach(function(id){
+    var l=libro.pedido[id], p=productoPorId(id);
+    if(!l || !p) return;
+    if(+l.cajas>0 && !(+p.udsCaja>0) && +p.garrafa>0){
+      l.garrafas=(+l.garrafas||0)+(+l.cajas); l.cajas=0; tocado=true;
+    }
+  });
   if(tocado) guardar();
 }
 
@@ -323,9 +332,13 @@ function cambiarUnidad(id, campoNuevo){
 /* La casilla que le toca a un producto cuando no se dice otra cosa: la
    caja si viene en cajas, y si no, la de su unidad. */
 function campoNatural(p){
-  /* Lo primero, lo que diga su ficha en "Como se pide". */
+  var hayCaja=(+(p&&p.udsCaja)||0)>0, hayGarr=(+(p&&p.garrafa)||0)>0;
+  /* Lo primero, lo que diga su ficha en "Como se pide"; pero si dice
+     cajas y no tiene caja y sí garrafa, es garrafa. */
+  if(p && p.pedirEn==="cajas" && !hayCaja && hayGarr) return "garrafas";
   if(p && p.pedirEn && modoDe(p.pedirEn)) return p.pedirEn;
-  if((+(p&&p.udsCaja)||0)>0) return "cajas";
+  if(hayCaja) return "cajas";
+  if(hayGarr) return "garrafas";
   var u=unidadDe(p);
   return u==="kg" ? "kg" : u==="L" ? "litros" : "uds";
 }
@@ -1113,6 +1126,7 @@ function engancharFichas(caja){
     var input=c.querySelector("input");
     var elige=c.querySelector("[data-ud]");
     function aplicar(n){
+      campo=c.getAttribute("data-cnt").split("|")[1];
       ponerEnPedido(id, campo, n);
       var l=delPedido(id);
       input.value=l[campo]||"";
@@ -1158,7 +1172,25 @@ function engancharFichas(caja){
       if(!p) return;
       var v=+String(inp.value).replace(",",".")||0;
       if(que==="caja") p.udsCaja = v>0 ? v : null; else p.garrafa = v>0 ? v : null;
+      /* Si se queda sin caja y tiene garrafa, lo que hubiera en cajas
+         pasa a garrafas, y al revés. */
+      var lp=libro.pedido[id];
+      if(!(+p.udsCaja>0) && +p.garrafa>0){
+        if(p.pedirEn==="cajas") p.pedirEn="garrafas";
+        if(lp && +lp.cajas>0){ lp.garrafas=(+lp.garrafas||0)+(+lp.cajas); lp.cajas=0; }
+      } else if(+p.udsCaja>0 && !(+p.garrafa>0)){
+        if(p.pedirEn==="garrafas") p.pedirEn="cajas";
+        if(lp && +lp.garrafas>0){ lp.cajas=(+lp.cajas||0)+(+lp.garrafas); lp.garrafas=0; }
+      }
       guardar();
+      var cnt=document.querySelector('.contador[data-cnt^="'+id+'|"]');
+      if(cnt){
+        var lq=delPedido(id), campoYa=unidadPuesta(p, lq);
+        cnt.setAttribute("data-cnt", id+"|"+campoYa);
+        var selU=cnt.querySelector(".ud"); if(selU) selU.value=campoYa;
+        var inU=cnt.querySelector("input"); if(inU) inU.value=lq[campoYa]||"";
+        cnt.classList.toggle("activo", !!lq[campoYa]);
+      }
       var pr=document.querySelector('[data-envase-precio="'+que+'|'+id+'"]');
       var precio = que==="caja" ? precioCaja(p) : precioGarrafa(p);
       if(pr) pr.textContent=(v>0&&precio) ? " · "+eur(precio) : "";
