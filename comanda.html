@@ -263,6 +263,8 @@ dialog::backdrop{background:rgba(20,14,15,.5)}
 .foto-th img{width:100%; height:100%; object-fit:cover; display:block}
 .foto-th img:not([src]){visibility:hidden}
 .foto-th .marca{position:absolute; left:5px; bottom:5px; font-size:10.5px; background:var(--warn-soft); color:var(--warn); padding:1px 7px; border-radius:10px; font-weight:600}
+.enviar-copias{padding:12px 22px; font-size:15px}
+@media (max-width:900px){ .enviar-copias{width:100%} }
 .ver-foto img{max-width:100%; display:block; margin:0 auto; border-radius:4px}
 @media (max-width:900px){
   .camara .btn{flex:1 1 100%; padding:13px 18px; font-size:15px}
@@ -294,7 +296,7 @@ dialog::backdrop{background:rgba(20,14,15,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202610221830"></script>
+<script src="sync.js?v=202610222110"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');

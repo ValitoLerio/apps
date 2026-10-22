@@ -870,13 +870,13 @@ function viewFotos(main){
         (aMandar.length ? '<strong>'+num(aMandar.length)+(aMandar.length>1?" fotos":" foto")+'</strong> de '+num(nDias)+(nDias>1?" días":" día")+', '+esc(tr.texto)+'.'
                         : 'No hay fotos '+esc(tr.texto)+'.')+
       '</p>'+
-      '<div class="toolbar" style="margin:0">'+
-        '<button class="btn primary" id="ft_pdf"'+(aMandar.length?"":" disabled")+'><span class="step">1</span>Descargar PDF</button>'+
-        '<button class="btn" id="ft_mail"'+(aMandar.length?"":" disabled")+'><span class="step">2</span>Abrir correo</button>'+
-        (canShareFiles()?'<button class="btn" id="ft_share"'+(aMandar.length?"":" disabled")+'>Compartir PDF…</button>':"")+
-      '</div>'+
-      '<p class="section-note" style="margin:10px 0 0">Con la factura del mes también puedes meterlas en el mismo PDF: '+
-        'al abrir la factura emitida sale la casilla para añadirlas.</p>'+
+      '<button class="btn primary enviar-copias" id="ft_enviar"'+(aMandar.length?"":" disabled")+'>Enviar las copias</button>'+
+      '<p class="section-note" style="margin:10px 0 0">'+
+        (canShareFiles()
+          ? 'Se abre el menú de compartir con el PDF ya dentro: elige Correo o WhatsApp y envía.'
+          : 'Se descarga el PDF y se abre el correo para '+esc(correosDe(company(cid)).join(", ")||"la empresa")+
+            '. Arrastra el PDF al mensaje y envía.')+
+        ' <button class="inline-link" id="ft_pdf"'+(aMandar.length?"":" disabled")+'>Solo descargar el PDF</button></p>'+
     '</div></div>'
     : "")+
 
@@ -907,8 +907,10 @@ function viewFotos(main){
       b.addEventListener("click", function(){ ui.fotoTramo=b.getAttribute("data-tramo"); ui.fotoTramoMes=ui.month; render(); });
     });
     var bp=document.getElementById("ft_pdf"); if(bp) bp.addEventListener("click", function(){ descargarCopias(cid, ym, ui.fotoTramo); });
-    var bm=document.getElementById("ft_mail"); if(bm) bm.addEventListener("click", function(){ correoCopias(cid, ym, ui.fotoTramo); });
-    var bs=document.getElementById("ft_share"); if(bs) bs.addEventListener("click", function(){ compartirCopias(cid, ym, ui.fotoTramo); });
+    var be=document.getElementById("ft_enviar"); if(be) be.addEventListener("click", function(){ enviarCopias(cid, ym, ui.fotoTramo); });
+    /* Para compartir, el móvil exige que el archivo esté listo en el
+       mismo toque: se prepara antes, mientras se mira la pantalla. */
+    if(aMandar.length && canShareFiles()) prepararCopias(cid, ym, ui.fotoTramo);
   }
   pintarFotos(cid, delMes);
 }
@@ -1044,6 +1046,50 @@ async function compartirCopias(cid, ym, t){
     if(e && e.name==="AbortError") return;
     toast("No se pudo compartir aquí. Descarga el PDF y adjúntalo a mano.", true);
   }
+}
+/* Un solo botón. En el móvil, el menú de compartir con el PDF dentro.
+   En el ordenador, el PDF descargado y el correo abierto a la vez. */
+var copiasListas=null;
+function claveCopias(cid, ym, t){
+  var tr=tramoDe(ym, t);
+  return cid+"|"+t+"|"+fotosDe(cid, tr.desde, tr.hasta).map(function(f){ return f.id; }).join(",");
+}
+async function prepararCopias(cid, ym, t){
+  var clave=claveCopias(cid, ym, t);
+  if(copiasListas && copiasListas.clave===clave) return copiasListas;
+  var tr=tramoDe(ym, t);
+  var r=await paginasDeCopias(cid, tr.desde, tr.hasta, tr.texto);
+  if(!r.n) return null;
+  copiasListas={clave:clave, faltan:r.faltan,
+    file:new File([buildPDF(r.pages)], nombreCopias(cid, ym, t), {type:"application/pdf"})};
+  return copiasListas;
+}
+function textoCopias(ym, t){
+  var em=perfilActivo()||{}, tr=tramoDe(ym, t);
+  return {asunto:"Copia de facturas "+tr.texto+" — "+(em.name||""),
+          cuerpo:"Buenos días:\n\nOs adjunto la copia de las facturas diarias "+tr.texto+".\n\nUn saludo,\n"+(em.name||"")};
+}
+async function enviarCopias(cid, ym, t){
+  if(canShareFiles()){
+    var listo=(copiasListas && copiasListas.clave===claveCopias(cid, ym, t)) ? copiasListas : null;
+    if(!listo){
+      toast("Preparando el PDF… vuelve a pulsar en un momento.");
+      prepararCopias(cid, ym, t).then(function(){ toast("Listo. Pulsa «Enviar las copias»."); })
+        .catch(function(){ toast("No se pudo preparar el PDF. Mira la conexión.", true); });
+      return;
+    }
+    var tx=textoCopias(ym, t);
+    try{
+      await navigator.share({files:[listo.file], title:tx.asunto, text:tx.cuerpo});
+    }catch(e){
+      if(e && e.name==="AbortError") return;
+      descargarArchivo(listo.file.name, listo.file, "application/pdf");
+      toast("No se pudo compartir: el PDF se ha descargado para adjuntarlo a mano.", true);
+    }
+    return;
+  }
+  correoCopias(cid, ym, t);
+  descargarCopias(cid, ym, t);
 }
 function correoCopias(cid, ym, t){
   var c=company(cid), para=correosDe(c);
