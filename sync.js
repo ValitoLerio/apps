@@ -636,79 +636,10 @@ function interceptar(){
 // ══════════════════════════════════════════════════════════════════
 // API pública
 // ══════════════════════════════════════════════════════════════════
-/* ── Archivos sueltos (fotos) ──────────────────────────────────────
-   Las fotos no caben en datos.json: cada una va a su propio archivo
-   en el repositorio de datos, y la app guarda solo dónde está. El
-   contenido viaja ya en base64. */
-function rutaApi(ruta){
-  return 'contents/' + String(ruta).split('/').map(encodeURIComponent).join('/');
-}
-function esperar(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
-
-function subirArchivo(ruta, b64, mensaje, intento){
-  intento = intento || 0;
-  return api(rutaApi(ruta), {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({message: mensaje || ('archivo: ' + ruta), content: b64, branch: rama()})
-  }).then(function(res){
-    /* Dos escrituras a la vez en la misma rama: GitHub rechaza una.
-       Se espera un poco y se repite. */
-    if ((res.status === 409 || res.status === 502) && intento < 4) {
-      return esperar(800 * (intento + 1)).then(function(){ return subirArchivo(ruta, b64, mensaje, intento + 1); });
-    }
-    if (res.status === 422) return {yaEstaba: true};   // ya subido en otro intento
-    if (!res.ok) throw errorDe(res);
-    return res.json();
-  });
-}
-
-function leerArchivo(ruta){
-  return api(rutaApi(ruta) + '?ref=' + encodeURIComponent(rama()), {cache: 'no-store'})
-    .then(function(res){
-      if (!res.ok) throw errorDe(res);
-      return res.json();
-    })
-    .then(function(data){
-      if (data.content && String(data.content).trim()) return String(data.content).replace(/\s/g, '');
-      if (!data.sha) throw new Error('Archivo vacío');
-      return api('git/blobs/' + data.sha, {cache: 'no-store'})
-        .then(function(res){ if (!res.ok) throw errorDe(res); return res.json(); })
-        .then(function(b){ return String(b.content || '').replace(/\s/g, ''); });
-    });
-}
-
-function borrarArchivo(ruta, intento){
-  intento = intento || 0;
-  return api(rutaApi(ruta) + '?ref=' + encodeURIComponent(rama()), {cache: 'no-store'})
-    .then(function(res){
-      if (res.status === 404) return null;
-      if (!res.ok) throw errorDe(res);
-      return res.json();
-    })
-    .then(function(data){
-      if (!data) return null;
-      return api(rutaApi(ruta), {
-        method: 'DELETE',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({message: 'borrar: ' + ruta, sha: data.sha, branch: rama()})
-      }).then(function(res){
-        if (res.status === 409 && intento < 4) {
-          return esperar(800 * (intento + 1)).then(function(){ return borrarArchivo(ruta, intento + 1); });
-        }
-        if (!res.ok && res.status !== 404) throw errorDe(res);
-        return null;
-      });
-    });
-}
-
 window.Sync = {
   conectado: conectado,
   repo: repo,
   rama: rama,
-  subirArchivo: subirArchivo,
-  leerArchivo: leerArchivo,
-  borrarArchivo: borrarArchivo,
   guardarCredenciales: guardarCredenciales,
   olvidarCredenciales: olvidarCredenciales,
 
