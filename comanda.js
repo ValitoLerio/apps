@@ -642,11 +642,7 @@ function tramoDe(ym, t){
   if(t==="q2") return {desde:ym+"-16", hasta:fin, texto:"del 16 al "+(+fin.slice(8))+" de "+monthLabel(ym)};
   return {desde:ym+"-01", hasta:fin, texto:"de "+monthLabel(ym)};
 }
-function tramoPorDefecto(ym){
-  var hoy=todayISO();
-  if(ym!==hoy.slice(0,7)) return "mes";
-  return (+hoy.slice(8)<=20) ? "q1" : "mes";
-}
+function tramoPorDefecto(ym){ return "mes"; }
 
 /* ── Guardado en este aparato ── */
 var IDB=null;
@@ -865,7 +861,7 @@ function viewFotos(main){
       '<div class="filters">'+
         '<div class="field"><label class="lbl" for="ft_month">Mes</label><input type="month" id="ft_month" value="'+esc(ym)+'"></div>'+
         '<div class="field" style="width:auto"><span class="lbl">Qué días</span><div class="tramos" role="group" aria-label="Qué días mandar">'+
-          [["q1","1 – 15"],["q2","16 – "+fin],["mes","Mes entero"]].map(function(t){
+          [["mes","Mes entero"],["q1","1 – 15"],["q2","16 – "+fin]].map(function(t){
             return '<button type="button" data-tramo="'+t[0]+'" aria-pressed="'+(ui.fotoTramo===t[0])+'">'+t[1]+'</button>';
           }).join("")+
         '</div></div>'+
