@@ -27,7 +27,7 @@ function blankState(){
       defaultPrice:13.5, defaultDesc:"Menú del día",
       mailIntro:"Buenos días:\n\nOs adjunto la factura de las comidas del periodo indicado, junto con el detalle de albaranes.\n\nUn saludo,"
     },
-    profiles:[], companies:[], services:[], invoices:[]
+    profiles:[], companies:[], services:[], invoices:[], fotos:[]
   };
 }
 
@@ -292,11 +292,13 @@ function boot(){
     for(var k in d) if(state.settings[k]===undefined) state.settings[k]=d[k];
     state.companies=state.companies||[]; state.services=state.services||[]; state.invoices=state.invoices||[];
     state.profiles=state.profiles||[];
+    state.fotos=state.fotos||[];
   }
   asegurarPerfiles();
   ui.perfil = state.settings.perfilActivo || (perfiles()[0] && perfiles()[0].id) || "";
   render();
   paintSave();
+  setTimeout(subirPendientes, 1500);
 
   /* Si algo se coló antes (o desde otro dispositivo), que se vea al entrar. */
   var repes=numerosRepetidos();
@@ -328,6 +330,7 @@ function toast(msg,bad){
 /* ============================ render shell ============================ */
 var NAV=[
   {id:"servicios", label:"Servicios"},
+  {id:"fotos",     label:"Fotos"},
   {id:"empresas",  label:"Empresas"},
   {id:"facturar",  label:"Facturar"},
   {id:"facturas",  label:"Facturas"},
@@ -336,6 +339,7 @@ var NAV=[
 function counts(){
   return {
     servicios: servicesOf(ui.month,"","").length,
+    fotos: fotos().filter(function(f){ return f.date.slice(0,7)===ui.month; }).length||"",
     empresas: state.companies.length,
     facturar: state.services.filter(function(s){ return (s.status||"pendiente")==="pendiente"; }).length,
     facturas: state.invoices.length,
@@ -361,7 +365,7 @@ function render(){
   });
   paintSave();
   var main=document.getElementById("main");
-  ({servicios:viewServicios, empresas:viewEmpresas, facturar:viewFacturar, facturas:viewFacturas, ajustes:viewAjustes})[ui.view](main);
+  ({servicios:viewServicios, fotos:viewFotos, empresas:viewEmpresas, facturar:viewFacturar, facturas:viewFacturas, ajustes:viewAjustes})[ui.view](main);
   var pAct = perfilActivo();
   if((!pAct || !pAct.name) && ui.view!=="ajustes"){
     var w=document.createElement("div"); w.className="warn-banner";
@@ -610,6 +614,452 @@ function editService(id){
     });
 }
 
+/* ============================ fotos de facturas ============================
+   Hay clientes que quieren la copia de cada factura del día. Se le hace
+   una foto al momento y queda guardada con su empresa y su fecha:
+
+   - la imagen, reducida a un tamaño que se lee bien y pesa poco, va a un
+     archivo propio en el repositorio de datos (fotos/comanda/AAAA-MM/…);
+     en datos.json solo se apunta dónde está, para no engordarlo;
+   - mientras no se ha subido, la foto vive en este aparato (IndexedDB) y
+     se reintenta sola, así no se pierde aunque no haya cobertura;
+   - al mandar las copias (el día 15 o con la factura del mes) salen todas
+     juntas en un PDF, por orden de día. */
+function fotos(){ return state.fotos || (state.fotos=[]); }
+function finDeMes(ym){ var a=ym.split("-"); return ym+"-"+p2(new Date(+a[0], +a[1], 0).getDate()); }
+function fotosDe(cid, desde, hasta){
+  return fotos().filter(function(f){ return f.companyId===cid && f.date>=desde && f.date<=hasta; })
+    .sort(function(a,b){ return a.date<b.date?-1:a.date>b.date?1:(a.at<b.at?-1:a.at>b.at?1:0); });
+}
+function fotosDelMes(cid, ym){ return fotosDe(cid, ym+"-01", finDeMes(ym)); }
+var DIAS=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+function diaLargo(iso){ var d=new Date(iso+"T12:00:00"); return DIAS[d.getDay()]+" "+dmy(iso); }
+
+/* Los tramos para mandar: la primera quincena, la segunda o el mes. */
+function tramoDe(ym, t){
+  var fin=finDeMes(ym);
+  if(t==="q1") return {desde:ym+"-01", hasta:ym+"-15", texto:"del 1 al 15 de "+monthLabel(ym)};
+  if(t==="q2") return {desde:ym+"-16", hasta:fin, texto:"del 16 al "+(+fin.slice(8))+" de "+monthLabel(ym)};
+  return {desde:ym+"-01", hasta:fin, texto:"de "+monthLabel(ym)};
+}
+function tramoPorDefecto(ym){
+  var hoy=todayISO();
+  if(ym!==hoy.slice(0,7)) return "mes";
+  return (+hoy.slice(8)<=20) ? "q1" : "mes";
+}
+
+/* ── Guardado en este aparato ── */
+var IDB=null;
+function idb(){
+  if(IDB) return IDB;
+  IDB=new Promise(function(ok,ko){
+    var r=indexedDB.open("comanda-fotos",1);
+    r.onupgradeneeded=function(){ r.result.createObjectStore("fotos"); };
+    r.onsuccess=function(){ ok(r.result); };
+    r.onerror=function(){ ko(r.error); };
+  });
+  return IDB;
+}
+function idbHacer(modo, fn){
+  return idb().then(function(db){
+    return new Promise(function(ok){
+      var q=fn(db.transaction("fotos", modo).objectStore("fotos"));
+      q.onsuccess=function(){ ok(q.result===undefined?null:q.result); };
+      q.onerror=function(){ ok(null); };
+    });
+  }).catch(function(){ return null; });
+}
+function idbGet(k){ return idbHacer("readonly", function(s){ return s.get(k); }); }
+function idbPut(k,v){ return idbHacer("readwrite", function(s){ return s.put(v,k); }); }
+function idbDel(k){ return idbHacer("readwrite", function(s){ return s.delete(k); }); }
+
+function bytesAB64(u8){
+  var s="", CH=0x8000;
+  for(var i=0;i<u8.length;i+=CH) s+=String.fromCharCode.apply(null, u8.subarray(i,i+CH));
+  return btoa(s);
+}
+function b64ABytes(b64){
+  var bin=atob(b64), u=new Uint8Array(bin.length);
+  for(var i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i);
+  return u;
+}
+function blobABytes(b){ return b.arrayBuffer().then(function(ab){ return new Uint8Array(ab); }); }
+
+/* La foto del móvil pesa varios megas: se deja en 1800 px por el lado
+   largo, que se lee de sobra, y en JPEG. Así ronda los 300 KB. */
+function comprimir(file){
+  return new Promise(function(ok,ko){
+    var url=URL.createObjectURL(file), img=new Image();
+    img.onload=function(){
+      var MAX=1800, w=img.naturalWidth, h=img.naturalHeight, k=Math.min(1, MAX/Math.max(w,h));
+      var cw=Math.max(1,Math.round(w*k)), ch=Math.max(1,Math.round(h*k));
+      var cv=document.createElement("canvas"); cv.width=cw; cv.height=ch;
+      var ctx=cv.getContext("2d");
+      ctx.fillStyle="#fff"; ctx.fillRect(0,0,cw,ch);
+      ctx.drawImage(img,0,0,cw,ch);
+      URL.revokeObjectURL(url);
+      cv.toBlob(function(b){ b ? ok({blob:b,w:cw,h:ch}) : ko(new Error("no se pudo comprimir")); }, "image/jpeg", 0.72);
+    };
+    img.onerror=function(){ URL.revokeObjectURL(url); ko(new Error("formato no reconocido")); };
+    img.src=url;
+  });
+}
+function slug(s){
+  return String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^A-Za-z0-9]+/g,"-").replace(/^-|-$/g,"").toLowerCase().slice(0,40)||"empresa";
+}
+
+async function anadirFotos(files, cid, date){
+  if(!cid){ toast("Elige primero la empresa.", true); return; }
+  if(!date){ toast("Pon la fecha de la factura.", true); return; }
+  var lista=Array.prototype.slice.call(files||[]);
+  if(!lista.length) return;
+  toast(lista.length>1 ? "Guardando "+lista.length+" fotos…" : "Guardando la foto…");
+  var bien=0, mal=0;
+  for(var i=0;i<lista.length;i++){
+    try{
+      var r=await comprimir(lista[i]);
+      var id=uid();
+      var f={id:id, companyId:cid, date:date, w:r.w, h:r.h, at:new Date().toISOString(), subida:false,
+             ruta:"fotos/comanda/"+date.slice(0,7)+"/"+date+"_"+slug(companyName(cid))+"_"+id+".jpg"};
+      await idbPut(id, r.blob);
+      fotos().push(f); bien++;
+    }catch(e){ mal++; }
+  }
+  if(bien){ touch(); ui.month=date.slice(0,7); render(); }
+  if(mal) toast(mal===1&&!bien ? "Esa imagen no se ha podido leer. Prueba a hacer la foto otra vez." :
+                mal+" de "+lista.length+" imágenes no se han podido leer.", true);
+  else toast(bien===1 ? "Foto guardada · "+companyName(cid)+" · "+dmy(date) : bien+" fotos guardadas · "+companyName(cid)+" · "+dmy(date));
+  subirPendientes();
+}
+
+/* Sube las que aún están solo en este aparato. Las que se hicieron en
+   otro y aún no han llegado, se quedan esperando a que suba aquel. */
+var subiendoFotos=false;
+async function subirPendientes(){
+  if(subiendoFotos || !window.Sync || !Sync.conectado()) return;
+  subiendoFotos=true;
+  var fallo=false;
+  try{
+    var cola=fotos().filter(function(f){ return !f.subida; });
+    for(var i=0;i<cola.length;i++){
+      var f=cola[i], blob=await idbGet(f.id);
+      if(!blob) continue;
+      try{
+        var b64=bytesAB64(await blobABytes(blob));
+        await Sync.subirArchivo(f.ruta, b64, "foto: "+companyName(f.companyId)+" "+f.date);
+        var viva=null; fotos().forEach(function(x){ if(x.id===f.id) viva=x; });
+        if(viva){ viva.subida=true; touch(); }
+        pintarMarcaFoto(f.id);
+      }catch(e){ fallo=true; break; }
+    }
+  } finally { subiendoFotos=false; }
+  if(fallo) toast("Hay fotos que aún no se han podido subir. Se quedan en este aparato y se vuelve a intentar sola.", true);
+}
+function pintarMarcaFoto(id){
+  var m=document.querySelector('[data-marca="'+id+'"]'); if(m) m.remove();
+}
+window.addEventListener("online", function(){ subirPendientes(); });
+
+/* La imagen de una foto: de este aparato si está; si no, del repositorio
+   (y se guarda aquí para la próxima vez). */
+async function blobDeFoto(f){
+  var b=await idbGet(f.id);
+  if(b) return b;
+  if(!f.subida || !window.Sync) return null;
+  var blob=new Blob([b64ABytes(await Sync.leerArchivo(f.ruta))], {type:"image/jpeg"});
+  idbPut(f.id, blob);
+  return blob;
+}
+var urlsFoto={};
+function urlDeFoto(f){
+  if(urlsFoto[f.id]) return Promise.resolve(urlsFoto[f.id]);
+  return blobDeFoto(f).then(function(b){
+    if(!b) return null;
+    return (urlsFoto[f.id]=URL.createObjectURL(b));
+  });
+}
+
+function borrarFoto(id){
+  var f=null; fotos().forEach(function(x){ if(x.id===id) f=x; });
+  if(!f) return;
+  confirmar("Borrar foto",
+    '<p style="margin:0">Vas a borrar una foto de <strong>'+esc(companyName(f.companyId))+'</strong> del <strong>'+
+    esc(dmy(f.date))+'</strong>.</p><p class="section-note" style="margin:12px 0 0">No se puede deshacer.</p>',
+    function(){
+      var d=document.getElementById("fotoDlg"); if(d){ d.close(); d.remove(); }
+      state.fotos=fotos().filter(function(x){ return x.id!==id; });
+      touch(); render();
+      idbDel(id);
+      if(urlsFoto[id]){ URL.revokeObjectURL(urlsFoto[id]); delete urlsFoto[id]; }
+      if(f.subida && window.Sync) Sync.borrarArchivo(f.ruta).catch(function(){});
+      toast("Foto borrada");
+    },
+    {okLabel:"Borrar foto", danger:true});
+}
+
+function verFoto(id){
+  var f=null; fotos().forEach(function(x){ if(x.id===id) f=x; });
+  if(!f) return;
+  var old=document.getElementById("fotoDlg"); if(old) old.remove();
+  var d=document.createElement("dialog"); d.id="fotoDlg"; d.style.maxWidth="760px";
+  d.innerHTML='<div class="dlg-head"><h3>'+esc(companyName(f.companyId))+' · '+esc(diaLargo(f.date))+'</h3>'+
+    '<button class="btn ghost" data-x>Cerrar</button></div>'+
+    '<div class="dlg-body ver-foto"><div class="empty">Cargando…</div></div>'+
+    '<div class="dlg-foot"><button class="btn danger" data-borrar>Borrar foto</button>'+
+    '<span class="spacer"></span><button class="btn" data-x>Cerrar</button></div>';
+  document.body.appendChild(d);
+  d.querySelectorAll("[data-x]").forEach(function(b){ b.addEventListener("click",function(){ d.close(); d.remove(); }); });
+  d.querySelector("[data-borrar]").addEventListener("click", function(){ borrarFoto(id); });
+  d.showModal();
+  urlDeFoto(f).then(function(u){
+    var c=d.querySelector(".ver-foto");
+    c.innerHTML=u ? '<img alt="Factura del '+esc(dmy(f.date))+'" src="'+u+'">'
+                  : '<div class="empty">Esta foto se hizo en otro aparato y todavía no se ha subido.</div>';
+  }).catch(function(){
+    d.querySelector(".ver-foto").innerHTML='<div class="empty">No se ha podido descargar la foto. Mira la conexión.</div>';
+  });
+}
+
+/* Empresas para elegir: primero las que piden copia. */
+function companyOptionsFotos(sel){
+  var lista=companiesByUse().slice().sort(function(a,b){ return (b.copias?1:0)-(a.copias?1:0); });
+  return '<option value="">— elegir —</option>'+lista.map(function(c){
+    return '<option value="'+c.id+'"'+(sel===c.id?" selected":"")+">"+esc(c.name)+(c.copias?" · pide copia":"")+"</option>";
+  }).join("");
+}
+
+/* ============================ view: fotos ============================ */
+function viewFotos(main){
+  if(!ui.fotoCompany || !company(ui.fotoCompany)){
+    var conCopia=state.companies.filter(function(c){ return c.copias; });
+    ui.fotoCompany=(conCopia[0]&&conCopia[0].id)||"";
+  }
+  if(!ui.fotoTramo || ui.fotoTramoMes!==ui.month){ ui.fotoTramo=tramoPorDefecto(ui.month); ui.fotoTramoMes=ui.month; }
+  var cid=ui.fotoCompany, ym=ui.month, tr=tramoDe(ym, ui.fotoTramo);
+  var delMes=cid?fotosDelMes(cid, ym):[];
+  var aMandar=cid?fotosDe(cid, tr.desde, tr.hasta):[];
+  var diasMandar={}; aMandar.forEach(function(f){ diasMandar[f.date]=1; });
+  var nDias=Object.keys(diasMandar).length;
+  var fin=+finDeMes(ym).slice(8);
+
+  main.innerHTML=head("Fotos de facturas",
+    "Haz la foto de cada factura del día. Se guardan por empresa y día, y luego salen todas juntas en un PDF para mandar al cliente.")+
+
+    '<div class="card" style="margin-bottom:18px"><div class="card-head"><h2>Hacer foto</h2>'+
+      '<span class="hint">Puedes hacer varias el mismo día</span></div><div class="card-body">'+
+      '<div class="grid2">'+
+        '<div class="field"><label class="lbl" for="ft_comp">Empresa</label><select id="ft_comp">'+companyOptionsFotos(cid)+'</select></div>'+
+        '<div class="field"><label class="lbl" for="ft_date">Fecha de la factura</label><input type="date" id="ft_date" value="'+esc(ui.fotoFecha||todayISO())+'"></div>'+
+      '</div>'+
+      '<div class="camara">'+
+        '<button class="btn primary" id="ft_cam">Hacer foto</button>'+
+        '<button class="btn" id="ft_gal">Elegir de la galería</button>'+
+      '</div>'+
+      '<input type="file" id="ft_in_cam" accept="image/*" capture="environment" hidden>'+
+      '<input type="file" id="ft_in_gal" accept="image/*" multiple hidden>'+
+    '</div></div>'+
+
+    (cid?
+    '<div class="card" style="margin-bottom:18px"><div class="card-head"><h2>Mandar las copias</h2>'+
+      '<span class="hint">'+esc(companyName(cid))+'</span></div><div class="card-body">'+
+      '<div class="filters">'+
+        '<div class="field"><label class="lbl" for="ft_month">Mes</label><input type="month" id="ft_month" value="'+esc(ym)+'"></div>'+
+        '<div class="field" style="width:auto"><span class="lbl">Qué días</span><div class="tramos" role="group" aria-label="Qué días mandar">'+
+          [["q1","1 – 15"],["q2","16 – "+fin],["mes","Mes entero"]].map(function(t){
+            return '<button type="button" data-tramo="'+t[0]+'" aria-pressed="'+(ui.fotoTramo===t[0])+'">'+t[1]+'</button>';
+          }).join("")+
+        '</div></div>'+
+      '</div>'+
+      '<p class="section-note" style="margin:12px 0">'+
+        (aMandar.length ? '<strong>'+num(aMandar.length)+(aMandar.length>1?" fotos":" foto")+'</strong> de '+num(nDias)+(nDias>1?" días":" día")+', '+esc(tr.texto)+'.'
+                        : 'No hay fotos '+esc(tr.texto)+'.')+
+      '</p>'+
+      '<div class="toolbar" style="margin:0">'+
+        '<button class="btn primary" id="ft_pdf"'+(aMandar.length?"":" disabled")+'><span class="step">1</span>Descargar PDF</button>'+
+        '<button class="btn" id="ft_mail"'+(aMandar.length?"":" disabled")+'><span class="step">2</span>Abrir correo</button>'+
+        (canShareFiles()?'<button class="btn" id="ft_share"'+(aMandar.length?"":" disabled")+'>Compartir PDF…</button>':"")+
+      '</div>'+
+      '<p class="section-note" style="margin:10px 0 0">Con la factura del mes también puedes meterlas en el mismo PDF: '+
+        'al abrir la factura emitida sale la casilla para añadirlas.</p>'+
+    '</div></div>'
+    : "")+
+
+    '<div class="card"><div class="card-head"><h2>'+(cid?esc(companyName(cid))+" · "+esc(monthLabel(ym)):"Fotos guardadas")+'</h2>'+
+      (cid?'<span class="hint">'+num(delMes.length)+(delMes.length===1?" foto":" fotos")+'</span>':"")+'</div>'+
+      '<div id="fotosLista"></div></div>';
+
+  var sel=document.getElementById("ft_comp"), fecha=document.getElementById("ft_date");
+  sel.addEventListener("change", function(){ ui.fotoCompany=sel.value; render(); });
+  fecha.addEventListener("change", function(){ ui.fotoFecha=fecha.value; });
+  var inCam=document.getElementById("ft_in_cam"), inGal=document.getElementById("ft_in_gal");
+  function pedir(input){
+    if(!sel.value){ toast("Elige primero la empresa.", true); sel.focus(); return; }
+    input.value=""; input.click();
+  }
+  document.getElementById("ft_cam").addEventListener("click", function(){ pedir(inCam); });
+  document.getElementById("ft_gal").addEventListener("click", function(){ pedir(inGal); });
+  [inCam, inGal].forEach(function(inp){
+    inp.addEventListener("change", function(){
+      ui.fotoFecha=fecha.value;
+      anadirFotos(inp.files, sel.value, fecha.value);
+    });
+  });
+
+  if(cid){
+    document.getElementById("ft_month").addEventListener("change", function(){ if(this.value){ ui.month=this.value; render(); } });
+    main.querySelectorAll("[data-tramo]").forEach(function(b){
+      b.addEventListener("click", function(){ ui.fotoTramo=b.getAttribute("data-tramo"); ui.fotoTramoMes=ui.month; render(); });
+    });
+    var bp=document.getElementById("ft_pdf"); if(bp) bp.addEventListener("click", function(){ descargarCopias(cid, ym, ui.fotoTramo); });
+    var bm=document.getElementById("ft_mail"); if(bm) bm.addEventListener("click", function(){ correoCopias(cid, ym, ui.fotoTramo); });
+    var bs=document.getElementById("ft_share"); if(bs) bs.addEventListener("click", function(){ compartirCopias(cid, ym, ui.fotoTramo); });
+  }
+  pintarFotos(cid, delMes);
+}
+
+function pintarFotos(cid, lista){
+  var box=document.getElementById("fotosLista"); if(!box) return;
+  if(!cid){
+    box.innerHTML='<div class="empty"><strong>Elige una empresa</strong>Arriba salen primero las que piden copia de la factura del día. '+
+      'Para marcarlas, ve a Empresas y edita la ficha.</div>';
+    return;
+  }
+  if(!lista.length){
+    box.innerHTML='<div class="empty"><strong>Ninguna foto en '+esc(monthLabel(ui.month))+'</strong>Haz la primera con el botón de arriba.</div>';
+    return;
+  }
+  var porDia={};
+  lista.forEach(function(f){ (porDia[f.date]=porDia[f.date]||[]).push(f); });
+  box.innerHTML=Object.keys(porDia).sort().reverse().map(function(d){
+    var l=porDia[d];
+    return '<div class="fotos-dia"><h3><span>'+esc(diaLargo(d))+'</span><span class="hint">'+l.length+(l.length>1?" fotos":" foto")+'</span></h3>'+
+      '<div class="fotos-grid">'+l.map(function(f){
+        return '<button type="button" class="foto-th" data-ver="'+f.id+'" aria-label="Ver la foto del '+esc(dmy(f.date))+'">'+
+          '<img alt="" data-img="'+f.id+'">'+
+          (f.subida?"":'<span class="marca" data-marca="'+f.id+'">sin subir</span>')+
+        '</button>';
+      }).join("")+'</div></div>';
+  }).join("");
+  box.querySelectorAll("[data-ver]").forEach(function(b){ b.addEventListener("click", function(){ verFoto(b.getAttribute("data-ver")); }); });
+  lista.forEach(function(f){
+    urlDeFoto(f).then(function(u){
+      var im=box.querySelector('[data-img="'+f.id+'"]');
+      if(im && u) im.src=u;
+    }).catch(function(){});
+  });
+}
+
+/* ── El PDF de las copias ──
+   Las facturas de ticket son altas y estrechas: dos caben una al lado de
+   la otra y se leen bien. Las apaisadas van solas en su página. */
+async function cargarFotos(lista){
+  var out=[], faltan=0;
+  for(var i=0;i<lista.length;i++){
+    var f=lista[i], data=null;
+    try{ var b=await blobDeFoto(f); if(b) data=await blobABytes(b); }catch(e){}
+    if(!data) faltan++;
+    out.push({f:f, img:data?{data:data, pw:f.w, ph:f.h}:null});
+  }
+  return {items:out, faltan:faltan};
+}
+function layoutFotos(items, cid, texto){
+  var pages=[], L=PAGE.m, R=PAGE.w-PAGE.m, top=PAGE.m+40, bottom=PAGE.h-PAGE.m-14;
+  var nombre=companyName(cid);
+  var porDia={}; items.forEach(function(it){ porDia[it.f.date]=(porDia[it.f.date]||0)+1; });
+  var vistoDia={};
+  items.forEach(function(it){ vistoDia[it.f.date]=0; });
+
+  function pagina(){
+    var ops=[];
+    ops.push({t:"text",v:"COPIA DE FACTURAS DIARIAS",x:L,y:PAGE.m+2,s:7.4,b:true,c:C_ACC,a:"left"});
+    ops.push({t:"text",v:clip(nombre,60),x:L,y:PAGE.m+17,s:12,b:true,c:C_INK,a:"left"});
+    var cab=texto.replace(/^de /,""); ops.push({t:"text",v:cab.charAt(0).toUpperCase()+cab.slice(1),x:R,y:PAGE.m+17,s:8.6,b:false,c:C_MUT,a:"right"});
+    ops.push({t:"line",x1:L,y1:PAGE.m+26,x2:R,y2:PAGE.m+26,w:0.6,c:C_LINE});
+    return ops;
+  }
+  function poner(ops, it, x, y, cw, ch){
+    vistoDia[it.f.date]++;
+    var cap=diaLargo(it.f.date)+(porDia[it.f.date]>1?"  ·  "+vistoDia[it.f.date]+" de "+porDia[it.f.date]:"");
+    var alto=ch-18;
+    if(it.img){
+      var k=Math.min(cw/it.f.w, alto/it.f.h), dw=it.f.w*k, dh=it.f.h*k, dx=x+(cw-dw)/2;
+      ops.push({t:"img", img:it.img, x:dx, y:y, w:dw, h:dh});
+      [[dx,y,dx+dw,y],[dx,y+dh,dx+dw,y+dh],[dx,y,dx,y+dh],[dx+dw,y,dx+dw,y+dh]].forEach(function(l){
+        ops.push({t:"line",x1:l[0],y1:l[1],x2:l[2],y2:l[3],w:0.4,c:C_LINE});
+      });
+      ops.push({t:"text",v:cap,x:x+cw/2,y:y+dh+13,s:8.4,b:false,c:C_MUT,a:"center"});
+    } else {
+      ops.push({t:"rect",x:x,y:y,w:cw,h:60,c:C_SOFT});
+      ops.push({t:"text",v:"Foto no disponible todavía",x:x+cw/2,y:y+28,s:9,b:true,c:C_MUT,a:"center"});
+      ops.push({t:"text",v:cap,x:x+cw/2,y:y+44,s:8.4,b:false,c:C_MUT,a:"center"});
+    }
+  }
+  function vertical(it){ return it.f.h >= it.f.w*1.15; }
+  for(var i=0;i<items.length;){
+    var ops=pagina(), a=items[i], b=items[i+1];
+    if(b && vertical(a) && vertical(b)){
+      var cw=(R-L-18)/2;
+      poner(ops, a, L, top, cw, bottom-top);
+      poner(ops, b, L+cw+18, top, cw, bottom-top);
+      i+=2;
+    } else {
+      poner(ops, a, L, top, R-L, bottom-top);
+      i+=1;
+    }
+    pages.push(ops);
+  }
+  pages.forEach(function(ops, n){
+    ops.push({t:"text",v:"Copias · página "+(n+1)+" de "+pages.length,x:R,y:PAGE.h-PAGE.m+4,s:7.6,b:false,c:C_MUT,a:"right"});
+  });
+  return pages;
+}
+async function paginasDeCopias(cid, desde, hasta, texto){
+  var lista=fotosDe(cid, desde, hasta);
+  if(!lista.length) return {pages:[], n:0, faltan:0};
+  var c=await cargarFotos(lista);
+  return {pages:layoutFotos(c.items, cid, texto), n:lista.length, faltan:c.faltan};
+}
+function nombreCopias(cid, ym, t){
+  var tr=t==="q1"?"1-15":t==="q2"?"16-"+finDeMes(ym).slice(8):"mes";
+  return ("Copias-facturas-"+slug(companyName(cid))+"-"+ym+"-"+tr).slice(0,90)+".pdf";
+}
+async function pdfDeCopias(cid, ym, t){
+  var tr=tramoDe(ym, t);
+  toast("Preparando el PDF…");
+  var r=await paginasDeCopias(cid, tr.desde, tr.hasta, tr.texto);
+  if(!r.n){ toast("No hay fotos en esos días.", true); return null; }
+  if(r.faltan) toast(r.faltan+(r.faltan>1?" fotos no han llegado":" foto no ha llegado")+" todavía de otro aparato: sale"+(r.faltan>1?"n":"")+" en blanco.", true);
+  return buildPDF(r.pages);
+}
+async function descargarCopias(cid, ym, t){
+  try{
+    var bytes=await pdfDeCopias(cid, ym, t); if(!bytes) return;
+    descargarArchivo(nombreCopias(cid, ym, t), bytes, "application/pdf");
+    toast("PDF descargado: adjúntalo al correo");
+  }catch(e){ toast("No se pudo preparar el PDF. Mira la conexión y vuelve a probar.", true); }
+}
+async function compartirCopias(cid, ym, t){
+  try{
+    var bytes=await pdfDeCopias(cid, ym, t); if(!bytes) return;
+    var file=new File([bytes], nombreCopias(cid, ym, t), {type:"application/pdf"});
+    if(!(navigator.canShare && navigator.canShare({files:[file]}))){ toast("Este dispositivo no permite compartir archivos.", true); return; }
+    await navigator.share({files:[file], title:"Copia de facturas "+tramoDe(ym,t).texto});
+  }catch(e){
+    if(e && e.name==="AbortError") return;
+    toast("No se pudo compartir aquí. Descarga el PDF y adjúntalo a mano.", true);
+  }
+}
+function correoCopias(cid, ym, t){
+  var c=company(cid), para=correosDe(c);
+  if(!para.length){ toast("Esta empresa no tiene correo guardado. Añádelo en Empresas.", true); return; }
+  var em=perfilActivo()||{}, rem=remitentesDe(em), desde=rem[0]||"";
+  var tr=tramoDe(ym, t);
+  var asunto="Copia de facturas "+tr.texto+" — "+(em.name||"");
+  var cuerpo="Buenos días:\n\nOs adjunto la copia de las facturas diarias "+tr.texto+".\n\nUn saludo,\n"+(em.name||"");
+  openExternal(urlDelCorreo(desde, para, asunto, cuerpo, 0),
+    (desde?"Se abre con "+desde+". ":"")+"Adjunta el PDF de las copias antes de enviar.");
+}
+
 /* ============================ view: empresas ============================ */
 function viewEmpresas(main){
   main.innerHTML=head("Empresas cliente",
@@ -712,6 +1162,8 @@ function editCompany(id){
         'al enviar la factura salen todos marcados y quitas los que no toquen ese mes.</span></div>'+
       '<div class="field"><label class="lbl" for="c_phone">Teléfono (WhatsApp)</label><input id="c_phone" value="'+esc(c.phone)+'" placeholder="+376 800 111"></div>'+
       '<div class="field" style="grid-column:1/-1"><label class="lbl" for="c_terms">Condiciones de pago propias</label><input id="c_terms" value="'+esc(c.terms)+'" placeholder="Si lo dejas vacío se usan las de Ajustes"></div>'+
+      '<div class="field" style="grid-column:1/-1"><label class="check" style="margin:0"><input type="checkbox" id="c_copias"'+(c.copias?" checked":"")+'>'+
+        '<span><b>Pide copia de las facturas del día</b>Sale la primera en «Fotos», y al mandar la factura del mes se ofrece meter las fotos en el mismo PDF.</span></label></div>'+
     '</div>',
     function(){
       var name=document.getElementById("c_name").value.trim();
@@ -726,6 +1178,7 @@ function editCompany(id){
       c.email=c.emails[0]||"";
       c.phone=document.getElementById("c_phone").value.trim();
       c.terms=document.getElementById("c_terms").value.trim();
+      c.copias=document.getElementById("c_copias").checked;
       if(!id) state.companies.push(c);
       touch(); render(); toast(id?"Empresa actualizada":"Empresa dada de alta");
     });
@@ -1311,6 +1764,7 @@ function openDialog(title, bodyHTML, onSave, opts){
 /* ============================ invoice modal ============================ */
 function showInvoice(inv, isDraft){
   if(!inv) return;
+  ui.conFotos=true;
   var old=document.getElementById("invDlg"); if(old) old.remove();
   var d=document.createElement("dialog"); d.id="invDlg";
   d.style.maxWidth="880px";
@@ -1334,6 +1788,8 @@ function showInvoice(inv, isDraft){
 /* Los botones del panel de envio. Va aparte porque el panel se vuelve a
    pintar al cambiar de remitente. */
 function engancharEnvio(d, inv){
+  var cf=d.querySelector("#conFotos");
+  if(cf) cf.addEventListener("change", function(){ ui.conFotos=cf.checked; });
   d.querySelector("[data-pdf]").addEventListener("click", function(){ downloadInvoice(inv,"pdf"); });
   d.querySelector("[data-mail]").addEventListener("click", function(){ copyMail(inv); });
   d.querySelector("[data-mailto]").addEventListener("click", function(){ openMail(inv); });
@@ -1432,6 +1888,13 @@ function sendBoxHTML(inv){
         'style="padding:5px 10px;font-size:12.5px">Guardar en la empresa</button>'+
       "</div>"+
     "</div>"+
+    (function(){
+      var n=fotosDelMes(inv.companyId, inv.period).length;
+      if(!n) return "";
+      return '<label class="check" style="margin:0 0 12px"><input type="checkbox" id="conFotos"'+(ui.conFotos!==false?" checked":"")+'>'+
+        '<span><b>Añadir al PDF las '+(n>1?n+" fotos":"foto")+' de facturas de '+esc(monthLabel(inv.period))+'</b>'+
+        'Van detrás de la factura, por orden de día, en el mismo archivo.</span></label>';
+    })()+
     (remitentes.length
       ? '<div style="margin:0 0 10px">'+
           '<div class="lbl" style="margin-bottom:6px">Enviar desde</div>'+
@@ -1539,9 +2002,21 @@ function openWhatsApp(inv){
   openExternal("https://wa.me/"+tel+"?text="+encodeURIComponent(waText(inv)),
     tel ? "Adjunta el PDF en el chat antes de enviar." : "Elige el contacto en WhatsApp y adjunta el PDF.");
 }
+/* El PDF de la factura y, si se ha pedido, las fotos del mes detrás. */
+async function pdfDeFactura(inv){
+  var pages=layoutInvoice(inv);
+  var n=fotosDelMes(inv.companyId, inv.period).length;
+  if(n && ui.conFotos!==false){
+    toast("Preparando el PDF con "+(n>1?n+" fotos":"la foto")+"…");
+    var r=await paginasDeCopias(inv.companyId, inv.period+"-01", finDeMes(inv.period), "de "+monthLabel(inv.period));
+    pages=pages.concat(r.pages);
+    if(r.faltan) toast(r.faltan+(r.faltan>1?" fotos no han llegado":" foto no ha llegado")+" todavía de otro aparato: sale"+(r.faltan>1?"n":"")+" en blanco.", true);
+  }
+  return buildPDF(pages);
+}
 async function shareInvoice(inv){
   try{
-    var bytes=buildPDF(layoutInvoice(inv));
+    var bytes=await pdfDeFactura(inv);
     var file=new File([bytes], invFilename(inv,"pdf"), {type:"application/pdf"});
     if(!(navigator.canShare && navigator.canShare({files:[file]}))){ toast("Este dispositivo no permite compartir archivos.", true); return; }
     await navigator.share({files:[file], title:"Factura "+inv.number, text:waText(inv)});
@@ -1835,10 +2310,15 @@ function buildPDF(pages){
   var offsets=[];
   pushStr("%PDF-1.4\n%âãÏÓ\n");
 
-  /* objetos: 1 catálogo, 2 árbol de páginas, 3 y 4 fuentes, y luego 2 por página */
+  /* Las fotos van como imágenes JPEG tal cual (DCTDecode): una por
+     objeto, al final, y cada página dice cuáles usa. */
+  var imgs=[];
+  pages.forEach(function(ops){ ops.forEach(function(o){ if(o.t==="img" && imgs.indexOf(o.img)<0) imgs.push(o.img); }); });
+
+  /* objetos: 1 catálogo, 2 árbol de páginas, 3 y 4 fuentes, 2 por página y 1 por imagen */
   var nPages=pages.length;
-  var lastObj=4+nPages*2;
-  var fontR=3, fontB=4, firstPage=5;
+  var fontR=3, fontB=4, firstPage=5, firstImg=firstPage+nPages*2;
+  var lastObj=firstImg+imgs.length-1;
   function obj(num, bodyBytes){
     offsets[num]=len;
     pushStr(num+" 0 obj\n"); push(bodyBytes); pushStr("\nendobj\n");
@@ -1854,12 +2334,18 @@ function buildPDF(pages){
 
   for(var pi=0; pi<nPages; pi++){
     var pnum=firstPage+pi*2, cnum=pnum+1;
+    var usadas=[];
+    pages[pi].forEach(function(o){ if(o.t==="img" && usadas.indexOf(o.img)<0) usadas.push(o.img); });
+    var xobj=usadas.length ? " /XObject << "+usadas.map(function(im){
+      var n=imgs.indexOf(im); return "/Im"+n+" "+(firstImg+n)+" 0 R"; }).join(" ")+" >>" : "";
     obj(pnum, strBytes("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 "+fmt(PAGE.w)+" "+fmt(PAGE.h)+"] "+
-      "/Resources << /Font << /F1 "+fontR+" 0 R /F2 "+fontB+" 0 R >> >> /Contents "+cnum+" 0 R >>"));
+      "/Resources << /Font << /F1 "+fontR+" 0 R /F2 "+fontB+" 0 R >>"+xobj+" >> /Contents "+cnum+" 0 R >>"));
     var stream=[];
     function put(s){ var a=strBytes(s); for(var i=0;i<a.length;i++) stream.push(a[i]); }
     pages[pi].forEach(function(o){
-      if(o.t==="rect"){
+      if(o.t==="img"){
+        put("q "+fmt(o.w)+" 0 0 "+fmt(o.h)+" "+fmt(o.x)+" "+fmt(PAGE.h-o.y-o.h)+" cm /Im"+imgs.indexOf(o.img)+" Do Q\n");
+      } else if(o.t==="rect"){
         put(fmt(o.c[0])+" "+fmt(o.c[1])+" "+fmt(o.c[2])+" rg\n");
         put(fmt(o.x)+" "+fmt(PAGE.h-o.y-o.h)+" "+fmt(o.w)+" "+fmt(o.h)+" re f\n");
       } else if(o.t==="line"){
@@ -1880,6 +2366,15 @@ function buildPDF(pages){
     obj(cnum, body);
   }
 
+  imgs.forEach(function(im, n){
+    var num=firstImg+n;
+    offsets[num]=len;
+    pushStr(num+" 0 obj\n<< /Type /XObject /Subtype /Image /Width "+im.pw+" /Height "+im.ph+
+      " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "+im.data.length+" >>\nstream\n");
+    push(im.data);
+    pushStr("\nendstream\nendobj\n");
+  });
+
   var xrefPos=len;
   var total=lastObj+1;                  /* entradas del xref: el objeto libre 0 más cada objeto */
   pushStr("xref\n0 "+total+"\n0000000000 65535 f \n");
@@ -1890,7 +2385,7 @@ function buildPDF(pages){
   pushStr("trailer\n<< /Size "+total+" /Root 1 0 R >>\nstartxref\n"+xrefPos+"\n%%EOF");
 
   var out=new Uint8Array(len), pos=0;
-  chunks.forEach(function(c){ for(var i=0;i<c.length;i++) out[pos++]=c[i]; });
+  chunks.forEach(function(c){ out.set(c, pos); pos+=c.length; });
   return out;
 }
 
@@ -1907,6 +2402,7 @@ function renderPNG(pages){
       var oy=pi*(PAGE.h+gap);
       ctx.fillStyle="#FFFFFF"; ctx.fillRect(0,oy*sc,PAGE.w*sc,PAGE.h*sc);
       ops.forEach(function(o){
+        if(o.t==="img") return;
         var col=function(c){ return "rgb("+Math.round(c[0]*255)+","+Math.round(c[1]*255)+","+Math.round(c[2]*255)+")"; };
         if(o.t==="rect"){ ctx.fillStyle=col(o.c); ctx.fillRect(o.x*sc,(o.y+oy)*sc,o.w*sc,o.h*sc); }
         else if(o.t==="line"){
@@ -1935,7 +2431,7 @@ async function downloadInvoice(inv, kind){
   var pages=paper ? layoutPaper(inv, state.settings.paperCopy!==false) : layoutInvoice(inv);
   try{
     if(kind==="pdf"||paper){
-      var bytes=buildPDF(pages);
+      var bytes=paper ? buildPDF(pages) : await pdfDeFactura(inv);
       descargarArchivo(invFilename(inv, paper?"papel.pdf":"pdf"), bytes, "application/pdf");
       toast(paper ? "PDF listo: ábrelo y dale a imprimir en A4" : "PDF descargado: adjúntalo al correo");
     } else {
