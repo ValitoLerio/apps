@@ -27,7 +27,7 @@ function blankState(){
       defaultPrice:13.5, defaultDesc:"Menú del día",
       mailIntro:"Buenos días:\n\nOs adjunto la factura de las comidas del periodo indicado, junto con el detalle de albaranes.\n\nUn saludo,"
     },
-    profiles:[], companies:[], services:[], invoices:[]
+    profiles:[], companies:[], services:[], invoices:[], fotos:[]
   };
 }
 
@@ -292,11 +292,13 @@ function boot(){
     for(var k in d) if(state.settings[k]===undefined) state.settings[k]=d[k];
     state.companies=state.companies||[]; state.services=state.services||[]; state.invoices=state.invoices||[];
     state.profiles=state.profiles||[];
+    state.fotos=state.fotos||[];
   }
   asegurarPerfiles();
   ui.perfil = state.settings.perfilActivo || (perfiles()[0] && perfiles()[0].id) || "";
   render();
   paintSave();
+  setTimeout(subirPendientes, 1500);
 
   /* Si algo se coló antes (o desde otro dispositivo), que se vea al entrar. */
   var repes=numerosRepetidos();
@@ -414,7 +416,8 @@ function viewServicios(main){
     '</div>'+
 
     '<div class="card" style="margin-bottom:18px"><div class="card-head"><h2>Anotar un servicio</h2>'+
-      '<span class="hint">Pulsa Intro en cualquier campo para añadir</span></div>'+
+      '<span class="hint hint-intro">Pulsa Intro en cualquier campo para añadir</span>'+
+      '<button class="btn foto-btn" type="button" id="q_foto" title="Foto del recibo de la empresa y la fecha de abajo">'+ICO_CAM+'Foto del recibo</button></div>'+
     '<div class="card-body"><form id="quickForm" class="quick">'+
       '<div class="field"><label class="lbl" for="q_date">Fecha</label><input type="date" id="q_date" value="'+esc(todayISO())+'" required></div>'+
       '<div class="field"><label class="lbl" for="q_comp">Empresa</label><select id="q_comp" required>'+companyOptions(ui.fCompany,"— elegir —")+'</select></div>'+
@@ -469,6 +472,10 @@ function viewServicios(main){
   qe.addEventListener("input", refreshPreview);
   qa.value=nextAlbaran();
   refreshPreview();
+
+  document.getElementById("q_foto").addEventListener("click", function(){
+    if(!pedirFoto(qc.value, document.getElementById("q_date").value, false) && !qc.value) qc.focus();
+  });
 
   var masLineas=false;
   document.getElementById("q_more").addEventListener("click", function(){
@@ -529,10 +536,20 @@ function paintServices(list,t){
     box.innerHTML='<div class="empty"><strong>Ningún servicio en '+esc(monthLabel(ui.month))+'</strong>Anota el primero con el formulario de arriba.</div>';
     return;
   }
+  var nFotos={}, chipVisto={};
+  fotos().forEach(function(f){ var k=f.companyId+"|"+f.date; nFotos[k]=(nFotos[k]||0)+1; });
   var rows=list.map(function(s,ix){
     var a=svcAmounts(s), cont=sigueAlb(list[ix-1], s);
+    var kf=s.companyId+"|"+s.date, chip="";
+    if(!cont && s.companyId && !chipVisto[kf]){
+      chipVisto[kf]=1;
+      var nf=nFotos[kf]||0;
+      chip='<button type="button" class="foto-chip'+(nf?" tiene":"")+'" data-dia="'+esc(kf)+'" '+
+           'aria-label="'+(nf?"Ver las "+nf+" fotos":"Hacer foto del recibo")+" de "+esc(companyName(s.companyId))+" del "+esc(dmy(s.date))+'">'+
+           ICO_CAM+(nf?'<span>'+nf+'</span>':"")+'</button>';
+    }
     return '<tr data-id="'+s.id+'"'+grpCls(list,ix)+'>'+
-      "<td>"+(cont?"":esc(dmy(s.date)))+"</td>"+
+      '<td class="td-fecha">'+(cont?"":'<span class="fecha-cel">'+esc(dmy(s.date))+chip+'</span>')+"</td>"+
       "<td>"+(cont?"":esc(companyName(s.companyId)))+"</td>"+
       "<td>"+esc(s.desc)+"</td>"+
       '<td class="num">'+(extraDe(s)?eur(extraDe(s)):"—")+"</td>"+
@@ -559,6 +576,11 @@ function paintServices(list,t){
     '<td class="num">'+eur(t.base)+'</td><td class="num">'+eur(t.igi)+'</td>'+
     '<td class="num">'+eur(t.total)+'</td><td colspan="2"></td></tr></tfoot></table>';
   box.querySelectorAll("[data-edit]").forEach(function(b){ b.addEventListener("click",function(){ editService(b.getAttribute("data-edit")); }); });
+  box.querySelectorAll("[data-dia]").forEach(function(b){ b.addEventListener("click",function(){
+    var k=b.getAttribute("data-dia").split("|");
+    if(fotosDelDia(k[0], k[1]).length) abrirDia(k[0], k[1]);
+    else pedirFoto(k[0], k[1], false);
+  }); });
   box.querySelectorAll("[data-del]").forEach(function(b){ b.addEventListener("click",function(){ delService(b.getAttribute("data-del")); }); });
 }
 function delService(id){
@@ -608,6 +630,383 @@ function editService(id){
       s.status=document.getElementById("e_stat").value;
       touch(); render(); toast("Servicio actualizado");
     });
+}
+
+/* ============================ fotos de los recibos ============================
+   Hay clientes que quieren copia de los recibos que firman sus empleados.
+   Se les hace una foto desde Servicios, con la empresa y la fecha que ya
+   estén puestas, y al mandar la factura del mes van detrás, en el mismo PDF.
+
+   - la imagen, reducida a un tamaño que se lee bien y pesa poco, va a un
+     archivo propio en el repositorio de datos (fotos/comanda/AAAA-MM/…);
+     en datos.json solo se apunta dónde está, para no engordarlo;
+   - mientras no se ha subido, la foto vive en este aparato (IndexedDB) y
+     se reintenta sola, así no se pierde aunque no haya cobertura. */
+function fotos(){ return state.fotos || (state.fotos=[]); }
+function finDeMes(ym){ var a=ym.split("-"); return ym+"-"+p2(new Date(+a[0], +a[1], 0).getDate()); }
+function fotosDe(cid, desde, hasta){
+  return fotos().filter(function(f){ return f.companyId===cid && f.date>=desde && f.date<=hasta; })
+    .sort(function(a,b){ return a.date<b.date?-1:a.date>b.date?1:(a.at<b.at?-1:a.at>b.at?1:0); });
+}
+function fotosDelMes(cid, ym){ return fotosDe(cid, ym+"-01", finDeMes(ym)); }
+function fotosDelDia(cid, date){ return fotosDe(cid, date, date); }
+var DIAS=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+function diaLargo(iso){ var d=new Date(iso+"T12:00:00"); return DIAS[d.getDay()]+" "+dmy(iso); }
+var ICO_CAM='<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/></svg>';
+
+/* ── Guardado en este aparato ── */
+var IDB=null;
+function idb(){
+  if(IDB) return IDB;
+  IDB=new Promise(function(ok,ko){
+    var r=indexedDB.open("comanda-fotos",1);
+    r.onupgradeneeded=function(){ r.result.createObjectStore("fotos"); };
+    r.onsuccess=function(){ ok(r.result); };
+    r.onerror=function(){ ko(r.error); };
+  });
+  return IDB;
+}
+function idbHacer(modo, fn){
+  return idb().then(function(db){
+    return new Promise(function(ok){
+      var q=fn(db.transaction("fotos", modo).objectStore("fotos"));
+      q.onsuccess=function(){ ok(q.result===undefined?null:q.result); };
+      q.onerror=function(){ ok(null); };
+    });
+  }).catch(function(){ return null; });
+}
+function idbGet(k){ return idbHacer("readonly", function(s){ return s.get(k); }); }
+function idbPut(k,v){ return idbHacer("readwrite", function(s){ return s.put(v,k); }); }
+function idbDel(k){ return idbHacer("readwrite", function(s){ return s.delete(k); }); }
+
+function bytesAB64(u8){
+  var s="", CH=0x8000;
+  for(var i=0;i<u8.length;i+=CH) s+=String.fromCharCode.apply(null, u8.subarray(i,i+CH));
+  return btoa(s);
+}
+function b64ABytes(b64){
+  var bin=atob(b64), u=new Uint8Array(bin.length);
+  for(var i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i);
+  return u;
+}
+function blobABytes(b){ return b.arrayBuffer().then(function(ab){ return new Uint8Array(ab); }); }
+
+/* La foto del móvil pesa varios megas: se deja en 1800 px por el lado
+   largo, que se lee de sobra, y en JPEG. Así ronda los 300 KB. */
+function comprimir(file){
+  return new Promise(function(ok,ko){
+    var url=URL.createObjectURL(file), img=new Image();
+    img.onload=function(){
+      var MAX=1800, w=img.naturalWidth, h=img.naturalHeight, k=Math.min(1, MAX/Math.max(w,h));
+      var cw=Math.max(1,Math.round(w*k)), ch=Math.max(1,Math.round(h*k));
+      var cv=document.createElement("canvas"); cv.width=cw; cv.height=ch;
+      var ctx=cv.getContext("2d");
+      ctx.fillStyle="#fff"; ctx.fillRect(0,0,cw,ch);
+      ctx.drawImage(img,0,0,cw,ch);
+      URL.revokeObjectURL(url);
+      cv.toBlob(function(b){ b ? ok({blob:b,w:cw,h:ch}) : ko(new Error("no se pudo comprimir")); }, "image/jpeg", 0.72);
+    };
+    img.onerror=function(){ URL.revokeObjectURL(url); ko(new Error("formato no reconocido")); };
+    img.src=url;
+  });
+}
+function slug(s){
+  return String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^A-Za-z0-9]+/g,"-").replace(/^-|-$/g,"").toLowerCase().slice(0,40)||"empresa";
+}
+
+/* La cámara. Los dos campos de archivo viven fuera de la página para que
+   repintar no se los lleve mientras la cámara está abierta. */
+var pedidoFoto=null;
+function entradaFoto(galeria){
+  var id=galeria?"fotoInGal":"fotoInCam";
+  var inp=document.getElementById(id);
+  if(inp) return inp;
+  inp=document.createElement("input");
+  inp.type="file"; inp.accept="image/*"; inp.id=id; inp.hidden=true;
+  if(galeria) inp.multiple=true; else inp.setAttribute("capture","environment");
+  inp.addEventListener("change", function(){
+    var p=pedidoFoto; pedidoFoto=null;
+    if(p && inp.files && inp.files.length) anadirFotos(inp.files, p.cid, p.date);
+    inp.value="";
+  });
+  document.body.appendChild(inp);
+  return inp;
+}
+function pedirFoto(cid, date, galeria){
+  if(!cid || !company(cid)){ toast("Elige primero la empresa.", true); return false; }
+  if(!date){ toast("Pon la fecha del recibo.", true); return false; }
+  pedidoFoto={cid:cid, date:date};
+  entradaFoto(galeria).click();
+  return true;
+}
+
+async function anadirFotos(files, cid, date){
+  var lista=Array.prototype.slice.call(files||[]);
+  if(!lista.length) return;
+  toast(lista.length>1 ? "Guardando "+lista.length+" fotos…" : "Guardando la foto…");
+  var bien=0, mal=0;
+  for(var i=0;i<lista.length;i++){
+    try{
+      var r=await comprimir(lista[i]);
+      var id=uid();
+      var f={id:id, companyId:cid, date:date, w:r.w, h:r.h, at:new Date().toISOString(), subida:false,
+             ruta:"fotos/comanda/"+date.slice(0,7)+"/"+date+"_"+slug(companyName(cid))+"_"+id+".jpg"};
+      await idbPut(id, r.blob);
+      fotos().push(f); bien++;
+    }catch(e){ mal++; }
+  }
+  if(bien){ touch(); refrescarFotos(); }
+  var n=fotosDelDia(cid, date).length;
+  if(mal) toast(mal===1&&!bien ? "Esa imagen no se ha podido leer. Prueba a hacer la foto otra vez." :
+                mal+" de "+lista.length+" imágenes no se han podido leer.", true);
+  else toast((bien===1?"Foto guardada":bien+" fotos guardadas")+" · "+companyName(cid)+" · "+dmy(date)+
+             (n>bien?" · "+n+" ese día":""));
+  subirPendientes();
+}
+
+/* Tras añadir o borrar: se repinta la página y, si está abierto, el
+   cuadro de fotos del día. */
+function refrescarFotos(){
+  var dia=document.getElementById("diaDlg");
+  var abierto=dia ? {cid:dia.dataset.cid, date:dia.dataset.date} : null;
+  if(ui.view==="servicios"){
+    var keep={};
+    ["q_comp","q_date","q_tipo","q_desc","q_ext","q_alb","q_din","q_pri"].forEach(function(id){
+      var el=document.getElementById(id); if(el) keep[id]=el.value;
+    });
+    render();
+    Object.keys(keep).forEach(function(id){ var el=document.getElementById(id); if(el) el.value=keep[id]; });
+    var qt=document.getElementById("q_tipo"), qd=document.getElementById("q_desc");
+    if(qt && qd) qd.style.display=qt.value==="__otro"?"":"none";
+    var qd2=document.getElementById("q_din"); if(qd2) qd2.dispatchEvent(new Event("input"));
+  } else render();
+  if(abierto) pintarDia(abierto.cid, abierto.date);
+}
+
+/* Sube las que aún están solo en este aparato. Las que se hicieron en
+   otro y aún no han llegado, se quedan esperando a que suba aquel. */
+var subiendoFotos=false;
+async function subirPendientes(){
+  if(subiendoFotos || !window.Sync || !Sync.conectado || !Sync.conectado() || !Sync.subirArchivo) return;
+  subiendoFotos=true;
+  var fallo=false;
+  try{
+    var cola=fotos().filter(function(f){ return !f.subida; });
+    for(var i=0;i<cola.length;i++){
+      var f=cola[i], blob=await idbGet(f.id);
+      if(!blob) continue;
+      try{
+        var b64=bytesAB64(await blobABytes(blob));
+        await Sync.subirArchivo(f.ruta, b64, "foto: "+companyName(f.companyId)+" "+f.date);
+        var viva=null; fotos().forEach(function(x){ if(x.id===f.id) viva=x; });
+        if(viva){ viva.subida=true; touch(); }
+        document.querySelectorAll('[data-marca="'+f.id+'"]').forEach(function(m){ m.remove(); });
+      }catch(e){ fallo=true; break; }
+    }
+  } finally { subiendoFotos=false; }
+  if(fallo) toast("Hay fotos que aún no se han podido subir. Se quedan en este aparato y se vuelve a intentar sola.", true);
+}
+window.addEventListener("online", function(){ subirPendientes(); });
+
+/* La imagen de una foto: de este aparato si está; si no, del repositorio
+   (y se guarda aquí para la próxima vez). */
+async function blobDeFoto(f){
+  var b=await idbGet(f.id);
+  if(b) return b;
+  if(!f.subida || !window.Sync || !Sync.leerArchivo) return null;
+  var blob=new Blob([b64ABytes(await Sync.leerArchivo(f.ruta))], {type:"image/jpeg"});
+  idbPut(f.id, blob);
+  return blob;
+}
+var urlsFoto={};
+function urlDeFoto(f){
+  if(urlsFoto[f.id]) return Promise.resolve(urlsFoto[f.id]);
+  return blobDeFoto(f).then(function(b){
+    if(!b) return null;
+    return (urlsFoto[f.id]=URL.createObjectURL(b));
+  });
+}
+
+function borrarFoto(id){
+  var f=null; fotos().forEach(function(x){ if(x.id===id) f=x; });
+  if(!f) return;
+  confirmar("Borrar foto",
+    '<p style="margin:0">Vas a borrar una foto de <strong>'+esc(companyName(f.companyId))+'</strong> del <strong>'+
+    esc(dmy(f.date))+'</strong>.</p><p class="section-note" style="margin:12px 0 0">No se puede deshacer.</p>',
+    function(){
+      var d=document.getElementById("fotoDlg"); if(d){ d.close(); d.remove(); }
+      state.fotos=fotos().filter(function(x){ return x.id!==id; });
+      touch(); refrescarFotos();
+      idbDel(id);
+      if(urlsFoto[id]){ URL.revokeObjectURL(urlsFoto[id]); delete urlsFoto[id]; }
+      if(f.subida && window.Sync && Sync.borrarArchivo) Sync.borrarArchivo(f.ruta).catch(function(){});
+      toast("Foto borrada");
+    },
+    {okLabel:"Borrar foto", danger:true});
+}
+
+function verFoto(id){
+  var f=null; fotos().forEach(function(x){ if(x.id===id) f=x; });
+  if(!f) return;
+  var old=document.getElementById("fotoDlg"); if(old) old.remove();
+  var d=document.createElement("dialog"); d.id="fotoDlg"; d.style.maxWidth="760px";
+  d.innerHTML='<div class="dlg-head"><h3>'+esc(companyName(f.companyId))+' · '+esc(dmy(f.date))+'</h3>'+
+    '<button class="btn ghost" data-x>Cerrar</button></div>'+
+    '<div class="dlg-body ver-foto"><div class="empty">Cargando…</div></div>'+
+    '<div class="dlg-foot"><button class="btn danger" data-borrar>Borrar foto</button>'+
+    '<span class="spacer"></span><button class="btn" data-x>Cerrar</button></div>';
+  document.body.appendChild(d);
+  d.querySelectorAll("[data-x]").forEach(function(b){ b.addEventListener("click",function(){ d.close(); d.remove(); }); });
+  d.querySelector("[data-borrar]").addEventListener("click", function(){ borrarFoto(id); });
+  d.showModal();
+  urlDeFoto(f).then(function(u){
+    var c=d.querySelector(".ver-foto");
+    c.innerHTML=u ? '<img alt="Recibo del '+esc(dmy(f.date))+'" src="'+u+'">'
+                  : '<div class="empty">Esta foto se hizo en otro aparato y todavía no se ha subido.</div>';
+  }).catch(function(){
+    d.querySelector(".ver-foto").innerHTML='<div class="empty">No se ha podido descargar la foto. Mira la conexión.</div>';
+  });
+}
+
+/* Las fotos de una empresa en un día: verlas, añadir más o borrar. */
+function abrirDia(cid, date){
+  var old=document.getElementById("diaDlg"); if(old) old.remove();
+  var d=document.createElement("dialog"); d.id="diaDlg"; d.style.maxWidth="640px";
+  d.dataset.cid=cid; d.dataset.date=date;
+  d.innerHTML='<div class="dlg-head"><h3>Recibos · '+esc(companyName(cid))+'</h3>'+
+    '<button class="btn ghost" data-x>Cerrar</button></div>'+
+    '<div class="dlg-body"><p class="section-note dia-sub"></p><div class="fotos-grid" id="diaGrid"></div></div>'+
+    '<div class="dlg-foot dia-foot">'+
+      '<button class="btn" data-gal>Galería</button>'+
+      '<span class="spacer"></span>'+
+      '<button class="btn primary" data-cam>'+ICO_CAM+'Hacer foto</button></div>';
+  document.body.appendChild(d);
+  d.querySelectorAll("[data-x]").forEach(function(b){ b.addEventListener("click",function(){ d.close(); d.remove(); }); });
+  d.querySelector("[data-cam]").addEventListener("click", function(){ pedirFoto(cid, date, false); });
+  d.querySelector("[data-gal]").addEventListener("click", function(){ pedirFoto(cid, date, true); });
+  d.addEventListener("close", function(){ d.remove(); });
+  d.showModal();
+  pintarDia(cid, date);
+}
+function pintarDia(cid, date){
+  var d=document.getElementById("diaDlg"); if(!d) return;
+  var lista=fotosDelDia(cid, date);
+  d.querySelector(".dia-sub").innerHTML='<span class="cap">'+esc(diaLargo(date))+'</span> · '+
+    (lista.length ? lista.length+(lista.length>1?" fotos":" foto") : "ninguna foto todavía");
+  var g=d.querySelector("#diaGrid");
+  if(!lista.length){
+    g.innerHTML='<div class="empty" style="grid-column:1/-1">Pulsa <strong style="display:inline;font:inherit;font-weight:600">Hacer foto</strong> y fotografía el recibo.</div>';
+    return;
+  }
+  g.innerHTML=lista.map(function(f){
+    return '<button type="button" class="foto-th" data-ver="'+f.id+'" aria-label="Ver la foto">'+
+      '<img alt="" data-img="'+f.id+'">'+
+      (f.subida?"":'<span class="marca" data-marca="'+f.id+'">sin subir</span>')+'</button>';
+  }).join("");
+  g.querySelectorAll("[data-ver]").forEach(function(b){ b.addEventListener("click", function(){ verFoto(b.getAttribute("data-ver")); }); });
+  lista.forEach(function(f){
+    urlDeFoto(f).then(function(u){
+      var im=g.querySelector('[data-img="'+f.id+'"]');
+      if(im && u) im.src=u;
+    }).catch(function(){});
+  });
+}
+
+/* ── Las fotos en el PDF ──
+   Los recibos son altos y estrechos: dos caben uno al lado del otro y se
+   leen bien. Los apaisados van solos en su página. */
+async function cargarFotos(lista){
+  var out=[], faltan=0;
+  for(var i=0;i<lista.length;i++){
+    var f=lista[i], data=null;
+    try{ var b=await blobDeFoto(f); if(b) data=await blobABytes(b); }catch(e){}
+    if(!data) faltan++;
+    out.push({f:f, img:data?{data:data, pw:f.w, ph:f.h}:null});
+  }
+  return {items:out, faltan:faltan};
+}
+function layoutFotos(items, cid, texto){
+  var pages=[], L=PAGE.m, R=PAGE.w-PAGE.m, top=PAGE.m+40, bottom=PAGE.h-PAGE.m-14;
+  var nombre=companyName(cid);
+  var porDia={}; items.forEach(function(it){ porDia[it.f.date]=(porDia[it.f.date]||0)+1; });
+  var vistoDia={};
+  items.forEach(function(it){ vistoDia[it.f.date]=0; });
+
+  function pagina(){
+    var ops=[];
+    ops.push({t:"text",v:"COPIA DE LOS RECIBOS",x:L,y:PAGE.m+2,s:7.4,b:true,c:C_ACC,a:"left"});
+    ops.push({t:"text",v:clip(nombre,60),x:L,y:PAGE.m+17,s:12,b:true,c:C_INK,a:"left"});
+    ops.push({t:"text",v:texto,x:R,y:PAGE.m+17,s:8.6,b:false,c:C_MUT,a:"right"});
+    ops.push({t:"line",x1:L,y1:PAGE.m+26,x2:R,y2:PAGE.m+26,w:0.6,c:C_LINE});
+    return ops;
+  }
+  function poner(ops, it, x, y, cw, ch){
+    vistoDia[it.f.date]++;
+    var cap=dmy(it.f.date)+(porDia[it.f.date]>1?"  ·  "+vistoDia[it.f.date]+"/"+porDia[it.f.date]:"");
+    var alto=ch-18;
+    if(it.img){
+      var k=Math.min(cw/it.f.w, alto/it.f.h), dw=it.f.w*k, dh=it.f.h*k, dx=x+(cw-dw)/2;
+      ops.push({t:"img", img:it.img, x:dx, y:y, w:dw, h:dh});
+      [[dx,y,dx+dw,y],[dx,y+dh,dx+dw,y+dh],[dx,y,dx,y+dh],[dx+dw,y,dx+dw,y+dh]].forEach(function(l){
+        ops.push({t:"line",x1:l[0],y1:l[1],x2:l[2],y2:l[3],w:0.4,c:C_LINE});
+      });
+      ops.push({t:"text",v:cap,x:x+cw/2,y:y+dh+13,s:8.4,b:false,c:C_MUT,a:"center"});
+    } else {
+      ops.push({t:"rect",x:x,y:y,w:cw,h:60,c:C_SOFT});
+      ops.push({t:"text",v:"Foto no disponible",x:x+cw/2,y:y+28,s:9,b:true,c:C_MUT,a:"center"});
+      ops.push({t:"text",v:cap,x:x+cw/2,y:y+44,s:8.4,b:false,c:C_MUT,a:"center"});
+    }
+  }
+  function vertical(it){ return it.f.h >= it.f.w*1.15; }
+  for(var i=0;i<items.length;){
+    var ops=pagina(), a=items[i], b=items[i+1];
+    if(b && vertical(a) && vertical(b)){
+      var cw=(R-L-18)/2;
+      poner(ops, a, L, top, cw, bottom-top);
+      poner(ops, b, L+cw+18, top, cw, bottom-top);
+      i+=2;
+    } else {
+      poner(ops, a, L, top, R-L, bottom-top);
+      i+=1;
+    }
+    pages.push(ops);
+  }
+  pages.forEach(function(ops, n){
+    ops.push({t:"text",v:"Recibos · página "+(n+1)+" de "+pages.length,x:R,y:PAGE.h-PAGE.m+4,s:7.6,b:false,c:C_MUT,a:"right"});
+  });
+  return pages;
+}
+
+/* El PDF de la factura y, si se ha pedido, las fotos del mes detrás. */
+function fotosDeFactura(inv){ return (inv && inv.companyId && inv.period) ? fotosDelMes(inv.companyId, inv.period) : []; }
+function llevaFotos(inv){ return ui.conFotos!==false && fotosDeFactura(inv).length>0; }
+async function pdfDeFactura(inv){
+  var pages=layoutInvoice(inv);
+  if(llevaFotos(inv)){
+    var c=await cargarFotos(fotosDeFactura(inv));
+    var mes=monthLabel(inv.period);
+    pages=pages.concat(layoutFotos(c.items, inv.companyId, mes.charAt(0).toUpperCase()+mes.slice(1)));
+    if(c.faltan) toast(c.faltan+(c.faltan>1?" fotos no han llegado":" foto no ha llegado")+" todavía de otro aparato: sale"+(c.faltan>1?"n":"")+" en blanco.", true);
+  }
+  return buildPDF(pages);
+}
+/* Para compartir, el móvil exige que el archivo esté listo en el mismo
+   toque: con fotos se prepara antes, mientras se mira la factura. */
+var pdfListo=null;
+function clavePdf(inv){
+  return inv.id+"|"+(llevaFotos(inv)?fotosDeFactura(inv).map(function(f){ return f.id; }).join(","):"");
+}
+function prepararPdf(inv){
+  var clave=clavePdf(inv);
+  if(pdfListo && pdfListo.clave===clave) return pdfListo.promesa;
+  var p=pdfDeFactura(inv).then(function(bytes){
+    var file=new File([bytes], invFilename(inv,"pdf"), {type:"application/pdf"});
+    if(pdfListo && pdfListo.clave===clave) pdfListo.file=file;
+    return file;
+  });
+  pdfListo={clave:clave, promesa:p, file:null};
+  p.catch(function(){ if(pdfListo && pdfListo.clave===clave) pdfListo=null; });
+  return p;
 }
 
 /* ============================ view: empresas ============================ */
@@ -821,7 +1220,8 @@ function viewFacturar(main){
   zone.innerHTML=aviso+ids.map(function(id){
     var list=sortedServices(byComp[id]), t=totalsOf(list), c=company(id);
     return '<div class="card" style="margin-bottom:18px"><div class="card-head">'+
-      "<div><h2>"+esc(companyName(id))+'</h2><span class="hint">'+num(nAlb(list))+" albaranes · "+num(t.diners)+" comensales · "+esc(monthLabel(ym))+"</span></div>"+
+      "<div><h2>"+esc(companyName(id))+'</h2><span class="hint">'+num(nAlb(list))+" albaranes · "+num(t.diners)+" comensales · "+esc(monthLabel(ym))+
+        (fotosDelMes(id, ym).length?" · "+fotosDelMes(id, ym).length+(fotosDelMes(id, ym).length>1?" fotos de recibos":" foto de recibo"):"")+"</span></div>"+
       '<div class="toolbar" style="margin:0">'+
         '<span style="font-weight:600; font-size:16px; font-variant-numeric:tabular-nums">'+eur(t.total)+"</span>"+
         '<button class="btn" data-preview="'+id+'">Ver borrador</button>'+
@@ -1328,12 +1728,18 @@ function showInvoice(inv, isDraft){
     d.querySelector("[data-paper]").addEventListener("click", function(){ downloadInvoice(inv,"paper"); });
     d.querySelector("[data-png]").addEventListener("click", function(){ downloadInvoice(inv,"png"); });
     engancharEnvio(d, inv);
+    if(canShareFiles() && llevaFotos(inv)) prepararPdf(inv).catch(function(){});
   }
   d.showModal();
 }
 /* Los botones del panel de envio. Va aparte porque el panel se vuelve a
    pintar al cambiar de remitente. */
 function engancharEnvio(d, inv){
+  var cf=d.querySelector("#conFotos");
+  if(cf) cf.addEventListener("change", function(){
+    ui.conFotos=cf.checked;
+    if(canShareFiles()) prepararPdf(inv).catch(function(){});
+  });
   d.querySelector("[data-pdf]").addEventListener("click", function(){ downloadInvoice(inv,"pdf"); });
   d.querySelector("[data-mail]").addEventListener("click", function(){ copyMail(inv); });
   d.querySelector("[data-mailto]").addEventListener("click", function(){ openMail(inv); });
@@ -1438,6 +1844,13 @@ function sendBoxHTML(inv){
           '<div style="display:flex;gap:6px;flex-wrap:wrap">'+eleccion+'</div>'+
         '</div>'
       : "")+
+    (function(){
+      var n=fotosDeFactura(inv).length;
+      if(!n) return "";
+      return '<label class="check" style="margin:0 0 12px"><input type="checkbox" id="conFotos"'+(ui.conFotos!==false?" checked":"")+'>'+
+        '<span><b>Meter en el PDF '+(n>1?"las "+n+" fotos":"la foto")+' de los recibos de '+esc(monthLabel(inv.period))+'</b>'+
+        'Van detrás de la factura, por orden de día, en el mismo archivo.</span></label>';
+    })()+
     '<div class="toolbar" style="margin:0">'+
       '<button class="btn primary" data-pdf><span class="step">1</span>Descargar PDF</button>'+
       '<button class="btn" data-mailto><span class="step">2</span>Abrir correo</button>'+
@@ -1541,8 +1954,19 @@ function openWhatsApp(inv){
 }
 async function shareInvoice(inv){
   try{
-    var bytes=buildPDF(layoutInvoice(inv));
-    var file=new File([bytes], invFilename(inv,"pdf"), {type:"application/pdf"});
+    var file;
+    if(llevaFotos(inv)){
+      var listo=(pdfListo && pdfListo.clave===clavePdf(inv)) ? pdfListo.file : null;
+      if(!listo){
+        toast("Preparando el PDF con las fotos… vuelve a pulsar en un momento.");
+        prepararPdf(inv).then(function(){ toast("Listo. Pulsa «Compartir PDF»."); })
+          .catch(function(){ toast("No se pudo preparar el PDF. Mira la conexión.", true); });
+        return;
+      }
+      file=listo;
+    } else {
+      file=new File([buildPDF(layoutInvoice(inv))], invFilename(inv,"pdf"), {type:"application/pdf"});
+    }
     if(!(navigator.canShare && navigator.canShare({files:[file]}))){ toast("Este dispositivo no permite compartir archivos.", true); return; }
     await navigator.share({files:[file], title:"Factura "+inv.number, text:waText(inv)});
   }catch(e){
@@ -1835,10 +2259,15 @@ function buildPDF(pages){
   var offsets=[];
   pushStr("%PDF-1.4\n%âãÏÓ\n");
 
-  /* objetos: 1 catálogo, 2 árbol de páginas, 3 y 4 fuentes, y luego 2 por página */
+  /* Las fotos van como imágenes JPEG tal cual (DCTDecode): una por
+     objeto, al final, y cada página dice cuáles usa. */
+  var imgs=[];
+  pages.forEach(function(ops){ ops.forEach(function(o){ if(o.t==="img" && imgs.indexOf(o.img)<0) imgs.push(o.img); }); });
+
+  /* objetos: 1 catálogo, 2 árbol de páginas, 3 y 4 fuentes, 2 por página y 1 por imagen */
   var nPages=pages.length;
-  var lastObj=4+nPages*2;
-  var fontR=3, fontB=4, firstPage=5;
+  var fontR=3, fontB=4, firstPage=5, firstImg=firstPage+nPages*2;
+  var lastObj=firstImg+imgs.length-1;
   function obj(num, bodyBytes){
     offsets[num]=len;
     pushStr(num+" 0 obj\n"); push(bodyBytes); pushStr("\nendobj\n");
@@ -1854,12 +2283,18 @@ function buildPDF(pages){
 
   for(var pi=0; pi<nPages; pi++){
     var pnum=firstPage+pi*2, cnum=pnum+1;
+    var usadas=[];
+    pages[pi].forEach(function(o){ if(o.t==="img" && usadas.indexOf(o.img)<0) usadas.push(o.img); });
+    var xobj=usadas.length ? " /XObject << "+usadas.map(function(im){
+      var n=imgs.indexOf(im); return "/Im"+n+" "+(firstImg+n)+" 0 R"; }).join(" ")+" >>" : "";
     obj(pnum, strBytes("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 "+fmt(PAGE.w)+" "+fmt(PAGE.h)+"] "+
-      "/Resources << /Font << /F1 "+fontR+" 0 R /F2 "+fontB+" 0 R >> >> /Contents "+cnum+" 0 R >>"));
+      "/Resources << /Font << /F1 "+fontR+" 0 R /F2 "+fontB+" 0 R >>"+xobj+" >> /Contents "+cnum+" 0 R >>"));
     var stream=[];
     function put(s){ var a=strBytes(s); for(var i=0;i<a.length;i++) stream.push(a[i]); }
     pages[pi].forEach(function(o){
-      if(o.t==="rect"){
+      if(o.t==="img"){
+        put("q "+fmt(o.w)+" 0 0 "+fmt(o.h)+" "+fmt(o.x)+" "+fmt(PAGE.h-o.y-o.h)+" cm /Im"+imgs.indexOf(o.img)+" Do Q\n");
+      } else if(o.t==="rect"){
         put(fmt(o.c[0])+" "+fmt(o.c[1])+" "+fmt(o.c[2])+" rg\n");
         put(fmt(o.x)+" "+fmt(PAGE.h-o.y-o.h)+" "+fmt(o.w)+" "+fmt(o.h)+" re f\n");
       } else if(o.t==="line"){
@@ -1880,6 +2315,15 @@ function buildPDF(pages){
     obj(cnum, body);
   }
 
+  imgs.forEach(function(im, n){
+    var num=firstImg+n;
+    offsets[num]=len;
+    pushStr(num+" 0 obj\n<< /Type /XObject /Subtype /Image /Width "+im.pw+" /Height "+im.ph+
+      " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "+im.data.length+" >>\nstream\n");
+    push(im.data);
+    pushStr("\nendstream\nendobj\n");
+  });
+
   var xrefPos=len;
   var total=lastObj+1;                  /* entradas del xref: el objeto libre 0 más cada objeto */
   pushStr("xref\n0 "+total+"\n0000000000 65535 f \n");
@@ -1890,7 +2334,7 @@ function buildPDF(pages){
   pushStr("trailer\n<< /Size "+total+" /Root 1 0 R >>\nstartxref\n"+xrefPos+"\n%%EOF");
 
   var out=new Uint8Array(len), pos=0;
-  chunks.forEach(function(c){ for(var i=0;i<c.length;i++) out[pos++]=c[i]; });
+  chunks.forEach(function(c){ out.set(c, pos); pos+=c.length; });
   return out;
 }
 
@@ -1907,6 +2351,7 @@ function renderPNG(pages){
       var oy=pi*(PAGE.h+gap);
       ctx.fillStyle="#FFFFFF"; ctx.fillRect(0,oy*sc,PAGE.w*sc,PAGE.h*sc);
       ops.forEach(function(o){
+        if(o.t==="img") return;
         var col=function(c){ return "rgb("+Math.round(c[0]*255)+","+Math.round(c[1]*255)+","+Math.round(c[2]*255)+")"; };
         if(o.t==="rect"){ ctx.fillStyle=col(o.c); ctx.fillRect(o.x*sc,(o.y+oy)*sc,o.w*sc,o.h*sc); }
         else if(o.t==="line"){
@@ -1935,9 +2380,11 @@ async function downloadInvoice(inv, kind){
   var pages=paper ? layoutPaper(inv, state.settings.paperCopy!==false) : layoutInvoice(inv);
   try{
     if(kind==="pdf"||paper){
-      var bytes=buildPDF(pages);
+      if(!paper && llevaFotos(inv)) toast("Preparando el PDF con las fotos…");
+      var bytes=paper ? buildPDF(pages) : await pdfDeFactura(inv);
       descargarArchivo(invFilename(inv, paper?"papel.pdf":"pdf"), bytes, "application/pdf");
-      toast(paper ? "PDF listo: ábrelo y dale a imprimir en A4" : "PDF descargado: adjúntalo al correo");
+      toast(paper ? "PDF listo: ábrelo y dale a imprimir en A4" :
+            llevaFotos(inv) ? "PDF descargado con la factura y las fotos: adjúntalo al correo" : "PDF descargado: adjúntalo al correo");
     } else {
       var blob=await renderPNG(pages);
       descargarArchivo(invFilename(inv,"png"), blob, "image/png");
