@@ -852,6 +852,38 @@ function borrarFoto(id){
     {okLabel:"Borrar foto", danger:true});
 }
 
+/* Borrar varias de golpe: las de un día o las de todo el mes. */
+function quitarFotos(lista){
+  var ids={}; lista.forEach(function(f){ ids[f.id]=1; });
+  state.fotos=fotos().filter(function(x){ return !ids[x.id]; });
+  touch();
+  lista.forEach(function(f){
+    idbDel(f.id);
+    if(urlsFoto[f.id]){ URL.revokeObjectURL(urlsFoto[f.id]); delete urlsFoto[f.id]; }
+  });
+  /* De una en una: GitHub no deja dos escrituras a la vez en la rama */
+  (async function(){
+    for(var i=0;i<lista.length;i++){
+      var f=lista[i];
+      if(f.subida && window.Sync && Sync.borrarArchivo){ try{ await Sync.borrarArchivo(f.ruta); }catch(e){} }
+    }
+  })();
+}
+function borrarTodas(lista, donde, alTerminar){
+  if(!lista.length) return;
+  var n=lista.length;
+  confirmar(n>1?"Borrar las "+n+" fotos":"Borrar la foto",
+    '<p style="margin:0">Vas a borrar <strong>'+(n>1?"las "+n+" fotos":"la foto")+'</strong> de <strong>'+
+    esc(companyName(lista[0].companyId))+'</strong> '+donde+'.</p>'+
+    '<p class="section-note" style="margin:12px 0 0">No se puede deshacer.</p>',
+    function(){
+      quitarFotos(lista);
+      if(alTerminar) alTerminar(); else refrescarFotos();
+      toast(n>1?n+" fotos borradas":"Foto borrada");
+    },
+    {okLabel:n>1?"Borrar las "+n:"Borrar", danger:true});
+}
+
 function verFoto(id){
   var f=null; fotos().forEach(function(x){ if(x.id===id) f=x; });
   if(!f) return;
@@ -885,12 +917,16 @@ function abrirDia(cid, date){
     '<div class="dlg-body"><p class="section-note dia-sub"></p><div class="fotos-grid" id="diaGrid"></div></div>'+
     '<div class="dlg-foot dia-foot">'+
       '<button class="btn" data-gal>Galería</button>'+
+      '<button class="btn danger" data-borrar-todas style="display:none">Borrar todas</button>'+
       '<span class="spacer"></span>'+
       '<button class="btn primary" data-cam>'+ICO_CAM+'Hacer foto</button></div>';
   document.body.appendChild(d);
   d.querySelectorAll("[data-x]").forEach(function(b){ b.addEventListener("click",function(){ d.close(); d.remove(); }); });
   d.querySelector("[data-cam]").addEventListener("click", function(){ pedirFoto(cid, date, false); });
   d.querySelector("[data-gal]").addEventListener("click", function(){ pedirFoto(cid, date, true); });
+  d.querySelector("[data-borrar-todas]").addEventListener("click", function(){
+    borrarTodas(fotosDelDia(cid, date), "del "+dmy(date));
+  });
   d.addEventListener("close", function(){ d.remove(); });
   d.showModal();
   pintarDia(cid, date);
@@ -898,6 +934,9 @@ function abrirDia(cid, date){
 function pintarDia(cid, date){
   var d=document.getElementById("diaDlg"); if(!d) return;
   var lista=fotosDelDia(cid, date);
+  var bt=d.querySelector("[data-borrar-todas]");
+  bt.style.display=lista.length>1?"":"none";
+  bt.textContent="Borrar todas ("+lista.length+")";
   d.querySelector(".dia-sub").innerHTML='<span class="cap">'+esc(diaLargo(date))+'</span> · '+
     (lista.length ? lista.length+(lista.length>1?" fotos":" foto") : "ninguna foto todavía");
   var g=d.querySelector("#diaGrid");
@@ -1791,6 +1830,15 @@ function showInvoice(inv, isDraft){
 /* Los botones del panel de envio. Va aparte porque el panel se vuelve a
    pintar al cambiar de remitente. */
 function engancharEnvio(d, inv){
+  var bm=d.querySelector("[data-borrar-mes]");
+  if(bm) bm.addEventListener("click", function(){
+    borrarTodas(fotosDeFactura(inv), "de "+monthLabel(inv.period), function(){
+      pdfListo=null; render();
+      var caja=d.querySelector(".send-box"), nueva=document.createElement("div");
+      nueva.innerHTML=sendBoxHTML(inv); caja.replaceWith(nueva.firstChild);
+      engancharEnvio(d, inv);
+    });
+  });
   var cf=d.querySelector("#conFotos");
   if(cf) cf.addEventListener("change", function(){
     ui.conFotos=cf.checked;
@@ -1905,7 +1953,9 @@ function sendBoxHTML(inv){
       if(!n) return "";
       return '<label class="check" style="margin:0 0 12px"><input type="checkbox" id="conFotos"'+(ui.conFotos!==false?" checked":"")+'>'+
         '<span><b>Mandar también '+(n>1?"las "+n+" fotos":"la foto")+' de los recibos de '+esc(monthLabel(inv.period))+'</b>'+
-        'Van en una carpeta aparte (.zip), una imagen por recibo con su fecha. La factura sigue en su PDF.</span></label>';
+        'Van en una carpeta aparte (.zip), una imagen por recibo con su fecha. La factura sigue en su PDF.</span></label>'+
+        '<p class="section-note" style="margin:-4px 0 12px 25px"><button class="inline-link" data-borrar-mes style="color:var(--danger)">'+
+        'Borrar '+(n>1?"las "+n+" fotos":"la foto")+' de '+esc(monthLabel(inv.period))+'</button> cuando ya las hayas mandado.</p>';
     })()+
     '<div class="toolbar" style="margin:0">'+
       '<button class="btn primary" data-pdf><span class="step">1</span>Descargar PDF</button>'+
