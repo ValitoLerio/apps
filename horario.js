@@ -3481,7 +3481,7 @@ function planRellenar(){
   });
   var DESC = (+p.descanso || 0) * 60;
   planDeshacer = JSON.stringify(sched);
-  var avisos = [], puestos = 0;
+  var avisos = [], puestos = 0, coberturas = [];
 
   function finDe(c){
     if (!c || c.estado !== 'trabajo' || !c.inicio || !c.fin) return null;
@@ -3654,10 +3654,23 @@ function planRellenar(){
       if (esCoc && a <= 13*60 && b >= 15*60) cocD = true;
       if (esCoc && b >= 23*60) cocN = true;
     });
+    /* Sin cocinero en un turno: lo cubre un camarero que ya esté en
+       ese turno ese día, y se le apunta «Cocina» en la nota. */
+    function cubrirCocina(deNoche){
+      var cand = libres.filter(function(l){ return l.g.grupo === 'cam'; }).map(function(l){
+        var c = gcAt(l.s.id, dia), a = aMin(c.inicio), b = aMin(c.fin); if (b <= a) b += 1440;
+        var vale = deNoche ? b >= 23*60 : (a <= 13*60 && b >= 15*60);
+        return vale ? {l:l, c:c, rank: deNoche ? 0 : (a >= 9*60 ? 0 : 1)} : null;
+      }).filter(Boolean).sort(function(x, y){ return x.rank - y.rank; });
+      if (!cand.length) return null;
+      cand[0].c.nota = 'Cocina';
+      coberturas.push(DC_FULL[fecha.getDay()] + ' ' + etiquetaDia(dia, curM) + ': ' + cand[0].l.s.name + ' cubre la cocina ' + (deNoche ? 'por la noche' : 'a mediodía'));
+      return cand[0].l.s.name;
+    }
     if (libres.length) {
       if (!encC) falta.push('no cierra ningún encargado');
-      if (!cocD) falta.push('sin cocina a mediodía');
-      if (!cocN) falta.push('sin cocina por la noche');
+      if (!cocD && !cubrirCocina(false)) falta.push('sin cocina a mediodía');
+      if (!cocN && !cubrirCocina(true)) falta.push('sin cocina por la noche');
     }
     if (falta.length && libres.length) avisos.push(DC_FULL[fecha.getDay()] + ' ' + etiquetaDia(dia, curM) + ': ' + falta.join(', '));
   });
@@ -3668,6 +3681,7 @@ function planRellenar(){
   var caja = document.getElementById('plan-res');
   if (caja) {
     caja.innerHTML = '<b style="color:var(--gold2)">Hecho: ' + puestos + ' turnos puestos.</b> Revísalo y cambia lo que quieras tocando el día.' +
+      (coberturas.length ? '<div style="margin-top:6px;color:var(--text2)">Cocina cubierta por camareros (llevan la nota «Cocina»):<br>' + coberturas.map(esc).join('<br>') + '</div>' : '') +
       (avisos.length ? '<div style="margin-top:6px;color:#e8a020">Para que lo mires:<br>' + avisos.map(esc).join('<br>') + '</div>' : '');
   }
   var bd = document.getElementById('plan-deshacer'); if (bd) bd.style.display = '';
