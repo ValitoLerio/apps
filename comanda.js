@@ -1026,23 +1026,60 @@ function layoutFotos(items, cid, texto){
   return pages;
 }
 
-/* Las fotos del mes van aparte de la factura, cada una como adjunto.
-   La factura sigue siendo su PDF de siempre. */
+/* Las fotos del mes van aparte de la factura: una carpeta comprimida
+   (.zip) con una imagen por recibo, nombrada por día. La factura sigue
+   siendo su PDF de siempre. */
 function fotosDeFactura(inv){ return (inv && inv.companyId && inv.period) ? fotosDelMes(inv.companyId, inv.period) : []; }
 function llevaFotos(inv){ return ui.conFotos!==false && fotosDeFactura(inv).length>0; }
 
-/* Las fotos sueltas, una imagen por recibo, para que lleguen abiertas
-   en el correo y se vean sin descomprimir nada. */
-async function jpgsDeFotos(inv){
+var CRC_T=null;
+function crc32(u8){
+  if(!CRC_T){ CRC_T=new Uint32Array(256); for(var n=0;n<256;n++){ var c=n; for(var k=0;k<8;k++) c=c&1?0xEDB88320^(c>>>1):c>>>1; CRC_T[n]=c>>>0; } }
+  var crc=0xFFFFFFFF; for(var i=0;i<u8.length;i++) crc=CRC_T[(crc^u8[i])&0xFF]^(crc>>>8);
+  return (crc^0xFFFFFFFF)>>>0;
+}
+/* ZIP sin comprimir (los JPEG ya van comprimidos): cabecera de cada
+   archivo, su contenido y, al final, el índice. */
+function hacerZip(archivos){
+  var enc=new TextEncoder(), partes=[], indice=[], pos=0;
+  var d=new Date(), hora=(d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1),
+      fecha=((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate();
+  function cab(tam){ return {b:new Uint8Array(tam), v:null}; }
+  archivos.forEach(function(a){
+    var nom=enc.encode(a.nombre), crc=crc32(a.datos), n=a.datos.length;
+    var h=new Uint8Array(30+nom.length), v=new DataView(h.buffer);
+    v.setUint32(0,0x04034b50,true); v.setUint16(4,20,true); v.setUint16(6,0x0800,true); v.setUint16(8,0,true);
+    v.setUint16(10,hora,true); v.setUint16(12,fecha,true); v.setUint32(14,crc,true);
+    v.setUint32(18,n,true); v.setUint32(22,n,true); v.setUint16(26,nom.length,true); v.setUint16(28,0,true);
+    h.set(nom,30);
+    var c=new Uint8Array(46+nom.length), w=new DataView(c.buffer);
+    w.setUint32(0,0x02014b50,true); w.setUint16(4,20,true); w.setUint16(6,20,true); w.setUint16(8,0x0800,true);
+    w.setUint16(10,0,true); w.setUint16(12,hora,true); w.setUint16(14,fecha,true); w.setUint32(16,crc,true);
+    w.setUint32(20,n,true); w.setUint32(24,n,true); w.setUint16(28,nom.length,true);
+    w.setUint32(42,pos,true); c.set(nom,46);
+    partes.push(h, a.datos); indice.push(c); pos+=h.length+n;
+  });
+  var tamIndice=indice.reduce(function(t,c){ return t+c.length; },0);
+  var fin=new Uint8Array(22), f=new DataView(fin.buffer);
+  f.setUint32(0,0x06054b50,true); f.setUint16(8,archivos.length,true); f.setUint16(10,archivos.length,true);
+  f.setUint32(12,tamIndice,true); f.setUint32(16,pos,true);
+  return new Blob(partes.concat(indice,[fin]), {type:"application/zip"});
+}
+function nombreZip(inv){
+  return ("Recibos-"+slug(companyName(inv.companyId))+"-"+inv.period).slice(0,80)+".zip";
+}
+async function zipDeFotos(inv){
   var c=await cargarFotos(fotosDeFactura(inv));
-  var porDia={}, out=[];
+  var carpeta="Recibos "+monthLabel(inv.period)+" - "+companyName(inv.companyId).replace(/[\\/:*?"<>|]/g,"");
+  var porDia={}, archivos=[];
   c.items.forEach(function(it){
     if(!it.img) return;
     porDia[it.f.date]=(porDia[it.f.date]||0)+1;
-    out.push(new File([it.img.data], "Recibo "+dmy(it.f.date).replace(/\//g,"-")+" ("+porDia[it.f.date]+").jpg", {type:"image/jpeg"}));
+    archivos.push({nombre:carpeta+"/"+it.f.date+" recibo "+porDia[it.f.date]+".jpg", datos:it.img.data});
   });
-  if(c.faltan) toast(c.faltan+(c.faltan>1?" fotos no han llegado":" foto no ha llegado")+" todavía de otro aparato y no va"+(c.faltan>1?"n":"")+".", true);
-  return out;
+  if(c.faltan) toast(c.faltan+(c.faltan>1?" fotos no han llegado":" foto no ha llegado")+" todavía de otro aparato y no va"+(c.faltan>1?"n":"")+" en la carpeta.", true);
+  if(!archivos.length) return null;
+  return new File([hacerZip(archivos)], nombreZip(inv), {type:"application/zip"});
 }
 /* Para compartir, el móvil exige que los archivos estén listos en el
    mismo toque: se preparan mientras se mira la factura. */
@@ -1053,8 +1090,9 @@ function clavePdf(inv){
 function prepararPdf(inv){
   var clave=clavePdf(inv);
   if(pdfListo && pdfListo.clave===clave) return pdfListo.promesa;
-  var p=(llevaFotos(inv)?jpgsDeFotos(inv):Promise.resolve([])).then(function(jpgs){
-    var files=[new File([buildPDF(layoutInvoice(inv))], invFilename(inv,"pdf"), {type:"application/pdf"})].concat(jpgs);
+  var p=(llevaFotos(inv)?zipDeFotos(inv):Promise.resolve(null)).then(function(zip){
+    var files=[new File([buildPDF(layoutInvoice(inv))], invFilename(inv,"pdf"), {type:"application/pdf"})];
+    if(zip) files.push(zip);
     if(pdfListo && pdfListo.clave===clave) pdfListo.files=files;
     return files;
   });
@@ -1915,7 +1953,7 @@ function sendBoxHTML(inv){
       if(!n) return "";
       return '<label class="check" style="margin:0 0 12px"><input type="checkbox" id="conFotos"'+(ui.conFotos!==false?" checked":"")+'>'+
         '<span><b>Mandar también '+(n>1?"las "+n+" fotos":"la foto")+' de los recibos de '+esc(monthLabel(inv.period))+'</b>'+
-        'Cada foto va como un adjunto más, con su fecha, y se ve al abrir el correo. La factura sigue en su PDF.</span></label>'+
+        'Van en una carpeta aparte (.zip), una imagen por recibo con su fecha. La factura sigue en su PDF.</span></label>'+
         '<p class="section-note" style="margin:-4px 0 12px 25px"><button class="inline-link" data-borrar-mes style="color:var(--danger)">'+
         'Borrar '+(n>1?"las "+n+" fotos":"la foto")+' de '+esc(monthLabel(inv.period))+'</button> cuando ya las hayas mandado.</p>';
     })()+
@@ -2026,7 +2064,7 @@ async function shareInvoice(inv){
     if(llevaFotos(inv)){
       files=(pdfListo && pdfListo.clave===clavePdf(inv)) ? pdfListo.files : null;
       if(!files){
-        toast("Preparando las fotos… vuelve a pulsar en un momento.");
+        toast("Preparando la carpeta de fotos… vuelve a pulsar en un momento.");
         prepararPdf(inv).then(function(){ toast("Listo. Pulsa «Compartir PDF»."); })
           .catch(function(){ toast("No se pudieron preparar las fotos. Mira la conexión.", true); });
         return;
@@ -2036,9 +2074,9 @@ async function shareInvoice(inv){
     }
     if(!(navigator.canShare && navigator.canShare({files:files}))){
       if(files.length>1 && navigator.canShare({files:[files[0]]})){
-        files.slice(1).forEach(function(f,i){ setTimeout(function(){ descargarArchivo(f.name, f, "image/jpeg"); }, 400*i); });
+        descargarArchivo(files[1].name, files[1], "application/zip");
         files=[files[0]];
-        toast("Las fotos se han descargado: adjúntalas también.", true);
+        toast("La carpeta de fotos se ha descargado: adjúntala también.", true);
       } else { toast("Este dispositivo no permite compartir archivos.", true); return; }
     }
     await navigator.share({files:files, title:"Factura "+inv.number, text:waText(inv)});
@@ -2455,14 +2493,14 @@ async function downloadInvoice(inv, kind){
     if(kind==="pdf"||paper){
       var bytes=buildPDF(pages);
       descargarArchivo(invFilename(inv, paper?"papel.pdf":"pdf"), bytes, "application/pdf");
-      var jpgs=[];
+      var zip=null;
       if(!paper && llevaFotos(inv)){
-        toast("Preparando las fotos…");
-        jpgs=await jpgsDeFotos(inv);
-        jpgs.forEach(function(f,i){ setTimeout(function(){ descargarArchivo(f.name, f, "image/jpeg"); }, 600+400*i); });
+        toast("Preparando la carpeta de fotos…");
+        zip=await zipDeFotos(inv);
+        if(zip) setTimeout(function(){ descargarArchivo(zip.name, zip, "application/zip"); }, 600);
       }
       toast(paper ? "PDF listo: ábrelo y dale a imprimir en A4" :
-            jpgs.length ? "Descargadas la factura y "+jpgs.length+(jpgs.length>1?" fotos":" foto")+": adjúntalas al correo" : "PDF descargado: adjúntalo al correo");
+            zip ? "Descargados la factura y la carpeta de fotos: adjunta los dos al correo" : "PDF descargado: adjúntalo al correo");
     } else {
       var blob=await renderPNG(pages);
       descargarArchivo(invFilename(inv,"png"), blob, "image/png");
