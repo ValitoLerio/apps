@@ -238,6 +238,9 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
     <div>
       <div class="section-title">Factura para WhatsApp</div>
       <div class="card" style="padding:1rem">
+        <label style="display:flex;align-items:center;gap:9px;margin:0 0 10px;cursor:pointer;font-size:13.5px">
+          <input type="checkbox" class="chk-simple" onchange="ponerReciboSimple(this.checked)" style="width:auto;margin:0">
+          <span><b>Recibo simple</b> · sin gastos ni saldo anterior</span></label>
         <canvas id="factura-canvas" style="width:100%;border-radius:8px;border:1px solid var(--border);display:block"></canvas>
         <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
           <button class="btn btn-primary btn-full" style="font-size:15px;padding:13px" onclick="descargarFactura()">⬇️ Guardar imagen para WhatsApp</button>
@@ -465,7 +468,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
 </div>
 
 
-<script src="sync.js?v=202610251045"></script>
+<script src="sync.js?v=202610251355"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');

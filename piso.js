@@ -1200,6 +1200,14 @@ function importarDatos(event){
 }
 
 // ── FACTURA VISUAL PROFESIONAL ────────────────────────────────────────────────
+/* Recibo simple: solo conceptos y total, sin la cuenta de consumos (ni
+   gastos del mes ni saldo anterior). Se elige al mandarlo. */
+var reciboSimple=false;
+function ponerReciboSimple(v){
+  reciboSimple=!!v;
+  document.querySelectorAll('.chk-simple').forEach(c=>{ c.checked=reciboSimple; });
+  try{ dibujarFactura(getDatosFactura()); }catch(e){}
+}
 /* Una hoja blanca como las de una gestoría: cabecera con el nombre del
    piso y el número de recibo, quién paga y de qué periodo, la tabla de
    conceptos con el total, y debajo la cuenta de consumos. Un solo color,
@@ -1278,7 +1286,8 @@ function dibujarFactura(datos, lienzo){
   t(eur(datos.alq+datos.cuota),R-14,y+35,'#ffffff',22,700,'right');
   y+=54;
 
-  // ── Cuenta de consumos
+  // ── Cuenta de consumos (el recibo simple no la lleva)
+  if(!datos.simple){
   y+=52;
   t('CUENTA DE CONSUMOS',L,y,AC,10.5,700,'left',1.6);
   y+=10; ln(y,AC,1.2);
@@ -1305,6 +1314,7 @@ function dibujarFactura(datos, lienzo){
   if(datos.numMeses>0){
     y+=22;
     t('El fondo de consumos se regulariza con el gasto real. Meses acumulados: '+datos.numMeses+'.',L,y,LT,11,400);
+  }
   }
 
   // ── Pie
@@ -1379,7 +1389,7 @@ function datosFacturaDeRecibo(m){
     alq:m.alq||0, cuota, saldoFavAnt:saldoAnt, numMeses,
     cal, agua, elec, totalConsumo, totalFavor,
     saldoFinal:totalFavor-totalConsumo,
-    cierre:cfg.cierre||'Muchas gracias 🙏'
+    cierre:cfg.cierre||'Muchas gracias 🙏', simple:reciboSimple
   };
 }
 
@@ -1429,12 +1439,13 @@ function textoWhatsApp(m){
            'Te envío el recibo del alquiler de *'+d.mes.toLowerCase()+'*.', '',
            '*Total a pagar: '+fmtMil(d.alq+d.cuota)+' €*',
            'Alquiler '+fmtMil(d.alq)+' € + fondo de consumos '+fmtMil(d.cuota)+' €', '',
-           sf>0.004 ? 'Cuenta de consumos: saldo a tu favor de '+fmtMil(sf)+' €.'
+           reciboSimple ? null
+         : sf>0.004 ? 'Cuenta de consumos: saldo a tu favor de '+fmtMil(sf)+' €.'
          : sf<-0.004 ? 'Cuenta de consumos: saldo pendiente de '+fmtMil(Math.abs(sf))+' €.'
          : 'Cuenta de consumos al día.',
-           '', 'Tienes el detalle en el recibo adjunto.',
+           reciboSimple ? null : '', 'Tienes el detalle en el recibo adjunto.',
            (cfg.cierre||'Muchas gracias').replace(/\s*🙏\s*/g,'').trim()+'.'];
-  return l.join('\n').replace(/\.\.$/,'.');
+  return l.filter(x=>x!==null).join('\n').replace(/\.\.$/,'.');
 }
 
 /* Manda la factura por WhatsApp, eligiendo a quién: a mí o al inquilino
@@ -1514,6 +1525,9 @@ function ventanaWhatsApp(m, blob, nombre, movil){
     '<div style="color:var(--muted);margin-bottom:8px">¿A quién?</div>'+
     fila('yo','A mí', miTelefono())+
     fila('inq','A '+inq, telDelInq())+
+    '<label style="display:flex;align-items:center;gap:9px;margin:4px 0 2px;cursor:pointer;font-size:13px">'+
+      '<input type="checkbox" class="chk-simple" id="wa-simple" style="width:auto;margin:0"'+(reciboSimple?' checked':'')+'>'+
+      '<span><b>Recibo simple</b> · sin gastos ni saldo anterior</span></label>'+
     '<div style="white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);'+
       'border-radius:10px;padding:10px;max-height:28vh;overflow:auto;margin:6px 0 10px;'+
       'font-size:12.5px" id="wa-texto"></div>'+
@@ -1527,6 +1541,18 @@ function ventanaWhatsApp(m, blob, nombre, movil){
       '<button class="btn btn-secondary" id="wa-cerrar">Cerrar</button></div>';
   document.body.appendChild(caja);
 
+  document.getElementById('wa-simple').addEventListener('change', function(){
+    ponerReciboSimple(this.checked);
+    try{ blob=imagenDeRecibo(m); }catch(e){}
+    if(!movil){
+      const url=URL.createObjectURL(blob), a=document.createElement('a');
+      a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 4000);
+      document.getElementById('wa-nota').innerHTML='Descargada la factura '+(reciboSimple?'simple':'completa')+
+        ' (<strong>'+nombre+'</strong>): arrástrala al chat.';
+    }
+    document.getElementById('wa-texto').textContent=textoPara(quien);
+  });
   function elegir(q){
     quien=q;
     caja.querySelectorAll('[data-quien]').forEach(l=>{
@@ -1612,7 +1638,7 @@ function getDatosFactura(){
     mes:fmtMes(mes), codigo:mes, inq:cfg.inq||'(Inquilino)',
     alq,cuota,saldoFavAnt:saldoAnt,numMeses:mesesAnt.length,
     cal,agua,elec,totalConsumo,totalFavor,saldoFinal,
-    cierre:cfg.cierre||'Muchas gracias 🙏'
+    cierre:cfg.cierre||'Muchas gracias 🙏', simple:reciboSimple
   };
 }
 
