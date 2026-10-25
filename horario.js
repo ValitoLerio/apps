@@ -3460,17 +3460,23 @@ function planPersonas(p){
   function siguiente(t){ return {man:'med', med:'noc', noc:'man'}[t]; }
   lista.forEach(function(s){
     var g = p.gente[s.id];
-    /* Luis libra los lunes (lo dijo Lito); solo si no tiene otro puesto */
-    if (g && g.fest === -1 && /^luis/i.test(s.name)) g.fest = 1;
     if (g) return;
     var ap = planAprender(s.id);
     g = {grupo: s.role === 'enc' ? 'enc' : s.role === 'coc' ? 'coc' : 'cam', fest: ap.fest, ini:'man', fijoT:'O'};
     if (/^valeriano/i.test(s.name)) g.grupo = 'enccoc';
     if (/^(melo|martin)/i.test(s.name)) g.cubreCoc = true;
-    if (g.fest === -1 && /^luis/i.test(s.name)) g.fest = 1;
+
     if (ap.entra && ap.entra === p.turnos.O[0] && g.grupo === 'cam') g.grupo = 'fijo';
     p.gente[s.id] = g;
   });
+  /* Festivos que dijo Lito (una sola vez: luego se cambian en la ventana) */
+  if ((p._fest || 0) < 1) {
+    var FEST_DICHOS = [[/^luis/i, 1], [/^martin/i, 2], [/^cris/i, 3]];
+    lista.forEach(function(s){
+      FEST_DICHOS.forEach(function(f){ if (f[0].test(s.name) && p.gente[s.id]) p.gente[s.id].fest = f[1]; });
+    });
+    p._fest = 1;
+  }
   // Arranque escalonado: que no empiecen todos en el mismo turno
   var encs = lista.filter(function(s){ var g = p.gente[s.id]; return !g._puesto && (g.grupo === 'enc' || g.grupo === 'enccoc'); });
   /* El que es encargado y cocina, de noche; los demás encargados
@@ -3696,10 +3702,11 @@ function planRellenar(){
         if (cocs[i] && tt.a <= 13*60 && tt.b >= 15*60) cocDia = true;
         if (cocs[i] && tt.b >= 23*60) cocNoche = true;
       }
-      coste += Math.abs(a7 - p.abren) * 200;
-      coste += Math.max(0, p.alas9 - a9) * 200;
+      /* Si no da para todo, lo primero es cerrar y abrir con los que tocan */
+      coste += Math.abs(a7 - p.abren) * 260;
+      coste += Math.max(0, p.alas9 - a9) * 220;
       coste += Math.max(0, p.comidas - com) * 200;
-      coste += Math.abs(cie - p.cierran) * 200;
+      coste += Math.abs(cie - p.cierran) * 320;
       coste += Math.max(0, com - p.comidas) * 3;
       if (!encCierra && !encFijoCierra) coste += 300;   /* siempre cierra un encargado */
       if (!encAbre) coste += 8;
