@@ -3363,6 +3363,33 @@ var PLAN_GRUPOS = {enc:'Encargado', coc:'Cocina', enccoc:'Enc. + cocina', cam:'C
 var PLAN_T = ['O','M','L','C','K'];
 var PLAN_TNOM = {O:'Apertura', M:'Mañana', L:'Mediodía', C:'Cierre encargado', K:'Cierre'};
 var planDeshacer = null;
+var planDesdeIdx = null;   /* desde qué semana del mes se rellena */
+/* Por defecto, la primera semana que tiene algún día sin poner. */
+function planDesde(){
+  var sem = planSemanas();
+  if (planDesdeIdx !== null && planDesdeIdx < sem.length) return planDesdeIdx;
+  var p = cargarPlan();
+  for (var i = 0; i < sem.length; i++) {
+    var hueco = sem[i].dias.some(function(dia){
+      return visibleStaff().some(function(st){
+        var g = p.gente[st.id]; if (g && g.grupo === 'no') return false;
+        return !gcAt(st.id, dia);
+      });
+    });
+    if (hueco) return (planDesdeIdx = i);
+  }
+  return (planDesdeIdx = 0);
+}
+function planDiasDesde(){
+  var sem = planSemanas(), i = planDesde(), out = [];
+  sem.slice(i).forEach(function(w){ out = out.concat(w.dias); });
+  return out;
+}
+function planCambiarDesde(v){
+  guardarPlan(leerPlanDeLaVentana());
+  planDesdeIdx = parseInt(v, 10) || 0;
+  pintarPlan();
+}
 
 function planDefecto(){
   return {
@@ -3414,12 +3441,30 @@ function planAprender(sid){
 /* Las reglas de cada persona, con lo que falte puesto por defecto. */
 function planPersonas(p){
   var lista = visibleStaff(), cuenta = {enc:0, cam:0};
+  /* Lo que hizo cada uno la semana de antes de empezar: si entraba
+     temprano, a mediodía o por la tarde. */
+  var d0 = planDiasDesde()[0], ini0 = new Date(d0.y, d0.m, d0.d);
+  function previo(sid){
+    var n = {man:0, med:0, noc:0};
+    for (var i = 1; i <= 7; i++) {
+      var f = new Date(ini0.getFullYear(), ini0.getMonth(), ini0.getDate() - i);
+      var c = gcAt(sid, {y:f.getFullYear(), m:f.getMonth(), d:f.getDate()});
+      if (!c || c.estado !== 'trabajo' || !c.inicio) continue;
+      var a = aMin(c.inicio);
+      n[a < 11*60 ? 'man' : a < 15*60 ? 'med' : 'noc']++;
+    }
+    var mejor = null, max = 0;
+    Object.keys(n).forEach(function(k){ if (n[k] > max) { max = n[k]; mejor = k; } });
+    return mejor;
+  }
+  function siguiente(t){ return {man:'med', med:'noc', noc:'man'}[t]; }
   lista.forEach(function(s){
     var g = p.gente[s.id];
     if (g) return;
     var ap = planAprender(s.id);
     g = {grupo: s.role === 'enc' ? 'enc' : s.role === 'coc' ? 'coc' : 'cam', fest: ap.fest, ini:'man', fijoT:'O'};
     if (/^valeriano/i.test(s.name)) g.grupo = 'enccoc';
+    if (/^(melo|martin)/i.test(s.name)) g.cubreCoc = true;
     if (ap.entra && ap.entra === p.turnos.O[0] && g.grupo === 'cam') g.grupo = 'fijo';
     p.gente[s.id] = g;
   });
@@ -3441,6 +3486,15 @@ function planPersonas(p){
     if (g.grupo === 'coc') g.ini = (vc && p.gente[vc.id].ini === 'noc') ? 'man' : 'noc';
     if (g.grupo === 'cam') { g.ini = ['man','med','noc'][cuenta.cam % 3]; cuenta.cam++; }
     g._puesto = 1;
+  });
+  /* La primera vez: que siga la rotación desde lo que hizo cada uno la
+     semana anterior (si se sabe). */
+  lista.forEach(function(s){
+    var g = p.gente[s.id];
+    if (g._previo || g.grupo === 'fijo' || g.grupo === 'no' || g.grupo === 'coc') { g._previo = 1; return; }
+    var t = previo(s.id);
+    if (t) g.ini = siguiente(t);
+    g._previo = 1;
   });
   return lista;
 }
@@ -3470,7 +3524,7 @@ function planPrefs(g, tipo){
 function planRellenar(){
   var p = leerPlanDeLaVentana();
   guardarPlan(p);
-  var dias = diasDelMes(curY, curM);
+  var dias = planDiasDesde();
   var lista = planPersonas(p);
   if (!p.base) p.base = isoDe(lunesDe(new Date(dias[0].y, dias[0].m, dias[0].d)));
   var base = deIso(p.base);
@@ -3502,6 +3556,23 @@ function planRellenar(){
      semana (vacaciones), los que quedan se reparten primero abrir y
      cerrar, y el mediodía solo si hay tres. */
   var tiposSem = {};
+  var semIni = semanasEntre(base, new Date(dias[0].y, dias[0].m, dias[0].d));
+  /* Lo que hizo de verdad cada uno una semana ya puesta. */
+  function tiposReales(lunes){
+    var r = {};
+    lista.forEach(function(s){
+      var n = {man:0, med:0, noc:0}, max = 0;
+      for (var i = 0; i < 7; i++) {
+        var f = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() + i);
+        var c = gcAt(s.id, {y:f.getFullYear(), m:f.getMonth(), d:f.getDate()});
+        if (!c || c.estado !== 'trabajo' || !c.inicio) continue;
+        var a = aMin(c.inicio), fin = aMin(c.fin); if (fin <= a) fin += 1440;
+        n[fin >= 25*60 - 1 ? 'noc' : a < 11*60 ? 'man' : 'med']++;
+      }
+      Object.keys(n).forEach(function(k){ if (n[k] > max) { max = n[k]; r[s.id] = k; } });
+    });
+    return r;
+  }
   function tiposDe(sem, lunes){
     if (tiposSem[sem]) return tiposSem[sem];
     var r = {}, encs = [];
@@ -3518,6 +3589,15 @@ function planRellenar(){
         if (dispo >= 4) encs.push(s.id);
       }
     });
+    /* Dos encargados: alternan. El que cerró la semana anterior, abre. */
+    if (encs.length === 2) {
+      var ant = (sem > semIni) ? tiposDe(sem - 1, new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() - 7)) : tiposReales(new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() - 7));
+      var A = encs[0], B = encs[1];
+      if (ant[A] === 'noc' && ant[B] !== 'noc') { r[A] = 'man'; r[B] = 'noc'; }
+      else if (ant[B] === 'noc' && ant[A] !== 'noc') { r[B] = 'man'; r[A] = 'noc'; }
+      else if (ant[A] === 'man' && ant[B] !== 'man') { r[A] = 'noc'; r[B] = 'man'; }
+      else if (ant[B] === 'man' && ant[A] !== 'man') { r[B] = 'noc'; r[A] = 'man'; }
+    }
     var falta = ['man','noc','med'].slice(0, encs.length);
     var quedan = [];
     encs.forEach(function(id){
@@ -3584,9 +3664,20 @@ function planRellenar(){
     var elec = new Array(n);
     var encs = libres.map(function(l){ return l.g.grupo === 'enc' || l.g.grupo === 'enccoc'; });
     var cocs = libres.map(function(l){ return l.g.grupo === 'coc' || l.g.grupo === 'enccoc'; });
+    var cubre = libres.map(function(l){ return !!l.g.cubreCoc && l.g.grupo !== 'coc' && l.g.grupo !== 'enccoc'; });
+    /* Cocina con lo que ya estaba puesto ese día */
+    var cocFijoD = false, cocFijoN = false;
+    lista.forEach(function(s){
+      var g = p.gente[s.id]; if (!g || (g.grupo !== 'coc' && g.grupo !== 'enccoc')) return;
+      var c = gcAt(s.id, dia); if (!c || c.estado !== 'trabajo' || !c.inicio) return;
+      var a = aMin(c.inicio), b = aMin(c.fin); if (b <= a) b += 1440;
+      if (a <= 13*60 && b >= 15*60) cocFijoD = true;
+      if (b >= 23*60) cocFijoN = true;
+    });
     function evaluar(){
       var a7 = base0.a7, a9 = base0.a9, com = base0.com, cie = base0.cie, coste = 0, extra = 0;
-      var encCierra = false, encAbre = false, cocDia = false, cocNoche = false, Lhay = false;
+      var encCierra = false, encAbre = false, cocDia = cocFijoD, cocNoche = cocFijoN, Lhay = false;
+      var cubD = false, cubN = false, encCierran = 0, cubNenc = false;
       for (var i = 0; i < n; i++) {
         var t = elec[i], r = libres[i].prefs.indexOf(t), tt = T[t];
         coste += r * 4;
@@ -3595,7 +3686,9 @@ function planRellenar(){
         if (tt.a <= 13*60 && tt.b >= 15*60) com++;
         if (tt.b >= 25*60 - 1) cie++;
         if (t === 'L') Lhay = true;
-        if (encs[i] && tt.b >= 25*60 - 1) encCierra = true;
+        if (encs[i] && tt.b >= 25*60 - 1) { encCierra = true; encCierran++; }
+        if (cubre[i] && tt.a <= 13*60 && tt.b >= 15*60) cubD = true;
+        if (cubre[i] && tt.b >= 23*60) { if (encs[i] && tt.b >= 25*60 - 1) cubNenc = true; else cubN = true; }
         if (encs[i] && tt.a <= 7*60) encAbre = true;
         if (cocs[i] && tt.a <= 13*60 && tt.b >= 15*60) cocDia = true;
         if (cocs[i] && tt.b >= 23*60) cocNoche = true;
@@ -3607,8 +3700,11 @@ function planRellenar(){
       coste += Math.max(0, com - p.comidas) * 3;
       if (!encCierra && !encFijoCierra) coste += 300;   /* siempre cierra un encargado */
       if (!encAbre) coste += 8;
-      if (!cocDia) coste += 30;
-      if (!cocNoche) coste += 15;
+      /* Cocina: el cocinero, o si no, uno de los que pueden cubrirla. Un
+         encargado que cubre la cocina no cuenta como el que cierra. */
+      if (cubNenc && encCierran >= 2) cubN = true;
+      if (!cocDia) coste += cubD ? 6 : 250;
+      if (!cocNoche) coste += cubN ? 6 : 250;
       if (!Lhay) coste += 6;
       return {coste:coste, a7:a7, a9:a9, com:com, cie:cie};
     }
@@ -3657,14 +3753,16 @@ function planRellenar(){
     /* Sin cocinero en un turno: lo cubre un camarero que ya esté en
        ese turno ese día, y se le apunta «Cocina» en la nota. */
     function cubrirCocina(deNoche){
-      var cand = libres.filter(function(l){ return l.g.grupo === 'cam'; }).map(function(l){
+      var cand = libres.filter(function(l){ return l.g.cubreCoc && l.g.grupo !== 'coc' && l.g.grupo !== 'enccoc'; }).map(function(l){
         var c = gcAt(l.s.id, dia), a = aMin(c.inicio), b = aMin(c.fin); if (b <= a) b += 1440;
         var vale = deNoche ? b >= 23*60 : (a <= 13*60 && b >= 15*60);
-        return vale ? {l:l, c:c, rank: deNoche ? 0 : (a >= 9*60 ? 0 : 1)} : null;
+        var esEnc = l.g.grupo === 'enc';
+        return vale ? {l:l, c:c, rank: (esEnc ? 2 : 0) + (deNoche ? 0 : (a >= 9*60 ? 0 : 1))} : null;
       }).filter(Boolean).sort(function(x, y){ return x.rank - y.rank; });
       if (!cand.length) return null;
       cand[0].c.nota = 'Cocina';
       coberturas.push(DC_FULL[fecha.getDay()] + ' ' + etiquetaDia(dia, curM) + ': ' + cand[0].l.s.name + ' cubre la cocina ' + (deNoche ? 'por la noche' : 'a mediodía'));
+      cand.forEach(function(x){ x.usado = true; });
       return cand[0].l.s.name;
     }
     if (libres.length) {
@@ -3681,7 +3779,7 @@ function planRellenar(){
   var caja = document.getElementById('plan-res');
   if (caja) {
     caja.innerHTML = '<b style="color:var(--gold2)">Hecho: ' + puestos + ' turnos puestos.</b> Revísalo y cambia lo que quieras tocando el día.' +
-      (coberturas.length ? '<div style="margin-top:6px;color:var(--text2)">Cocina cubierta por camareros (llevan la nota «Cocina»):<br>' + coberturas.map(esc).join('<br>') + '</div>' : '') +
+      (coberturas.length ? '<div style="margin-top:6px;color:var(--text2)">Cocina cubierta (llevan la nota «Cocina»):<br>' + coberturas.map(esc).join('<br>') + '</div>' : '') +
       (avisos.length ? '<div style="margin-top:6px;color:#e8a020">Para que lo mires:<br>' + avisos.map(esc).join('<br>') + '</div>' : '');
   }
   var bd = document.getElementById('plan-deshacer'); if (bd) bd.style.display = '';
@@ -3715,10 +3813,11 @@ function cerrarPlan(){ var ov = document.getElementById('planov'); if (ov) ov.cl
 function pintarPlan(){
   var p = cargarPlan();
   var lista = planPersonas(p);
-  var dias = diasDelMes(curY, curM);
+  var dias = planDiasDesde();
   var primero = new Date(dias[0].y, dias[0].m, dias[0].d);
   var sem0 = p.base ? semanasEntre(deIso(p.base), primero) : 0;
-  var inp = 'background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 6px;font-family:inherit;font-size:.8rem';
+  var estrecho = window.innerWidth < 520, pd = '3px';
+  var inp = 'background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:' + (estrecho ? '4px 2px' : '5px 6px') + ';font-family:inherit;font-size:' + (estrecho ? '.72rem' : '.8rem');
   var tit = 'font-size:.66rem;color:var(--gold);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 6px;font-weight:700';
   var dsel = function(v){
     var o = '<option value="-1"' + (v === -1 ? ' selected' : '') + '>—</option>';
@@ -3728,26 +3827,32 @@ function pintarPlan(){
   var h = '<h3>Hacer horario</h3>' +
     '<div style="font-size:.8rem;color:var(--text2);line-height:1.5">Rellena <b style="color:var(--text)">' + MESES[curM] + ' ' + curY + ' (' + esc(rangoDelMes(curY, curM)) + ')</b> ' +
       'con turnos que rotan cada semana. Solo toca los días vacíos: lo que ya tengas puesto se queda. Luego cambias lo que quieras tocando el día.</div>' +
+    '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.8rem;color:var(--text2)">Rellenar desde la semana del ' +
+      '<select onchange="planCambiarDesde(this.value)" style="' + inp + '">' + planSemanas().map(function(w, i){
+        return '<option value="' + i + '"' + (i === planDesde() ? ' selected' : '') + '>' + esc(w.txt) + '</option>'; }).join('') + '</select></label>' +
 
     '<div style="' + tit + '">Personas</div>' +
     '<div style="font-size:.72rem;color:var(--text2);margin-bottom:6px">«1ª semana» es el turno que hace cada uno la semana del ' +
-      etiquetaDia(dias[0], curM) + '; a partir de ahí rota solo. Encargados: abre → mediodía → cierra. Camareros: mañana → mediodía → noche. Cocina: mañana / noche.</div>' +
+      etiquetaDia(dias[0], curM) + '; a partir de ahí rota solo. Encargados: abre → mediodía → cierra. Camareros: mañana → mediodía → noche. Cocina: mañana / noche. «Cocina» marca quién puede cubrirla cuando falta cocinero.</div>' +
+    (function(){ pd = estrecho ? '2px 1px' : '3px'; return ''; })() +
     '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:.8rem">' +
-    '<tr style="color:var(--text2);font-size:.68rem;text-align:left"><th style="padding:3px">Nombre</th><th style="padding:3px">Grupo</th><th style="padding:3px">Festivo</th><th style="padding:3px">1ª semana</th></tr>';
+    '<tr style="color:var(--text2);font-size:.68rem;text-align:left"><th style="padding:' + pd + '">Nombre</th><th style="padding:' + pd + '">Grupo</th><th style="padding:' + pd + '">Festivo</th><th style="padding:' + pd + '">1ª semana</th><th style="padding:' + pd + '" title="Puede cubrir la cocina cuando falta cocinero">Cocina</th></tr>';
   lista.forEach(function(s){
     var g = p.gente[s.id];
     var tipo0 = planTipo(g, sem0) || 'man';
-    h += '<tr data-pid="' + s.id + '"><td style="padding:3px;white-space:nowrap;color:' + RCOL[s.role] + ';font-weight:600">' + esc(s.name) + '</td>' +
-      '<td style="padding:3px"><select data-k="grupo" style="' + inp + '">' + Object.keys(PLAN_GRUPOS).map(function(k){
+    h += '<tr data-pid="' + s.id + '"><td style="padding:' + pd + ';white-space:nowrap;color:' + RCOL[s.role] + ';font-weight:600;font-size:' + (estrecho ? '.72rem' : '.8rem') + ';max-width:' + (estrecho ? '62px' : 'none') + ';overflow:hidden;text-overflow:ellipsis">' + esc(s.name) + '</td>' +
+      '<td style="padding:' + pd + '"><select data-k="grupo" style="' + inp + '">' + Object.keys(PLAN_GRUPOS).map(function(k){
         return '<option value="' + k + '"' + (g.grupo === k ? ' selected' : '') + '>' + PLAN_GRUPOS[k] + '</option>'; }).join('') + '</select></td>' +
-      '<td style="padding:3px"><select data-k="fest" style="' + inp + '">' + dsel(g.fest) + '</select></td>' +
-      '<td style="padding:3px">' +
+      '<td style="padding:' + pd + '"><select data-k="fest" style="' + inp + '">' + dsel(g.fest) + '</select></td>' +
+      '<td style="padding:' + pd + '">' +
         '<select data-k="ini" style="' + inp + (g.grupo === 'fijo' || g.grupo === 'no' ? ';display:none' : '') + '">' + Object.keys(PLAN_TIPOS).map(function(k){
           if (g.grupo === 'coc' && k === 'med') return '';
           return '<option value="' + k + '"' + (tipo0 === k ? ' selected' : '') + '>' + PLAN_TIPOS[k] + '</option>'; }).join('') + '</select>' +
         '<select data-k="fijoT" style="' + inp + (g.grupo === 'fijo' ? '' : ';display:none') + '">' + PLAN_T.map(function(t){
           return '<option value="' + t + '"' + ((g.fijoT || 'O') === t ? ' selected' : '') + '>' + p.turnos[t][0].replace(':00','') + '-' + p.turnos[t][1].replace(':00','') + '</option>'; }).join('') + '</select>' +
-      '</td></tr>';
+      '</td>' +
+      '<td style="padding:' + pd + ';text-align:center"><input type="checkbox" data-k="cubreCoc" title="Puede cubrir la cocina"' +
+        (g.cubreCoc ? ' checked' : '') + ((g.grupo === 'coc' || g.grupo === 'enccoc') ? ' disabled' : '') + ' style="width:18px;height:18px;accent-color:#c9a84c"></td></tr>';
   });
   h += '</table></div>' +
 
@@ -3774,7 +3879,7 @@ function pintarPlan(){
     }).join('') + '</div>' +
     '<div id="plan-res" style="margin-top:12px;font-size:.78rem;line-height:1.5"></div>' +
     '<div class="mact" style="margin-top:12px;flex-wrap:wrap">' +
-      '<button class="bp" onclick="planRellenar()">&#129668; Rellenar ' + MESES[curM] + '</button>' +
+      '<button class="bp" onclick="planRellenar()">&#129668; Rellenar desde el ' + dias[0].d + ' ' + MESES[dias[0].m].slice(0,3).toLowerCase() + '</button>' +
       '<button class="bs" id="plan-deshacer" onclick="planDeshacerYa()"' + (planDeshacer ? '' : ' style="display:none"') + '>Deshacer</button>' +
       '<button class="bs" onclick="guardarPlan(leerPlanDeLaVentana());toast(\'Reglas guardadas\')">Guardar reglas</button>' +
       '<button class="bs" onclick="cerrarPlan()">Cerrar</button>' +
@@ -3798,7 +3903,7 @@ function leerPlanDeLaVentana(){
   if (!cuerpo) return p;
   cuerpo.querySelectorAll('input[data-t]').forEach(function(i){ if (i.value) p.turnos[i.dataset.t][+i.dataset.i] = i.value; });
   cuerpo.querySelectorAll('input[data-n]').forEach(function(i){ p[i.dataset.n] = Math.max(0, parseInt(i.value, 10) || 0); });
-  var dias = diasDelMes(curY, curM);
+  var dias = planDiasDesde();
   p.base = isoDe(lunesDe(new Date(dias[0].y, dias[0].m, dias[0].d)));
   cuerpo.querySelectorAll('tr[data-pid]').forEach(function(tr){
     var sid = tr.dataset.pid, g = p.gente[sid] || {};
@@ -3807,7 +3912,8 @@ function leerPlanDeLaVentana(){
     g.ini = tr.querySelector('[data-k="ini"]').value || 'man';
     if (g.grupo === 'coc' && g.ini === 'med') g.ini = 'man';
     g.fijoT = tr.querySelector('[data-k="fijoT"]').value || 'O';
-    g._puesto = 1;
+    g.cubreCoc = !!tr.querySelector('[data-k="cubreCoc"]').checked;
+    g._puesto = 1; g._previo = 1;
     p.gente[sid] = g;
   });
   return p;
