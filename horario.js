@@ -1122,17 +1122,61 @@ function vacSumar(td){
     vacArrastre.vistos[kk] = q; vacPintarPrevia(c);
   }
 }
-document.addEventListener('pointerdown', function(ev){
-  var td = ev.target && ev.target.closest ? ev.target.closest('td[data-vac]') : null;
-  if (!td || (ev.button != null && ev.button > 0)) return;
-  ev.preventDefault();
+function vacEmpezar(td){
   var p = vacPartes(td);
   var celda = celdaDe(p.sid, {y:p.y, m:p.m, d:p.d});
   var est = celda && celda.estado ? celda.estado : 'libre';
   vacArrastre = {sid:p.sid, accion:(est === vacTipo ? 'quitar' : 'poner'), vistos:{}, primera:td};
   vacSumar(td);
+}
+/* Con el dedo, deslizar mueve la tabla y un toque marca un día. Para
+   muchos días de golpe está «Varios días»: se toca el primero y el
+   último de la misma persona, y se ponen (o se quitan, si el primero ya
+   lo tenía) todos los de en medio. */
+var vacVarios = false, vacInicio = null;
+function vacTd(k){ return document.querySelector('td[data-vac="' + k + '"]'); }
+function toggleVacVarios(){
+  vacVarios = !vacVarios; vacQuitarInicio();
+  renderVacaciones();
+  toast(vacVarios ? 'Toca el primer día y luego el último' : 'Varios días: desactivado');
+}
+function vacQuitarInicio(){
+  if (vacInicio) { var t = vacTd(vacInicio); if (t) { t.style.boxShadow = ''; } }
+  vacInicio = null;
+}
+function vacToqueVarios(td){
+  var k = td.getAttribute('data-vac');
+  if (!vacInicio) {
+    vacInicio = k;
+    td.style.boxShadow = 'inset 0 0 0 3px var(--gold)';
+    toast('Ahora toca el último día');
+    return;
+  }
+  var tdIni = vacTd(vacInicio);
+  if (!tdIni || vacPartes(tdIni).sid !== vacPartes(td).sid) {
+    vacQuitarInicio(); vacToqueVarios(td);   // otra persona: se empieza de nuevo desde aquí
+    return;
+  }
+  vacInicio = null; vacVarios = false;
+  vacEmpezar(tdIni); vacSumar(td); vacTerminar();
+}
+var vacToque = null;
+document.addEventListener('pointerdown', function(ev){
+  var td = ev.target && ev.target.closest ? ev.target.closest('td[data-vac]') : null;
+  if (!td || (ev.button != null && ev.button > 0)) return;
+  if (ev.pointerType === 'touch' || vacVarios) {
+    vacToque = {td:td, x:ev.clientX, y:ev.clientY};
+    if (ev.pointerType !== 'touch') ev.preventDefault();
+    return;
+  }
+  ev.preventDefault();
+  vacEmpezar(td);
 });
 document.addEventListener('pointermove', function(ev){
+  if (vacToque) {
+    if (Math.abs(ev.clientX - vacToque.x) > 10 || Math.abs(ev.clientY - vacToque.y) > 10) vacToque = null;
+    return;
+  }
   if (!vacArrastre) return;
   vacSumar(vacCeldaEn(ev.clientX, ev.clientY));
 });
@@ -1164,8 +1208,19 @@ function vacTerminar(){
         (quitados ? ' (se han quitado ' + quitados + (quitados === 1 ? ' turno)' : ' turnos)') : ''));
   renderTable(); renderCov(); renderHours(); renderAusencias(); renderVacaciones(); pegarCabeceras();
 }
-document.addEventListener('pointerup', vacTerminar);
-document.addEventListener('pointercancel', vacTerminar);
+document.addEventListener('pointerup', function(ev){
+  if (vacToque) {
+    var t = vacToque; vacToque = null;
+    if (vacVarios) { vacToqueVarios(t.td); return; }
+    var u = vacPartes(t.td); marcarDiaVac(u.sid, u.y, u.m, u.d);
+    return;
+  }
+  vacTerminar();
+});
+document.addEventListener('pointercancel', function(){
+  if (vacToque) { vacToque = null; return; }
+  vacTerminar();
+});
 
 function marcarDiaVac(sid, y, m, d){
   var dia = {y:y, m:m, d:d};
@@ -1485,7 +1540,13 @@ function renderVacaciones(){
         'border-radius:14px;border:1px solid ' + (on ? e.puro : 'var(--border)') + ';' +
         'background:' + (on ? e.bg : 'transparent') + ';color:' + (on ? e.col : 'var(--text2)') + ';">' +
         '<span style="font-weight:900">' + e.letra + '</span> ' + e.uno + '</button>';
-    }).join('') + '<span style="margin-left:auto;align-self:center">' + leyendaFiestas() + '</span>';
+    }).join('') +
+      '<button onclick="toggleVacVarios()" title="Toca el primer día y el último: se ponen o se quitan todos los de en medio" ' +
+        'style="cursor:pointer;font-family:inherit;font-size:.74rem;font-weight:700;padding:5px 12px;border-radius:14px;' +
+        'border:1px ' + (vacVarios ? 'solid var(--gold)' : 'dashed var(--border)') + ';' +
+        'background:' + (vacVarios ? 'var(--gold)' : 'transparent') + ';color:' + (vacVarios ? 'var(--bg)' : 'var(--text2)') + ';">' +
+        '&#8596; Varios d&iacute;as' + (vacVarios ? ' &middot; activo' : '') + '</button>' +
+      '<span style="margin-left:auto;align-self:center">' + leyendaFiestas() + '</span>';
   }
 
   if (!all.length) {
@@ -1581,7 +1642,7 @@ function renderVacaciones(){
             : ' - poner ' + VAC_EST[vacTipo].uno.toLowerCase());
       return '<td data-vac="' + s.id + '|' + dia.y + '|' + dia.m + '|' + dia.d + '" ' +
              'title="' + esc(s.name) + ' - ' + etiquetaDia(dia, curM) + pista + '" ' +
-             'style="cursor:pointer;touch-action:none;text-align:center;padding:4px 2px;border:1px solid var(--border);' +
+             'style="cursor:pointer;touch-action:manipulation;text-align:center;padding:4px 2px;border:1px solid var(--border);' +
              'background:' + fondo + ';color:' + color + ';font-weight:700;font-size:.78rem;user-select:none' +
              /* lo que no es lo que se esta mirando, mas flojo */
              (e && est !== vacTipo ? ';opacity:.4' : '') + '">' +
@@ -1690,7 +1751,7 @@ function renderVacAno(tbl, all){
       celdas += '<td data-vac="' + s.id + '|' + dia.y + '|' + dia.m + '|' + dia.d + '" ' +
         'title="' + esc(s.name) + ' - ' + DC_FULL[dia.dow] + ' ' + dia.d + ' de ' + MESES[dia.m] +
         (es ? ' - ' + es.uno : '') + '" ' +
-        'style="cursor:pointer;touch-action:none;height:24px;padding:0;text-align:center;font-size:.6rem;font-weight:800;user-select:none;' +
+        'style="cursor:pointer;touch-action:manipulation;height:24px;padding:0;text-align:center;font-size:.6rem;font-weight:800;user-select:none;' +
         'border:1px solid var(--border);' + (dia.d === 1 ? 'border-left:2px solid var(--gold);' : '') +
         'background:' + fondo + ';color:' + (es ? es.col : 'transparent') +
         (es && est !== vacTipo ? ';opacity:.4' : '') + '">' + (es ? es.letra : '') + '</td>';
