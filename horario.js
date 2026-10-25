@@ -2220,6 +2220,26 @@ function isW(ini, fin, slot) {
   var s0 = slot*60, s1 = slot*60+59;
   return a < b ? (s0 < b && s1 >= a) : (s1 >= a || s0 < b);
 }
+/* Cuántos minutos de esa hora cubre el tramo: 13:00-20:30 cubre la hora
+   de las 20 solo a medias, y así se cuenta media persona. */
+function minEnHora(ini, fin, slot) {
+  if (!ini || !fin) return 0;
+  var a = parseInt(ini.split(':')[0])*60 + parseInt(ini.split(':')[1]);
+  var b = parseInt(fin.split(':')[0])*60 + parseInt(fin.split(':')[1]);
+  if (b <= a) b += 1440;                     // el que sale de madrugada
+  var tot = 0;
+  [slot*60, slot*60 + 1440].forEach(function(s0){
+    tot += Math.max(0, Math.min(b, s0 + 60) - Math.max(a, s0));
+  });
+  return Math.min(60, tot);
+}
+/* 1,5 personas se escribe 1½; media, ½ */
+function personasTxt(n) {
+  var e = Math.floor(n + 0.001), r = n - e;
+  var medio = r > 0.2 && r < 0.8;
+  if (r >= 0.8) { e++; }
+  return (e > 0 ? e : '') + (medio ? '&frac12;' : '') || '0';
+}
 function cbg(n) {
   if (n===0) return {bg:'#16140f',fg:'#3a3530'};
   if (n<=2)  return {bg:'#0d2e14',fg:'#ffffff'};
@@ -2246,10 +2266,12 @@ function renderCov() {
       var cell = gcAt(s.id, dia);
       if (!cell||cell.estado!=='trabajo') return;
       SLOTS.forEach(function(slot){
-        if (isW(cell.inicio, cell.fin, slot) ||
-            (esPartido(cell) && isW(cell.inicio2, cell.fin2, slot))) {
-          cov[slot][i]++;
-          who[slot][i].push(s.name.split(' ')[0]);
+        var mins = minEnHora(cell.inicio, cell.fin, slot) +
+                   (esPartido(cell) ? minEnHora(cell.inicio2, cell.fin2, slot) : 0);
+        mins = Math.min(60, mins);
+        if (mins > 0) {
+          cov[slot][i] += mins / 60;
+          who[slot][i].push(s.name.split(' ')[0] + (mins < 60 ? ' (' + mins + ' min)' : ''));
         }
       });
     });
@@ -2275,12 +2297,12 @@ function renderCov() {
     dias.forEach(function(dia, i){
       var n   = cov[slot][i];
       var col = cbg(n);
-      var tip = n===0?'Nadie':n+' persona'+(n>1?'s':'')+': '+who[slot][i].join(', ');
+      var tip = n===0?'Nadie':who[slot][i].length+' persona'+(who[slot][i].length>1?'s':'')+': '+who[slot][i].join(', ');
       /* Solo el numero: el «pers.» debajo de cada celda no decia nada que
          no dijera ya el titulo de la tabla, y hacia la rejilla el doble
          de alta. */
       html += '<td title="'+lbl+' Dia '+etiquetaDia(dia, curM)+' - '+tip+'" style="text-align:center;padding:'+(apr?'0':'3px')+' 2px;background:'+col.bg+';border:1px solid rgba(46,43,34,.35);cursor:default;transition:filter .1s" onmouseover="this.style.filter=\'brightness(1.5)\'" onmouseout="this.style.filter=\'none\'">'
-            + '<div style="color:'+col.fg+';font-size:'+(n>0?(altoFila==='apretado'?'.8rem':apr?'.95rem':'1.05rem'):'.75rem')+';font-weight:'+(n>0?'900':'400')+';line-height:1.05">'+(n>0?n:'.') +'</div>'
+            + '<div style="color:'+col.fg+';font-size:'+(n>0?(altoFila==='apretado'?'.8rem':apr?'.95rem':'1.05rem'):'.75rem')+';font-weight:'+(n>0?'900':'400')+';line-height:1.05">'+(n>0?personasTxt(n):'.') +'</div>'
             + '</td>';
     });
     html += '</tr>';
