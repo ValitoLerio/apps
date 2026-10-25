@@ -243,6 +243,7 @@
   <button class="sb i" id="bi" onclick="setSeason('invierno')">&#10052;&#65039; Invierno</button>
   <button class="tbtn" style="border-color:#5b9bd5;color:#5b9bd5" onclick="openAddModal()">+ Personal</button>
   <button class="tbtn" id="bwk" style="border-color:#27ae60;color:#27ae60" onclick="toggleWeekMode()">&#128197; Vista semana</button>
+  <button class="tbtn" style="border-color:#c9a84c;color:#e8c96a" onclick="abrirPlan()" title="Rellenar el mes con turnos rotativos por semanas, y borrar semanas">&#129668; Hacer horario</button>
   <button class="tbtn" id="banch" style="border-color:var(--gold);color:var(--gold)" onclick="cambiarAncho()" title="Lo ancho que es cada d&iacute;a en el cuadrante del mes">&#8596; Ancho</button>
   <button class="tbtn" id="bgoma" style="border-color:#e87c6f;color:#e87c6f" onclick="ponerGoma()" title="Borrar varios d&iacute;as de una vez: p&aacute;sale el dedo o el rat&oacute;n por encima">&#129529; Borrar</button>
   <button class="tbtn" id="balto" style="border-color:var(--gold);color:var(--gold)" onclick="cambiarAlto()" title="Lo alto que es cada fila: apretando caben los doce empleados de una vez">&#8597; Normal</button>
@@ -582,7 +583,7 @@
 
 
 
-<script src="sync.js?v=202610252025"></script>
+<script src="sync.js?v=202610252030"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');

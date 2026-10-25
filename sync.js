@@ -43,7 +43,7 @@ var VIGILANCIA = 60000;   // cada cuánto se mira si hay versión nueva
 // Qué claves de localStorage pertenecen a cada app
 var SECCIONES = {
   piso:    ['piso_cfg','piso_meses','piso_gastos','piso_inq','piso_data_version'],
-  horario: ['rsch','rcam','rhid','rvac','rvacmig','rtheme','rwa','rancho'],
+  horario: ['rsch','rcam','rhid','rvac','rvacmig','rtheme','rwa','rancho','rplan'],
   comanda: ['comanda.ledger.v1'],
   casa:    ['casa.libro.v1'],
   caja:    ['caja.libro.v1'],
