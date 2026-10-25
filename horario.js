@@ -2338,7 +2338,7 @@ function openCell(sid, day, event, mo, yr) {
       togglePartido(esPartido(cell));
       var nota = document.getElementById('nota'); if (nota) nota.value = cell&&cell.nota?cell.nota:'';
       var hl = document.getElementById('hl');
-      if (cell&&cell.inicio) calcFin(); else if (hl) hl.textContent = 'Introduce la hora de entrada';
+      if (cell&&cell.inicio) calcFin(cell.fin ? 'fin' : undefined); else if (hl) hl.textContent = 'Introduce la hora de entrada';
       if (ar) { ar.style.display='block'; var hIni=cell&&cell.inicio?parseInt(cell.inicio.split(':')[0]):13; var autoA=hIni>=7&&hIni<=12?'flex-start':hIni>=13&&hIni<=15?'center':'flex-end'; selAlign(cell&&cell.align?cell.align:autoA); }
     } else {
       ta.style.display = 'none';
@@ -2364,7 +2364,21 @@ function openCell(sid, day, event, mo, yr) {
   }
 }
 
-function calcFin() {
+/* La salida media hora antes o después, para los turnos como de 12 a
+   16:30. */
+function moverFin(min) {
+  var felm = document.getElementById('fin'); if (!felm) return;
+  var base = felm.value || (document.getElementById('ini')||{}).value;
+  if (!base) { var hl = document.getElementById('hl'); if (hl) hl.textContent = 'Pon primero la hora de entrada'; return; }
+  var p = base.split(':'), t = (parseInt(p[0])*60 + parseInt(p[1]) + min + 1440) % 1440;
+  felm.value = (t<600?'0':'') + Math.floor(t/60) + ':' + (t%60<10?'0':'') + (t%60);
+  calcFin('fin');
+}
+function horasBonitas(min) {
+  var h = Math.round(min/6)/10;
+  return String(h).replace('.', ',');
+}
+function calcFin(desde) {
   var ini = document.getElementById('ini');
   if (!ini||!active) return;
   var v = ini.value; if (!v) return;
@@ -2376,7 +2390,7 @@ function calcFin() {
   /* Con turno partido la salida no se puede adivinar: el primer tramo no
      dura la jornada entera. Se escriben los dos a mano y aqui se dice lo
      que suman contra las horas que tocan. */
-  if (partido) {
+  if (partido || desde === 'fin') {
     fs = felm ? felm.value : '';
   } else {
     var p = v.split(':');
@@ -2397,7 +2411,9 @@ function calcFin() {
                    ' - partido: '+fmtH(v)+'-'+fmtH(fs)+
                    (i2&&f2 ? ' y '+fmtH(i2)+'-'+fmtH(f2) : ' y falta el segundo tramo');
   } else {
-    hl.innerHTML = '<span style="color:var(--gold2);font-weight:600">'+h+'h</span> - '+rl+' - '+(curS==='verano'?'Verano':'Invierno')+' - '+fmtH(v)+' to '+fmtH(fs);
+    var real = minutosDe(v, fs);
+    hl.innerHTML = '<span style="color:var(--gold2);font-weight:600">'+horasBonitas(real)+'h</span>'+
+      (Math.abs(real - h*60) > 0 ? ' de '+h+'h' : '')+' - '+rl+' - '+(curS==='verano'?'Verano':'Invierno')+' - '+fmtH(v)+' a '+fmtH(fs);
   }
 }
 
@@ -2453,7 +2469,7 @@ function selE(est) {
   if (est === 'trabajo') {
     ta.style.display = 'block';
     var ini = document.getElementById('ini'); var hl = document.getElementById('hl');
-    if (ini&&ini.value) calcFin(); else if (hl) hl.textContent = 'Introduce la hora de entrada';
+    if (ini&&ini.value) calcFin((document.getElementById('fin')||{}).value ? 'fin' : undefined); else if (hl) hl.textContent = 'Introduce la hora de entrada';
     if (ar) { ar.style.display='block'; selAlign(pop._align||'center'); }
   } else {
     ta.style.display = 'none';
