@@ -167,6 +167,20 @@
   #cargando .sub{font-size:.8rem;color:var(--text2);max-width:34ch;line-height:1.5}
   #cargando a{color:var(--gold);font-size:.82rem}
 
+  /* Móvil tumbado: la pantalla es baja y las barras de arriba (ajustes,
+     meses, bloques) se comían casi todo. Ahí la página entera se desliza:
+     al bajar, las barras se van y el cuadrante ocupa la pantalla. */
+  @media (orientation:landscape) and (max-height:520px){
+    html,body{height:auto;}
+    body{display:block;overflow:auto;}
+    #cuerpo{overflow:visible;}
+    #barra-bloques{position:static !important;}
+    #cov > :first-child, #hours-section > :first-child,
+    #ausencias-section > :first-child, #vac-section > :first-child{position:static !important;}
+    .schedule-area{max-height:100vh;max-height:100dvh;}
+    .topbar{min-height:0;padding:3px 10px;}
+  }
+
   /* Bloques que se abren y se cierran desde la barra de arriba */
   #barra-bloques{display:flex;gap:6px;flex-wrap:wrap;padding:7px 14px;background:var(--surface);
     border-bottom:1px solid var(--border);position:sticky;top:0;z-index:40}
@@ -568,7 +582,7 @@
 
 
 
-<script src="sync.js?v=202610251915"></script>
+<script src="sync.js?v=202610251925"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
