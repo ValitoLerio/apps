@@ -3530,10 +3530,10 @@ function planPrefs(g, tipo){
 }
 
 /* Rellena el mes que se esta viendo. */
-function planRellenar(soloUna){
+function planRellenar(){
   var p = leerPlanDeLaVentana();
   guardarPlan(p);
-  var dias = soloUna ? planSemanas()[planDesde()].dias : planDiasDesde();
+  var dias = planDiasDesde();
   var lista = planPersonas(p);
   if (!p.base) p.base = isoDe(lunesDe(new Date(dias[0].y, dias[0].m, dias[0].d)));
   var base = deIso(p.base);
@@ -3837,7 +3837,7 @@ function pintarPlan(){
   var h = '<h3>Hacer horario</h3>' +
     '<div style="font-size:.8rem;color:var(--text2);line-height:1.5">Rellena <b style="color:var(--text)">' + MESES[curM] + ' ' + curY + ' (' + esc(rangoDelMes(curY, curM)) + ')</b> ' +
       'con turnos que rotan cada semana. Solo toca los días vacíos: lo que ya tengas puesto se queda. Luego cambias lo que quieras tocando el día.</div>' +
-    '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.8rem;color:var(--text2)">Semana del ' +
+    '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.8rem;color:var(--text2)">Rellenar desde la semana del ' +
       '<select onchange="planCambiarDesde(this.value)" style="' + inp + '">' + planSemanas().map(function(w, i){
         return '<option value="' + i + '"' + (i === planDesde() ? ' selected' : '') + '>' + esc(w.txt) + '</option>'; }).join('') + '</select></label>' +
 
@@ -3889,8 +3889,7 @@ function pintarPlan(){
     }).join('') + '</div>' +
     '<div id="plan-res" style="margin-top:12px;font-size:.78rem;line-height:1.5"></div>' +
     '<div class="mact" style="margin-top:12px;flex-wrap:wrap">' +
-      '<button class="bp" onclick="planRellenar()">&#129668; Desde el ' + dias[0].d + ' ' + MESES[dias[0].m].slice(0,3).toLowerCase() + ' hasta fin de mes</button>' +
-      '<button class="bp" style="background:transparent;color:var(--gold2);border:1px solid var(--gold)" onclick="planRellenar(true)">Solo la semana del ' + esc(planSemanas()[planDesde()].txt) + '</button>' +
+      '<button class="bp" onclick="planRellenar()">&#129668; Rellenar desde el ' + dias[0].d + ' ' + MESES[dias[0].m].slice(0,3).toLowerCase() + '</button>' +
       '<button class="bs" id="plan-deshacer" onclick="planDeshacerYa()"' + (planDeshacer ? '' : ' style="display:none"') + '>Deshacer</button>' +
       '<button class="bs" onclick="guardarPlan(leerPlanDeLaVentana());toast(\'Reglas guardadas\')">Guardar reglas</button>' +
       '<button class="bs" onclick="cerrarPlan()">Cerrar</button>' +
