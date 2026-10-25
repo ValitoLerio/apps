@@ -3460,11 +3460,14 @@ function planPersonas(p){
   function siguiente(t){ return {man:'med', med:'noc', noc:'man'}[t]; }
   lista.forEach(function(s){
     var g = p.gente[s.id];
+    /* Luis libra los lunes (lo dijo Lito); solo si no tiene otro puesto */
+    if (g && g.fest === -1 && /^luis/i.test(s.name)) g.fest = 1;
     if (g) return;
     var ap = planAprender(s.id);
     g = {grupo: s.role === 'enc' ? 'enc' : s.role === 'coc' ? 'coc' : 'cam', fest: ap.fest, ini:'man', fijoT:'O'};
     if (/^valeriano/i.test(s.name)) g.grupo = 'enccoc';
     if (/^(melo|martin)/i.test(s.name)) g.cubreCoc = true;
+    if (g.fest === -1 && /^luis/i.test(s.name)) g.fest = 1;
     if (ap.entra && ap.entra === p.turnos.O[0] && g.grupo === 'cam') g.grupo = 'fijo';
     p.gente[s.id] = g;
   });
