@@ -3982,7 +3982,7 @@ function vacReglas(){
   if (v.cocina === undefined) v.cocina = true;
   v.gente = v.gente || {};
   planPersonas(p);
-  visibleStaff().forEach(function(s){
+  staff().forEach(function(s){
     if (v.gente[s.id]) return;
     v.gente[s.id] = {
       entra: !/^luis/i.test(s.name),
@@ -4002,6 +4002,20 @@ function abrirVacas(){
     ov.addEventListener('click', function(e){ if (e.target === ov) ov.classList.remove('show'); });
   }
   var pv = vacReglas();
+  /* Cada año guarda sus tandas: al volver a un año salen como se dejaron */
+  pv.vac.porAno = pv.vac.porAno || {};
+  if (pv.vac.tandas && pv.vac.tandas.length) pv.vac.porAno[String(pv.vac.desde).slice(0,4)] = {tandas:pv.vac.tandas, desde:pv.vac.desde, desde2:pv.vac.desde2};
+  var guardado = pv.vac.porAno[String(curY)];
+  if (guardado && guardado.tandas && guardado.tandas.length) {
+    pv.vac.tandas = guardado.tandas; pv.vac.desde = guardado.desde; pv.vac.desde2 = guardado.desde2; guardarPlan(pv);
+  }
+  /* ¿Falta en las tandas alguien que coge vacaciones (o sobra alguien que ya no)? Se rehacen */
+  var enTandas = {}; (pv.vac.tandas || []).forEach(function(t){ t.ids.forEach(function(id){ enTandas[id] = 1; }); });
+  var cambio = staff().some(function(st){ var g = pv.vac.gente[st.id]; return g && (!!g.entra !== !!enTandas[st.id]); });
+  if (cambio && pv.vac.tandas && pv.vac.tandas.length && String(pv.vac.desde).slice(0,4) === String(curY)) {
+    pintarVacas(); vacCalcular._callado = true; vacCalcular(); vacCalcular._callado = false;
+    ov.classList.add('show'); return;
+  }
   if (!pv.vac.tandas || !pv.vac.tandas.length || String(pv.vac.desde).slice(0,4) !== String(curY)) {
     pv.vac.desde = curY + '-03-30'; pv.vac.desde2 = curY + '-08-30'; pv.vac.dias = 30; pv.vac.dias2 = 25; guardarPlan(pv);
     pintarVacas();                    /* para que existan los campos que lee vacCalcular */
@@ -4037,6 +4051,8 @@ function pintarVacas(resultado){
       '<div data-k="hasta" style="font-size:.78rem;color:var(--text2);min-width:74px">' + (vacDiasTanda(t) > 0 ? 'hasta ' + fmtC(t.hasta) : 'sin vacaciones') + '</div></div>';
   });
 
+  var fuera = staff().filter(function(st){ return v.gente[st.id] && !v.gente[st.id].entra; }).map(function(st){ return esc(st.name); });
+  if (fuera.length) h += '<div style="margin-top:8px;font-size:.72rem;color:var(--text2)">No cogen vacaciones: ' + fuera.join(', ') + ' (se cambia en «Cambiar reglas»).</div>';
   h += '<div id="vacas-res" style="margin-top:12px;font-size:.78rem;line-height:1.5">' + (resultado || '') + '</div>' +
     '<button class="bp" onclick="vacAplicar()" style="width:100%;margin-top:12px;padding:12px;font-size:.95rem">&#127958;&#65039; Poner en el horario</button>' +
     '<div class="mact" style="margin-top:8px">' +
@@ -4056,7 +4072,7 @@ function pintarVacas(resultado){
       'Que siempre quede cocina</label>' +
     '<table style="border-collapse:collapse;width:100%;font-size:.8rem;margin-top:10px">' +
     '<tr style="color:var(--text2);font-size:.68rem;text-align:left"><th style="padding:3px">Nombre</th><th style="padding:3px;text-align:center">Coge</th><th style="padding:3px;text-align:center">No coinciden</th></tr>';
-  visibleStaff().forEach(function(s){
+  staff().forEach(function(s){
     var g = v.gente[s.id];
     h += '<tr data-vid="' + s.id + '"><td style="padding:3px;color:' + RCOL[s.role] + ';font-weight:600">' + esc(s.name) + '</td>' +
       '<td style="padding:3px;text-align:center"><input type="checkbox" data-k="entra"' + (g.entra ? ' checked' : '') + ' style="' + chk + '"></td>' +
@@ -4092,9 +4108,9 @@ function vacLeer(){
    se cambian una a una. */
 function vacCalcular(){
   var p = vacLeer(), v = p.vac;
-  var gente = visibleStaff().filter(function(s){ return v.gente[s.id] && v.gente[s.id].entra; });
+  var gente = staff().filter(function(s){ return v.gente[s.id] && v.gente[s.id].entra; });
   if (!gente.length) { toast('Marca quién coge vacaciones'); return; }
-  var cocineros = gente.filter(function(s){ var g = p.gente[s.id]; return g && (g.grupo === 'coc' || g.grupo === 'enccoc'); }).map(function(s){ return s.id; });
+  var cocineros = gente.filter(function(s){ var g = p.gente[s.id]; return g ? (g.grupo === 'coc' || g.grupo === 'enccoc') : s.role === 'coc'; }).map(function(s){ return s.id; });
   var cubren = gente.filter(function(s){ var g = p.gente[s.id]; return g && g.cubreCoc; }).map(function(s){ return s.id; });
   function choca(a, b){
     if (v.gente[a].junto && v.gente[b].junto) return true;
@@ -4146,6 +4162,8 @@ function vacCalcular(){
     var a = new Date(ini2.getFullYear(), ini2.getMonth(), ini2.getDate() + i * L2);
     v.tandas.push({ronda:2, ids:q, dias:L2, desde:isoDe(a), hasta:isoDe(new Date(a.getFullYear(), a.getMonth(), a.getDate() + L2 - 1))});
   });
+  v.porAno = v.porAno || {};
+  v.porAno[String(v.desde).slice(0,4)] = {tandas:v.tandas, desde:v.desde, desde2:v.desde2};
   guardarPlan(p);
   pintarVacas(vacCalcular._callado ? '' : '<b style="color:var(--gold2)">Tandas rehechas.</b>');
 }
@@ -4184,7 +4202,7 @@ function vacAplicar(){
   });
   if (!limpiar) Object.keys(cuenta).forEach(function(k){
     var f = deIso(k);
-    visibleStaff().forEach(function(s){ var c = ((sched[f.getFullYear()] || {})[f.getMonth()] || {})[s.id]; c = c && c[f.getDate()]; if (c && c.estado === 'vacaciones') cuenta[k][s.id] = 1; });
+    staff().forEach(function(s){ var c = ((sched[f.getFullYear()] || {})[f.getMonth()] || {})[s.id]; c = c && c[f.getDate()]; if (c && c.estado === 'vacaciones') cuenta[k][s.id] = 1; });
   });
   var choques = Object.keys(cuenta).sort().filter(function(k){ return Object.keys(cuenta[k]).length >= LIM; });
   if (choques.length) {
@@ -4195,6 +4213,8 @@ function vacAplicar(){
     toast('Hay días con ' + LIM + ' de vacaciones a la vez');
     return;
   }
+  v.porAno = v.porAno || {};
+  v.porAno[String(v.desde).slice(0,4)] = {tandas:v.tandas, desde:v.desde, desde2:v.desde2};
   guardarPlan(p);
   vacDeshacer = JSON.stringify(sched);
   var anos = {};
@@ -4233,7 +4253,7 @@ function vacAplicar(){
     for (var i = 0; i < 366; i++) {
       var f = new Date(ano, 0, 1 + i); if (f.getFullYear() !== ano) break;
       var n = 0;
-      visibleStaff().forEach(function(s){ var c = ((sched[ano] || {})[f.getMonth()] || {})[s.id]; c = c && c[f.getDate()]; if (c && c.estado === 'vacaciones') n++; });
+      staff().forEach(function(s){ var c = ((sched[ano] || {})[f.getMonth()] || {})[s.id]; c = c && c[f.getDate()]; if (c && c.estado === 'vacaciones') n++; });
       if (n > v.max) pasados.push(f.getDate() + '/' + (f.getMonth() + 1) + ' (' + n + ')');
     }
   });
@@ -4272,6 +4292,17 @@ function vacRecontar(el){
 function vacCambiarAno(y){
   var p = vacLeer(), v = p.vac;
   y = parseInt(y, 10); if (!y) return;
+  vacLeerTandas(v);
+  v.porAno = v.porAno || {};
+  if (v.tandas && v.tandas.length) v.porAno[String(v.desde).slice(0,4)] = {tandas:v.tandas, desde:v.desde, desde2:v.desde2};
+  var g = v.porAno[String(y)];
+  if (g && g.tandas && g.tandas.length) {
+    v.tandas = g.tandas; v.desde = g.desde; v.desde2 = g.desde2; guardarPlan(p);
+    var sel0 = document.getElementById('yr');
+    if (sel0 && String(curY) !== String(y)) { curY = y; sel0.value = String(y); renderAll(); }
+    pintarVacas();
+    return;
+  }
   var md = function(iso, def){ return iso ? iso.slice(4) : def; };
   v.desde = y + md(v.desde, '-03-30');
   v.desde2 = y + md(v.desde2, '-08-30');
