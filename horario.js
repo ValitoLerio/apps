@@ -3975,7 +3975,7 @@ function vacReglas(){
   var v = p.vac || {};
   var y = curY;
   if (!v.desde) v.desde = y + '-03-30';
-  if (!v.dias) v.dias = 30;
+  if (v.dias === undefined || v.dias === null) v.dias = 30;
   if (v.dias2 === undefined) v.dias2 = 25;     /* segunda tanda (0 = no hay) */
   if (v.desde2 === undefined) v.desde2 = y + '-08-30';
   if (!v.max) v.max = 2;
@@ -4033,8 +4033,8 @@ function pintarVacas(resultado){
     h += '<div data-tanda="' + i + '" style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">' +
       '<div style="flex:1 1 130px;font-weight:700;font-size:.86rem">' + t.ids.map(nomDe).join(' + ') + '</div>' +
       '<input type="date" data-k="desde" value="' + t.desde + '" oninput="vacRecontar(this)" style="' + inp + ';width:' + (estrecho ? '122px' : '140px') + '">' +
-      '<label style="display:flex;align-items:center;gap:4px;font-size:.74rem;color:var(--text2)"><input type="number" min="1" max="120" data-k="dias" value="' + vacDiasTanda(t) + '" oninput="vacRecontar(this)" style="' + inp + ';width:52px">días</label>' +
-      '<div data-k="hasta" style="font-size:.78rem;color:var(--text2);min-width:74px">hasta ' + fmtC(t.hasta) + '</div></div>';
+      '<label style="display:flex;align-items:center;gap:4px;font-size:.74rem;color:var(--text2)"><input type="number" min="0" max="120" data-k="dias" value="' + vacDiasTanda(t) + '" oninput="vacRecontar(this)" style="' + inp + ';width:52px">días</label>' +
+      '<div data-k="hasta" style="font-size:.78rem;color:var(--text2);min-width:74px">' + (vacDiasTanda(t) > 0 ? 'hasta ' + fmtC(t.hasta) : 'sin vacaciones') + '</div></div>';
   });
 
   h += '<div id="vacas-res" style="margin-top:12px;font-size:.78rem;line-height:1.5">' + (resultado || '') + '</div>' +
@@ -4047,7 +4047,7 @@ function pintarVacas(resultado){
     '<details style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px"><summary style="cursor:pointer;font-size:.8rem;color:var(--gold2);font-weight:600">Cambiar reglas</summary>' +
     '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:10px;font-size:.76rem;color:var(--text2)">' +
       '<label style="display:flex;flex-direction:column;gap:3px">Empiezan el<input type="date" id="vac-desde" value="' + esc(v.desde) + '" style="' + inp + '"></label>' +
-      '<label style="display:flex;flex-direction:column;gap:3px">Días 1ª tanda<input type="number" min="1" max="120" id="vac-dias" value="' + v.dias + '" style="' + inp + '"></label>' +
+      '<label style="display:flex;flex-direction:column;gap:3px">Días 1ª tanda (0 = no hay)<input type="number" min="0" max="120" id="vac-dias" value="' + v.dias + '" style="' + inp + '"></label>' +
       '<label style="display:flex;flex-direction:column;gap:3px">Días 2ª tanda (0 = no hay)<input type="number" min="0" max="120" id="vac-dias2" value="' + v.dias2 + '" style="' + inp + '"></label>' +
       '<label style="display:flex;flex-direction:column;gap:3px">2ª tanda empieza el<input type="date" id="vac-desde2" value="' + esc(v.desde2 || '') + '" style="' + inp + '"></label>' +
       '<label style="display:flex;flex-direction:column;gap:3px">Por tanda, como mucho<input type="number" min="1" max="10" id="vac-max" value="' + v.max + '" style="' + inp + '"></label>' +
@@ -4073,7 +4073,7 @@ function pintarVacas(resultado){
 function vacLeer(){
   var p = vacReglas(), v = p.vac;
   var d = document.getElementById('vac-desde'); if (d && d.value) v.desde = d.value;
-  v.dias = Math.max(1, parseInt((document.getElementById('vac-dias') || {}).value, 10) || 30);
+  var n1 = parseInt((document.getElementById('vac-dias') || {}).value, 10); v.dias = isNaN(n1) ? (v.dias == null ? 30 : v.dias) : Math.max(0, n1);
   v.max = Math.max(1, parseInt((document.getElementById('vac-max') || {}).value, 10) || 2);
   var d2 = document.getElementById('vac-desde2'); v.desde2 = d2 ? (d2.value || '') : (v.desde2 || '');
   var n2 = parseInt((document.getElementById('vac-dias2') || {}).value, 10); v.dias2 = isNaN(n2) ? 25 : Math.max(0, n2);
@@ -4137,7 +4137,7 @@ function vacCalcular(){
   var fin1 = new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + grupos.length * L);
   var ini2 = v.desde2 ? deIso(v.desde2) : fin1;
   v.tandas = [];
-  grupos.forEach(function(q, i){
+  if (L > 0) grupos.forEach(function(q, i){
     var a = new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + i * L);
     v.tandas.push({ronda:1, ids:q, dias:L, desde:isoDe(a), hasta:isoDe(new Date(a.getFullYear(), a.getMonth(), a.getDate() + L - 1))});
   });
@@ -4155,21 +4155,21 @@ function vacLeerTandas(v){
     var t = v.tandas[+tr.dataset.tanda]; if (!t) return;
     var a = tr.querySelector('[data-k="desde"]').value;
     var nd = parseInt((tr.querySelector('[data-k="dias"]') || {}).value, 10);
-    if (nd > 0) t.dias = nd;
+    if (nd >= 0) t.dias = nd;
     if (a) {
-      var L = t.dias || vacDiasTanda(t), f = deIso(a);
+      var L = Math.max(1, vacDiasTanda(t)), f = deIso(a);
       t.desde = a; t.hasta = isoDe(new Date(f.getFullYear(), f.getMonth(), f.getDate() + L - 1));
     }
   });
 }
-function vacDiasTanda(t){ return t.dias || (Math.round((deIso(t.hasta) - deIso(t.desde)) / 86400000) + 1); }
+function vacDiasTanda(t){ return (t.dias !== undefined && t.dias !== null) ? t.dias : (Math.round((deIso(t.hasta) - deIso(t.desde)) / 86400000) + 1); }
 
 /* Paso 2: las fechas que se han puesto, al horario. */
 function vacAplicar(){
   var p = vacLeer(), v = p.vac;
   if (!v.tandas || !v.tandas.length) { vacCalcular(); return; }
   vacLeerTandas(v);
-  var malas = v.tandas.filter(function(t){ return !t.desde || !t.hasta || vacDiasTanda(t) < 1; });
+  var malas = v.tandas.filter(function(t){ return vacDiasTanda(t) > 0 && (!t.desde || !t.hasta); });
   if (malas.length) { toast('Revisa las fechas: alguna tanda acaba antes de empezar'); return; }
   /* Nunca 4 a la vez: con las fechas puestas, se cuenta día a día (y si no
      se quitan las de antes, también las que ya hay). Si pasa, no se pone. */
@@ -4262,6 +4262,7 @@ function vacDeshacerYa(){
 function vacRecontar(el){
   var fila = el.closest('[data-tanda]'); if (!fila) return;
   var a = fila.querySelector('[data-k="desde"]').value, L = parseInt(fila.querySelector('[data-k="dias"]').value, 10);
+  if (L === 0) { fila.querySelector('[data-k="hasta"]').textContent = 'sin vacaciones'; return; }
   if (!a || !(L > 0)) return;
   var f = deIso(a), h = new Date(f.getFullYear(), f.getMonth(), f.getDate() + L - 1);
   fila.querySelector('[data-k="hasta"]').textContent = 'hasta ' + h.getDate() + ' ' + MESES[h.getMonth()].slice(0,3).toLowerCase();
