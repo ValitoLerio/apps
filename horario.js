@@ -1546,6 +1546,9 @@ function renderVacaciones(){
         'border:1px ' + (vacVarios ? 'solid var(--gold)' : 'dashed var(--border)') + ';' +
         'background:' + (vacVarios ? 'var(--gold)' : 'transparent') + ';color:' + (vacVarios ? 'var(--bg)' : 'var(--text2)') + ';">' +
         '&#8596; Varios d&iacute;as' + (vacVarios ? ' &middot; activo' : '') + '</button>' +
+      '<button onclick="abrirVacas()" title="Repartir las vacaciones del año con tus reglas" ' +
+        'style="cursor:pointer;font-family:inherit;font-size:.74rem;font-weight:700;padding:5px 12px;border-radius:14px;' +
+        'border:1px solid var(--gold);background:rgba(201,168,76,.12);color:var(--gold2)">&#127958;&#65039; Repartir vacaciones</button>' +
       '<span style="margin-left:auto;align-self:center">' + leyendaFiestas() + '</span>';
   }
 
@@ -3954,4 +3957,202 @@ function planBorrarSemana(i){
   var bd = document.getElementById('plan-deshacer'); if (bd) bd.style.display = '';
   var caja = document.getElementById('plan-res'); if (caja) caja.innerHTML = '<b style="color:var(--gold2)">Semana del ' + esc(w.txt) + ' borrada</b> (' + n + ' días). Si te has equivocado, dale a Deshacer.';
   toast('Semana borrada');
+}
+
+// ================================================================
+// REPARTIR VACACIONES
+// ================================================================
+// Reparte las vacaciones del año en tandas seguidas desde el día que
+// se diga: cada uno los días que le tocan, como mucho los que se diga a
+// la vez, sin que coincidan los que no pueden (los marcados, los dos
+// cocineros, y quien cubre la cocina con un cocinero). Lo que sale son
+// días de vacaciones normales, que se cambian como siempre en el
+// cuadro, y se puede deshacer de golpe. Las reglas se guardan.
+var vacDeshacer = null;
+
+function vacReglas(){
+  var p = cargarPlan();
+  var v = p.vac || {};
+  var y = curY;
+  if (!v.desde) v.desde = y + '-03-30';
+  if (!v.dias) v.dias = 30;
+  if (!v.max) v.max = 2;
+  if (v.cocina === undefined) v.cocina = true;
+  v.gente = v.gente || {};
+  planPersonas(p);
+  visibleStaff().forEach(function(s){
+    if (v.gente[s.id]) return;
+    v.gente[s.id] = {
+      entra: !/^luis/i.test(s.name),
+      junto: /^(valeriano|tamara|martin)/i.test(s.name)   /* no coinciden entre ellos */
+    };
+  });
+  p.vac = v;
+  return p;
+}
+
+function abrirVacas(){
+  var ov = document.getElementById('vacasov');
+  if (!ov) {
+    ov = document.createElement('div'); ov.className = 'ov'; ov.id = 'vacasov';
+    ov.innerHTML = '<div class="modal" style="max-width:560px;width:96vw"><div id="vacas-cuerpo"></div></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function(e){ if (e.target === ov) ov.classList.remove('show'); });
+  }
+  pintarVacas();
+  ov.classList.add('show');
+}
+function cerrarVacas(){ var ov = document.getElementById('vacasov'); if (ov) ov.classList.remove('show'); }
+
+function pintarVacas(resultado){
+  var p = vacReglas(), v = p.vac;
+  guardarPlan(p);
+  var estrecho = window.innerWidth < 520;
+  var inp = 'background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:' + (estrecho ? '4px 3px' : '5px 6px') + ';font-family:inherit;font-size:' + (estrecho ? '.74rem' : '.8rem');
+  var tit = 'font-size:.66rem;color:var(--gold);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 6px;font-weight:700';
+  var chk = 'width:18px;height:18px;accent-color:#c9a84c';
+  var anoV = (v.desde || '').slice(0, 4);
+  var h = '<h3>Repartir vacaciones</h3>' +
+    '<div style="font-size:.8rem;color:var(--text2);line-height:1.5">Reparte las vacaciones en tandas seguidas desde el día que pongas. ' +
+      'Luego las cambias en el cuadro como siempre, y si no te gustan, Deshacer.</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:12px;font-size:.78rem;color:var(--text2)">' +
+      '<label style="display:flex;flex-direction:column;gap:3px">Desde el día<input type="date" id="vac-desde" value="' + esc(v.desde) + '" style="' + inp + '"></label>' +
+      '<label style="display:flex;flex-direction:column;gap:3px">Días cada uno<input type="number" min="1" max="120" id="vac-dias" value="' + v.dias + '" style="' + inp + '"></label>' +
+      '<label style="display:flex;flex-direction:column;gap:3px">Como mucho a la vez<input type="number" min="1" max="10" id="vac-max" value="' + v.max + '" style="' + inp + '"></label>' +
+    '</div>' +
+    '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.78rem;color:var(--text2)"><input type="checkbox" id="vac-cocina"' + (v.cocina ? ' checked' : '') + ' style="' + chk + '">' +
+      'Que siempre quede cocina (no coinciden los cocineros, ni los que cubren la cocina entre ellos o con un cocinero)</label>' +
+
+    '<div style="' + tit + '">Personas</div>' +
+    '<div style="font-size:.72rem;color:var(--text2);margin-bottom:6px">«Coge» = entra en el reparto. «No coinciden» = los marcados nunca están de vacaciones a la vez.</div>' +
+    '<table style="border-collapse:collapse;width:100%;font-size:.8rem">' +
+    '<tr style="color:var(--text2);font-size:.68rem;text-align:left"><th style="padding:3px">Nombre</th><th style="padding:3px;text-align:center">Coge</th><th style="padding:3px;text-align:center">No coinciden</th></tr>';
+  visibleStaff().forEach(function(s){
+    var g = v.gente[s.id];
+    h += '<tr data-vid="' + s.id + '"><td style="padding:3px;color:' + RCOL[s.role] + ';font-weight:600">' + esc(s.name) + '</td>' +
+      '<td style="padding:3px;text-align:center"><input type="checkbox" data-k="entra"' + (g.entra ? ' checked' : '') + ' style="' + chk + '"></td>' +
+      '<td style="padding:3px;text-align:center"><input type="checkbox" data-k="junto"' + (g.junto ? ' checked' : '') + ' style="' + chk + '"></td></tr>';
+  });
+  h += '</table>' +
+    '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:.78rem;color:#e0b168"><input type="checkbox" id="vac-limpiar" style="' + chk + '">' +
+      'Quitar antes las vacaciones que ya haya puestas en ' + esc(anoV) + '</label>' +
+    '<div id="vacas-res" style="margin-top:12px;font-size:.78rem;line-height:1.5">' + (resultado || '') + '</div>' +
+    '<div class="mact" style="margin-top:12px;flex-wrap:wrap">' +
+      '<button class="bp" onclick="vacRepartir()">&#127958;&#65039; Repartir</button>' +
+      '<button class="bs" id="vac-deshacer" onclick="vacDeshacerYa()"' + (vacDeshacer ? '' : ' style="display:none"') + '>Deshacer</button>' +
+      '<button class="bs" onclick="cerrarVacas()">Cerrar</button>' +
+    '</div>';
+  document.getElementById('vacas-cuerpo').innerHTML = h;
+}
+
+function vacLeer(){
+  var p = vacReglas(), v = p.vac;
+  var d = document.getElementById('vac-desde'); if (d && d.value) v.desde = d.value;
+  v.dias = Math.max(1, parseInt((document.getElementById('vac-dias') || {}).value, 10) || 30);
+  v.max = Math.max(1, parseInt((document.getElementById('vac-max') || {}).value, 10) || 2);
+  v.cocina = !!(document.getElementById('vac-cocina') || {}).checked;
+  document.querySelectorAll('#vacas-cuerpo tr[data-vid]').forEach(function(tr){
+    var g = v.gente[tr.dataset.vid] || {};
+    g.entra = tr.querySelector('[data-k="entra"]').checked;
+    g.junto = tr.querySelector('[data-k="junto"]').checked;
+    v.gente[tr.dataset.vid] = g;
+  });
+  guardarPlan(p);
+  return p;
+}
+
+function vacRepartir(){
+  var p = vacLeer(), v = p.vac;
+  var gente = visibleStaff().filter(function(s){ return v.gente[s.id] && v.gente[s.id].entra; });
+  if (!gente.length) { toast('Marca quién coge vacaciones'); return; }
+  var cocineros = gente.filter(function(s){ var g = p.gente[s.id]; return g && (g.grupo === 'coc' || g.grupo === 'enccoc'); }).map(function(s){ return s.id; });
+  var cubren = gente.filter(function(s){ var g = p.gente[s.id]; return g && g.cubreCoc; }).map(function(s){ return s.id; });
+
+  /* Quién no puede coincidir con quién */
+  function choca(a, b){
+    if (v.gente[a].junto && v.gente[b].junto) return true;
+    if (v.cocina) {
+      if (cocineros.indexOf(a) >= 0 && cocineros.indexOf(b) >= 0) return true;
+      if ((cubren.indexOf(a) >= 0 && cocineros.indexOf(b) >= 0) || (cubren.indexOf(b) >= 0 && cocineros.indexOf(a) >= 0)) return true;
+      if (cubren.indexOf(a) >= 0 && cubren.indexOf(b) >= 0) return true;
+    }
+    return false;
+  }
+  /* Primero los que más choques tienen, que son los difíciles */
+  var ids = gente.map(function(s){ return s.id; });
+  ids.sort(function(a, b){
+    var ca = ids.filter(function(x){ return x !== a && choca(a, x); }).length;
+    var cb = ids.filter(function(x){ return x !== b && choca(b, x); }).length;
+    return cb - ca;
+  });
+  var tanda = {}, sol = null;
+  function probar(i, K, cupo){
+    if (i === ids.length) { sol = JSON.parse(JSON.stringify(tanda)); return true; }
+    var id = ids[i];
+    for (var k = 0; k < K; k++) {
+      if (cupo[k].length >= v.max) continue;
+      if (cupo[k].some(function(o){ return choca(id, o); })) continue;
+      cupo[k].push(id); tanda[id] = k;
+      if (probar(i + 1, K, cupo)) return true;
+      cupo[k].pop(); delete tanda[id];
+    }
+    return false;
+  }
+  var K = Math.ceil(ids.length / v.max);
+  while (!sol && K <= ids.length) {
+    var cupo = []; for (var k = 0; k < K; k++) cupo.push([]);
+    probar(0, K, cupo);
+    if (!sol) K++;
+  }
+  if (!sol) { toast('No se puede repartir con esas reglas'); return; }
+
+  /* Las tandas, por orden: que las primeras vayan llenas y la gente
+     del grupo que no coincide, cuanto antes */
+  vacDeshacer = JSON.stringify(sched);
+  var ini = deIso(v.desde), L = v.dias;
+  var ano = ini.getFullYear();
+  if (document.getElementById('vac-limpiar') && document.getElementById('vac-limpiar').checked) {
+    Object.keys(sched[ano] || {}).forEach(function(m){
+      Object.keys(sched[ano][m] || {}).forEach(function(sid){
+        var mes = sched[ano][m][sid] || {};
+        Object.keys(mes).forEach(function(d){ if (mes[d] && mes[d].estado === 'vacaciones') delete mes[d]; });
+      });
+    });
+  }
+  var filas = [], turnosFuera = 0;
+  for (var k = 0; k < K; k++) {
+    var quien = ids.filter(function(id){ return sol[id] === k; });
+    if (!quien.length) continue;
+    var a = new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + k * L);
+    var b = new Date(a.getFullYear(), a.getMonth(), a.getDate() + L - 1);
+    quien.forEach(function(sid){
+      for (var i = 0; i < L; i++) {
+        var f = new Date(a.getFullYear(), a.getMonth(), a.getDate() + i);
+        var y = f.getFullYear(), m = f.getMonth(), d = f.getDate();
+        if (!sched[y]) sched[y] = {};
+        if (!sched[y][m]) sched[y][m] = {};
+        if (!sched[y][m][sid]) sched[y][m][sid] = {};
+        var antes = sched[y][m][sid][d];
+        if (antes && antes.estado === 'trabajo' && antes.inicio) turnosFuera++;
+        sched[y][m][sid][d] = {estado:'vacaciones', nota:(antes && antes.nota) || ''};
+      }
+    });
+    var fmt = function(f){ return f.getDate() + ' ' + MESES[f.getMonth()].slice(0,3).toLowerCase(); };
+    filas.push('<tr><td style="padding:3px 10px 3px 0;white-space:nowrap;color:var(--gold2)">' + fmt(a) + ' – ' + fmt(b) + '</td><td style="padding:3px 0">' +
+      quien.map(function(id){ var s = staff().find(function(x){ return x.id === id; }); return esc(s ? s.name : id); }).join(' + ') + '</td></tr>');
+  }
+  save();
+  renderAll();
+  pintarVacas('<b style="color:var(--gold2)">Vacaciones repartidas:</b><table style="border-collapse:collapse;margin-top:4px">' + filas.join('') + '</table>' +
+    (turnosFuera ? '<div style="color:#e0b168;margin-top:4px">' + turnosFuera + ' días tenían turno y se ha quitado.</div>' : ''));
+  toast('Vacaciones repartidas');
+}
+
+function vacDeshacerYa(){
+  if (!vacDeshacer) return;
+  try { sched = JSON.parse(vacDeshacer); } catch(e){ return; }
+  vacDeshacer = null;
+  save(); renderAll();
+  pintarVacas('Deshecho: las vacaciones están como antes.');
+  toast('Deshecho');
 }
