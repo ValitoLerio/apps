@@ -4051,6 +4051,21 @@ function pintarVacas(resultado){
       '<div data-k="hasta" style="font-size:.78rem;color:var(--text2);min-width:74px">' + (vacDiasTanda(t) > 0 ? 'hasta ' + fmtC(t.hasta) : 'sin vacaciones') + '</div></div>';
   });
 
+  /* Las parejas: cada uno elige en qué tanda va (la segunda va igual) */
+  var r1 = (v.tandas || []).filter(function(t){ return t.ronda === 1; });
+  if (!r1.length) r1 = (v.tandas || []).filter(function(t){ return t.ronda === 2; });
+  if (r1.length) {
+    var avisos = vacChoques(p);
+    h += '<details style="margin-top:12px"' + (vacParejasAbierto ? ' open' : '') + ' ontoggle="vacParejasAbierto=this.open"><summary style="cursor:pointer;font-size:.8rem;color:var(--gold2);font-weight:600">Cambiar parejas</summary>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 12px;margin-top:8px">';
+    r1.forEach(function(t, k){ t.ids.forEach(function(id){
+      h += '<label style="display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:.8rem"><b>' + nomDe(id) + '</b>' +
+        '<select onchange="vacMover(\'' + id + '\', this.value)" style="' + inp + '">' +
+        r1.map(function(_, j){ return '<option value="' + j + '"' + (j === k ? ' selected' : '') + '>Tanda ' + (j + 1) + '</option>'; }).join('') +
+        '<option value="nueva">Tanda nueva</option></select></label>';
+    }); });
+    h += '</div>' + (avisos.length ? '<div style="margin-top:8px;font-size:.74rem;color:#e0b168">Ojo: ' + avisos.map(esc).join(' · ') + '</div>' : '') + '</details>';
+  }
   var fuera = staff().filter(function(st){ return v.gente[st.id] && !v.gente[st.id].entra; }).map(function(st){ return esc(st.name); });
   if (fuera.length) h += '<div style="margin-top:8px;font-size:.72rem;color:var(--text2)">No cogen vacaciones: ' + fuera.join(', ') + ' (se cambia en «Cambiar reglas»).</div>';
   h += '<div id="vacas-res" style="margin-top:12px;font-size:.78rem;line-height:1.5">' + (resultado || '') + '</div>' +
@@ -4314,4 +4329,56 @@ function vacCambiarAno(y){
   /* y el cuadro de vacaciones pasa a ese año */
   var sel = document.getElementById('yr');
   if (sel && String(curY) !== String(y)) { curY = y; sel.value = String(y); renderAll(); }
+}
+
+var vacParejasAbierto = false;
+/* Lo que no cumple las reglas en las tandas tal como están */
+function vacChoques(p){
+  var v = p.vac, out = [];
+  var nom = function(id){ var s = staff().find(function(x){ return x.id === id; }); return s ? s.name : id; };
+  var esCoc = function(id){ var g = p.gente[id]; var s = staff().find(function(x){ return x.id === id; }); return g ? (g.grupo === 'coc' || g.grupo === 'enccoc') : (s && s.role === 'coc'); };
+  var cubre = function(id){ var g = p.gente[id]; return !!(g && g.cubreCoc); };
+  (v.tandas || []).filter(function(t){ return t.ronda === 1; }).forEach(function(t, k){
+    var ids = t.ids;
+    if (ids.length > v.max) out.push('la tanda ' + (k + 1) + ' tiene ' + ids.length + ' personas');
+    for (var a = 0; a < ids.length; a++) for (var b = a + 1; b < ids.length; b++) {
+      var x = ids[a], y = ids[b];
+      if (v.gente[x] && v.gente[y] && v.gente[x].junto && v.gente[y].junto) out.push(nom(x) + ' y ' + nom(y) + ' no pueden coincidir');
+      else if (v.cocina && esCoc(x) && esCoc(y)) out.push(nom(x) + ' y ' + nom(y) + ' son los dos de cocina');
+      else if (v.cocina && ((cubre(x) && esCoc(y)) || (cubre(y) && esCoc(x)) || (cubre(x) && cubre(y)))) out.push('con ' + nom(x) + ' y ' + nom(y) + ' fuera nadie cubre la cocina');
+    }
+  });
+  return out;
+}
+/* Pasar a alguien a otra tanda (en las dos rondas a la vez) */
+function vacMover(sid, dest){
+  var p = vacLeer(), v = p.vac;
+  vacLeerTandas(v);
+  var r1 = v.tandas.filter(function(t){ return t.ronda === 1; }), r2 = v.tandas.filter(function(t){ return t.ronda === 2; });
+  var sumar = function(iso, n){ var f = deIso(iso); return isoDe(new Date(f.getFullYear(), f.getMonth(), f.getDate() + n)); };
+  [r1, r2].forEach(function(r){ r.forEach(function(t){ t.ids = t.ids.filter(function(x){ return x !== sid; }); }); });
+  if (dest === 'nueva') {
+    [r1, r2].forEach(function(r, i){
+      if (!r.length) return;
+      var ult = r[r.length - 1], L = ult.dias || (i ? v.dias2 : v.dias);
+      var d = sumar(ult.hasta, 1);
+      r.push({ronda: i + 1, ids: [], dias: L, desde: d, hasta: sumar(d, L - 1)});
+    });
+    dest = (r1.length || r2.length) - 1;
+  }
+  dest = parseInt(dest, 10);
+  if (r1[dest]) r1[dest].ids.push(sid);
+  if (r2[dest]) r2[dest].ids.push(sid);
+  /* Las tandas que se quedan vacías, fuera (en las dos rondas) */
+  var vacias = [];
+  r1.forEach(function(t, i){ if (!t.ids.length) vacias.push(i); });
+  r2.forEach(function(t, i){ if (!t.ids.length && vacias.indexOf(i) < 0) vacias.push(i); });
+  r1 = r1.filter(function(_, i){ return vacias.indexOf(i) < 0; });
+  r2 = r2.filter(function(_, i){ return vacias.indexOf(i) < 0; });
+  v.tandas = r1.concat(r2);
+  v.porAno = v.porAno || {};
+  v.porAno[String(v.desde).slice(0,4)] = {tandas:v.tandas, desde:v.desde, desde2:v.desde2};
+  guardarPlan(p);
+  vacParejasAbierto = true;
+  pintarVacas('<b style="color:var(--gold2)">Parejas cambiadas.</b> Revisa las fechas y dale a «Poner en el horario».');
 }
