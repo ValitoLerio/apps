@@ -4022,7 +4022,9 @@ function pintarVacas(resultado){
   var fmtC = function(iso){ var f = deIso(iso); return f.getDate() + ' ' + MESES[f.getMonth()].slice(0,3).toLowerCase(); };
   var nomDe = function(id){ var s = staff().find(function(x){ return x.id === id; }); return esc(s ? s.name : id); };
 
-  var h = '<h3>Vacaciones ' + esc(anoV) + '</h3>' +
+  var anoN = parseInt(anoV, 10) || curY, opts = '';
+  for (var ya = Math.min(anoN, curY) - 1; ya <= Math.max(anoN, curY) + 3; ya++) opts += '<option' + (ya === anoN ? ' selected' : '') + '>' + ya + '</option>';
+  var h = '<h3 style="display:flex;align-items:center;gap:10px">Vacaciones <select onchange="vacCambiarAno(this.value)" style="' + inp + ';font-size:1rem;font-weight:700">' + opts + '</select></h3>' +
     '<div style="font-size:.8rem;color:var(--text2);line-height:1.5;margin-bottom:6px">Cambia si quieres el día que empieza cada tanda o los días, y dale al botón de abajo. Después también puedes tocar cualquier día en el cuadro.</div>';
 
   (v.tandas || []).forEach(function(t, i){
@@ -4263,4 +4265,21 @@ function vacRecontar(el){
   if (!a || !(L > 0)) return;
   var f = deIso(a), h = new Date(f.getFullYear(), f.getMonth(), f.getDate() + L - 1);
   fila.querySelector('[data-k="hasta"]').textContent = 'hasta ' + h.getDate() + ' ' + MESES[h.getMonth()].slice(0,3).toLowerCase();
+}
+
+/* Otro año: las tandas de ese año, con las mismas reglas */
+function vacCambiarAno(y){
+  var p = vacLeer(), v = p.vac;
+  y = parseInt(y, 10); if (!y) return;
+  var md = function(iso, def){ return iso ? iso.slice(4) : def; };
+  v.desde = y + md(v.desde, '-03-30');
+  v.desde2 = y + md(v.desde2, '-08-30');
+  guardarPlan(p);
+  pintarVacas();
+  var c = document.getElementById('vac-desde'); if (c) c.value = v.desde;
+  var c2 = document.getElementById('vac-desde2'); if (c2) c2.value = v.desde2;
+  vacCalcular._callado = true; vacCalcular(); vacCalcular._callado = false;
+  /* y el cuadro de vacaciones pasa a ese año */
+  var sel = document.getElementById('yr');
+  if (sel && String(curY) !== String(y)) { curY = y; sel.value = String(y); renderAll(); }
 }
