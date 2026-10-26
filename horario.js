@@ -4034,7 +4034,7 @@ function pintarVacas(resultado){
       '<td style="padding:3px;text-align:center"><input type="checkbox" data-k="junto"' + (g.junto ? ' checked' : '') + ' style="' + chk + '"></td></tr>';
   });
   h += '</table>' +
-    '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:.78rem;color:#e0b168"><input type="checkbox" id="vac-limpiar" style="' + chk + '">' +
+    '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:.78rem;color:#e0b168"><input type="checkbox" id="vac-limpiar" checked style="' + chk + '">' +
       'Quitar antes las vacaciones que ya haya puestas en ' + esc(anoV) + '</label>' +
     '<div id="vacas-res" style="margin-top:12px;font-size:.78rem;line-height:1.5">' + (resultado || '') + '</div>' +
     '<div class="mact" style="margin-top:12px;flex-wrap:wrap">' +
@@ -4141,10 +4141,20 @@ function vacRepartir(){
     filas.push('<tr><td style="padding:3px 10px 3px 0;white-space:nowrap;color:var(--gold2)">' + fmt(a) + ' – ' + fmt(b) + '</td><td style="padding:3px 0">' +
       quien.map(function(id){ var s = staff().find(function(x){ return x.id === id; }); return esc(s ? s.name : id); }).join(' + ') + '</td></tr>');
   }
+  /* Comprobación: ningún día con más de los permitidos a la vez */
+  var pasados = [], dd0 = new Date(ano, 0, 1);
+  for (var i = 0; i < 366; i++) {
+    var f = new Date(ano, 0, 1 + i); if (f.getFullYear() !== ano) break;
+    var n = 0;
+    visibleStaff().forEach(function(s){ var c = ((sched[ano] || {})[f.getMonth()] || {})[s.id]; c = c && c[f.getDate()]; if (c && c.estado === 'vacaciones') n++; });
+    if (n > v.max) pasados.push(f.getDate() + '/' + (f.getMonth() + 1) + ' (' + n + ')');
+  }
   save();
   renderAll();
   pintarVacas('<b style="color:var(--gold2)">Vacaciones repartidas:</b><table style="border-collapse:collapse;margin-top:4px">' + filas.join('') + '</table>' +
-    (turnosFuera ? '<div style="color:#e0b168;margin-top:4px">' + turnosFuera + ' días tenían turno y se ha quitado.</div>' : ''));
+    (turnosFuera ? '<div style="color:#e0b168;margin-top:4px">' + turnosFuera + ' días tenían turno y se ha quitado.</div>' : '') +
+    (pasados.length ? '<div style="color:#e87c6f;margin-top:4px">Ojo: hay días con más de ' + v.max + ' de vacaciones a la vez, por vacaciones que ya estaban puestas: ' +
+      esc(pasados.slice(0, 12).join(', ')) + (pasados.length > 12 ? '…' : '') + '. Marca «Quitar antes» y vuelve a repartir.</div>' : ''));
   toast('Vacaciones repartidas');
 }
 
