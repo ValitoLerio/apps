@@ -3977,7 +3977,7 @@ function vacReglas(){
   if (!v.desde) v.desde = y + '-03-30';
   if (!v.dias) v.dias = 30;
   if (v.dias2 === undefined) v.dias2 = 25;     /* segunda tanda (0 = no hay) */
-  if (v.desde2 === undefined) v.desde2 = '';   /* vacío: justo al acabar la primera */
+  if (v.desde2 === undefined) v.desde2 = y + '-08-30';
   if (!v.max) v.max = 2;
   if (v.cocina === undefined) v.cocina = true;
   v.gente = v.gente || {};
@@ -4001,7 +4001,12 @@ function abrirVacas(){
     document.body.appendChild(ov);
     ov.addEventListener('click', function(e){ if (e.target === ov) ov.classList.remove('show'); });
   }
-  pintarVacas();
+  var pv = vacReglas();
+  if (!pv.vac.tandas || !pv.vac.tandas.length || String(pv.vac.desde).slice(0,4) !== String(curY)) {
+    pv.vac.desde = curY + '-03-30'; pv.vac.desde2 = curY + '-08-30'; pv.vac.dias = 30; pv.vac.dias2 = 25; guardarPlan(pv);
+    pintarVacas();                    /* para que existan los campos que lee vacCalcular */
+    vacCalcular._callado = true; vacCalcular(); vacCalcular._callado = false;
+  } else pintarVacas();
   ov.classList.add('show');
 }
 function cerrarVacas(){ var ov = document.getElementById('vacasov'); if (ov) ov.classList.remove('show'); }
@@ -4014,25 +4019,40 @@ function pintarVacas(resultado){
   var tit = 'font-size:.66rem;color:var(--gold);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 6px;font-weight:700';
   var chk = 'width:18px;height:18px;accent-color:#c9a84c';
   var anoV = (v.desde || '').slice(0, 4);
-  var h = '<h3>Repartir vacaciones</h3>' +
-    '<div style="font-size:.8rem;color:var(--text2);line-height:1.5">Primero hace las tandas (quién va con quién y en qué orden); luego pones tú las fechas de cada una y las pasa al horario. ' +
-      'Las fechas de arriba solo sirven para proponer.</div>' +
-    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:12px;font-size:.78rem;color:var(--text2)">' +
-      '<label style="display:flex;flex-direction:column;gap:3px">Desde el día<input type="date" id="vac-desde" value="' + esc(v.desde) + '" style="' + inp + '"></label>' +
-      '<label style="display:flex;flex-direction:column;gap:3px">Días cada uno<input type="number" min="1" max="120" id="vac-dias" value="' + v.dias + '" style="' + inp + '"></label>' +
-      '<label style="display:flex;flex-direction:column;gap:3px">Como mucho a la vez<input type="number" min="1" max="10" id="vac-max" value="' + v.max + '" style="' + inp + '"></label>' +
-    '</div>' +
-    '<div style="font-size:.72rem;color:var(--text2);margin-top:10px">Segunda tanda (deja «Días» en 0 si no hay). Sin fecha, empieza justo al acabar la primera, en el mismo orden.</div>' +
-    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:6px;font-size:.78rem;color:var(--text2)">' +
-      '<label style="display:flex;flex-direction:column;gap:3px">Segunda, desde<input type="date" id="vac-desde2" value="' + esc(v.desde2 || '') + '" style="' + inp + '"></label>' +
-      '<label style="display:flex;flex-direction:column;gap:3px">Días cada uno<input type="number" min="0" max="120" id="vac-dias2" value="' + v.dias2 + '" style="' + inp + '"></label>' +
-    '</div>' +
-    '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.78rem;color:var(--text2)"><input type="checkbox" id="vac-cocina"' + (v.cocina ? ' checked' : '') + ' style="' + chk + '">' +
-      'Que siempre quede cocina (no coinciden los cocineros, ni los que cubren la cocina entre ellos o con un cocinero)</label>' +
+  var fmtC = function(iso){ var f = deIso(iso); return f.getDate() + ' ' + MESES[f.getMonth()].slice(0,3).toLowerCase(); };
+  var nomDe = function(id){ var s = staff().find(function(x){ return x.id === id; }); return esc(s ? s.name : id); };
 
-    '<div style="' + tit + '">Personas</div>' +
-    '<div style="font-size:.72rem;color:var(--text2);margin-bottom:6px">«Coge» = entra en el reparto. «No coinciden» = los marcados nunca están de vacaciones a la vez.</div>' +
-    '<table style="border-collapse:collapse;width:100%;font-size:.8rem">' +
+  var h = '<h3>Vacaciones ' + esc(anoV) + '</h3>' +
+    '<div style="font-size:.8rem;color:var(--text2);line-height:1.5;margin-bottom:6px">Cambia si quieres el día que empieza cada tanda o los días, y dale al botón de abajo. Después también puedes tocar cualquier día en el cuadro.</div>';
+
+  (v.tandas || []).forEach(function(t, i){
+    if (i === 0 || t.ronda !== v.tandas[i-1].ronda)
+      h += '<div style="' + tit + '">' + (t.ronda === 1 ? 'Primera tanda' : 'Segunda tanda') + '</div>';
+    h += '<div data-tanda="' + i + '" style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">' +
+      '<div style="flex:1 1 130px;font-weight:700;font-size:.86rem">' + t.ids.map(nomDe).join(' + ') + '</div>' +
+      '<input type="date" data-k="desde" value="' + t.desde + '" oninput="vacRecontar(this)" style="' + inp + ';width:' + (estrecho ? '122px' : '140px') + '">' +
+      '<label style="display:flex;align-items:center;gap:4px;font-size:.74rem;color:var(--text2)"><input type="number" min="1" max="120" data-k="dias" value="' + vacDiasTanda(t) + '" oninput="vacRecontar(this)" style="' + inp + ';width:52px">días</label>' +
+      '<div data-k="hasta" style="font-size:.78rem;color:var(--text2);min-width:74px">hasta ' + fmtC(t.hasta) + '</div></div>';
+  });
+
+  h += '<div id="vacas-res" style="margin-top:12px;font-size:.78rem;line-height:1.5">' + (resultado || '') + '</div>' +
+    '<button class="bp" onclick="vacAplicar()" style="width:100%;margin-top:12px;padding:12px;font-size:.95rem">&#127958;&#65039; Poner en el horario</button>' +
+    '<div class="mact" style="margin-top:8px">' +
+      '<button class="bs" id="vac-deshacer" onclick="vacDeshacerYa()"' + (vacDeshacer ? '' : ' style="display:none"') + '>Deshacer</button>' +
+      '<button class="bs" onclick="cerrarVacas()" style="margin-left:auto">Cerrar</button>' +
+    '</div>' +
+
+    '<details style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px"><summary style="cursor:pointer;font-size:.8rem;color:var(--gold2);font-weight:600">Cambiar reglas</summary>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:10px;font-size:.76rem;color:var(--text2)">' +
+      '<label style="display:flex;flex-direction:column;gap:3px">Empiezan el<input type="date" id="vac-desde" value="' + esc(v.desde) + '" style="' + inp + '"></label>' +
+      '<label style="display:flex;flex-direction:column;gap:3px">Días 1ª tanda<input type="number" min="1" max="120" id="vac-dias" value="' + v.dias + '" style="' + inp + '"></label>' +
+      '<label style="display:flex;flex-direction:column;gap:3px">Días 2ª tanda (0 = no hay)<input type="number" min="0" max="120" id="vac-dias2" value="' + v.dias2 + '" style="' + inp + '"></label>' +
+      '<label style="display:flex;flex-direction:column;gap:3px">2ª tanda empieza el<input type="date" id="vac-desde2" value="' + esc(v.desde2 || '') + '" style="' + inp + '"></label>' +
+      '<label style="display:flex;flex-direction:column;gap:3px">Por tanda, como mucho<input type="number" min="1" max="10" id="vac-max" value="' + v.max + '" style="' + inp + '"></label>' +
+    '</div>' +
+    '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.76rem;color:var(--text2)"><input type="checkbox" id="vac-cocina"' + (v.cocina ? ' checked' : '') + ' style="' + chk + '">' +
+      'Que siempre quede cocina</label>' +
+    '<table style="border-collapse:collapse;width:100%;font-size:.8rem;margin-top:10px">' +
     '<tr style="color:var(--text2);font-size:.68rem;text-align:left"><th style="padding:3px">Nombre</th><th style="padding:3px;text-align:center">Coge</th><th style="padding:3px;text-align:center">No coinciden</th></tr>';
   visibleStaff().forEach(function(s){
     var g = v.gente[s.id];
@@ -4041,27 +4061,10 @@ function pintarVacas(resultado){
       '<td style="padding:3px;text-align:center"><input type="checkbox" data-k="junto"' + (g.junto ? ' checked' : '') + ' style="' + chk + '"></td></tr>';
   });
   h += '</table>' +
-    '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:.78rem;color:#e0b168"><input type="checkbox" id="vac-limpiar" checked style="' + chk + '">' +
-      'Quitar antes las vacaciones que ya haya puestas en ' + esc(anoV) + '</label>' +
-    (v.tandas && v.tandas.length ? '<div style="' + tit + '">Tandas · pon tú las fechas</div>' +
-      '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:.78rem">' +
-      '<tr style="color:var(--text2);font-size:.66rem;text-align:left"><th style="padding:3px">Quién</th><th style="padding:3px">Desde</th><th style="padding:3px">Hasta</th><th style="padding:3px;text-align:right">Días</th></tr>' +
-      v.tandas.map(function(t, i){
-        var nom = t.ids.map(function(id){ var s = staff().find(function(x){ return x.id === id; }); return esc(s ? s.name : id); }).join(' + ');
-        var sep = (i > 0 && t.ronda !== v.tandas[i-1].ronda) || i === 0
-          ? '<tr><td colspan="4" style="padding:8px 3px 2px;color:var(--text2);font-size:.64rem;text-transform:uppercase;letter-spacing:.06em">' + (t.ronda === 1 ? 'Primera tanda' : 'Segunda tanda') + '</td></tr>' : '';
-        return sep + '<tr data-tanda="' + i + '"><td style="padding:3px;font-weight:600">' + nom + '</td>' +
-          '<td style="padding:3px"><input type="date" data-k="desde" value="' + t.desde + '" oninput="vacRecontar(this)" style="' + inp + (estrecho ? ';width:108px' : '') + '"></td>' +
-          '<td style="padding:3px"><input type="date" data-k="hasta" value="' + t.hasta + '" oninput="vacRecontar(this)" style="' + inp + (estrecho ? ';width:108px' : '') + '"></td>' +
-          '<td style="padding:3px;text-align:right;font-variant-numeric:tabular-nums" data-k="dias">' + vacDiasTanda(t) + '</td></tr>';
-      }).join('') + '</table></div>' : '') +
-    '<div id="vacas-res" style="margin-top:12px;font-size:.78rem;line-height:1.5">' + (resultado || '') + '</div>' +
-    '<div class="mact" style="margin-top:12px;flex-wrap:wrap">' +
-      '<button class="' + (v.tandas && v.tandas.length ? 'bs' : 'bp') + '" onclick="vacCalcular()">1. Hacer las tandas</button>' +
-      (v.tandas && v.tandas.length ? '<button class="bp" onclick="vacAplicar()">&#127958;&#65039; 2. Poner en el horario</button>' : '') +
-      '<button class="bs" id="vac-deshacer" onclick="vacDeshacerYa()"' + (vacDeshacer ? '' : ' style="display:none"') + '>Deshacer</button>' +
-      '<button class="bs" onclick="cerrarVacas()">Cerrar</button>' +
-    '</div>';
+    '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.76rem;color:var(--text2)"><input type="checkbox" id="vac-limpiar" checked style="' + chk + '">' +
+      'Al poner, quitar las vacaciones que ya hubiera en ' + esc(anoV) + '</label>' +
+    '<button class="bs" onclick="vacCalcular()" style="width:100%;margin-top:10px">Rehacer las tandas con estas reglas</button>' +
+    '</details>';
   document.getElementById('vacas-cuerpo').innerHTML = h;
 }
 
@@ -4134,25 +4137,30 @@ function vacCalcular(){
   v.tandas = [];
   grupos.forEach(function(q, i){
     var a = new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + i * L);
-    v.tandas.push({ronda:1, ids:q, desde:isoDe(a), hasta:isoDe(new Date(a.getFullYear(), a.getMonth(), a.getDate() + L - 1))});
+    v.tandas.push({ronda:1, ids:q, dias:L, desde:isoDe(a), hasta:isoDe(new Date(a.getFullYear(), a.getMonth(), a.getDate() + L - 1))});
   });
   /* Segunda: el mismo orden, así el que fue el último lo sigue siendo */
   if (L2 > 0) grupos.forEach(function(q, i){
     var a = new Date(ini2.getFullYear(), ini2.getMonth(), ini2.getDate() + i * L2);
-    v.tandas.push({ronda:2, ids:q, desde:isoDe(a), hasta:isoDe(new Date(a.getFullYear(), a.getMonth(), a.getDate() + L2 - 1))});
+    v.tandas.push({ronda:2, ids:q, dias:L2, desde:isoDe(a), hasta:isoDe(new Date(a.getFullYear(), a.getMonth(), a.getDate() + L2 - 1))});
   });
   guardarPlan(p);
-  pintarVacas('<b style="color:var(--gold2)">Tandas hechas.</b> Pon las fechas de cada una y dale a «Poner en el horario».');
+  pintarVacas(vacCalcular._callado ? '' : '<b style="color:var(--gold2)">Tandas rehechas.</b>');
 }
 
 function vacLeerTandas(v){
   document.querySelectorAll('#vacas-cuerpo [data-tanda]').forEach(function(tr){
     var t = v.tandas[+tr.dataset.tanda]; if (!t) return;
-    var a = tr.querySelector('[data-k="desde"]').value, b = tr.querySelector('[data-k="hasta"]').value;
-    if (a) t.desde = a; if (b) t.hasta = b;
+    var a = tr.querySelector('[data-k="desde"]').value;
+    var nd = parseInt((tr.querySelector('[data-k="dias"]') || {}).value, 10);
+    if (nd > 0) t.dias = nd;
+    if (a) {
+      var L = t.dias || vacDiasTanda(t), f = deIso(a);
+      t.desde = a; t.hasta = isoDe(new Date(f.getFullYear(), f.getMonth(), f.getDate() + L - 1));
+    }
   });
 }
-function vacDiasTanda(t){ return Math.round((deIso(t.hasta) - deIso(t.desde)) / 86400000) + 1; }
+function vacDiasTanda(t){ return t.dias || (Math.round((deIso(t.hasta) - deIso(t.desde)) / 86400000) + 1); }
 
 /* Paso 2: las fechas que se han puesto, al horario. */
 function vacAplicar(){
@@ -4250,8 +4258,9 @@ function vacDeshacerYa(){
 }
 
 function vacRecontar(el){
-  var tr = el.closest('tr'); if (!tr) return;
-  var a = tr.querySelector('[data-k="desde"]').value, b = tr.querySelector('[data-k="hasta"]').value;
-  var c = tr.querySelector('[data-k="dias"]');
-  if (a && b && c) c.textContent = Math.round((deIso(b) - deIso(a)) / 86400000) + 1;
+  var fila = el.closest('[data-tanda]'); if (!fila) return;
+  var a = fila.querySelector('[data-k="desde"]').value, L = parseInt(fila.querySelector('[data-k="dias"]').value, 10);
+  if (!a || !(L > 0)) return;
+  var f = deIso(a), h = new Date(f.getFullYear(), f.getMonth(), f.getDate() + L - 1);
+  fila.querySelector('[data-k="hasta"]').textContent = 'hasta ' + h.getDate() + ' ' + MESES[h.getMonth()].slice(0,3).toLowerCase();
 }
