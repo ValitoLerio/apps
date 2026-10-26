@@ -3976,6 +3976,8 @@ function vacReglas(){
   var y = curY;
   if (!v.desde) v.desde = y + '-03-30';
   if (!v.dias) v.dias = 30;
+  if (v.dias2 === undefined) v.dias2 = 25;     /* segunda tanda (0 = no hay) */
+  if (v.desde2 === undefined) v.desde2 = '';   /* vacío: justo al acabar la primera */
   if (!v.max) v.max = 2;
   if (v.cocina === undefined) v.cocina = true;
   v.gente = v.gente || {};
@@ -4020,6 +4022,11 @@ function pintarVacas(resultado){
       '<label style="display:flex;flex-direction:column;gap:3px">Días cada uno<input type="number" min="1" max="120" id="vac-dias" value="' + v.dias + '" style="' + inp + '"></label>' +
       '<label style="display:flex;flex-direction:column;gap:3px">Como mucho a la vez<input type="number" min="1" max="10" id="vac-max" value="' + v.max + '" style="' + inp + '"></label>' +
     '</div>' +
+    '<div style="font-size:.72rem;color:var(--text2);margin-top:10px">Segunda tanda (deja «Días» en 0 si no hay). Sin fecha, empieza justo al acabar la primera, en el mismo orden.</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:6px;font-size:.78rem;color:var(--text2)">' +
+      '<label style="display:flex;flex-direction:column;gap:3px">Segunda, desde<input type="date" id="vac-desde2" value="' + esc(v.desde2 || '') + '" style="' + inp + '"></label>' +
+      '<label style="display:flex;flex-direction:column;gap:3px">Días cada uno<input type="number" min="0" max="120" id="vac-dias2" value="' + v.dias2 + '" style="' + inp + '"></label>' +
+    '</div>' +
     '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.78rem;color:var(--text2)"><input type="checkbox" id="vac-cocina"' + (v.cocina ? ' checked' : '') + ' style="' + chk + '">' +
       'Que siempre quede cocina (no coinciden los cocineros, ni los que cubren la cocina entre ellos o con un cocinero)</label>' +
 
@@ -4050,6 +4057,8 @@ function vacLeer(){
   var d = document.getElementById('vac-desde'); if (d && d.value) v.desde = d.value;
   v.dias = Math.max(1, parseInt((document.getElementById('vac-dias') || {}).value, 10) || 30);
   v.max = Math.max(1, parseInt((document.getElementById('vac-max') || {}).value, 10) || 2);
+  var d2 = document.getElementById('vac-desde2'); v.desde2 = d2 ? (d2.value || '') : (v.desde2 || '');
+  var n2 = parseInt((document.getElementById('vac-dias2') || {}).value, 10); v.dias2 = isNaN(n2) ? 25 : Math.max(0, n2);
   v.cocina = !!(document.getElementById('vac-cocina') || {}).checked;
   document.querySelectorAll('#vacas-cuerpo tr[data-vid]').forEach(function(tr){
     var g = v.gente[tr.dataset.vid] || {};
@@ -4120,11 +4129,18 @@ function vacRepartir(){
     });
   }
   var filas = [], turnosFuera = 0;
-  for (var k = 0; k < K; k++) {
+  var usadas = []; for (var k = 0; k < K; k++) if (ids.some(function(id){ return sol[id] === k; })) usadas.push(k);
+  var finPrimera = new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + usadas.length * L);
+  var ini2 = v.desde2 ? deIso(v.desde2) : finPrimera, L2 = v.dias2;
+  var tandas = [];
+  usadas.forEach(function(k, i){ tandas.push({k:k, ini:new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + i * L), L:L}); });
+  if (L2 > 0) usadas.forEach(function(k, i){ tandas.push({k:k, ini:new Date(ini2.getFullYear(), ini2.getMonth(), ini2.getDate() + i * L2), L:L2, segunda:true}); });
+  tandas.forEach(function(tt){
+    var k = tt.k, L = tt.L;
     var quien = ids.filter(function(id){ return sol[id] === k; });
-    if (!quien.length) continue;
-    var a = new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + k * L);
+    var a = tt.ini;
     var b = new Date(a.getFullYear(), a.getMonth(), a.getDate() + L - 1);
+    if (tt.segunda && !filas.segunda) { filas.push('<tr><td colspan="2" style="padding:6px 0 2px;color:var(--text2);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em">Segunda tanda</td></tr>'); filas.segunda = true; }
     quien.forEach(function(sid){
       for (var i = 0; i < L; i++) {
         var f = new Date(a.getFullYear(), a.getMonth(), a.getDate() + i);
@@ -4140,7 +4156,7 @@ function vacRepartir(){
     var fmt = function(f){ return f.getDate() + ' ' + MESES[f.getMonth()].slice(0,3).toLowerCase(); };
     filas.push('<tr><td style="padding:3px 10px 3px 0;white-space:nowrap;color:var(--gold2)">' + fmt(a) + ' – ' + fmt(b) + '</td><td style="padding:3px 0">' +
       quien.map(function(id){ var s = staff().find(function(x){ return x.id === id; }); return esc(s ? s.name : id); }).join(' + ') + '</td></tr>');
-  }
+  });
   /* Comprobación: ningún día con más de los permitidos a la vez */
   var pasados = [], dd0 = new Date(ano, 0, 1);
   for (var i = 0; i < 366; i++) {
