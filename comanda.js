@@ -1081,18 +1081,36 @@ async function zipDeFotos(inv){
   if(!archivos.length) return null;
   return new File([hacerZip(archivos)], nombreZip(inv), {type:"application/zip"});
 }
+/* Las fotos sueltas, una imagen por recibo, para quien no quiera la
+   carpeta comprimida: llegan abiertas en el correo. */
+async function jpgsDeFotos(inv){
+  var c=await cargarFotos(fotosDeFactura(inv));
+  var porDia={}, out=[];
+  c.items.forEach(function(it){
+    if(!it.img) return;
+    porDia[it.f.date]=(porDia[it.f.date]||0)+1;
+    out.push(new File([it.img.data], "Recibo "+dmy(it.f.date).replace(/\//g,"-")+" ("+porDia[it.f.date]+").jpg", {type:"image/jpeg"}));
+  });
+  if(c.faltan) toast(c.faltan+(c.faltan>1?" fotos no han llegado":" foto no ha llegado")+" todavía de otro aparato y no va"+(c.faltan>1?"n":"")+".", true);
+  return out;
+}
+/* Comprimidas (.zip) o sueltas, según se elija al enviar */
+function fotosEnZip(){ return state.settings.fotosZip!==false; }
+async function archivosDeFotos(inv){
+  if(fotosEnZip()){ var z=await zipDeFotos(inv); return z?[z]:[]; }
+  return jpgsDeFotos(inv);
+}
 /* Para compartir, el móvil exige que los archivos estén listos en el
    mismo toque: se preparan mientras se mira la factura. */
 var pdfListo=null;
 function clavePdf(inv){
-  return inv.id+"|"+(llevaFotos(inv)?fotosDeFactura(inv).map(function(f){ return f.id; }).join(","):"");
+  return inv.id+"|"+(fotosEnZip()?"z":"s")+"|"+(llevaFotos(inv)?fotosDeFactura(inv).map(function(f){ return f.id; }).join(","):"");
 }
 function prepararPdf(inv){
   var clave=clavePdf(inv);
   if(pdfListo && pdfListo.clave===clave) return pdfListo.promesa;
-  var p=(llevaFotos(inv)?zipDeFotos(inv):Promise.resolve(null)).then(function(zip){
-    var files=[new File([buildPDF(layoutInvoice(inv))], invFilename(inv,"pdf"), {type:"application/pdf"})];
-    if(zip) files.push(zip);
+  var p=(llevaFotos(inv)?archivosDeFotos(inv):Promise.resolve([])).then(function(fotosA){
+    var files=[new File([buildPDF(layoutInvoice(inv))], invFilename(inv,"pdf"), {type:"application/pdf"})].concat(fotosA);
     if(pdfListo && pdfListo.clave===clave) pdfListo.files=files;
     return files;
   });
@@ -1839,6 +1857,19 @@ function engancharEnvio(d, inv){
       engancharEnvio(d, inv);
     });
   });
+  d.querySelectorAll("[data-fmodo]").forEach(function(b){
+    b.addEventListener("click", function(){
+      state.settings.fotosZip = b.getAttribute("data-fmodo")==="zip";
+      touch();
+      d.querySelectorAll("[data-fmodo]").forEach(function(x){
+        var on=(x.getAttribute("data-fmodo")==="zip")===fotosEnZip();
+        x.classList.toggle("primary", on); x.setAttribute("aria-pressed", on);
+      });
+      pdfListo=null;
+      if(canShareFiles()) prepararPdf(inv).catch(function(){});
+      toast(fotosEnZip() ? "Las fotos irán en una carpeta comprimida" : "Las fotos irán sueltas, una a una");
+    });
+  });
   var cf=d.querySelector("#conFotos");
   if(cf) cf.addEventListener("change", function(){
     ui.conFotos=cf.checked;
@@ -1953,7 +1984,11 @@ function sendBoxHTML(inv){
       if(!n) return "";
       return '<label class="check" style="margin:0 0 12px"><input type="checkbox" id="conFotos"'+(ui.conFotos!==false?" checked":"")+'>'+
         '<span><b>Mandar también '+(n>1?"las "+n+" fotos":"la foto")+' de los recibos de '+esc(monthLabel(inv.period))+'</b>'+
-        'Van en una carpeta aparte (.zip), una imagen por recibo con su fecha. La factura sigue en su PDF.</span></label>'+
+        'Una imagen por recibo, con su fecha. La factura sigue en su PDF.</span></label>'+
+        '<div class="fotos-modo" role="radiogroup" aria-label="Cómo van las fotos" style="display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 10px 25px">'+
+          '<button type="button" class="btn sm'+(fotosEnZip()?" primary":"")+'" data-fmodo="zip" aria-pressed="'+fotosEnZip()+'">Comprimidas (.zip)</button>'+
+          '<button type="button" class="btn sm'+(!fotosEnZip()?" primary":"")+'" data-fmodo="sueltas" aria-pressed="'+(!fotosEnZip())+'">Sueltas, una a una</button>'+
+        '</div>'+
         '<p class="section-note" style="margin:-4px 0 12px 25px"><button class="inline-link" data-borrar-mes style="color:var(--danger)">'+
         'Borrar '+(n>1?"las "+n+" fotos":"la foto")+' de '+esc(monthLabel(inv.period))+'</button> cuando ya las hayas mandado.</p>';
     })()+
@@ -2064,7 +2099,7 @@ async function shareInvoice(inv){
     if(llevaFotos(inv)){
       files=(pdfListo && pdfListo.clave===clavePdf(inv)) ? pdfListo.files : null;
       if(!files){
-        toast("Preparando la carpeta de fotos… vuelve a pulsar en un momento.");
+        toast("Preparando las fotos… vuelve a pulsar en un momento.");
         prepararPdf(inv).then(function(){ toast("Listo. Pulsa «Compartir PDF»."); })
           .catch(function(){ toast("No se pudieron preparar las fotos. Mira la conexión.", true); });
         return;
@@ -2074,9 +2109,9 @@ async function shareInvoice(inv){
     }
     if(!(navigator.canShare && navigator.canShare({files:files}))){
       if(files.length>1 && navigator.canShare({files:[files[0]]})){
-        descargarArchivo(files[1].name, files[1], "application/zip");
+        files.slice(1).forEach(function(f,i){ setTimeout(function(){ descargarArchivo(f.name, f, f.type); }, 400*i); });
         files=[files[0]];
-        toast("La carpeta de fotos se ha descargado: adjúntala también.", true);
+        toast("Las fotos se han descargado: adjúntalas también.", true);
       } else { toast("Este dispositivo no permite compartir archivos.", true); return; }
     }
     await navigator.share({files:files, title:"Factura "+inv.number, text:waText(inv)});
@@ -2493,14 +2528,16 @@ async function downloadInvoice(inv, kind){
     if(kind==="pdf"||paper){
       var bytes=buildPDF(pages);
       descargarArchivo(invFilename(inv, paper?"papel.pdf":"pdf"), bytes, "application/pdf");
-      var zip=null;
+      var fa=[];
       if(!paper && llevaFotos(inv)){
-        toast("Preparando la carpeta de fotos…");
-        zip=await zipDeFotos(inv);
-        if(zip) setTimeout(function(){ descargarArchivo(zip.name, zip, "application/zip"); }, 600);
+        toast("Preparando las fotos…");
+        fa=await archivosDeFotos(inv);
+        fa.forEach(function(f,i){ setTimeout(function(){ descargarArchivo(f.name, f, f.type); }, 600+400*i); });
       }
       toast(paper ? "PDF listo: ábrelo y dale a imprimir en A4" :
-            zip ? "Descargados la factura y la carpeta de fotos: adjunta los dos al correo" : "PDF descargado: adjúntalo al correo");
+            !fa.length ? "PDF descargado: adjúntalo al correo" :
+            fotosEnZip() ? "Descargados la factura y la carpeta de fotos: adjunta los dos al correo"
+                         : "Descargadas la factura y "+fa.length+(fa.length>1?" fotos":" foto")+": adjúntalas al correo");
     } else {
       var blob=await renderPNG(pages);
       descargarArchivo(invFilename(inv,"png"), blob, "image/png");
