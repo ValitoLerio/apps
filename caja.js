@@ -880,13 +880,16 @@ function pintarFormularioDia(d){
     '</div>'+
     /* El orden de escribir es el de la hoja: visas, efectivo, pagos,
        amarilla y fondo de caja; lo demás va detrás. */
+    '<div class="rejilla" style="margin-top:16px">'+
+      '<div class="campo"><label class="lbl" for="f_amar">Caja amarilla · saldo actual (€)</label>'+
+      '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo que hay dentro esta noche, contado</div>'+
+        '<input type="number" class="grande" id="f_amar" min="0" step="0.01" value="'+esc(actual.aAmarilla)+'">'+
+        '<div class="nota" style="margin:4px 0 0" id="f_amarNota"></div></div>'+
+    '</div>'+
     '<p class="nota" style="margin:16px 0 8px;font-weight:600;color:var(--tinta2)">Pagos hechos con dinero de la caja</p>'+
     '<div id="gastos"></div>'+
     '<button class="btn sm" id="masGasto" style="margin-top:8px">+ Otro pago</button>'+
     '<div class="rejilla" style="margin-top:16px">'+
-      '<div class="campo"><label class="lbl" for="f_amar">Caja amarilla (€)</label>'+
-      '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo que hay dentro esta noche, contado</div>'+
-        '<input type="number" class="grande" id="f_amar" min="0" step="0.01" value="'+esc(actual.aAmarilla)+'"></div>'+
       '<div class="campo"><label class="lbl" for="f_fondo">Caja registradora (€)</label>'+
         '<input type="number" class="grande" id="f_fondo" min="0" step="0.01" value="'+
         esc(actual.fondoCaja!=null&&actual.fondoCaja!==""?actual.fondoCaja:(libro.ajustes.fondoHabitual||""))+'"></div>'+
@@ -962,6 +965,15 @@ function pintarFormularioDia(d){
   function refrescar(){
     var visa=numero("f_visa"), efec=numero("f_efec"), g=totalG();
     var am=numero("f_amar"), fondo=numero("f_fondo");
+    /* Saldo anterior e ingreso de la amarilla, debajo de su casilla */
+    var notaAm=document.getElementById("f_amarNota");
+    if(notaAm){
+      var pv=recuentoAntesDe(ui.dia), campoAm=document.getElementById("f_amar");
+      notaAm.innerHTML = pv
+        ? "Saldo anterior <strong>"+eur(+pv.aAmarilla||0)+"</strong>"+
+          ((campoAm && campoAm.value!=="") ? " · ingreso <strong>"+eur(r2(am-(+pv.aAmarilla||0)))+"</strong>" : "")
+        : "";
+    }
     var neto=r2(efec-g);
     var cuenta=objetivoAmarilla()>0 ? r2(Math.max(0, am-objetivoAmarilla())) : 0;
     var campoSobra=document.getElementById("f_sobra");
@@ -1332,13 +1344,21 @@ function textoDia(fecha, opciones){
      que va el del cajon, contado, y las noches que no se cuenta el
      renglon dice "sin contar" y se queda sin cifra. Mejor un hueco
      honrado que una cuenta con pinta de recuento. */
+  /* La amarilla, en tres: lo que había, lo que ha entrado y lo que hay */
+  var previoAm=recuentoAntesDe(fecha);
+  var amAnt=previoAm ? r2(+previoAm.aAmarilla||0) : null;
+  var amar = amAnt==null
+    ? [["Amarilla actual", eur(c.amarilla)]]
+    : [["Amarilla anterior", eur(amAnt)],
+       ["Ingreso amarilla",  eur(r2(c.amarilla-amAnt))],
+       ["Amarilla actual",   eur(c.amarilla)]];
   var lineas=[
     ["Visas",       eur(c.visa)],
-    ["Efectivo",    c.hayReal ? eur(c.efectivoReal) : "sin contar"],
-    ["C. amarilla", eur(c.amarilla)],
+    ["Efectivo",    c.hayReal ? eur(c.efectivoReal) : "sin contar"]
+  ].concat(amar).concat([
     ["Pagos",       eur(c.gastos)],
     ["Fondo caja",  eur(c.fondo)]
-  ];
+  ]);
 
   /* Lo que sobra de la amarilla va aparte, separado del cierre: no es
      una cifra más de lo cobrado, es el dinero que ya no hace falta en el
