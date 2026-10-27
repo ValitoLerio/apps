@@ -882,7 +882,7 @@ function pintarFormularioDia(d){
        amarilla y fondo de caja; lo demás va detrás. */
     '<p class="nota" style="margin:16px 0 8px;font-weight:600;color:var(--tinta2)">Pagos hechos con dinero de la caja</p>'+
     '<div id="gastos"></div>'+
-    '<button class="btn sm" id="masGasto" style="margin-top:8px">+ Añadir gasto</button>'+
+    '<button class="btn sm" id="masGasto" style="margin-top:8px">+ Otro pago</button>'+
     '<div class="rejilla" style="margin-top:16px">'+
       '<div class="campo"><label class="lbl" for="f_amar">Caja amarilla (€)</label>'+
       '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo que hay dentro esta noche, contado</div>'+
@@ -904,8 +904,7 @@ function pintarFormularioDia(d){
     '</div>'+
     '<p class="nota" style="margin:6px 0 0" id="f_cuadre"></p>'+
     '<p class="nota" style="margin:6px 0 0" id="f_fondoTotal"></p>'+
-    '<div class="campo" style="margin-top:16px"><label class="lbl" for="f_nota">Nota del día</label>'+
-      '<input id="f_nota" value="'+esc(actual.nota||"")+'" placeholder="Fiesta mayor, cerrado por la tarde…"></div>'+
+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;'+
     'padding-top:14px;border-top:1px solid var(--linea);flex-wrap:wrap;gap:10px">'+
       '<div id="f_resumen" style="font-size:13px;color:var(--muted)"></div>'+
@@ -1099,9 +1098,9 @@ function pintarFormularioDia(d){
     g=g||{concepto:"", importe:""};
     var f=document.createElement("div");
     f.className="gasto";
-    f.style.cssText="display:grid;grid-template-columns:minmax(120px,2fr) 110px auto;gap:8px;margin-top:8px;align-items:end";
-    f.innerHTML='<div class="campo"><input class="g_con" value="'+esc(g.concepto)+'" placeholder="Proveedor, hielo, taxi…"></div>'+
-                '<div class="campo"><input type="number" class="g_imp" min="0" step="0.01" value="'+esc(g.importe)+'" placeholder="0,00"></div>'+
+    /* Solo el importe: el proveedor no hace falta apuntarlo */
+    f.style.cssText="display:grid;grid-template-columns:160px auto;gap:8px;margin-top:8px;align-items:end;justify-content:start";
+    f.innerHTML='<div class="campo"><input type="number" class="g_imp grande" min="0" step="0.01" value="'+esc(g.importe)+'" placeholder="0,00" aria-label="Importe del pago (€)"></div>'+
                 '<button class="btn suave sm malo" title="Quitar">✕</button>';
     cajaGastos.appendChild(f);
     f.querySelector("button").addEventListener("click", function(){ f.remove(); refrescar(); });
@@ -1162,9 +1161,8 @@ function pintarFormularioDia(d){
   document.getElementById("f_guardar").addEventListener("click", function(){
     var detalle=[];
     cajaGastos.querySelectorAll(".gasto").forEach(function(f){
-      var con=f.querySelector(".g_con").value.trim();
       var imp=+f.querySelector(".g_imp").value||0;
-      if(imp>0) detalle.push({concepto:con||"Gasto", importe:imp});
+      if(imp>0) detalle.push({concepto:"Pago", importe:imp});
     });
     var registro=d||{id:uid(), fecha:ui.dia};
     registro.visa=numero("f_visa");
@@ -1189,7 +1187,6 @@ function pintarFormularioDia(d){
        0 escrito es «no saqué nada». No son lo mismo para el cuadre. */
     var cx=document.getElementById("f_saca");
     registro.retirado=(cx && cx.value!=="") ? r2(+cx.value||0) : null;
-    registro.nota=valor("f_nota");
     if(!d) libro.dias.push(registro);
     guardar(); pintar();
     avisar(d?"Día actualizado":"Día guardado: "+eur(cuentasDia(registro).ventas));
@@ -1384,19 +1381,7 @@ function textoDia(fecha, opciones){
     salidas.forEach(renglon);
   }
   if(alineado) l.push("```");
-  /* El desglose de los pagos sólo si dice algo que no diga ya el
-     renglón de arriba: varios pagos, o uno con su concepto escrito. Un
-     único «Gasto: 567,00 €» debajo de «Pagos 567,00 €» es el mismo
-     número dos veces. */
-  var detalle=(d.detalle||[]).filter(function(g){ return (+g.importe||0)>0; });
-  var mereceDetalle = detalle.length>1 ||
-    (detalle.length===1 && (detalle[0].concepto||"").trim() &&
-     !/^gastos?$/i.test((detalle[0].concepto||"").trim()));
-  if(c.gastos>0 && mereceDetalle){
-    l.push("");
-    l.push("Pagos:");
-    detalle.forEach(function(g){ l.push("- "+(g.concepto||"Gasto")+": "+eur(g.importe)); });
-  }
+  /* Sin desglose de pagos: basta con el total de arriba */
 
   /* Y al final, de la amarilla, sólo lo que no esté ya arriba: cuánto
      falta para el objetivo, y el saldo de hoy si el parte es de un día
@@ -1406,7 +1391,6 @@ function textoDia(fecha, opciones){
   if(Math.abs(guardado-c.amarilla)>=0.005) cola.push("Hoy en la amarilla: "+eur(guardado));
   if(falta>0) cola.push("Faltan "+eur(falta)+" para "+eur(objetivoAmarilla()));
   if(cola.length){ l.push(""); cola.forEach(function(x){ l.push(x); }); }
-  if(d.nota){ l.push(""); l.push("Nota: "+d.nota); }
   return l.join("\n");
 }
 
@@ -1837,7 +1821,7 @@ function verMes(main){
     '<th class="num">Efec. real<div style="font-weight:400;color:var(--muted);font-size:11px">'+
       'contado en el cajón</div></th>'+
     '<th class="num">Pagos</th><th class="num">C. amarilla</th><th class="num">Fondo caja</th>'+
-    '<th class="num">Sobra am.</th><th class="num">Ventas</th><th>Nota</th></tr></thead><tbody>'+
+    '<th class="num">Sobra am.</th><th class="num">Ventas</th></tr></thead><tbody>'+
     dias.map(function(d){
       var c=cuentasDia(d);
       var esHoy=(d.fecha===hoyISO());
@@ -1866,8 +1850,7 @@ function verMes(main){
           (c.amarilla>0?eur(c.amarilla):"—")+"</td>"+
         '<td class="num">'+(c.fondo>0?eur(c.fondo):"—")+"</td>"+
         '<td class="num">'+(c.sobrante>0.004?"<strong>"+eur(c.sobrante)+"</strong>":"—")+"</td>"+
-        '<td class="num">'+eur(c.ventas)+"</td>"+
-        '<td style="font-size:12.5px;color:var(--muted)">'+esc(d.nota||"")+"</td></tr>";
+        '<td class="num">'+eur(c.ventas)+"</td></tr>";
     }).join("")+
     '</tbody><tfoot><tr><td>'+t.dias+' días</td>'+
       '<td class="num">'+eur(t.visa)+'</td>'+
@@ -1879,7 +1862,7 @@ function verMes(main){
       '<td class="num" style="color:var(--muted)">—</td>'+
       '<td class="num" style="color:var(--muted)">—</td>'+
       '<td class="num">'+eur(t.sobrante)+'</td>'+
-      '<td class="num">'+eur(t.ventas)+'</td><td></td></tr></tfoot></table>';
+      '<td class="num">'+eur(t.ventas)+'</td></tr></tfoot></table>';
 
   var botonCeros=document.getElementById("cerosMes");
   if(botonCeros) botonCeros.addEventListener("click", function(){ ponerCerosDelMes(ui.mes); });
