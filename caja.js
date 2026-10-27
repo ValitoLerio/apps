@@ -893,7 +893,8 @@ function pintarFormularioDia(d){
       '<div class="campo"><label class="lbl" for="f_fondo">Caja registradora (€)</label>'+
         '<input type="number" class="grande" id="f_fondo" min="0" step="0.01" value="'+
         esc(actual.fondoCaja!=null&&actual.fondoCaja!==""?actual.fondoCaja:(libro.ajustes.fondoHabitual||""))+'"></div>'+
-      '<div class="campo"><label class="lbl" for="f_saca">Se saca (€)</label>'+
+      /* «Se saca» ya no se pide: va escondido con lo que tenga (0 si nada) */
+      '<div class="campo" style="display:none"><label class="lbl" for="f_saca">Se saca (€)</label>'+
       '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo que te llevas al cerrar</div>'+
         '<input type="number" class="grande" id="f_saca" min="0" step="0.01" value="'+
         esc(sacaPuesto)+'" placeholder="0,00">'+
