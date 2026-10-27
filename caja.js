@@ -880,12 +880,22 @@ function pintarFormularioDia(d){
     '</div>'+
     /* El orden de escribir es el de la hoja: visas, efectivo, pagos,
        amarilla y fondo de caja; lo demás va detrás. */
-    '<div class="rejilla" style="margin-top:16px">'+
-      '<div class="campo"><label class="lbl" for="f_amar">Caja amarilla · saldo actual (€)</label>'+
-      '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">lo que hay dentro esta noche, contado</div>'+
-        '<input type="number" class="grande" id="f_amar" min="0" step="0.01" value="'+esc(actual.aAmarilla)+'">'+
-        '<div class="nota" style="margin:4px 0 0" id="f_amarNota"></div></div>'+
-    '</div>'+
+    /* La amarilla en una línea: lo que había, lo que entra hoy y lo que
+       hay. Se escribe el ingreso o el saldo, y el otro sale solo. */
+    (function(){
+      var pv=recuentoAntesDe(ui.dia), ant=pv ? r2(+pv.aAmarilla||0) : null;
+      var tieneAm=(actual.aAmarilla!=null && actual.aAmarilla!=="");
+      var ing=(tieneAm && ant!=null) ? r2(+actual.aAmarilla-ant) : "";
+      return '<p class="nota" style="margin:16px 0 8px;font-weight:600;color:var(--tinta2)">Caja amarilla</p>'+
+      '<div class="amarilla-fila" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">'+
+        '<div class="campo"><label class="lbl" for="f_amAnt">Saldo anterior</label>'+
+          '<input type="number" class="grande" id="f_amAnt" value="'+(ant!=null?esc(ant):"")+'" placeholder="—" readonly tabindex="-1" style="background:var(--fondo2,transparent);color:var(--muted)"></div>'+
+        '<div class="campo"><label class="lbl" for="f_amIng">Ingreso diario</label>'+
+          '<input type="number" class="grande" id="f_amIng" step="0.01" value="'+esc(ing)+'" placeholder="0,00"'+(ant==null?' disabled title="Sin saldo anterior: escribe el saldo actual"':'')+'></div>'+
+        '<div class="campo"><label class="lbl" for="f_amar">Saldo actual</label>'+
+          '<input type="number" class="grande" id="f_amar" min="0" step="0.01" value="'+esc(actual.aAmarilla)+'"></div>'+
+      '</div>';
+    })()+
     '<p class="nota" style="margin:16px 0 8px;font-weight:600;color:var(--tinta2)">Pagos hechos con dinero de la caja</p>'+
     '<div id="gastos"></div>'+
     '<button class="btn sm" id="masGasto" style="margin-top:8px">+ Otro pago</button>'+
@@ -899,14 +909,14 @@ function pintarFormularioDia(d){
         '<input type="number" class="grande" id="f_saca" min="0" step="0.01" value="'+
         esc(sacaPuesto)+'" placeholder="0,00">'+
         '<div class="nota" style="margin:4px 0 0" id="f_sacaNota"></div></div>'+
-      '<div class="campo"><label class="lbl" for="f_sobra">Sobra c. amarilla (€)</label>'+
+      '<div class="campo" style="display:none"><label class="lbl" for="f_sobra">Sobra c. amarilla (€)</label>'+
       '<div style="font-size:12px;color:var(--muted);margin:-4px 0 6px">se pone solo: lo que pasa de '+
       eur(objetivoAmarilla())+'</div>'+
         '<input type="number" class="grande" id="f_sobra" step="0.01" value="'+
         esc(actual.sobrante!=null&&actual.sobrante!==""?actual.sobrante:"")+'" '+
         'placeholder="0,00"></div>'+
     '</div>'+
-    '<p class="nota" style="margin:6px 0 0" id="f_cuadre"></p>'+
+    '<p class="nota" style="margin:6px 0 0;display:none" id="f_cuadre"></p>'+
     '<p class="nota" style="margin:6px 0 0" id="f_fondoTotal"></p>'+
 
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;'+
@@ -966,15 +976,7 @@ function pintarFormularioDia(d){
   function refrescar(){
     var visa=numero("f_visa"), efec=numero("f_efec"), g=totalG();
     var am=numero("f_amar"), fondo=numero("f_fondo");
-    /* Saldo anterior e ingreso de la amarilla, debajo de su casilla */
-    var notaAm=document.getElementById("f_amarNota");
-    if(notaAm){
-      var pv=recuentoAntesDe(ui.dia), campoAm=document.getElementById("f_amar");
-      notaAm.innerHTML = pv
-        ? "Saldo anterior <strong>"+eur(+pv.aAmarilla||0)+"</strong>"+
-          ((campoAm && campoAm.value!=="") ? " · ingreso <strong>"+eur(r2(am-(+pv.aAmarilla||0)))+"</strong>" : "")
-        : "";
-    }
+
     var neto=r2(efec-g);
     var cuenta=objetivoAmarilla()>0 ? r2(Math.max(0, am-objetivoAmarilla())) : 0;
     var campoSobra=document.getElementById("f_sobra");
@@ -1139,6 +1141,19 @@ function pintarFormularioDia(d){
   document.getElementById("f_efec").addEventListener("input", function(){
     efecAMano=true;
   });
+  (function(){
+    var cAnt=document.getElementById("f_amAnt"), cIng=document.getElementById("f_amIng"), cAm=document.getElementById("f_amar");
+    if(!cIng || !cAm) return;
+    cIng.addEventListener("input", function(){
+      if(cAnt.value==="") return;
+      cAm.value = cIng.value==="" ? "" : r2((+cAnt.value||0)+(+cIng.value||0));
+      refrescar();
+    });
+    cAm.addEventListener("input", function(){
+      if(cAnt.value==="") return;
+      cIng.value = cAm.value==="" ? "" : r2((+cAm.value||0)-(+cAnt.value||0));
+    });
+  })();
   ["f_visa","f_efec","f_efecReal","f_pct","f_amar","f_fondo","f_saca","f_sobra"].forEach(function(id){
     document.getElementById(id).addEventListener("input", refrescar);
   });
@@ -1349,10 +1364,11 @@ function textoDia(fecha, opciones){
   var previoAm=recuentoAntesDe(fecha);
   var amAnt=previoAm ? r2(+previoAm.aAmarilla||0) : null;
   var amar = amAnt==null
-    ? [["Amarilla actual", eur(c.amarilla)]]
-    : [["Amarilla anterior", eur(amAnt)],
-       ["Ingreso amarilla",  eur(r2(c.amarilla-amAnt))],
-       ["Amarilla actual",   eur(c.amarilla)]];
+    ? [["Caja amarilla", eur(c.amarilla)]]
+    : [["Caja amarilla", ""],
+       ["  Saldo anterior",  eur(amAnt)],
+       ["  Ingreso diario",  eur(r2(c.amarilla-amAnt))],
+       ["  Saldo actual",    eur(c.amarilla)]];
   var lineas=[
     ["Visas",       eur(c.visa)],
     ["Efectivo",    c.hayReal ? eur(c.efectivoReal) : "sin contar"]
@@ -1368,7 +1384,7 @@ function textoDia(fecha, opciones){
      Como en la hoja, mientras la amarilla no pase del objetivo no sobra
      nada y el renglón no sale. */
   var salidas=[];
-  if(c.sobrante>0.004) salidas.push(["Sobra caja amarilla", eur(c.sobrante)]);
+  /* «Sobra caja amarilla» ya no va en el parte */
 
   /* Los anchos se miden con los dos bloques juntos, para que las cifras
      queden en la misma columna aunque estén separadas. */
@@ -1387,6 +1403,7 @@ function textoDia(fecha, opciones){
   l.push(dmy(fecha)+" - "+diaSemana(fecha));
   l.push("");
   function renglon(x){
+    if(x[1]===""){ l.push(x[0]); return; }      /* un título, sin cifra */
     if(alineado){
       var etiqueta=x[0]+" ".repeat(anchoTexto-x[0].length);
       var importe=" ".repeat(anchoImporte-x[1].length)+x[1];
