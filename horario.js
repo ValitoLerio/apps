@@ -2002,8 +2002,8 @@ function renderTable() {
       var inn  = '';
       if (est === 'trabajo' && cell && cell.inicio) {
         var hIni = parseInt(cell.inicio.split(':')[0]);
-        var autoA = hIni>=7&&hIni<=12 ? 'flex-start' : hIni>=13&&hIni<=15 ? 'center' : 'flex-end';
-        var align = cell.align || autoA;
+        var autoA = hIni>=7&&hIni<=10 ? 'flex-start' : hIni>=11&&hIni<=14 ? 'center' : 'flex-end';
+        var align = autoA === 'center' ? 'center' : (cell.align || autoA);   /* los de 11 a 14, siempre al centro */
         var pad   = align==='flex-start' ? 'margin-left:-2px' : align==='flex-end' ? 'margin-right:-2px' : '';
         var radius= align==='flex-start' ? 'border-radius:0 5px 5px 0' : align==='flex-end' ? 'border-radius:5px 0 0 5px' : 'border-radius:5px';
         var bgCol = shiftBg(align);
@@ -2124,8 +2124,8 @@ function renderWeekTable() {
       var inner = '';
       if (est === 'trabajo' && cell && cell.inicio) {
         var hIni = parseInt(cell.inicio.split(':')[0]);
-        var autoA = hIni>=7&&hIni<=12 ? 'flex-start' : hIni>=13&&hIni<=15 ? 'center' : 'flex-end';
-        var walign  = cell.align || autoA;
+        var autoA = hIni>=7&&hIni<=10 ? 'flex-start' : hIni>=11&&hIni<=14 ? 'center' : 'flex-end';
+        var walign  = autoA === 'center' ? 'center' : (cell.align || autoA);
         /* En la semana sobra sitio, asi que el turno se pega del todo al
            lado que le toca: a la izquierda la manana, al medio la tarde
            y a la derecha la noche. Dos rayas finas parten la celda en
@@ -2181,7 +2181,7 @@ function renderWeekTable() {
     + '<span style="font-family:\'Playfair Display\',serif;font-size:.85rem;color:var(--gold2)">Horario - '+MESES[curM]+' '+curY+'</span>'
     + '<span style="font-size:.63rem;color:var(--text2);margin-left:14px">'
     +   '<span style="color:'+cssVar('--shift-l','#1a4a2e')+';font-weight:900">&#9608;</span> izquierda: ma&ntilde;ana &nbsp; '
-    +   '<span style="color:'+cssVar('--shift-c','#1a1814')+';font-weight:900">&#9608;</span> centro: tarde &nbsp; '
+    +   '<span style="color:'+cssVar('--shift-c','#1a1814')+';font-weight:900">&#9608;</span> centro: mediodía (entran de 11 a 14) &nbsp; '
     +   '<span style="color:'+cssVar('--shift-r','#2a1a0a')+';font-weight:900">&#9608;</span> derecha: noche'
     + '</span>'
     + '<span style="font-size:.65rem;color:var(--text2)">'+fmt(weekStart)+' - '+fmt(end)+' - '+SCFG[curS].lbl+'</span>'
@@ -2399,7 +2399,7 @@ function openCell(sid, day, event, mo, yr) {
       var nota = document.getElementById('nota'); if (nota) nota.value = cell&&cell.nota?cell.nota:'';
       var hl = document.getElementById('hl');
       if (cell&&cell.inicio) calcFin(cell.fin ? 'fin' : undefined); else if (hl) hl.textContent = 'Introduce la hora de entrada';
-      if (ar) { ar.style.display='block'; var hIni=cell&&cell.inicio?parseInt(cell.inicio.split(':')[0]):13; var autoA=hIni>=7&&hIni<=12?'flex-start':hIni>=13&&hIni<=15?'center':'flex-end'; selAlign(cell&&cell.align?cell.align:autoA); }
+      if (ar) { ar.style.display='block'; var hIni=cell&&cell.inicio?parseInt(cell.inicio.split(':')[0]):13; var autoA=hIni>=7&&hIni<=10?'flex-start':hIni>=11&&hIni<=14?'center':'flex-end'; selAlign(cell&&cell.align?cell.align:autoA); }
     } else {
       ta.style.display = 'none';
       var nota = document.getElementById('nota'); if (nota) nota.value = cell&&cell.nota?cell.nota:'';
@@ -3286,7 +3286,7 @@ var PRESETS = {
 
   papel: {nombre:'Papel', nota:'blanco, como la hoja',
     bg:'#ffffff',surface:'#f2f2f2',surface2:'#e7e7e7',border:'#b9b9b9',text:'#111111',text2:'#555555',gold:'#0a58ca',gold2:'#003a99','mes-bar':'#dcdcdc','mes-txt':'#111111',enc:'#0a58ca',coc:'#b3450f',cam:'#0f7a4a',
-    'shift-l':'#bfe8cd','shift-c':'#e7e7e7','shift-r':'#ffdfae',
+    'shift-l':'#bfe8cd','shift-c':'#bdbdbd','shift-r':'#ffdfae',
     'est-trabajo':'#0f7a4a','est-festivo':'#8c1d0f','est-vacaciones':'#0a3d6b','est-baja':'#5b2a8c','est-ausencia':'#8c4a0f'}
 };
 
@@ -3355,6 +3355,9 @@ function loadTheme() {
     var d = localStorage.getItem('rtheme');
     if (d) {
       var vals = JSON.parse(d);
+      /* Los que entran a mediodía (11 a 14), en gris que se vea: el gris
+         de antes era el mismo que el fondo y no se distinguía. */
+      if (vals['shift-c'] === '#e7e7e7') { vals['shift-c'] = '#bdbdbd'; try { localStorage.setItem('rtheme', JSON.stringify(vals)); } catch(e){} }
       var root = document.documentElement;
       Object.keys(vals).forEach(function(k){ root.style.setProperty('--'+k, vals[k]); });
     }
