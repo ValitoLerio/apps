@@ -1372,65 +1372,59 @@ function textoDia(fecha, opciones){
   var previoAm=recuentoAntesDe(fecha);
   var amAnt=(d.amAnterior!=null && d.amAnterior!=="") ? r2(+d.amAnterior||0)
            : (previoAm ? r2(+previoAm.aAmarilla||0) : null);
-  var amar = amAnt==null
-    ? [["CAJA AMARILLA", eur(c.amarilla)]]
-    : [["CAJA AMARILLA", ""],
-       ["  Saldo anterior",  eur(amAnt)],
-       ["  Ingreso diario",  eur(r2(c.amarilla-amAnt))],
-       ["  Saldo actual",    eur(c.amarilla)]];
-  var lineas=[
+  /* Tres bloques: lo cobrado, la amarilla (bien a la vista) y lo demás */
+  var bloque1=[
     ["Visas",       eur(c.visa)],
     ["Efectivo",    c.hayReal ? eur(c.efectivoReal) : "sin contar"]
-  ].concat(amar).concat([
+  ];
+  var bloqueAm = amAnt==null
+    ? [["Saldo actual",   eur(c.amarilla), true]]
+    : [["Saldo anterior", eur(amAnt)],
+       ["Ingreso diario", eur(r2(c.amarilla-amAnt))],
+       ["Saldo actual",   eur(c.amarilla), true]];
+  var bloque3=[
     ["Pagos",       eur(c.gastos)],
     ["Fondo caja",  eur(c.fondo)]
-  ]);
+  ];
 
-  /* Lo que sobra de la amarilla va aparte, separado del cierre: no es
-     una cifra más de lo cobrado, es el dinero que ya no hace falta en el
-     fondo. Lo que se saca al cerrar no va en el parte: eso es cuenta de
-     casa, no del cierre que se manda.
-     Como en la hoja, mientras la amarilla no pase del objetivo no sobra
-     nada y el renglón no sale. */
-  var salidas=[];
-  /* «Sobra caja amarilla» ya no va en el parte */
-
-  /* Los anchos se miden con los dos bloques juntos, para que las cifras
-     queden en la misma columna aunque estén separadas. */
-  var todas=lineas.concat(salidas);
+  /* Los anchos se miden con todo junto, para que las cifras queden en la
+     misma columna aunque vayan en bloques separados. */
+  var todas=bloque1.concat(bloqueAm, bloque3);
   var anchoTexto=Math.max.apply(null, todas.map(function(x){ return x[0].length; }));
   var anchoImporte=Math.max.apply(null, todas.map(function(x){ return x[1].length; }));
 
   /* Dos versiones del mismo parte:
-       - alineada, con letra de maquina, para copiar y pegar
-       - sencilla, para el enlace de WhatsApp: su app rechaza el enlace
-         cuando lleva acentos graves o adornos, y sale "no se pudo abrir
-         este enlace" */
+       - alineada, con letra de máquina, para copiar y pegar
+       - sencilla, para el enlace de WhatsApp (sin acentos graves, que
+         WhatsApp rechaza el enlace con ellos)
+     La amarilla va aparte en las dos: con líneas en blanco, el título en
+     negrita entre círculos amarillos y el saldo actual en negrita. */
   var alineado = (opciones && opciones.alineado);
+  var AM = "🟡";
   var l=[];
   if(libro.ajustes.nombre) l.push(libro.ajustes.nombre);
   l.push(dmy(fecha)+" - "+diaSemana(fecha));
   l.push("");
   function renglon(x){
-    /* Un título, sin cifra. WhatsApp no tiene colores: va en mayúsculas
-       y, en el parte para copiar, con un círculo amarillo delante. En el
-       enlace no, que WhatsApp lo rechaza con adornos. */
-    if(x[1]===""){ l.push((alineado ? "\uD83D\uDFE1 " : "") + x[0]); return; }
     if(alineado){
       var etiqueta=x[0]+" ".repeat(anchoTexto-x[0].length);
       var importe=" ".repeat(anchoImporte-x[1].length)+x[1];
       l.push(etiqueta+"  "+importe);
     } else {
-      l.push(x[0]+": "+x[1]);
+      l.push(x[2] ? "*"+x[0]+": "+x[1]+"*" : x[0]+": "+x[1]);
     }
   }
-  if(alineado) l.push("```");
-  lineas.forEach(renglon);
-  if(salidas.length){
-    l.push("");
-    salidas.forEach(renglon);
+  function bloque(lista){
+    if(alineado) l.push("```");
+    lista.forEach(renglon);
+    if(alineado) l.push("```");
   }
-  if(alineado) l.push("```");
+  bloque(bloque1);
+  l.push("");
+  l.push(AM+" *CAJA AMARILLA* "+AM);
+  bloque(bloqueAm);
+  l.push("");
+  bloque(bloque3);
   /* Sin desglose de pagos: basta con el total de arriba */
 
   /* Y al final, de la amarilla, sólo lo que no esté ya arriba: cuánto
