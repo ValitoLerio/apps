@@ -1373,8 +1373,8 @@ function textoDia(fecha, opciones){
   var amAnt=(d.amAnterior!=null && d.amAnterior!=="") ? r2(+d.amAnterior||0)
            : (previoAm ? r2(+previoAm.aAmarilla||0) : null);
   var amar = amAnt==null
-    ? [["Caja amarilla", eur(c.amarilla)]]
-    : [["Caja amarilla", ""],
+    ? [["CAJA AMARILLA", eur(c.amarilla)]]
+    : [["CAJA AMARILLA", ""],
        ["  Saldo anterior",  eur(amAnt)],
        ["  Ingreso diario",  eur(r2(c.amarilla-amAnt))],
        ["  Saldo actual",    eur(c.amarilla)]];
@@ -1412,7 +1412,10 @@ function textoDia(fecha, opciones){
   l.push(dmy(fecha)+" - "+diaSemana(fecha));
   l.push("");
   function renglon(x){
-    if(x[1]===""){ l.push(x[0]); return; }      /* un título, sin cifra */
+    /* Un título, sin cifra. WhatsApp no tiene colores: va en mayúsculas
+       y, en el parte para copiar, con un círculo amarillo delante. En el
+       enlace no, que WhatsApp lo rechaza con adornos. */
+    if(x[1]===""){ l.push((alineado ? "\uD83D\uDFE1 " : "") + x[0]); return; }
     if(alineado){
       var etiqueta=x[0]+" ".repeat(anchoTexto-x[0].length);
       var importe=" ".repeat(anchoImporte-x[1].length)+x[1];
