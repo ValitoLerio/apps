@@ -3425,10 +3425,29 @@ var PLAN_GRUPOS = {enc:'Encargado', coc:'Cocina', enccoc:'Enc. + cocina', cam:'C
 var PLAN_T = ['O','M','L','C','K'];
 var PLAN_TNOM = {O:'Apertura', M:'Mañana', L:'Mediodía', C:'Cierre encargado', K:'Cierre'};
 var planDeshacer = null;
-var planDesdeIdx = null;   /* desde qué semana del mes se rellena */
+var planDesdeIdx = null;   /* desde qué semana se rellena (de este mes o de los siguientes) */
+var planHastaMes = null;   /* hasta fin de qué mes (0 = el que se ve, 1 = el siguiente...) */
+var PLAN_ADELANTE = 12;    /* cuántos meses por delante se pueden ir haciendo */
+/* Las semanas de este mes y de los siguientes, cada una con su mes */
+function planSemanasLargo(){
+  var out = [];
+  for (var k = 0; k <= PLAN_ADELANTE; k++) {
+    var f = new Date(curY, curM + k, 1);
+    planSemanasDe(f.getFullYear(), f.getMonth()).forEach(function(w){ w.k = k; w.y = f.getFullYear(); w.mes = f.getMonth(); out.push(w); });
+  }
+  return out;
+}
+function planHasta(){
+  var sem = planSemanasLargo(), k0 = sem[planDesde()].k;
+  if (planHastaMes === null || planHastaMes < k0) planHastaMes = k0;
+  return planHastaMes;
+}
+/* La jornada de cada día va con la temporada de su mes; la del mes que
+   se ve, la que esté puesta arriba. */
+function planEstacion(k, mes){ return k === 0 ? curS : autoS(mes); }
 /* Por defecto, la primera semana que tiene algún día sin poner. */
 function planDesde(){
-  var sem = planSemanas();
+  var sem = planSemanasLargo();
   if (planDesdeIdx !== null && planDesdeIdx < sem.length) return planDesdeIdx;
   var p = cargarPlan();
   for (var i = 0; i < sem.length; i++) {
@@ -3443,13 +3462,22 @@ function planDesde(){
   return (planDesdeIdx = 0);
 }
 function planDiasDesde(){
-  var sem = planSemanas(), i = planDesde(), out = [];
-  sem.slice(i).forEach(function(w){ out = out.concat(w.dias); });
+  var sem = planSemanasLargo(), i = planDesde(), hasta = planHasta(), out = [];
+  sem.slice(i).forEach(function(w){
+    if (w.k > hasta) return;
+    w.dias.forEach(function(d){ d.est = planEstacion(w.k, w.mes); });
+    out = out.concat(w.dias);
+  });
   return out;
 }
 function planCambiarDesde(v){
   guardarPlan(leerPlanDeLaVentana());
   planDesdeIdx = parseInt(v, 10) || 0;
+  pintarPlan();
+}
+function planCambiarHasta(v){
+  guardarPlan(leerPlanDeLaVentana());
+  planHastaMes = parseInt(v, 10) || 0;
   pintarPlan();
 }
 
@@ -3503,12 +3531,13 @@ function horasDeEntrada(p){
 function dosD(n){ return (n < 10 ? '0' : '') + n; }
 /* El turno de una persona si entra a la hora h: sus horas seguidas. Si
    es de los fijos y en Personal tiene su horario, ese. */
-function turnoDe(s, g, h){
+function turnoDe(s, g, h, est){
   if (g && g.grupo === 'fijo' && s.fijo && s.fijo.ini && s.fijo.fin) {
     var a = aMin(s.fijo.ini), b = aMin(s.fijo.fin); if (b <= a) b += 1440;
     return {h: Math.floor(a / 60), a:a, b:b, ini:s.fijo.ini, fin:s.fijo.fin};
   }
   var H = tgtH(s.id);
+  if (est && SCFG[est]) H = s.role === 'enc' ? SCFG[est].eH : SCFG[est].rH;
   return {h:h, a:h*60, b:(h + H)*60, ini:dosD(h) + ':00', fin:dosD((h + H) % 24) + ':00'};
 }
 /* Cuántos habrá trabajando a cada hora con esas entradas, contando la
@@ -3685,7 +3714,11 @@ function planPonerModo(m){ guardarPlan(leerPlanDeLaVentana()); planModo = m; pin
 function planRellenar(){
   var p = leerPlanDeLaVentana();
   guardarPlan(p);
-  var dias = planModo === 'semana' ? planSemanas()[planDesde()].dias : planDiasDesde();
+  var dias;
+  if (planModo === 'semana') {
+    var w1 = planSemanasLargo()[planDesde()];
+    dias = w1.dias; dias.forEach(function(d){ d.est = planEstacion(w1.k, w1.mes); });
+  } else dias = planDiasDesde();
   var lista = planPersonas(p);
   if (!p.base) p.base = isoDe(lunesDe(new Date(dias[0].y, dias[0].m, dias[0].d)));
   var base = deIso(p.base);
@@ -3788,7 +3821,7 @@ function planRellenar(){
       var sig = gcAt(s.id, diaDespues(dia));
       var sigIni = (sig && sig.estado === 'trabajo' && sig.inicio) ? aMin(sig.inicio) + 1440 : null;
       var tipo = tSem[s.id] || planTipo(g, sem);
-      var prefs = planPrefs(g, tipo, E, p).map(function(h){ return turnoDe(s, g, h); }).filter(function(t){
+      var prefs = planPrefs(g, tipo, E, p).map(function(h){ return turnoDe(s, g, h, dia.est); }).filter(function(t){
         if (prev !== null && t.a + 1440 - prev < DESC) return false;      // descanso con el dia de antes
         if (sigIni !== null && sigIni - t.b < DESC) return false;          // y con el de despues si ya esta puesto
         return true;
@@ -3946,6 +3979,8 @@ function planDeshacerYa(){
 
 /* ── La ventana ─────────────────────────────────────────────────── */
 function abrirPlan(){
+  /* Cada vez que se abre, desde el mes que se está viendo */
+  if (abrirPlan._mes !== curY * 12 + curM) { planDesdeIdx = null; planHastaMes = null; abrirPlan._mes = curY * 12 + curM; }
   var ov = document.getElementById('planov');
   if (!ov) {
     ov = document.createElement('div'); ov.className = 'ov'; ov.id = 'planov';
@@ -3973,7 +4008,7 @@ function pintarPlan(){
     return o;
   };
   var h = '<h3>Hacer horario</h3>' +
-    '<div style="font-size:.8rem;color:var(--text2);line-height:1.5">Rellena <b style="color:var(--text)">' + MESES[curM] + ' ' + curY + ' (' + esc(rangoDelMes(curY, curM)) + ')</b> ' +
+    '<div style="font-size:.8rem;color:var(--text2);line-height:1.5">Rellena desde la semana que elijas (de este mes o de los siguientes) ' +
       'con turnos que rotan cada semana. Solo toca los días vacíos: lo que ya tengas puesto se queda. Luego cambias lo que quieras tocando el día.</div>' +
     /* Mensual o semanal */
     '<div role="group" aria-label="Qué rellenar" style="display:inline-flex;margin-top:12px">' +
@@ -3984,8 +4019,23 @@ function pintarPlan(){
           (i === 0 ? 'border-radius:14px 0 0 14px' : 'border-radius:0 14px 14px 0;margin-left:-1px') + '">' + (m === 'mes' ? 'Mensual' : 'Semanal') + '</button>';
       }).join('') + '</div>' +
     '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.8rem;color:var(--text2)">' + (planModo === 'semana' ? 'La semana del ' : 'Desde la semana del ') +
-      '<select onchange="planCambiarDesde(this.value)" style="' + inp + '">' + planSemanas().map(function(w, i){
-        return '<option value="' + i + '"' + (i === planDesde() ? ' selected' : '') + '>' + esc(w.txt) + '</option>'; }).join('') + '</select></label>' +
+      (function(){
+        var sem = planSemanasLargo(), sel = planDesde(), o = '', k = -1;
+        sem.forEach(function(w, i){
+          if (w.k !== k) { if (k >= 0) o += '</optgroup>'; k = w.k; o += '<optgroup label="' + MESES[w.mes] + ' ' + w.y + '">'; }
+          o += '<option value="' + i + '"' + (i === sel ? ' selected' : '') + '>' + esc(w.txt) + '</option>';
+        });
+        return '<select onchange="planCambiarDesde(this.value)" style="' + inp + '">' + o + '</optgroup></select>';
+      })() + '</label>' +
+    (planModo === 'semana' ? '' : (function(){
+      var sem = planSemanasLargo(), k0 = sem[planDesde()].k, hk = planHasta(), o = '';
+      for (var k = k0; k <= PLAN_ADELANTE; k++) {
+        var f = new Date(curY, curM + k, 1);
+        o += '<option value="' + k + '"' + (k === hk ? ' selected' : '') + '>' + MESES[f.getMonth()] + ' ' + f.getFullYear() + '</option>';
+      }
+      return '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:.8rem;color:var(--text2)">Hasta fin de ' +
+        '<select onchange="planCambiarHasta(this.value)" style="' + inp + '">' + o + '</select></label>';
+    })()) +
 
     '<div style="' + tit + '">Personas</div>' +
     '<div style="font-size:.72rem;color:var(--text2);margin-bottom:6px">«1ª semana» es el turno que hace cada uno la semana del ' +
@@ -4035,8 +4085,8 @@ function pintarPlan(){
     '<div id="plan-res" style="margin-top:12px;font-size:.78rem;line-height:1.5"></div>' +
     '<div class="mact" style="margin-top:12px;flex-wrap:wrap">' +
       '<button class="bp" onclick="planRellenar()">&#129668; ' + (planModo === 'semana'
-          ? 'Rellenar la semana del ' + esc(planSemanas()[planDesde()].txt)
-          : 'Rellenar desde el ' + dias[0].d + ' ' + MESES[dias[0].m].slice(0,3).toLowerCase() + ' hasta fin de mes') + '</button>' +
+          ? 'Rellenar la semana del ' + esc(planSemanasLargo()[planDesde()].txt)
+          : 'Rellenar desde el ' + dias[0].d + ' ' + MESES[dias[0].m].slice(0,3).toLowerCase() + ' hasta fin de ' + MESES[new Date(curY, curM + planHasta(), 1).getMonth()].toLowerCase()) + '</button>' +
       '<button class="bs" id="plan-deshacer" onclick="planDeshacerYa()"' + (planDeshacer ? '' : ' style="display:none"') + '>Deshacer</button>' +
       '<button class="bs" onclick="guardarPlan(leerPlanDeLaVentana());toast(\'Reglas guardadas\')">Guardar reglas</button>' +
       '<button class="bs" onclick="cerrarPlan()">Cerrar</button>' +
@@ -4102,8 +4152,9 @@ function leerPlanDeLaVentana(){
 }
 
 /* Las semanas del mes que se esta viendo, de lunes a domingo. */
-function planSemanas(){
-  var dias = diasDelMes(curY, curM), out = [];
+function planSemanas(){ return planSemanasDe(curY, curM); }
+function planSemanasDe(y, m){
+  var dias = diasDelMes(y, m), out = [];
   for (var i = 0; i < dias.length; i += 7) {
     var tramo = dias.slice(i, i + 7), a = tramo[0], b = tramo[tramo.length - 1];
     out.push({dias:tramo, txt: a.d + (a.m !== b.m ? ' ' + MESES[a.m].slice(0,3).toLowerCase() : '') + ' – ' + b.d + ' ' + MESES[b.m].slice(0,3).toLowerCase()});
