@@ -702,7 +702,26 @@ function borrarArchivo(ruta, intento){
     });
 }
 
+/* El archivo de datos tal como estaba en un momento dado (el último
+   guardado antes de esa fecha), para recuperar algo que se borró. */
+function versionAnterior(hastaISO){
+  return api('commits?path=' + encodeURIComponent(ARCHIVO) + '&sha=' + encodeURIComponent(rama()) +
+             '&until=' + encodeURIComponent(hastaISO) + '&per_page=1', {cache: 'no-store'})
+    .then(function(res){ if (!res.ok) throw errorDe(res); return res.json(); })
+    .then(function(lista){
+      if (!lista || !lista.length) throw new Error('No hay ninguna copia de antes de esa fecha');
+      var ref = lista[0].sha, cuando = lista[0].commit && lista[0].commit.committer && lista[0].commit.committer.date;
+      return api('contents/' + ARCHIVO + '?ref=' + ref, {cache: 'no-store'})
+        .then(function(res){ if (!res.ok) throw errorDe(res); return res.json(); })
+        .then(function(data){
+          if (data.content && String(data.content).trim()) return {datos: JSON.parse(deBase64(data.content)), cuando: cuando};
+          return descargarBlob(data.sha).then(function(d){ return {datos: d, cuando: cuando}; });
+        });
+    });
+}
+
 window.Sync = {
+  versionAnterior: versionAnterior,
   conectado: conectado,
   repo: repo,
   rama: rama,

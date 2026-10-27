@@ -617,6 +617,7 @@ function renderAll() {
   /* La barra de bloques, lo primero: así sale aunque algo de abajo
      falle al pintarse. */
   montarBarraBloques();
+  autoFestivos(curY, curM);
   renderNav(); renderTable(); renderStats(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
   BLOQUES.forEach(function(b){ aplicarPlegado(b.id); });
   ordenarBloques();
@@ -2948,7 +2949,13 @@ function fijoDe(id) {
 function setFijo(id, campo, valor) {
   var p = personaDe(id); if (!p) return;
   p.fijo = p.fijo || {ini:'', fin:'', libra:''};
+  var antes = p.fijo[campo];
   p.fijo[campo] = valor;
+  if (campo === 'libra' && String(antes) !== String(valor)) {
+    moverLibra(id, antes);
+    if (valor !== '') { autoFestivos(curY, curM); }
+    renderAll();
+  }
   /* Al escribir la entrada, la salida se rellena sola con las horas que
      le tocan por su oficio y la temporada, si no habia ninguna. */
   if (campo === 'ini' && valor && !p.fijo.fin) {
@@ -2957,8 +2964,54 @@ function setFijo(id, campo, valor) {
     var h = Math.floor(tot/60) % 24, m = tot % 60;
     p.fijo.fin = (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
   }
-  if (!p.fijo.ini && !p.fijo.fin && p.fijo.libra === '') delete p.fijo;
+  if (!p.fijo.ini && !p.fijo.fin && p.fijo.libra === '' && !Object.keys(p.fijo.festHecho || {}).length) delete p.fijo;
   save(); renderCamList();
+}
+
+/* Los festivos se ponen solos: la primera vez que se mira un mes (de
+   hoy en adelante), el día que libra cada uno queda como festivo en los
+   días vacíos. Se apunta en la persona que ese mes ya está hecho, así lo
+   que luego se cambie a mano se queda como se deje. */
+function autoFestivos(y, m){
+  var dias = diasDelMes(y, m);
+  var hoy = new Date(); hoy.setHours(0,0,0,0);
+  var ult = dias[dias.length - 1];
+  if (new Date(ult.y, ult.m, ult.d) < hoy) return;          // meses pasados, no
+  var clave = y + '-' + m, cambios = 0;
+  staff().forEach(function(p){
+    var f = p.fijo; if (!f || f.libra === '' || f.libra == null) return;
+    f.festHecho = f.festHecho || {};
+    if (f.festHecho[clave]) return;
+    dias.forEach(function(dia){
+      if (dia.dow !== +f.libra) return;
+      var mes = ((sched[dia.y] = sched[dia.y] || {})[dia.m] = (sched[dia.y][dia.m] || {}));
+      mes[p.id] = mes[p.id] || {};
+      var hay = mes[p.id][dia.d];
+      if (hay && hay.estado && hay.estado !== 'libre') return;   // ya hay algo
+      mes[p.id][dia.d] = {estado:'festivo', nota:''};
+      cambios++;
+    });
+    f.festHecho[clave] = 1;
+    cambios++;
+  });
+  if (cambios) save();
+}
+/* Cambia el día que libra: los festivos de su día de antes, de este mes
+   en adelante, se quitan y se ponen en el nuevo. */
+function moverLibra(id, antes){
+  var p = personaDe(id); if (!p || !p.fijo) return;
+  var hoy = new Date(); hoy.setHours(0,0,0,0);
+  var desde = mesDeFecha(hoy);
+  Object.keys(p.fijo.festHecho || {}).forEach(function(k){
+    var a = k.split('-'), y = +a[0], m = +a[1];
+    if (y < desde.y || (y === desde.y && m < desde.m)) return;
+    if (antes !== '' && antes != null) diasDelMes(y, m).forEach(function(dia){
+      if (dia.dow !== +antes) return;
+      var c = (((sched[dia.y] || {})[dia.m] || {})[id] || {})[dia.d];
+      if (c && c.estado === 'festivo') delete sched[dia.y][dia.m][id][dia.d];
+    });
+    delete p.fijo.festHecho[k];
+  });
 }
 
 /* Vuelca el turno fijo en los dias vacios del mes que se esta viendo. */
@@ -3472,6 +3525,11 @@ function planPersonas(p){
     if (ap.entra && ap.entra === p.turnos.O[0] && g.grupo === 'cam') g.grupo = 'fijo';
     p.gente[s.id] = g;
   });
+  /* El día que libra cada uno manda el de Personal, si lo tiene puesto */
+  lista.forEach(function(s){
+    var g = p.gente[s.id];
+    if (g && s.fijo && s.fijo.libra !== '' && s.fijo.libra != null) g.fest = +s.fijo.libra;
+  });
   /* Festivos que dijo Lito (una sola vez: luego se cambian en la ventana) */
   if ((p._fest || 0) < 1) {
     var FEST_DICHOS = [[/^luis/i, 1], [/^martin/i, 2], [/^cris/i, 3]];
@@ -3922,6 +3980,13 @@ function leerPlanDeLaVentana(){
     var sid = tr.dataset.pid, g = p.gente[sid] || {};
     g.grupo = tr.querySelector('[data-k="grupo"]').value;
     g.fest = parseInt(tr.querySelector('[data-k="fest"]').value, 10);
+    /* y se queda también en Personal, que es de donde salen los festivos solos */
+    var per = personaDe(sid);
+    if (per) {
+      per.fijo = per.fijo || {ini:'', fin:'', libra:''};
+      var nuevo = g.fest >= 0 ? String(g.fest) : '';
+      if (String(per.fijo.libra) !== nuevo) { var ant = per.fijo.libra; per.fijo.libra = nuevo; moverLibra(sid, ant); }
+    }
     g.ini = tr.querySelector('[data-k="ini"]').value || 'man';
     if (g.grupo === 'coc' && g.ini === 'med') g.ini = 'man';
     g.fijoT = tr.querySelector('[data-k="fijoT"]').value || 'O';
@@ -4095,8 +4160,16 @@ function pintarVacas(resultado){
   });
   h += '</table>' +
     '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.76rem;color:var(--text2)"><input type="checkbox" id="vac-limpiar" checked style="' + chk + '">' +
-      'Al poner, quitar las vacaciones que ya hubiera en ' + esc(anoV) + '</label>' +
+      'Al poner, quitar las vacaciones que ya hubiera en esas fechas (lo ya pasado no se toca)</label>' +
     '<button class="bs" onclick="vacCalcular()" style="width:100%;margin-top:10px">Rehacer las tandas con estas reglas</button>' +
+    '</details>' +
+    '<details style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px"' + (vacRecuperarAbierto ? ' open' : '') + '><summary style="cursor:pointer;font-size:.8rem;color:var(--gold2);font-weight:600">Recuperar vacaciones de antes</summary>' +
+      '<div style="font-size:.74rem;color:var(--text2);margin:8px 0">Trae del historial cómo estaban las vacaciones de ese año en el momento que digas y las deja así. Lo demás (turnos, festivos) no se toca. Se puede deshacer.</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:.78rem;color:var(--text2)">Como estaban el' +
+        '<input type="date" id="rec-dia" value="' + esc(vacRecDefecto().slice(0,10)) + '" style="' + inp + '">a las' +
+        '<input type="time" id="rec-hora" value="' + esc(vacRecDefecto().slice(11,16)) + '" style="' + inp + ';width:96px">' +
+        'del año <select id="rec-ano" style="' + inp + '">' + opts + '</select></div>' +
+      '<button class="bs" onclick="vacRecuperar()" style="width:100%;margin-top:10px">Recuperar</button>' +
     '</details>';
   document.getElementById('vacas-cuerpo').innerHTML = h;
 }
@@ -4234,15 +4307,19 @@ function vacAplicar(){
   vacDeshacer = JSON.stringify(sched);
   var anos = {};
   v.tandas.forEach(function(t){ anos[t.desde.slice(0,4)] = 1; anos[t.hasta.slice(0,4)] = 1; });
-  if (document.getElementById('vac-limpiar') && document.getElementById('vac-limpiar').checked) {
-    Object.keys(anos).forEach(function(ano){
-      Object.keys(sched[ano] || {}).forEach(function(m){
-        Object.keys(sched[ano][m] || {}).forEach(function(sid){
-          var mes = sched[ano][m][sid] || {};
-          Object.keys(mes).forEach(function(d){ if (mes[d] && mes[d].estado === 'vacaciones') delete mes[d]; });
-        });
-      });
-    });
+  /* Lo ya pasado no se toca nunca, y solo se quitan vacaciones dentro
+     del tramo que cubren las tandas */
+  var hoyV = new Date(); hoyV.setHours(0,0,0,0);
+  var tIni = null, tFin = null;
+  v.tandas.forEach(function(t){ if (vacDiasTanda(t) > 0) { var a = deIso(t.desde), b = deIso(t.hasta); if (!tIni || a < tIni) tIni = a; if (!tFin || b > tFin) tFin = b; } });
+  if (tIni && tIni < hoyV) tIni = hoyV;
+  v.antesDePoner = v.antesDePoner || {};
+  v.antesDePoner[String(v.desde).slice(0,4)] = new Date().toISOString();
+  if (tIni && tFin && document.getElementById('vac-limpiar') && document.getElementById('vac-limpiar').checked) {
+    for (var f0 = new Date(tIni); f0 <= tFin; f0.setDate(f0.getDate() + 1)) {
+      var mes0 = (sched[f0.getFullYear()] || {})[f0.getMonth()] || {};
+      Object.keys(mes0).forEach(function(sid){ var c = mes0[sid] && mes0[sid][f0.getDate()]; if (c && c.estado === 'vacaciones') delete mes0[sid][f0.getDate()]; });
+    }
   }
   var turnosFuera = 0, totales = {};
   v.tandas.forEach(function(t){
@@ -4250,6 +4327,7 @@ function vacAplicar(){
     t.ids.forEach(function(sid){
       for (var i = 0; i < L; i++) {
         var f = new Date(a.getFullYear(), a.getMonth(), a.getDate() + i);
+        if (f < hoyV) continue;                       /* el pasado, como estaba */
         var y = f.getFullYear(), m = f.getMonth(), d = f.getDate();
         if (!sched[y]) sched[y] = {};
         if (!sched[y][m]) sched[y][m] = {};
@@ -4381,4 +4459,54 @@ function vacMover(sid, dest){
   guardarPlan(p);
   vacParejasAbierto = true;
   pintarVacas('<b style="color:var(--gold2)">Parejas cambiadas.</b> Revisa las fechas y dale a «Poner en el horario».');
+}
+
+var vacRecuperarAbierto = false;
+/* Por defecto, un minuto antes de la última vez que se pusieron las tandas de este año */
+function vacRecDefecto(){
+  var v = (cargarPlan().vac || {}), y = String(v.desde || curY).slice(0,4);
+  var t = v.antesDePoner && v.antesDePoner[y];
+  var f = t ? new Date(new Date(t).getTime() - 60000) : new Date(2026, 9, 26, 11, 30);
+  var pad = function(n){ return (n < 10 ? '0' : '') + n; };
+  return f.getFullYear() + '-' + pad(f.getMonth() + 1) + '-' + pad(f.getDate()) + 'T' + pad(f.getHours()) + ':' + pad(f.getMinutes());
+}
+function vacRecuperar(){
+  vacRecuperarAbierto = true;
+  var dia = (document.getElementById('rec-dia') || {}).value, hora = (document.getElementById('rec-hora') || {}).value || '23:59';
+  var ano = (document.getElementById('rec-ano') || {}).value;
+  if (!dia || !ano) { toast('Pon el día y el año'); return; }
+  if (!window.Sync || !Sync.versionAnterior) { toast('Para recuperar hace falta estar conectado'); return; }
+  var res = document.getElementById('vacas-res');
+  if (res) res.innerHTML = 'Buscando en el historial…';
+  var hasta = new Date(dia + 'T' + hora + ':00').toISOString();
+  Sync.versionAnterior(hasta).then(function(r){
+    var h = (r.datos || {}).horario || {};
+    var viejo = h.rsch; if (typeof viejo === 'string') { try { viejo = JSON.parse(viejo); } catch(e){ viejo = null; } }
+    if (!viejo) throw new Error('Esa copia no tiene horario');
+    var antes = viejo[ano] || {}, ahora = sched[ano] = sched[ano] || {};
+    vacDeshacer = JSON.stringify(sched);
+    var puestos = 0, quitados = 0;
+    var meses = {}; Object.keys(antes).forEach(function(m){ meses[m] = 1; }); Object.keys(ahora).forEach(function(m){ meses[m] = 1; });
+    Object.keys(meses).forEach(function(m){
+      var A = antes[m] || {}, B = ahora[m] = ahora[m] || {};
+      var gente = {}; Object.keys(A).forEach(function(k){ gente[k] = 1; }); Object.keys(B).forEach(function(k){ gente[k] = 1; });
+      Object.keys(gente).forEach(function(sid){
+        var a = A[sid] || {}, b = B[sid] = B[sid] || {};
+        var ds = {}; Object.keys(a).forEach(function(k){ ds[k] = 1; }); Object.keys(b).forEach(function(k){ ds[k] = 1; });
+        Object.keys(ds).forEach(function(d){
+          var va = a[d] && a[d].estado === 'vacaciones', vb = b[d] && b[d].estado === 'vacaciones';
+          if (va && !vb) { b[d] = JSON.parse(JSON.stringify(a[d])); puestos++; }
+          else if (vb && !va) { if (a[d]) b[d] = JSON.parse(JSON.stringify(a[d])); else delete b[d]; quitados++; }
+        });
+      });
+    });
+    save(); renderAll();
+    var cuando = r.cuando ? new Date(r.cuando) : null;
+    pintarVacas('<b style="color:var(--gold2)">Recuperadas las vacaciones de ' + esc(ano) + '</b>' +
+      (cuando ? ' como estaban el ' + cuando.getDate() + '/' + (cuando.getMonth() + 1) + ' a las ' + cuando.toTimeString().slice(0,5) : '') +
+      ': ' + puestos + ' días vuelven a ser de vacaciones y ' + quitados + ' se quitan. Si no era esto, Deshacer.');
+    toast('Vacaciones recuperadas');
+  }).catch(function(e){
+    if (res) res.innerHTML = '<span style="color:#e87c6f">No he podido recuperarlas: ' + esc(e.message) + '</span>';
+  });
 }
