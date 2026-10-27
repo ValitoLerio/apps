@@ -884,14 +884,16 @@ function pintarFormularioDia(d){
        hay. Se escribe el ingreso o el saldo, y el otro sale solo. */
     (function(){
       var pv=recuentoAntesDe(ui.dia), ant=pv ? r2(+pv.aAmarilla||0) : null;
+      /* El saldo anterior lo puede poner uno a mano; si no, el del último recuento */
+      if(actual.amAnterior!=null && actual.amAnterior!=="") ant=r2(+actual.amAnterior||0);
       var tieneAm=(actual.aAmarilla!=null && actual.aAmarilla!=="");
       var ing=(tieneAm && ant!=null) ? r2(+actual.aAmarilla-ant) : "";
       return '<p class="nota" style="margin:16px 0 8px;font-weight:600;color:var(--tinta2)">Caja amarilla</p>'+
       '<div class="amarilla-fila" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">'+
         '<div class="campo"><label class="lbl" for="f_amAnt">Saldo anterior</label>'+
-          '<input type="number" class="grande" id="f_amAnt" value="'+(ant!=null?esc(ant):"")+'" placeholder="—" readonly tabindex="-1" style="background:var(--fondo2,transparent);color:var(--muted)"></div>'+
+          '<input type="number" class="grande" id="f_amAnt" step="0.01" value="'+(ant!=null?esc(ant):"")+'" placeholder="0,00"></div>'+
         '<div class="campo"><label class="lbl" for="f_amIng">Ingreso diario</label>'+
-          '<input type="number" class="grande" id="f_amIng" step="0.01" value="'+esc(ing)+'" placeholder="0,00"'+(ant==null?' disabled title="Sin saldo anterior: escribe el saldo actual"':'')+'></div>'+
+          '<input type="number" class="grande" id="f_amIng" step="0.01" value="'+esc(ing)+'" placeholder="0,00"></div>'+
         '<div class="campo"><label class="lbl" for="f_amar">Saldo actual</label>'+
           '<input type="number" class="grande" id="f_amar" min="0" step="0.01" value="'+esc(actual.aAmarilla)+'"></div>'+
       '</div>';
@@ -1145,13 +1147,17 @@ function pintarFormularioDia(d){
     var cAnt=document.getElementById("f_amAnt"), cIng=document.getElementById("f_amIng"), cAm=document.getElementById("f_amar");
     if(!cIng || !cAm) return;
     cIng.addEventListener("input", function(){
-      if(cAnt.value==="") return;
       cAm.value = cIng.value==="" ? "" : r2((+cAnt.value||0)+(+cIng.value||0));
       refrescar();
     });
     cAm.addEventListener("input", function(){
-      if(cAnt.value==="") return;
       cIng.value = cAm.value==="" ? "" : r2((+cAm.value||0)-(+cAnt.value||0));
+    });
+    /* Cambiar el saldo anterior mueve el actual (el ingreso se queda) */
+    cAnt.addEventListener("input", function(){
+      if(cIng.value!=="") cAm.value = r2((+cAnt.value||0)+(+cIng.value||0));
+      else if(cAm.value!=="") cIng.value = r2((+cAm.value||0)-(+cAnt.value||0));
+      refrescar();
     });
   })();
   ["f_visa","f_efec","f_efecReal","f_pct","f_amar","f_fondo","f_saca","f_sobra"].forEach(function(id){
@@ -1193,6 +1199,12 @@ function pintarFormularioDia(d){
       if(imp>0) detalle.push({concepto:"Pago", importe:imp});
     });
     var registro=d||{id:uid(), fecha:ui.dia};
+    (function(){
+      var cA=document.getElementById("f_amAnt"), pvA=recuentoAntesDe(ui.dia);
+      var calc=pvA ? r2(+pvA.aAmarilla||0) : null;
+      if(cA && cA.value!=="" && (calc==null || Math.abs(r2(+cA.value)-calc)>=0.005)) registro.amAnterior=r2(+cA.value||0);
+      else delete registro.amAnterior;
+    })();
     registro.visa=numero("f_visa");
     registro.efectivo=numero("f_efec");
     /* Vacío es «no lo he contado», y eso no es lo mismo que cero. */
@@ -1362,7 +1374,8 @@ function textoDia(fecha, opciones){
      honrado que una cuenta con pinta de recuento. */
   /* La amarilla, en tres: lo que había, lo que ha entrado y lo que hay */
   var previoAm=recuentoAntesDe(fecha);
-  var amAnt=previoAm ? r2(+previoAm.aAmarilla||0) : null;
+  var amAnt=(d.amAnterior!=null && d.amAnterior!=="") ? r2(+d.amAnterior||0)
+           : (previoAm ? r2(+previoAm.aAmarilla||0) : null);
   var amar = amAnt==null
     ? [["Caja amarilla", eur(c.amarilla)]]
     : [["Caja amarilla", ""],
