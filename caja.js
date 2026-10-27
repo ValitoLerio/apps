@@ -895,7 +895,7 @@ function pintarFormularioDia(d){
         '<div class="campo"><label class="lbl" for="f_amIng">Ingreso diario</label>'+
           '<input type="number" class="grande" id="f_amIng" step="0.01" value="'+esc(ing)+'" placeholder="0,00"></div>'+
         '<div class="campo"><label class="lbl" for="f_amar">Saldo actual</label>'+
-          '<input type="number" class="grande" id="f_amar" min="0" step="0.01" value="'+esc(actual.aAmarilla)+'"></div>'+
+          '<input type="number" class="grande" id="f_amar" min="0" step="0.01" value="'+esc(actual.aAmarilla)+'" readonly tabindex="-1" title="Saldo anterior + ingreso diario" style="font-weight:700"></div>'+
       '</div>';
     })()+
     '<p class="nota" style="margin:16px 0 8px;font-weight:600;color:var(--tinta2)">Pagos hechos con dinero de la caja</p>'+
@@ -1147,16 +1147,12 @@ function pintarFormularioDia(d){
     var cAnt=document.getElementById("f_amAnt"), cIng=document.getElementById("f_amIng"), cAm=document.getElementById("f_amar");
     if(!cIng || !cAm) return;
     cIng.addEventListener("input", function(){
-      cAm.value = cIng.value==="" ? "" : r2((+cAnt.value||0)+(+cIng.value||0));
+      cAm.value = (cAnt.value==="" && cIng.value==="") ? "" : r2((+cAnt.value||0)+(+cIng.value||0));
       refrescar();
     });
-    cAm.addEventListener("input", function(){
-      cIng.value = cAm.value==="" ? "" : r2((+cAm.value||0)-(+cAnt.value||0));
-    });
-    /* Cambiar el saldo anterior mueve el actual (el ingreso se queda) */
+    /* El saldo actual es siempre la suma de los otros dos */
     cAnt.addEventListener("input", function(){
-      if(cIng.value!=="") cAm.value = r2((+cAnt.value||0)+(+cIng.value||0));
-      else if(cAm.value!=="") cIng.value = r2((+cAm.value||0)-(+cAnt.value||0));
+      cAm.value = (cAnt.value==="" && cIng.value==="") ? "" : r2((+cAnt.value||0)+(+cIng.value||0));
       refrescar();
     });
   })();
