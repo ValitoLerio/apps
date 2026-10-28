@@ -4689,3 +4689,102 @@ function vacRecuperar(){
     if (res) res.innerHTML = '<span style="color:#e87c6f">No he podido recuperarlas: ' + esc(e.message) + '</span>';
   });
 }
+
+// ================================================================
+// PEGAR UNA SEMANA (de un horario en papel pasado a texto)
+// ================================================================
+// Una línea por persona: el nombre y los 7 días de lunes a domingo.
+//   Valeriano: 16-1 17-1 16-1 16-1 16-1 16-1 F
+// Turno «7-15» o «7:30-15:30», F festivo, V vacaciones, B baja,
+// A ausencia, y «-» para dejar el día como está.
+var pegarDeshacer = null;
+function abrirPegarSemana(){
+  var ov = document.getElementById('pegarov');
+  if (!ov) {
+    ov = document.createElement('div'); ov.className = 'ov'; ov.id = 'pegarov';
+    ov.innerHTML = '<div class="modal" style="max-width:620px;width:96vw"><div id="pegar-cuerpo"></div></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function(e){ if (e.target === ov) ov.classList.remove('show'); });
+  }
+  var ini = new Date(weekStart), fin = new Date(weekStart); fin.setDate(fin.getDate() + 6);
+  var f = function(d){ return d.getDate() + '/' + (d.getMonth() + 1); };
+  document.getElementById('pegar-cuerpo').innerHTML =
+    '<h3>Pegar semana del ' + f(ini) + ' al ' + f(fin) + '</h3>' +
+    '<div style="font-size:.8rem;color:var(--text2);line-height:1.5">Una línea por persona: el nombre y los 7 días, de lunes a domingo. ' +
+      'Turno <b>7-15</b> · <b>F</b> festivo · <b>V</b> vacaciones · <b>B</b> baja · <b>A</b> ausencia · <b>-</b> lo deja como está.</div>' +
+    '<textarea id="pegar-txt" rows="10" style="width:100%;margin-top:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px;font-family:monospace;font-size:.85rem" placeholder="Valeriano: 16-1 17-1 16-1 16-1 16-1 16-1 F"></textarea>' +
+    '<div id="pegar-res" style="margin-top:8px;font-size:.78rem;line-height:1.5"></div>' +
+    '<div class="mact" style="margin-top:12px;flex-wrap:wrap">' +
+      '<button class="bp" onclick="pegarSemana()">Poner en la semana</button>' +
+      '<button class="bs" id="pegar-deshacer" onclick="pegarDeshacerYa()"' + (pegarDeshacer ? '' : ' style="display:none"') + '>Deshacer</button>' +
+      '<button class="bs" onclick="document.getElementById(\'pegarov\').classList.remove(\'show\')">Cerrar</button>' +
+    '</div>';
+  ov.classList.add('show');
+  document.getElementById('pegar-txt').focus();
+}
+function pegarHora(t){
+  var m = /^(\d{1,2})(?:[:.h](\d{2}))?$/.exec(t); if (!m) return null;
+  var h = +m[1], mi = m[2] ? +m[2] : 0; if (h > 24 || mi > 59) return null;
+  return (h % 24 < 10 ? '0' : '') + (h % 24) + ':' + (mi < 10 ? '0' : '') + mi;
+}
+function pegarLeer(txt){
+  var gente = staff(), filas = [], errores = [];
+  var norm = function(s){ return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, ''); };
+  txt.split(/\n/).forEach(function(linea){
+    linea = linea.trim(); if (!linea) return;
+    /* El nombre es lo de delante hasta el primer día (un turno o una letra) */
+    var toks = linea.replace(/[:;\t|,]+(?=\s|$)/g, ' ').split(/\s+/).filter(Boolean), k = 0;
+    var esDia = function(t){ return /^[-._]$/.test(t) || /^[FXVBA]$/i.test(t) || /^\d{1,2}([:.h]\d{2})?-\d{1,2}([:.h]\d{2})?$/.test(t); };
+    while (k < toks.length && !esDia(toks[k])) k++;
+    var m = [null, toks.slice(0, k).join(' '), toks.slice(k).join(' ')];
+    if (!m[1]) { errores.push('Falta el nombre: ' + linea); return; }
+    var n = norm(m[1]);
+    var s = gente.find(function(x){ return norm(x.name) === n; }) || gente.find(function(x){ return n && norm(x.name).indexOf(n) === 0; });
+    if (!s) { errores.push('No hay nadie que se llame «' + m[1] + '»'); return; }
+    var vals = m[2].split(/[\s,;|]+/).filter(Boolean);
+    if (vals.length !== 7) { errores.push(s.name + ': hay ' + vals.length + ' días y tienen que ser 7'); return; }
+    var dias = [];
+    for (var i = 0; i < 7; i++) {
+      var v = vals[i].toUpperCase();
+      if (v === '-' || v === '.' || v === '_') { dias.push(null); continue; }
+      var est = {F:'festivo', X:'festivo', V:'vacaciones', B:'baja', A:'ausencia'}[v];
+      if (est) { dias.push({estado:est, nota:''}); continue; }
+      var t = vals[i].split('-'), a = pegarHora(t[0]), b = t.length === 2 ? pegarHora(t[1]) : null;
+      if (!a || !b) { errores.push(s.name + ': no entiendo «' + vals[i] + '»'); dias = null; break; }
+      dias.push({estado:'trabajo', inicio:a, fin:b, nota:''});
+    }
+    if (dias) filas.push({s:s, dias:dias});
+  });
+  return {filas:filas, errores:errores};
+}
+function pegarSemana(){
+  var r = pegarLeer(document.getElementById('pegar-txt').value);
+  var res = document.getElementById('pegar-res');
+  if (r.errores.length) { res.innerHTML = '<div style="color:#e87c6f">' + r.errores.map(esc).join('<br>') + '</div><div style="color:var(--text2)">No he puesto nada: corrígelo y vuelve a darle.</div>'; return; }
+  if (!r.filas.length) { res.innerHTML = '<span style="color:#e87c6f">No hay nada que poner.</span>'; return; }
+  pegarDeshacer = JSON.stringify(sched);
+  var n = 0;
+  r.filas.forEach(function(fl){
+    fl.dias.forEach(function(c, i){
+      if (!c) return;
+      var f = new Date(weekStart); f.setDate(f.getDate() + i);
+      var y = f.getFullYear(), m = f.getMonth(), d = f.getDate();
+      if (!sched[y]) sched[y] = {};
+      if (!sched[y][m]) sched[y][m] = {};
+      if (!sched[y][m][fl.s.id]) sched[y][m][fl.s.id] = {};
+      sched[y][m][fl.s.id][d] = c; n++;
+    });
+  });
+  save(); renderAll();
+  res.innerHTML = '<b style="color:var(--gold2)">Puesto: ' + r.filas.length + ' personas, ' + n + ' días.</b> Si algo no está bien, Deshacer o tócalo en el cuadro.';
+  document.getElementById('pegar-deshacer').style.display = '';
+  toast('Semana puesta');
+}
+function pegarDeshacerYa(){
+  if (!pegarDeshacer) return;
+  try { sched = JSON.parse(pegarDeshacer); } catch(e){ return; }
+  pegarDeshacer = null; save(); renderAll();
+  document.getElementById('pegar-deshacer').style.display = 'none';
+  document.getElementById('pegar-res').textContent = 'Deshecho: la semana está como antes.';
+  toast('Deshecho');
+}
