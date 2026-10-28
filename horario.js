@@ -3903,7 +3903,9 @@ function planRellenar(){
       for (var k = 0; k < E.length; k++) {
         var h = E[k], need = +ENT[h] || 0, c = cov[h];
         var punta = k === 0 || k === E.length - 1;
-        if (c < need) coste += (need - c) * (punta ? 320 : 200);
+        /* Si falta gente, que falte de día: primero se cubre abrir y la
+           noche (de las 15 en adelante), y lo que quede, al mediodía. */
+        if (c < need) coste += (need - c) * (k === 0 ? 320 : (h >= 15 || h < 7) ? 300 : 150);
         else if (c > need) coste += (c - need) * (punta ? 40 : 3);
       }
       if (!encCierra && !encFijoCierra) coste += 300;   /* siempre cierra un encargado */
