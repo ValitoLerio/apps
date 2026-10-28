@@ -2532,6 +2532,18 @@ async function downloadInvoice(inv, kind){
       if(!paper && llevaFotos(inv)){
         toast("Preparando las fotos…");
         fa=await archivosDeFotos(inv);
+        var compartibles=false;
+        try{ compartibles=!fotosEnZip() && fa.length && canShareFiles() && navigator.canShare({files:fa}); }catch(e){}
+        if(compartibles){
+          /* En el móvil solo baja un archivo de golpe: las fotos sueltas se
+             guardan todas de una vez desde el menú de compartir. */
+          openDialog("Guardar las fotos",
+            '<p style="margin:0">La factura ya está bajada. El móvil no deja bajar '+fa.length+(fa.length>1?" fotos":" foto")+' de golpe: '+
+            'toca <b>Guardar</b> y elige <b>Guardar '+(fa.length>1?"imágenes":"imagen")+'</b> (o la carpeta donde quieras tenerlas).</p>',
+            function(){ navigator.share({files:fa}).catch(function(){}); },
+            {okLabel:"Guardar "+(fa.length>1?"las "+fa.length+" fotos":"la foto")});
+          return;
+        }
         fa.forEach(function(f,i){ setTimeout(function(){ descargarArchivo(f.name, f, f.type); }, 600+400*i); });
       }
       toast(paper ? "PDF listo: ábrelo y dale a imprimir en A4" :
