@@ -3828,7 +3828,16 @@ function planRellenar(){
       var sig = gcAt(s.id, diaDespues(dia));
       var sigIni = (sig && sig.estado === 'trabajo' && sig.inicio) ? aMin(sig.inicio) + 1440 : null;
       var tipo = tSem[s.id] || planTipo(g, sem);
-      var prefs = planPrefs(g, tipo, E, p).map(function(h){ return turnoDe(s, g, h, dia.est); }).filter(function(t){
+      var cand = planPrefs(g, tipo, E, p).map(function(h){ return turnoDe(s, g, h, dia.est); });
+      /* Un camarero o cocinero tiene que cerrar con el encargado: si con
+         las horas puestas nadie llega al cierre, se le deja entrar a la
+         hora justa para salir al cerrar (con sus horas). */
+      if (g.grupo !== 'enc' && g.grupo !== 'enccoc' && g.grupo !== 'fijo') {
+        var t7 = turnoDe(s, g, 7, dia.est), hc = (CIERRE - (t7.b - t7.a)) / 60;
+        if (hc >= 24) hc -= 24;
+        if (hc === Math.floor(hc) && E.indexOf(hc) < 0) { var tc = turnoDe(s, g, hc, dia.est); tc.cierre = true; cand.push(tc); }
+      }
+      var prefs = cand.filter(function(t){
         if (prev !== null && t.a + 1440 - prev < DESC) return false;      // descanso con el dia de antes
         if (sigIni !== null && sigIni - t.b < DESC) return false;          // y con el de despues si ya esta puesto
         return true;
@@ -3843,6 +3852,13 @@ function planRellenar(){
     /* ¿Ya cierra algún encargado con lo que estaba puesto? */
     var encFijoCierra = lista.some(function(s){
       var g = p.gente[s.id]; if (!g || (g.grupo !== 'enc' && g.grupo !== 'enccoc')) return false;
+      var c = gcAt(s.id, dia); if (!c || c.estado !== 'trabajo' || !c.inicio) return false;
+      var a = aMin(c.inicio), b = aMin(c.fin); if (b <= a) b += 1440;
+      return b >= CIERRE - 1;
+    });
+    /* ¿Y algún camarero o cocinero que cierre con él? */
+    var otroFijoCierra = lista.some(function(s){
+      var g = p.gente[s.id]; if (!g || g.grupo === 'enc' || g.grupo === 'enccoc' || g.grupo === 'no') return false;
       var c = gcAt(s.id, dia); if (!c || c.estado !== 'trabajo' || !c.inicio) return false;
       var a = aMin(c.inicio), b = aMin(c.fin); if (b <= a) b += 1440;
       return b >= CIERRE - 1;
@@ -3868,10 +3884,13 @@ function planRellenar(){
       E.forEach(function(h){ cov[h] = base0[h]; });
       var encCierra = false, encAbre = false, cocDia = cocFijoD, cocNoche = cocFijoN;
       var cubD = false, cubN = false, encCierran = 0, cubNenc = false;
+      var otroCierra = otroFijoCierra, alCierre = 0;
       for (var i = 0; i < n; i++) {
         var r = elec[i], tt = libres[i].prefs[r];
         coste += r * 4;
         if (cov[tt.h] != null) cov[tt.h]++;
+        if (tt.cierre) alCierre++;
+        if (!encs[i] && tt.b >= CIERRE - 1) otroCierra = true;
         if (encs[i] && tt.b >= CIERRE - 1) { encCierra = true; encCierran++; }
         if (cubre[i] && tt.a <= 13*60 && tt.b >= 15*60) cubD = true;
         if (cubre[i] && tt.b >= 23*60) { if (encs[i] && tt.b >= CIERRE - 1) cubNenc = true; else cubN = true; }
@@ -3888,6 +3907,8 @@ function planRellenar(){
         else if (c > need) coste += (c - need) * (punta ? 40 : 3);
       }
       if (!encCierra && !encFijoCierra) coste += 300;   /* siempre cierra un encargado */
+      if (!otroCierra) coste += 280;                    /* y con él, un camarero o cocinero */
+      if (alCierre > 1) coste += (alCierre - 1) * 200;  /* uno solo de más para cerrar */
       if (!encAbre) coste += 8;
       /* Cocina: el cocinero, o si no, uno de los que pueden cubrirla. Un
          encargado que cubre la cocina no cuenta como el que cierra. */
@@ -3928,13 +3949,14 @@ function planRellenar(){
     });
     /* Lo que no es una cuenta pero conviene saber: que cierre un
        encargado y que haya cocina a mediodía y por la noche. */
-    var encC = false, cocD = false, cocN = false;
+    var encC = false, cocD = false, cocN = false, otroC = false;
     lista.forEach(function(s){
       var g = p.gente[s.id]; if (!g) return;
       var c = gcAt(s.id, dia); if (!c || c.estado !== 'trabajo' || !c.inicio) return;
       var a = aMin(c.inicio), b = aMin(c.fin); if (b <= a) b += 1440;
       var esEnc = g.grupo === 'enc' || g.grupo === 'enccoc', esCoc = g.grupo === 'coc' || g.grupo === 'enccoc';
       if (esEnc && b >= CIERRE - 1) encC = true;
+      if (!esEnc && g.grupo !== 'no' && b >= CIERRE - 1) otroC = true;
       if (esCoc && a <= 13*60 && b >= 15*60) cocD = true;
       if (esCoc && b >= 23*60) cocN = true;
     });
@@ -3955,6 +3977,7 @@ function planRellenar(){
     }
     if (libres.length) {
       if (!encC) falta.push('no cierra ningún encargado');
+      if (!otroC) falta.push('el encargado cierra solo (sin camarero ni cocinero)');
       if (!cocD && !cubrirCocina(false)) falta.push('sin cocina a mediodía');
       if (!cocN && !cubrirCocina(true)) falta.push('sin cocina por la noche');
     }
