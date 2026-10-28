@@ -3096,13 +3096,7 @@ function renderCamList() {
 // ================================================================
 // RESET
 // ================================================================
-function resetAll() {
-  if (!confirm('Borrar todos los datos?')) return;
-  localStorage.clear();
-  sched={}; hidden={}; vac={};
-  ENC=[]; COC=[]; CAM=[];
-  renderAll(); toast('Datos borrados');
-}
+/* (La papelera de borrar todo se quitó: lo borraba todo de golpe.) */
 
 // ================================================================
 // TOAST
