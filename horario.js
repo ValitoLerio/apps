@@ -631,9 +631,54 @@ function renderAll() {
 // primer lunes al domingo de antes del primer lunes siguiente. Antes se
 // vaciaba el cajon sched[ano][mes] entero, y con los meses corridos eso
 // dejaba fuera la ultima semana y colaba los dias sueltos del principio.
+// ================================================================
+// DESDE CUANDO CUENTAN LAS HORAS Y LOS DIAS TRABAJADOS
+// ================================================================
+// Los dias de antes de esa fecha no se suman ni se ven en la tabla (los
+// turnos del cuadrante no se tocan). Se elige en "Contar desde" y se
+// guarda con los ocultos (rhid) para que llegue a los demas
+// dispositivos. Vacio = contar desde siempre.
+var HORAS_DESDE_DEF = '2026-11-01';
+function horasDesde() {
+  var v = hidden && hidden._horasDesde;
+  if (v === 'todo') return null;
+  var t = String(v || HORAS_DESDE_DEF).split('-');
+  var d = new Date(parseInt(t[0]), parseInt(t[1]) - 1, parseInt(t[2]));
+  return isNaN(d) ? null : d;
+}
+function diaCuenta(dia) {
+  var d = horasDesde();
+  return !d || new Date(dia.y, dia.m, dia.d) >= d;
+}
+function montarHorasDesde() {
+  var inp = document.getElementById('hours-desde');
+  if (!inp) {
+    var hyr = document.getElementById('hours-year-sel'); if (!hyr) return;
+    var lbl = document.createElement('span');
+    lbl.textContent = 'Contar desde';
+    lbl.style.cssText = 'font-size:.72rem;color:var(--text2);white-space:nowrap';
+    inp = document.createElement('input');
+    inp.type = 'date'; inp.id = 'hours-desde';
+    inp.title = 'Vacio = contar desde siempre';
+    inp.style.cssText = 'font-size:.75rem;padding:3px 7px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;font-family:inherit;color-scheme:dark light';
+    inp.onchange = function(){
+      hidden._horasDesde = inp.value || 'todo';
+      save(); renderHours();
+      if (inp.value) { var t = inp.value.split('-'); toast('Contando desde el ' + parseInt(t[2]) + '/' + parseInt(t[1]) + '/' + t[0]); }
+      else toast('Contando desde siempre');
+    };
+    hyr.parentNode.appendChild(lbl);
+    hyr.parentNode.appendChild(inp);
+  }
+  var d = horasDesde();
+  var v = d ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') : '';
+  if (document.activeElement !== inp && inp.value !== v) inp.value = v;
+}
+
 function calcStaffHours(sid, y, m) {
   var totalH = 0, totalD = 0;
   diasDelMes(y, m).forEach(function(dia){
+    if (!diaCuenta(dia)) return;
     var c = ((((sched[dia.y]||{})[dia.m]||{})[sid])||{})[dia.d];
     if (!c) return;
     if (c.estado === 'trabajo') {
@@ -646,6 +691,7 @@ function calcStaffHours(sid, y, m) {
 
 function renderHours() {
   var tbl = document.getElementById('hourstbl'); if (!tbl) return;
+  montarHorasDesde();
   var hyr = document.getElementById('hours-year-sel');
   var y   = hyr ? parseInt(hyr.value) : curY;
   var all = staff();
@@ -680,6 +726,7 @@ function grpSep(cols) {
 function calcStaffWeek(sid, week) {
   var h=0, d=0;
   week.days.forEach(function(day){
+    if(!diaCuenta(day)) return;
     var sM=curM, sY=curY; curM=day.m; curY=day.y;
     var cell=gc(sid,day.d);
     curM=sM; curY=sY;
@@ -1843,11 +1890,36 @@ function ponerGoma(valor){
   document.documentElement.setAttribute('data-goma', goma ? '1' : '0');
   var b = document.getElementById('bgoma');
   if (b){
-    b.innerHTML = goma ? '\uD83E\uDDF9 Borrando' : '\uD83E\uDDF9 Borrar';
-    b.style.background = goma ? 'rgba(192,57,43,.25)' : 'transparent';
+    b.innerHTML = goma ? '\u2715 Parar de borrar' : '\uD83E\uDDF9 Borrar';
+    b.style.background = goma ? '#c0392b' : 'transparent';
+    b.style.color = goma ? '#fff' : '#e87c6f';
+    b.style.fontWeight = goma ? '700' : '';
   }
+  barraGoma(goma);
   if (goma) toast('Goma puesta: pasa por encima de los dias y se vacian');
   else if (loBorrado.length) loBorrado = [];
+}
+
+/* Con la goma puesta, una barra roja grande abajo para pararla (y
+   devolver lo borrado), que el boton de arriba se pierde. */
+function barraGoma(si){
+  var bar = document.getElementById('goma-bar');
+  if (!bar){
+    bar = document.createElement('div');
+    bar.id = 'goma-bar';
+    bar.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9998;display:none;' +
+      'align-items:center;gap:10px;justify-content:center;white-space:nowrap;background:#c0392b;color:#fff;' +
+      'padding:10px 14px;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.55);font-family:inherit;max-width:calc(100vw - 24px)';
+    var st = document.createElement('style');
+    st.textContent = '#goma-bar{flex-wrap:nowrap}@media (max-width:480px){#goma-bar .gb-txt{display:none}#goma-bar button{padding:8px 12px !important}}';
+    document.head.appendChild(st);
+    bar.innerHTML = '<span class="gb-txt" style="font-weight:700;font-size:.9rem;white-space:nowrap">\uD83E\uDDF9 Borrando</span>' +
+      '<button type="button" onclick="devolverBorrado()" style="cursor:pointer;font-family:inherit;font-size:.85rem;font-weight:600;padding:8px 14px;border-radius:10px;border:1.5px solid #fff;background:transparent;color:#fff">\u21A9 Deshacer</button>' +
+      '<button type="button" onclick="ponerGoma(false)" style="cursor:pointer;font-family:inherit;font-size:.95rem;font-weight:800;padding:9px 18px;border-radius:10px;border:none;background:#fff;color:#c0392b">\u2715 Parar de borrar</button>';
+    document.body.appendChild(bar);
+    document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && goma) ponerGoma(false); });
+  }
+  bar.style.display = si ? 'flex' : 'none';
 }
 
 /* Vacia un dia y se guarda lo que habia, por si hay que devolverlo. */
@@ -3535,6 +3607,7 @@ function turnoDe(s, g, h, est){
   }
   var H = tgtH(s.id);
   if (est && SCFG[est]) H = s.role === 'enc' ? SCFG[est].eH : SCFG[est].rH;
+  if (g && +g.jornada > 0) H = +g.jornada;   /* su jornada, si se la han puesto */
   var a0 = minHora(h);
   return {h:h, a:a0, b:a0 + H*60, ini:dosD(h) + ':00', fin:dosD((h + H) % 24) + ':00'};
 }
@@ -3726,6 +3799,28 @@ function planRellenar(){
   var DESC = (+p.descanso || 0) * 60;
   planDeshacer = JSON.stringify(sched);
   var avisos = [], puestos = 0, coberturas = [];
+  /* Reglas de equipo */
+  var cierresCnt = {}, NOC = p.noCoinciden || [], JUN = p.juntos || [];
+  var MAXSEG = +p.maxSeguidos || 0;
+  function trabajaEn(sid, d){ var c = gcAt(sid, d); return !!(c && c.estado === 'trabajo' && c.inicio); }
+  function rachaAntes(sid, d){
+    var n = 0;
+    for (var i = 0; i < 21; i++) {
+      var f = new Date(d.y, d.m, d.d - 1); d = {y:f.getFullYear(), m:f.getMonth(), d:f.getDate()};
+      if (!trabajaEn(sid, d)) break; n++;
+    }
+    return n;
+  }
+  function horasSemanaAntes(sid, fecha){
+    var h = 0;
+    for (var f = lunesDe(fecha); f < fecha; f.setDate(f.getDate() + 1)) {
+      var c = gcAt(sid, {y:f.getFullYear(), m:f.getMonth(), d:f.getDate()});
+      if (c && c.estado === 'trabajo') h += horasDeCelda(c);
+    }
+    return h;
+  }
+  function catDe(min){ return min < 11*60 ? 'man' : min < 15*60 ? 'med' : 'noc'; }
+  function nombreDe(sid){ var x = personaDe(sid); return x ? x.name : '?'; }
 
   function finDe(c){
     if (!c || c.estado !== 'trabajo' || !c.inicio || !c.fin) return null;
@@ -3817,7 +3912,26 @@ function planRellenar(){
       var g = p.gente[s.id]; if (!g || g.grupo === 'no') return;
       var c = gcAt(s.id, dia);
       if (c && c.estado) { if (c.estado === 'trabajo' && c.inicio) fijos.push(c); return; }
+      var pets = petActivas(g, fecha);
+      var petLibre = pets.filter(function(x){ return x.t === 'libre'; })[0];
+      if (petLibre) { poner(s.id, dia, {estado:'festivo', nota: petLibre.nota || ''}); return; }
       if (g.fest === fecha.getDay()) { poner(s.id, dia, {estado:'festivo', nota:''}); return; }
+      if (fest2Dia(g, sem) === fecha.getDay()) { poner(s.id, dia, {estado:'festivo', nota:''}); return; }
+      /* Su horario propio de ese dia de la semana, tal cual */
+      var pr = g.propio && g.propio[fecha.getDay()];
+      if (pr && pr.libre) { poner(s.id, dia, {estado:'festivo', nota:''}); return; }
+      if (pr && pr.ini && pr.fin) {
+        var dp = {estado:'trabajo', inicio:pr.ini, fin:pr.fin, nota:''};
+        if (pr.ini2 && pr.fin2) { dp.inicio2 = pr.ini2; dp.fin2 = pr.fin2; }
+        poner(s.id, dia, dp); fijos.push(dp); puestos++;
+        return;
+      }
+      /* Maximo de dias seguidos trabajando */
+      if (MAXSEG && rachaAntes(s.id, dia) >= MAXSEG) {
+        poner(s.id, dia, {estado:'festivo', nota:'Descanso'});
+        avisos.push(DC_FULL[fecha.getDay()] + ' ' + etiquetaDia(dia, curM) + ': ' + s.name + ' descansa (lleva ' + MAXSEG + ' días seguidos)');
+        return;
+      }
       var prev = finDe(gcAt(s.id, diaAntes(dia)));
       var sig = gcAt(s.id, diaDespues(dia));
       var sigIni = (sig && sig.estado === 'trabajo' && sig.inicio) ? aMin(sig.inicio) + 1440 : null;
@@ -3831,12 +3945,46 @@ function planRellenar(){
         if (hc >= 24) hc -= 24;
         if (hc === Math.floor(hc) && E.indexOf(hc) < 0) { var tc = turnoDe(s, g, hc, dia.est); tc.cierre = true; cand.push(tc); }
       }
+      var yaH = +g.maxSem > 0 ? horasSemanaAntes(s.id, fecha) : 0, porTope = false;
       var prefs = cand.filter(function(t){
         if (prev !== null && t.a + 1440 - prev < DESC) return false;      // descanso con el dia de antes
         if (sigIni !== null && sigIni - t.b < DESC) return false;          // y con el de despues si ya esta puesto
+        if (+g.maxSem > 0 && yaH + (t.b - t.a) / 60 > +g.maxSem + 0.01) { porTope = true; return false; }   // tope de horas de la semana
         return true;
       });
-      libres.push({s:s, g:g, tipo:tipo, prefs:prefs});
+      /* Sus peticiones de ese dia */
+      var porPet = null;
+      if (pets.length) {
+        var antes = prefs;
+        prefs = prefs.filter(function(t){
+          return pets.every(function(x){ return petDeja(x, t, E, CIERRE); });
+        });
+        if (!prefs.length && antes.length) porPet = pets.filter(function(x){ return !antes.some(function(t){ return petDeja(x, t, E, CIERRE); }); })[0] || pets[0];
+      }
+      libres.push({s:s, g:g, tipo:tipo, prefs:prefs, porTope:porTope, porPet:porPet});
+    });
+
+    /* No coinciden: los dos fuera el mismo dia */
+    NOC.forEach(function(par){
+      var fuera = par.map(function(sid){ var c = gcAt(sid, dia); return !!(c && c.estado && c.estado !== 'trabajo' && c.estado !== 'libre'); });
+      if (fuera[0] && fuera[1]) avisos.push(DC_FULL[fecha.getDay()] + ' ' + etiquetaDia(dia, curM) + ': ' + nombreDe(par[0]) + ' y ' + nombreDe(par[1]) + ' libran a la vez');
+    });
+    /* El turno de los que ya estaban puestos, para «van juntos» */
+    var catFijo = {}, horFijo = {};
+    lista.forEach(function(s){
+      var c = gcAt(s.id, dia); if (!(c && c.estado === 'trabajo' && c.inicio)) return;
+      catFijo[s.id] = catDe(aMin(c.inicio));
+      var a = aMin(c.inicio), b = aMin(c.fin); if (b <= a) b += 1440; horFijo[s.id] = [a, b];
+    });
+    /* «No coincide con» / «Coincide con» de las peticiones de ese dia */
+    var petNo = [], petSi = [];
+    lista.forEach(function(s){
+      var g = p.gente[s.id]; if (!g) return;
+      petActivas(g, fecha).forEach(function(x){
+        if (!x.con || x.con === s.id) return;
+        if (x.t === 'noCoincide') petNo.push([s.id, x.con]);
+        if (x.t === 'coincide') petSi.push([s.id, x.con]);
+      });
     });
 
     // Los que ya estaban puestos ese dia cuentan en su hora de entrada
@@ -3844,6 +3992,12 @@ function planRellenar(){
     E.forEach(function(h){ base0[h] = 0; });
     fijos.forEach(function(c){ var h = Math.floor(aMin(c.inicio) / 60); if (base0[h] != null) base0[h]++; });
     /* ¿Ya cierra algún encargado con lo que estaba puesto? */
+    /* ¿Ya abre algún encargado con lo que estaba puesto? */
+    var encFijoAbre = lista.some(function(s){
+      var g = p.gente[s.id]; if (!g || (g.grupo !== 'enc' && g.grupo !== 'enccoc')) return false;
+      var c = gcAt(s.id, dia); if (!c || c.estado !== 'trabajo' || !c.inicio) return false;
+      return aMin(c.inicio) <= E[0] * 60;
+    });
     var encFijoCierra = lista.some(function(s){
       var g = p.gente[s.id]; if (!g || (g.grupo !== 'enc' && g.grupo !== 'enccoc')) return false;
       var c = gcAt(s.id, dia); if (!c || c.estado !== 'trabajo' || !c.inicio) return false;
@@ -3878,10 +4032,13 @@ function planRellenar(){
       E.forEach(function(h){ cov[h] = base0[h]; });
       var encCierra = false, encAbre = false, cocDia = cocFijoD, cocNoche = cocFijoN;
       var cubD = false, cubN = false, encCierran = 0, cubNenc = false;
-      var otroCierra = otroFijoCierra, alCierre = 0;
+      var otroCierra = otroFijoCierra, alCierre = 0, cats = {}, hors = {};
       for (var i = 0; i < n; i++) {
         var r = elec[i], tt = libres[i].prefs[r];
         coste += r * 4;
+        cats[libres[i].s.id] = catDe(tt.a);
+        hors[libres[i].s.id] = [tt.a, tt.b];
+        if (p.justo && tt.b >= CIERRE - 1) coste += (cierresCnt[libres[i].s.id] || 0) * 6;   /* reparto de cierres */
         if (cov[tt.h] != null) cov[tt.h]++;
         if (tt.cierre) alCierre++;
         if (!encs[i] && tt.b >= CIERRE - 1) otroCierra = true;
@@ -3900,10 +4057,23 @@ function planRellenar(){
         if (c < need) coste += (need - c) * (punta ? 320 : 200);
         else if (c > need) coste += (c - need) * (punta ? 40 : 3);
       }
+      JUN.forEach(function(par){
+        var a = cats[par[0]] || catFijo[par[0]], b = cats[par[1]] || catFijo[par[1]];
+        if (a && b && a !== b) coste += 150;            /* van juntos: mismo turno */
+      });
+      petSi.forEach(function(par){
+        var a = cats[par[0]] || catFijo[par[0]], b = cats[par[1]] || catFijo[par[1]];
+        if (a && b && a !== b) coste += 180;            /* peticion: coincide con */
+      });
+      petNo.forEach(function(par){
+        var a = hors[par[0]] || horFijo[par[0]], b = hors[par[1]] || horFijo[par[1]];
+        if (a && b && Math.min(a[1], b[1]) - Math.max(a[0], b[0]) >= 60) coste += 220;   /* peticion: no coincide con */
+      });
       if (!encCierra && !encFijoCierra) coste += 300;   /* siempre cierra un encargado */
       if (!otroCierra) coste += 280;                    /* y con él, un camarero o cocinero */
       if (alCierre > 1) coste += (alCierre - 1) * 200;  /* uno solo de más para cerrar */
-      if (!encAbre) coste += 8;
+      /* Si hay encargados ese dia, uno abre (despues de que uno cierre) */
+      if (!encAbre && !encFijoAbre) coste += encsLibres >= 2 ? 260 : 8;
       /* Cocina: el cocinero, o si no, uno de los que pueden cubrirla. Un
          encargado que cubre la cocina no cuenta como el que cierra. */
       if (cubNenc && encCierran >= 2) cubN = true;
@@ -3922,19 +4092,35 @@ function planRellenar(){
       for (var k = 0; k < ps.length; k++) { elec[i] = k; probar(i + 1); }
     }
     libres = libres.filter(function(l){
+      if (!l.prefs.length && l.porTope) {
+        poner(l.s.id, dia, {estado:'festivo', nota:'Tope horas'});
+        avisos.push(DC_FULL[fecha.getDay()] + ' ' + etiquetaDia(dia, curM) + ': ' + l.s.name + ' libra porque llega a su tope de ' + l.g.maxSem + ' h a la semana');
+        return false;
+      }
+      if (!l.prefs.length && l.porPet) { avisos.push(DC_FULL[fecha.getDay()] + ' ' + etiquetaDia(dia, curM) + ': ' + l.s.name + ' no tiene ningún turno que cumpla «' + petTexto(l.porPet) + '» (lo dejo vacío)'); return false; }
       if (!l.prefs.length) { avisos.push(etiquetaDia(dia, curM) + ': ' + l.s.name + ' no puede entrar por el descanso'); return false; }
       return true;
     });
     n = libres.length;
     encs = libres.map(function(l){ return l.g.grupo === 'enc' || l.g.grupo === 'enccoc'; });
     cocs = libres.map(function(l){ return l.g.grupo === 'coc' || l.g.grupo === 'enccoc'; });
+    cubre = libres.map(function(l){ return !!l.g.cubreCoc && l.g.grupo !== 'coc' && l.g.grupo !== 'enccoc'; });
     elec = new Array(n);
+    var encsLibres = encs.filter(Boolean).length + lista.filter(function(s){
+      var g = p.gente[s.id]; if (!g || (g.grupo !== 'enc' && g.grupo !== 'enccoc')) return false;
+      var c = gcAt(s.id, dia); return !!(c && c.estado === 'trabajo' && c.inicio);
+    }).length;
     probar(0);
     if (!mejor) return;
     libres.forEach(function(l, i){
       var t = l.prefs[mejor.elec[i]];
       poner(l.s.id, dia, {estado:'trabajo', inicio:t.ini, fin:t.fin, nota:''});
       puestos++;
+    });
+    lista.forEach(function(s){
+      var c = gcAt(s.id, dia); if (!c || c.estado !== 'trabajo' || !c.inicio) return;
+      var a = aMin(c.inicio), b = aMin(c.fin); if (b <= a) b += 1440;
+      if (b >= CIERRE - 1) cierresCnt[s.id] = (cierresCnt[s.id] || 0) + 1;
     });
     var e = mejor.e, falta = [];
     E.forEach(function(h){
@@ -3943,13 +4129,15 @@ function planRellenar(){
     });
     /* Lo que no es una cuenta pero conviene saber: que cierre un
        encargado y que haya cocina a mediodía y por la noche. */
-    var encC = false, cocD = false, cocN = false, otroC = false;
+    var encC = false, cocD = false, cocN = false, otroC = false, encA = false, encHoy = 0;
     lista.forEach(function(s){
       var g = p.gente[s.id]; if (!g) return;
       var c = gcAt(s.id, dia); if (!c || c.estado !== 'trabajo' || !c.inicio) return;
       var a = aMin(c.inicio), b = aMin(c.fin); if (b <= a) b += 1440;
       var esEnc = g.grupo === 'enc' || g.grupo === 'enccoc', esCoc = g.grupo === 'coc' || g.grupo === 'enccoc';
       if (esEnc && b >= CIERRE - 1) encC = true;
+      if (esEnc) encHoy++;
+      if (esEnc && a <= E[0] * 60) encA = true;
       if (!esEnc && g.grupo !== 'no' && b >= CIERRE - 1) otroC = true;
       if (esCoc && a <= 13*60 && b >= 15*60) cocD = true;
       if (esCoc && b >= 23*60) cocN = true;
@@ -3971,19 +4159,30 @@ function planRellenar(){
     }
     if (libres.length) {
       if (!encC) falta.push('no cierra ningún encargado');
+      if (!encA && encHoy >= 2) falta.push('no abre ningún encargado');
       if (!otroC) falta.push('el encargado cierra solo (sin camarero ni cocinero)');
       if (!cocD && !cubrirCocina(false)) falta.push('sin cocina a mediodía');
       if (!cocN && !cubrirCocina(true)) falta.push('sin cocina por la noche');
     }
+    function horDe(sid){ var c = gcAt(sid, dia); if (!c || c.estado !== 'trabajo' || !c.inicio) return null; var a = aMin(c.inicio), b = aMin(c.fin); if (b <= a) b += 1440; return [a, b]; }
+    petNo.forEach(function(par){
+      var a = horDe(par[0]), b = horDe(par[1]);
+      if (a && b && Math.min(a[1], b[1]) - Math.max(a[0], b[0]) >= 60) falta.push(nombreDe(par[0]) + ' coincide con ' + nombreDe(par[1]) + ' (pidió que no)');
+    });
+    petSi.forEach(function(par){
+      var a = horDe(par[0]), b = horDe(par[1]);
+      if (a && b && catDe(a[0]) !== catDe(b[0])) falta.push(nombreDe(par[0]) + ' no coincide con ' + nombreDe(par[1]) + ' (pidió que sí)');
+    });
     if (falta.length && libres.length) avisos.push(DC_FULL[fecha.getDay()] + ' ' + etiquetaDia(dia, curM) + ': ' + falta.join(', '));
   });
 
+  var resumen = planResumen(p, lista, dias, avisos);
   guardarPlan(p);
   save();
   renderAll();
   var caja = document.getElementById('plan-res');
   if (caja) {
-    caja.innerHTML = '<b style="color:var(--gold2)">Hecho: ' + puestos + ' turnos puestos.</b> Revísalo y cambia lo que quieras tocando el día.' +
+    caja.innerHTML = '<b style="color:var(--gold2)">Hecho: ' + puestos + ' turnos puestos.</b> Revísalo y cambia lo que quieras tocando el día.' + resumen +
       (coberturas.length ? '<div style="margin-top:6px;color:var(--text2)">Cocina cubierta (llevan la nota «Cocina»):<br>' + coberturas.map(esc).join('<br>') + '</div>' : '') +
       (avisos.length ? '<div style="margin-top:6px;color:#e8a020">Para que lo mires:<br>' + avisos.map(esc).join('<br>') + '</div>' : '');
   }
@@ -4062,11 +4261,12 @@ function pintarPlan(){
     })()) +
 
     '<div style="' + tit + '">Personas</div>' +
+    planPetResumen(p, lista, dias) +
     '<div style="font-size:.72rem;color:var(--text2);margin-bottom:6px">«1ª semana» es el turno que hace cada uno la semana del ' +
       etiquetaDia(dias[0], curM) + '; a partir de ahí rota solo. Encargados: abre → mediodía → cierra. Camareros: mañana → mediodía → noche. Cocina: mañana / noche. «Cocina» marca quién puede cubrirla cuando falta cocinero.</div>' +
     (function(){ pd = estrecho ? '2px 1px' : '3px'; return ''; })() +
     '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:.8rem">' +
-    '<tr style="color:var(--text2);font-size:.68rem;text-align:left"><th style="padding:' + pd + '">Nombre</th><th style="padding:' + pd + '">Grupo</th><th style="padding:' + pd + '">Festivo</th><th style="padding:' + pd + '">1ª semana</th><th style="padding:' + pd + '" title="Puede cubrir la cocina cuando falta cocinero">Cocina</th></tr>';
+    '<tr style="color:var(--text2);font-size:.68rem;text-align:left"><th style="padding:' + pd + '">Nombre</th><th style="padding:' + pd + '">Grupo</th><th style="padding:' + pd + '">Festivo</th><th style="padding:' + pd + '">1ª semana</th><th style="padding:' + pd + '" title="Puede cubrir la cocina cuando falta cocinero">Cocina</th><th style="padding:' + pd + '"></th></tr>';
   lista.forEach(function(s){
     var g = p.gente[s.id];
     var tipo0 = planTipo(g, sem0) || 'man';
@@ -4084,7 +4284,9 @@ function pintarPlan(){
               return '<option value="' + hh + '"' + (fijoHora(g, p) === hh ? ' selected' : '') + '>Entra ' + dosD(hh) + ':00</option>'; }).join('') + '</select>') +
       '</td>' +
       '<td style="padding:' + pd + ';text-align:center"><input type="checkbox" data-k="cubreCoc" title="Puede cubrir la cocina"' +
-        (g.cubreCoc ? ' checked' : '') + ((g.grupo === 'coc' || g.grupo === 'enccoc') ? ' disabled' : '') + ' style="width:18px;height:18px;accent-color:#c9a84c"></td></tr>';
+        (g.cubreCoc ? ' checked' : '') + ((g.grupo === 'coc' || g.grupo === 'enccoc') ? ' disabled' : '') + ' style="width:18px;height:18px;accent-color:#c9a84c"></td>' +
+      '<td style="padding:' + pd + ';text-align:center"><button type="button" class="bs" title="Festivo 2, jornada, horas a la semana y horario propio" onclick="planVerMas(\'' + s.id + '\')" style="padding:3px 8px;font-size:.74rem' + (planTieneMas(g) ? ';color:var(--gold2);border-color:var(--gold)' : '') + '">Más' + (g.pet && g.pet.length ? ' · ' + g.pet.length : '') + '</button></td></tr>' +
+      planFilaMas(s, g, inp);
   });
   h += '</table></div>' +
 
@@ -4101,6 +4303,7 @@ function pintarPlan(){
     '<label style="display:flex;align-items:center;gap:6px;color:var(--text2);font-size:.78rem;margin-top:10px">Descanso mínimo entre turnos (h)' +
       '<input type="number" min="0" max="16" data-n="descanso" value="' + p.descanso + '" style="' + inp + ';width:56px"></label>' +
 
+    planReglasHtml(p, lista, inp, tit) +
     '<div style="' + tit + '">Borrar una semana</div>' +
     '<div style="font-size:.72rem;color:var(--text2);margin-bottom:6px">Quita los turnos y festivos de todos esa semana. Las vacaciones, bajas y ausencias se quedan.</div>' +
     '<div style="display:flex;gap:6px;flex-wrap:wrap">' + planSemanas().map(function(w, i){
@@ -4154,6 +4357,7 @@ function leerPlanDeLaVentana(){
   cuerpo.querySelectorAll('input[data-e]').forEach(function(i){ p.entradas[i.dataset.e] = Math.max(0, parseInt(i.value, 10) || 0); });
   var dias = planDiasDesde();
   p.base = isoDe(lunesDe(new Date(dias[0].y, dias[0].m, dias[0].d)));
+  planLeerReglas(cuerpo, p);
   cuerpo.querySelectorAll('tr[data-pid]').forEach(function(tr){
     var sid = tr.dataset.pid, g = p.gente[sid] || {};
     g.grupo = tr.querySelector('[data-k="grupo"]').value;
@@ -4169,10 +4373,305 @@ function leerPlanDeLaVentana(){
     if (g.grupo === 'coc' && g.ini === 'med') g.ini = 'man';
     var fh = tr.querySelector('[data-k="fijoH"]'); if (fh) g.fijoH = parseInt(fh.value, 10);
     g.cubreCoc = !!tr.querySelector('[data-k="cubreCoc"]').checked;
+    planLeerMas(cuerpo, sid, g);
     g._puesto = 1; g._previo = 1;
     p.gente[sid] = g;
   });
   return p;
+}
+
+/* ── Peticiones de cada persona ─────────────────────────────────── */
+/* Lo que pide cada uno, siempre o para unos días: que no abra, que no
+   haga noche, que salga antes por el médico, que libre un día, que no
+   coincida con alguien... Solo cuentan en los días que se rellenan
+   (lo que ya está puesto no se toca). */
+var PET_TIPOS = {
+  libre:'Libra ese día', noAbre:'No abre', noCierra:'No cierra',
+  noMan:'No de mañana', noMed:'No de mediodía', noNoc:'No de noche',
+  desde:'No entra antes de las', hasta:'Sale como tarde a las',
+  noCoincide:'No coincide con', coincide:'Coincide con'
+};
+var PET_CUANDO = {siempre:'Siempre', dia:'Un día', semana:'Esa semana', rango:'Entre fechas'};
+function petActivas(g, fecha){
+  return (g && g.pet || []).filter(function(x){
+    if (!x || !x.t) return false;
+    if (x.cu === 'siempre' || !x.cu) return true;
+    if (!x.d1) return false;
+    var d1 = deIso(x.d1);
+    if (x.cu === 'dia') return isoDe(fecha) === x.d1;
+    if (x.cu === 'semana') return isoDe(lunesDe(fecha)) === isoDe(lunesDe(d1));
+    if (x.cu === 'rango') { var d2 = x.d2 ? deIso(x.d2) : d1; return fecha >= d1 && fecha <= d2; }
+    return false;
+  });
+}
+/* ¿Le vale ese turno con esa petición? */
+function petDeja(x, t, E, CIERRE){
+  var cat = t.a < 11*60 ? 'man' : t.a < 15*60 ? 'med' : 'noc';
+  if (x.t === 'noAbre')   return t.a > E[0] * 60;
+  if (x.t === 'noCierra') return t.b < CIERRE - 1;
+  if (x.t === 'noMan')    return cat !== 'man';
+  if (x.t === 'noMed')    return cat !== 'med';
+  if (x.t === 'noNoc')    return cat !== 'noc';
+  if (x.t === 'desde' && x.h) { var m = aMin(x.h); if (m < 7*60) m += 1440; return t.a >= m; }
+  if (x.t === 'hasta' && x.h) { var m2 = aMin(x.h); if (m2 < 7*60) m2 += 1440; return t.b <= m2; }
+  return true;
+}
+function petFecha(iso){ if (!iso) return '?'; var d = deIso(iso); return d.getDate() + '/' + (d.getMonth() + 1); }
+function petTexto(x){
+  var t = x.t === 'libre' ? 'Libra' : (PET_TIPOS[x.t] || x.t);
+  if (x.t === 'desde' || x.t === 'hasta') t += ' ' + (x.h || '?');
+  if (x.t === 'noCoincide' || x.t === 'coincide') t += ' ' + nombrePet(x.con);
+  var c = x.cu === 'dia' ? ' el ' + petFecha(x.d1) :
+          x.cu === 'semana' ? ' la semana del ' + petFecha(isoDe(lunesDe(deIso(x.d1 || isoDe(new Date()))))) :
+          x.cu === 'rango' ? ' del ' + petFecha(x.d1) + ' al ' + petFecha(x.d2 || x.d1) : ' siempre';
+  return t + c + (x.nota ? ' (' + x.nota + ')' : '');
+}
+function nombrePet(id){ var x = personaDe(id); return x ? x.name : '?'; }
+function petPasada(x){
+  if (!x.cu || x.cu === 'siempre' || !x.d1) return false;
+  var fin = x.cu === 'rango' ? deIso(x.d2 || x.d1) : x.cu === 'semana' ? new Date(lunesDe(deIso(x.d1)).getTime() + 6 * 86400000) : deIso(x.d1);
+  var hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  return fin < hoy;
+}
+function planPetFila(sid, x, i, inp){
+  var tipos = Object.keys(PET_TIPOS).map(function(k){ return '<option value="' + k + '"' + (x.t === k ? ' selected' : '') + '>' + PET_TIPOS[k] + '</option>'; }).join('');
+  var cuando = Object.keys(PET_CUANDO).map(function(k){ return '<option value="' + k + '"' + ((x.cu || 'siempre') === k ? ' selected' : '') + '>' + PET_CUANDO[k] + '</option>'; }).join('');
+  var gente = visibleStaff().filter(function(s){ return s.id !== sid; }).map(function(s){
+    return '<option value="' + s.id + '"' + (x.con === s.id ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('');
+  var conHora = x.t === 'desde' || x.t === 'hasta', conQuien = x.t === 'noCoincide' || x.t === 'coincide';
+  var cu = x.cu || 'siempre';
+  return '<div data-pet="' + i + '" style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:5px;padding:5px;border-radius:6px;border:1px solid var(--border)' + (petPasada(x) ? ';opacity:.5' : '') + '">' +
+    '<select data-p="t" onchange="planPetVer(this)" style="' + inp + ';width:auto">' + tipos + '</select>' +
+    '<input type="time" step="900" data-p="h" value="' + esc(x.h || '') + '" style="' + inp + ';width:92px' + (conHora ? '' : ';display:none') + '">' +
+    '<select data-p="con" style="' + inp + ';width:auto' + (conQuien ? '' : ';display:none') + '">' + gente + '</select>' +
+    '<select data-p="cu" onchange="planPetVer(this)" style="' + inp + ';width:auto">' + cuando + '</select>' +
+    '<input type="date" data-p="d1" value="' + esc(x.d1 || '') + '" style="' + inp + ';width:auto' + (cu === 'siempre' ? ';display:none' : '') + '">' +
+    '<span data-p="a" style="font-size:.72rem;color:var(--text2)' + (cu === 'rango' ? '' : ';display:none') + '">al</span>' +
+    '<input type="date" data-p="d2" value="' + esc(x.d2 || '') + '" style="' + inp + ';width:auto' + (cu === 'rango' ? '' : ';display:none') + '">' +
+    '<input type="text" data-p="nota" value="' + esc(x.nota || '') + '" placeholder="Motivo (médico...)" style="' + inp + ';width:130px">' +
+    '<button type="button" class="bs" title="Quitar" style="padding:3px 9px;color:#e87c6f;border-color:#e87c6f" onclick="this.closest(\'[data-pet]\').remove()">✕</button>' +
+  '</div>';
+}
+function planPetVer(el){
+  var r = el.closest('[data-pet]'); if (!r) return;
+  var t = r.querySelector('[data-p="t"]').value, cu = r.querySelector('[data-p="cu"]').value;
+  var ver = function(k, si){ var e = r.querySelector('[data-p="' + k + '"]'); if (e) e.style.display = si ? '' : 'none'; };
+  ver('h', t === 'desde' || t === 'hasta');
+  ver('con', t === 'noCoincide' || t === 'coincide');
+  ver('d1', cu !== 'siempre'); ver('a', cu === 'rango'); ver('d2', cu === 'rango');
+  /* «Libra» casi siempre es para un día: se le pone ese por defecto */
+  if (el.dataset.p === 't' && t === 'libre' && cu === 'siempre') { r.querySelector('[data-p="cu"]').value = 'dia'; ver('d1', true); }
+}
+var planPetInp = '';
+function planPetHtml(s, g, inp){
+  planPetInp = inp;
+  var l = g.pet || [];
+  return '<div style="font-size:.66rem;color:var(--gold);text-transform:uppercase;letter-spacing:.07em;margin:12px 0 4px;font-weight:700">Peticiones</div>' +
+    '<div style="font-size:.7rem;color:var(--text2)">Lo que pide, siempre o para unos días: que no abra, que no haga noche, que salga antes por el médico, que libre un día, que no coincida con alguien… Solo se usa en los días que se rellenan.</div>' +
+    '<div data-pets="' + s.id + '">' + l.map(function(x, i){ return planPetFila(s.id, x, i, inp); }).join('') + '</div>' +
+    '<button type="button" class="bs" style="margin-top:6px;padding:4px 10px;font-size:.74rem" onclick="planPetNueva(\'' + s.id + '\')">+ Añadir petición</button>';
+}
+function planPetNueva(sid){
+  var caja = document.querySelector('#plan-cuerpo [data-pets="' + sid + '"]'); if (!caja) return;
+  var inp = planPetInp;
+  var tmp = document.createElement('div');
+  tmp.innerHTML = planPetFila(sid, {t:'noAbre', cu:'siempre'}, caja.children.length, inp);
+  caja.appendChild(tmp.firstChild);
+}
+function petLeer(tr){
+  var out = [];
+  tr.querySelectorAll('[data-pet]').forEach(function(r){
+    var v = function(k){ var e = r.querySelector('[data-p="' + k + '"]'); return e ? e.value : ''; };
+    var x = {t:v('t'), cu:v('cu')};
+    if (x.t === 'desde' || x.t === 'hasta') { x.h = v('h'); if (!x.h) return; }
+    if (x.t === 'noCoincide' || x.t === 'coincide') { x.con = v('con'); if (!x.con) return; }
+    if (x.cu !== 'siempre') { x.d1 = v('d1'); if (!x.d1) return; }
+    if (x.cu === 'rango') x.d2 = v('d2') || x.d1;
+    if (v('nota').trim()) x.nota = v('nota').trim();
+    out.push(x);
+  });
+  return out;
+}
+/* Arriba de Personas: las peticiones que caen en lo que se va a rellenar */
+function planPetResumen(p, lista, dias){
+  if (!dias.length) return '';
+  var a = new Date(dias[0].y, dias[0].m, dias[0].d), z = dias[dias.length - 1]; z = new Date(z.y, z.m, z.d);
+  var l = [];
+  lista.forEach(function(s){
+    var g = p.gente[s.id];
+    (g && g.pet || []).forEach(function(x){
+      var hay = false;
+      for (var f = new Date(a); f <= z && !hay; f.setDate(f.getDate() + 1)) if (petActivas({pet:[x]}, f).length) hay = true;
+      if (hay) l.push('<b style="color:' + RCOL[s.role] + '">' + esc(s.name) + '</b>: ' + esc(petTexto(x)));
+    });
+  });
+  if (!l.length) return '';
+  return '<div style="font-size:.74rem;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px 10px;margin-bottom:8px;line-height:1.55">' +
+    '<span style="color:var(--gold2);font-weight:700">Peticiones en estas fechas</span><br>' + l.join('<br>') + '</div>';
+}
+
+/* ── Más opciones de cada persona y reglas de equipo ─────────────── */
+/* El segundo festivo de la semana: un dia fijo, el de despues del
+   primero, o uno que va rotando cada semana (nunca cae en el primero). */
+function fest2Dia(g, sem){
+  var f2 = g.fest2;
+  if (f2 == null || f2 === '' || f2 === -1 || f2 === '-1') return -1;
+  if (f2 === 'j') return g.fest >= 0 ? (g.fest + 1) % 7 : -1;
+  if (f2 === 'r') { var b = g.fest >= 0 ? g.fest : 0; return (b + 1 + (((sem % 6) + 6) % 6)) % 7; }
+  return +f2;
+}
+var planAbiertos = {};
+function planTieneMas(g){
+  if (!g) return false;
+  var f2 = g.fest2;
+  return (f2 != null && f2 !== '' && f2 !== -1 && f2 !== '-1') || +g.jornada > 0 || +g.minSem > 0 || +g.maxSem > 0 ||
+    (g.propio && Object.keys(g.propio).length > 0) || (g.pet && g.pet.length > 0);
+}
+function planVerMas(sid){
+  planAbiertos[sid] = !planAbiertos[sid];
+  var tr = document.querySelector('#plan-cuerpo tr[data-extra="' + sid + '"]');
+  if (tr) tr.style.display = planAbiertos[sid] ? '' : 'none';
+}
+function planFilaMas(s, g, inp){
+  var f2 = g.fest2 == null ? '-1' : String(g.fest2);
+  var o = '<option value="-1"' + (f2 === '-1' ? ' selected' : '') + '>—</option>';
+  [1,2,3,4,5,6,0].forEach(function(i){ o += '<option value="' + i + '"' + (f2 === String(i) ? ' selected' : '') + '>' + DC[i] + '</option>'; });
+  o += '<option value="j"' + (f2 === 'j' ? ' selected' : '') + '>Junto al 1º</option>';
+  o += '<option value="r"' + (f2 === 'r' ? ' selected' : '') + '>Rota cada semana</option>';
+  var lab = 'display:flex;flex-direction:column;gap:2px;font-size:.66rem;color:var(--text2)';
+  var num = function(k, ph){ return '<input type="number" min="0" max="80" step="0.5" data-x="' + k + '" value="' + (+g[k] > 0 ? g[k] : '') + '" placeholder="' + ph + '" style="' + inp + ';width:62px">'; };
+  var pr = g.propio || {};
+  var tm = function(d, k){ return '<input type="time" step="900" data-d="' + d + '" data-f="' + k + '" value="' + esc((pr[d] || {})[k] || '') + '" style="' + inp + ';width:86px">'; };
+  var filas = [1,2,3,4,5,6,0].map(function(d){
+    var x = pr[d] || {};
+    return '<tr><td style="padding:2px 4px;font-size:.72rem;color:var(--text2)">' + DC[d] + '</td>' +
+      '<td style="padding:2px">' + tm(d, 'ini') + '</td><td style="padding:2px">' + tm(d, 'fin') + '</td>' +
+      '<td style="padding:2px">' + tm(d, 'ini2') + '</td><td style="padding:2px">' + tm(d, 'fin2') + '</td>' +
+      '<td style="padding:2px;text-align:center"><input type="checkbox" data-d="' + d + '" data-f="libre"' + (x.libre ? ' checked' : '') + ' style="width:16px;height:16px;accent-color:#c9a84c"></td></tr>';
+  }).join('');
+  return '<tr data-extra="' + s.id + '" style="' + (planAbiertos[s.id] ? '' : 'display:none') + '"><td colspan="6" style="padding:6px 4px 12px">' +
+    '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px">' +
+      '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">' +
+        '<label style="' + lab + '">Festivo 2<select data-x="fest2" style="' + inp + ';width:auto;min-width:120px">' + o + '</select></label>' +
+        '<label style="' + lab + '">Jornada (h)' + num('jornada', 'auto') + '</label>' +
+        '<label style="' + lab + '">Mín. h/semana' + num('minSem', '—') + '</label>' +
+        '<label style="' + lab + '">Máx. h/semana' + num('maxSem', '—') + '</label>' +
+      '</div>' +
+      '<div style="font-size:.66rem;color:var(--gold);text-transform:uppercase;letter-spacing:.07em;margin:10px 0 4px;font-weight:700">Horario propio</div>' +
+      '<div style="font-size:.7rem;color:var(--text2);margin-bottom:4px">El día que tenga horas, ese día hace eso; «Libre», libra. El resto, como siempre.</div>' +
+      '<div style="overflow-x:auto"><table style="border-collapse:collapse">' +
+        '<tr style="font-size:.64rem;color:var(--text2)"><th></th><th>Entra</th><th>Sale</th><th>Entra 2</th><th>Sale 2</th><th>Libre</th></tr>' + filas +
+      '</table></div>' +
+      planPetHtml(s, g, inp) +
+      '<div style="margin-top:10px"><button type="button" class="bs" style="padding:4px 10px;font-size:.72rem" onclick="planLimpiarMas(\'' + s.id + '\')">Quitar todo esto</button></div>' +
+    '</div></td></tr>';
+}
+function planLimpiarMas(sid){
+  var tr = document.querySelector('#plan-cuerpo tr[data-extra="' + sid + '"]'); if (!tr) return;
+  tr.querySelectorAll('input').forEach(function(i){ if (i.type === 'checkbox') i.checked = false; else i.value = ''; });
+  var f = tr.querySelector('[data-x="fest2"]'); if (f) f.value = '-1';
+  tr.querySelectorAll('[data-pet]').forEach(function(r){ r.remove(); });
+}
+function planLeerMas(cuerpo, sid, g){
+  var tr = cuerpo.querySelector('tr[data-extra="' + sid + '"]'); if (!tr) return;
+  var f2 = tr.querySelector('[data-x="fest2"]').value;
+  g.fest2 = (f2 === 'j' || f2 === 'r') ? f2 : parseInt(f2, 10);
+  ['jornada','minSem','maxSem'].forEach(function(k){
+    var v = parseFloat(String(tr.querySelector('[data-x="' + k + '"]').value).replace(',', '.'));
+    g[k] = v > 0 ? v : '';
+  });
+  var pr = {};
+  tr.querySelectorAll('[data-d]').forEach(function(i){
+    var d = i.dataset.d, k = i.dataset.f;
+    var v = i.type === 'checkbox' ? i.checked : i.value;
+    if (!v) return;
+    pr[d] = pr[d] || {}; pr[d][k] = v;
+  });
+  Object.keys(pr).forEach(function(d){ if (!pr[d].libre && !(pr[d].ini && pr[d].fin)) delete pr[d]; });
+  g.propio = pr;
+  g.pet = petLeer(tr);
+}
+function planReglasHtml(p, lista, inp, tit){
+  var sel = function(v, k, i, j){
+    return '<select data-par="' + k + '" data-i="' + i + '" data-j="' + j + '" style="' + inp + '">' + lista.map(function(s){
+      return '<option value="' + s.id + '"' + (s.id === v ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('') + '</select>';
+  };
+  var parejas = function(k, txt, ayuda){
+    var l = p[k] || [];
+    return '<div style="margin-top:10px;font-size:.78rem;color:var(--text)">' + txt + ' <span style="font-size:.7rem;color:var(--text2)">' + ayuda + '</span></div>' +
+      l.map(function(par, i){
+        return '<div style="display:flex;gap:6px;align-items:center;margin-top:5px">' + sel(par[0], k, i, 0) + '<span style="color:var(--text2)">y</span>' + sel(par[1], k, i, 1) +
+          '<button type="button" class="bs" style="padding:3px 9px;color:#e87c6f;border-color:#e87c6f" onclick="planPareja(\'' + k + '\',' + i + ')">✕</button></div>';
+      }).join('') +
+      '<button type="button" class="bs" style="margin-top:6px;padding:4px 10px;font-size:.74rem" onclick="planPareja(\'' + k + '\',-1)">+ Añadir pareja</button>';
+  };
+  return '<div style="' + tit + '">Reglas de equipo</div>' +
+    '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:.78rem;color:var(--text2)">' +
+      '<label style="display:flex;align-items:center;gap:6px">Máx. días seguidos trabajando' +
+        '<input type="number" min="0" max="14" data-n="maxSeguidos" value="' + (+p.maxSeguidos || 0) + '" style="' + inp + ';width:56px"></label>' +
+      '<label style="display:flex;align-items:center;gap:6px">Mín. días libres a la semana' +
+        '<input type="number" min="0" max="7" data-n="minLibres" value="' + (+p.minLibres || 0) + '" style="' + inp + ';width:56px"></label>' +
+      '<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" data-c="justo"' + (p.justo ? ' checked' : '') + ' style="width:16px;height:16px;accent-color:#c9a84c">Repartir los cierres por igual</label>' +
+    '</div>' +
+    '<div style="font-size:.7rem;color:var(--text2);margin-top:4px">0 = sin límite.</div>' +
+    parejas('noCoinciden', 'No coinciden', '(avisa si libran o tienen vacaciones el mismo día)') +
+    parejas('juntos', 'Van juntos', '(se intenta que hagan el mismo turno)');
+}
+function planLeerReglas(cuerpo, p){
+  var j = cuerpo.querySelector('[data-c="justo"]'); if (!j) return;
+  p.justo = !!j.checked;
+  ['noCoinciden','juntos'].forEach(function(k){
+    var l = [];
+    cuerpo.querySelectorAll('select[data-par="' + k + '"]').forEach(function(s){
+      var i = +s.dataset.i; l[i] = l[i] || []; l[i][+s.dataset.j] = s.value;
+    });
+    p[k] = l.filter(function(par){ return par && par[0] && par[1] && par[0] !== par[1]; });
+  });
+}
+function planPareja(k, i){
+  var p = leerPlanDeLaVentana();
+  p[k] = p[k] || [];
+  if (i < 0) {
+    var l = visibleStaff(); if (l.length < 2) return;
+    /* leer filtra las parejas a medio poner; la nueva se mete despues */
+    p[k].push([l[0].id, l[1].id]);
+  } else p[k].splice(i, 1);
+  guardarPlan(p); pintarPlan();
+}
+/* Resumen de lo que ha quedado, semana a semana: horas, dias y cierres
+   de cada uno, con lo que se pasa del tope en rojo y lo que se queda
+   corto en naranja. */
+function planResumen(p, lista, dias, avisos){
+  var lunes = [];
+  dias.forEach(function(d){ var l = isoDe(lunesDe(new Date(d.y, d.m, d.d))); if (lunes.indexOf(l) < 0) lunes.push(l); });
+  if (!lunes.length) return '';
+  var gente = lista.filter(function(s){ var g = p.gente[s.id]; return g && g.grupo !== 'no'; });
+  var th = '<tr><th style="text-align:left;padding:3px 6px;color:var(--text2);font-weight:500">Persona</th>' + lunes.map(function(l){
+    var f = deIso(l); return '<th style="padding:3px 6px;color:var(--text2);font-weight:500;white-space:nowrap">' + f.getDate() + '/' + (f.getMonth() + 1) + '</th>'; }).join('') + '</tr>';
+  var tb = gente.map(function(s){
+    var g = p.gente[s.id];
+    return '<tr><td style="padding:3px 6px;color:' + RCOL[s.role] + ';font-weight:600;white-space:nowrap">' + esc(s.name) + '</td>' + lunes.map(function(l){
+      var f0 = deIso(l), h = 0, dT = 0, cie = 0;
+      for (var i = 0; i < 7; i++) {
+        var f = new Date(f0.getFullYear(), f0.getMonth(), f0.getDate() + i);
+        var c = gcAt(s.id, {y:f.getFullYear(), m:f.getMonth(), d:f.getDate()});
+        if (!c || c.estado !== 'trabajo' || !c.inicio) continue;
+        dT++; h += horasDeCelda(c);
+        var a = aMin(c.inicio), b = aMin(c.fin); if (b <= a) b += 1440;
+        var cierre = autoS(f.getMonth()) === 'invierno' ? 27*60 : 25*60;
+        if (b >= cierre - 1) cie++;
+      }
+      h = Math.round(h * 10) / 10;
+      var col = 'var(--text)', nota = [];
+      if (+g.maxSem > 0 && h > +g.maxSem) { col = '#e87c6f'; nota.push('pasa de ' + g.maxSem + ' h'); }
+      else if (+g.minSem > 0 && h < +g.minSem) { col = '#e8a020'; nota.push('no llega a ' + g.minSem + ' h'); }
+      if (+p.minLibres > 0 && 7 - dT < +p.minLibres) { col = '#e8a020'; nota.push('solo ' + (7 - dT) + ' libres'); }
+      if (nota.length) avisos.push('Semana del ' + f0.getDate() + '/' + (f0.getMonth() + 1) + ': ' + s.name + ' ' + nota.join(', '));
+      return '<td style="padding:3px 6px;text-align:center;white-space:nowrap;color:' + col + '"><b>' + h + 'h</b> <span style="color:var(--text2)">' + dT + 'd' + (cie ? ' · ' + cie + 'C' : '') + '</span></td>';
+    }).join('') + '</tr>';
+  }).join('');
+  return '<div style="margin-top:8px;color:var(--text2)">Cómo queda cada semana (horas · días · C = cierres):</div>' +
+    '<div style="overflow-x:auto;margin-top:4px"><table style="border-collapse:collapse;font-size:.74rem">' + th + tb + '</table></div>';
 }
 
 /* Las semanas del mes que se esta viendo, de lunes a domingo. */
