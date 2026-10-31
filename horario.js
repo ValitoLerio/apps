@@ -2595,7 +2595,8 @@ function selE(est) {
   if (est !== 'trabajo') { aplicarEstado(est); return; }
   pop._est = est;
   document.querySelectorAll('.pb').forEach(function(b){ b.classList.remove('on'); });
-  event.target.classList.add('on');
+  var bOn = document.querySelector('.pb[onclick="selE(\'' + est + '\')"]');
+  if (bOn) bOn.classList.add('on');
   var ta = document.getElementById('ta'); if (!ta) return;
   var ar = document.getElementById('align-row');
   if (est === 'trabajo') {
@@ -3814,9 +3815,8 @@ function planPrefsGrupo(g, tipo, E, E_E, E_O, p){
   if (E_E === E && E_O === E) return planPrefs(g, tipo, E, p);
   var enc = g.grupo === 'enc' || g.grupo === 'enccoc';
   var suyas = enc ? E_E : E_O, resto = E.filter(function(h){ return suyas.indexOf(h) < 0; });
-  var a = suyas.length ? planPrefs(g, tipo, suyas, p) : [];
-  var b = resto.length ? planPrefs(g, tipo, resto, p) : [];
-  return a.concat(b.filter(function(h){ return a.indexOf(h) < 0; }));
+  if (g.grupo === 'fijo' || !suyas.length) return planPrefs(g, tipo, E, p);
+  return planPrefs(g, tipo, suyas, p);
 }
 
 /* Rellena el mes que se esta viendo. */
@@ -3978,25 +3978,25 @@ function planRellenar(){
       var sig = gcAt(s.id, diaDespues(dia));
       var sigIni = (sig && sig.estado === 'trabajo' && sig.inicio) ? aMin(sig.inicio) + 1440 : null;
       var tipo = tSem[s.id] || planTipo(g, sem);
-      var cand = planPrefsGrupo(g, tipo, E, E_E, E_O, p).map(function(h){ return turnoDe(s, g, h, dia.est); });
+      /* Las horas de su grupo; si con ellas no puede entrar, se prueban todas */
+      function armar(horas){
+      var cand = horas.map(function(h){ return turnoDe(s, g, h, dia.est); });
       /* Un camarero o cocinero tiene que cerrar con el encargado: si con
          las horas puestas nadie llega al cierre, se le deja entrar a la
          hora justa para salir al cerrar (con sus horas). */
       if (g.grupo !== 'enc' && g.grupo !== 'enccoc' && g.grupo !== 'fijo') {
         var t7 = turnoDe(s, g, 7, dia.est), hc = (CIERRE - (t7.b - t7.a)) / 60;
         if (hc >= 24) hc -= 24;
-        if (hc === Math.floor(hc) && E.indexOf(hc) < 0) { var tc = turnoDe(s, g, hc, dia.est); tc.cierre = true; cand.push(tc); }
+        if (hc === Math.floor(hc) && horas.indexOf(hc) < 0) { var tc = turnoDe(s, g, hc, dia.est); tc.cierre = true; cand.push(tc); }
       }
       /* Al encargado también: si con las horas puestas solo cierra
          quedándose de más, que pueda entrar a la hora justa. */
       if (g.grupo === 'enc' || g.grupo === 'enccoc') {
         var e7 = turnoDe(s, g, 7, dia.est), he = (CIERRE - (e7.b - e7.a)) / 60;
         if (he >= 24) he -= 24;
-        if (he === Math.floor(he) && E.indexOf(he) < 0) cand.push(turnoDe(s, g, he, dia.est));
+        if (he === Math.floor(he) && horas.indexOf(he) < 0) cand.push(turnoDe(s, g, he, dia.est));
       }
-      var yaH = +g.maxSem > 0 ? horasSemanaAntes(s.id, fecha) : 0, porTope = false;
-      var esEncD = g.grupo === 'enc' || g.grupo === 'enccoc';
-      var semKey = s.id + '|' + isoDe(lunesDe(fecha));
+      var porTope = false;
       var prefs = cand.filter(function(t){
         if (prev !== null && t.a + 1440 - prev < DESC) {                   // descanso con el dia de antes
           /* Excepción: un encargado, un día a la semana, con menos descanso para cambiar de turno */
@@ -4016,6 +4016,14 @@ function planRellenar(){
         });
         if (!prefs.length && antes.length) porPet = pets.filter(function(x){ return !antes.some(function(t){ return petDeja(x, t, E, CIERRE); }); })[0] || pets[0];
       }
+      return {prefs:prefs, porTope:porTope, porPet:porPet};
+      }
+      var yaH = +g.maxSem > 0 ? horasSemanaAntes(s.id, fecha) : 0;
+      var esEncD = g.grupo === 'enc' || g.grupo === 'enccoc';
+      var semKey = s.id + '|' + isoDe(lunesDe(fecha));
+      var arm = armar(planPrefsGrupo(g, tipo, E, E_E, E_O, p));
+      if (!arm.prefs.length && SPLIT) { var arm2 = armar(planPrefs(g, tipo, E, p)); if (arm2.prefs.length) arm = arm2; }
+      var prefs = arm.prefs, porTope = arm.porTope, porPet = arm.porPet;
       libres.push({s:s, g:g, tipo:tipo, prefs:prefs, porTope:porTope, porPet:porPet});
     });
 

@@ -1550,7 +1550,8 @@ function viewFacturas(main){
       '<td class="num">'+eur(i.base)+"</td>"+
       '<td class="num">'+eur(i.igi)+"</td>"+
       '<td class="num"><strong>'+eur(i.total)+"</strong></td>"+
-      "<td>"+(i.status==="cobrada"?'<span class="pill cobr">Cobrada</span>':'<span class="pill fact">Emitida</span>')+"</td>"+
+      "<td>"+(i.status==="cobrada"?'<span class="pill cobr">Cobrada</span>':'<span class="pill fact">Emitida</span>')+
+        (i.sentAt?'<div style="font-size:11px;color:var(--muted);margin-top:3px" title="'+esc((i.sentTo||[]).join(", "))+'">✉ Enviada '+esc(dmy(i.sentAt))+'</div>':'')+"</td>"+
       '<td><div class="row-actions">'+
         '<button class="btn ghost sm" data-open="'+i.id+'">Abrir</button>'+
         (i.status==="cobrada"?"":'<button class="btn ghost sm" data-paid="'+i.id+'">Cobrada</button>')+
@@ -1878,6 +1879,7 @@ function engancharEnvio(d, inv){
   d.querySelector("[data-pdf]").addEventListener("click", function(){ downloadInvoice(inv,"pdf"); });
   d.querySelector("[data-mail]").addEventListener("click", function(){ copyMail(inv); });
   d.querySelector("[data-mailto]").addEventListener("click", function(){ openMail(inv); });
+  d.querySelector("[data-enviar]").addEventListener("click", function(){ enviarPorCorreo(inv, d); });
     /* Elegir con que correo sale: se repinta solo el panel de envio, que
        los destinatarios marcados se quedan como estan. */
   d.querySelectorAll("[data-remite]").forEach(function(b){
@@ -1960,8 +1962,7 @@ function sendBoxHTML(inv){
     'style="padding:5px 10px;font-size:12.5px">Mi programa de correo</button>';
 
   return '<div class="send-box"><h4>Enviar a '+esc(c.name||"la empresa")+"</h4>"+
-    '<p class="lead">El PDF se adjunta a mano: ni el correo ni WhatsApp permiten que una web adjunte archivos por su cuenta. '+
-    'Descárgalo primero y adjúntalo en el mensaje que se abre'+(canShareFiles()?", o usa «Compartir PDF», que sí lo lleva dentro.":".")+"</p>"+
+    '<p class="lead">Marca a quién va y pulsa <b>Enviar por correo</b>. Ni el correo ni WhatsApp dejan que una web adjunte el PDF sola, así que lo único que haces tú es adjuntarlo.</p>'+
     '<div style="margin:0 0 10px">'+
       '<div class="lbl" style="margin-bottom:6px">Destinatarios</div>'+
       casillas+
@@ -1992,11 +1993,21 @@ function sendBoxHTML(inv){
         '<p class="section-note" style="margin:-4px 0 12px 25px"><button class="inline-link" data-borrar-mes style="color:var(--danger)">'+
         'Borrar '+(n>1?"las "+n+" fotos":"la foto")+' de '+esc(monthLabel(inv.period))+'</button> cuando ya las hayas mandado.</p>';
     })()+
+    (inv.sentAt
+      ? '<p class="section-note" style="margin:0 0 10px;color:var(--ok,#2e7d4f)"><b>✓ Enviada por correo el '+esc(dmy(inv.sentAt))+'</b>'+
+        (inv.sentTo&&inv.sentTo.length?' a '+esc(inv.sentTo.join(", ")):'')+'. Si la vuelves a mandar, se apunta la nueva fecha.</p>'
+      : "")+
+    '<button class="btn primary" data-enviar style="width:100%;justify-content:center;padding:12px 16px;font-size:15px;margin:0 0 6px">'+
+      '✉️ Enviar por correo</button>'+
+    '<p class="section-note" style="margin:0 0 14px">'+(movilComparte()
+      ? 'Se abre el menú del móvil con el PDF'+(llevaFotos(inv)?' y las fotos':'')+' ya dentro: elige <b>Mail</b> (o Gmail/Outlook) y pega los correos en «Para», que ya van copiados.'
+      : 'Un solo clic: baja el PDF'+(llevaFotos(inv)?' y las fotos':'')+' y abre el correo ya escrito, con los destinatarios. Solo te queda adjuntar el PDF desde <b>Descargas</b> y darle a Enviar.')+'</p>'+
+    '<div class="lbl" style="margin-bottom:6px">Otras formas</div>'+
     '<div class="toolbar" style="margin:0">'+
-      '<button class="btn primary" data-pdf><span class="step">1</span>Descargar PDF</button>'+
-      '<button class="btn" data-mailto><span class="step">2</span>Abrir correo</button>'+
-      '<button class="btn" data-wa><span class="step">2</span>Abrir WhatsApp</button>'+
-      (canShareFiles()?'<button class="btn" data-share>Compartir PDF…</button>':"")+
+      '<button class="btn ghost" data-pdf>Descargar PDF</button>'+
+      '<button class="btn ghost" data-mailto>Solo abrir el correo</button>'+
+      '<button class="btn ghost" data-wa>Abrir WhatsApp</button>'+
+      (canShareFiles()?'<button class="btn ghost" data-share>Compartir PDF…</button>':"")+
       '<button class="btn ghost" data-mail>Copiar texto</button>'+
     "</div>"+
     '<div class="dest">'+
@@ -2088,6 +2099,64 @@ function openMail(inv){
       ? "Van "+destinos.length+" destinatarios. Adjunta el PDF antes de enviar."
       : "Adjunta el PDF antes de enviar."));
 }
+/* ¿Es un móvil o tablet que puede mandar el PDF dentro del correo? */
+function movilComparte(){
+  var tactil=false;
+  try{ tactil = window.matchMedia("(pointer:coarse)").matches; }catch(e){}
+  return tactil && canShareFiles();
+}
+/* Enviar por correo de una vez.
+   En el móvil: copia los correos y abre el menú de compartir con el PDF
+   (y las fotos) dentro, para mandarlo con Mail, Gmail u Outlook.
+   En el ordenador: baja el PDF y abre el correo ya escrito con los
+   destinatarios; lo único que queda es adjuntar el PDF. Al acabar se
+   puede apuntar que la factura ya está enviada. */
+function enviarPorCorreo(inv, dlg){
+  var destinos=destinatariosElegidos(inv);
+  if(!destinos.length){
+    toast("Marca al menos un correo, o escribe uno en el hueco de «Más correos».", true);
+    var otro=document.getElementById("otroCorreo"); if(otro) otro.focus();
+    return;
+  }
+  if(movilComparte()){
+    try{ navigator.clipboard.writeText(destinos.join(", ")).catch(function(){}); }catch(e){}
+    shareInvoice(inv).then(function(ok){ if(ok) preguntarEnviada(inv, destinos, dlg); });
+    return;
+  }
+  downloadInvoice(inv, "pdf");
+  openMail(inv);
+  var nombre=invFilename(inv, "pdf");
+  openDialog("Adjunta el PDF y envía",
+    '<ol style="margin:0;padding-left:20px;line-height:1.7">'+
+      '<li>Se ha abierto el correo ya escrito, para <b>'+esc(destinos.join(", "))+'</b>.</li>'+
+      '<li>En el correo, pulsa <b>📎 Adjuntar</b>.</li>'+
+      '<li>Entra en <b>Descargas</b> y elige <b>'+esc(nombre)+'</b>'+(llevaFotos(inv)?' (y las fotos de '+esc(monthLabel(inv.period))+')':'')+'.</li>'+
+      '<li>Dale a <b>Enviar</b>.</li>'+
+    '</ol>'+
+    '<p class="section-note" style="margin:12px 0 0">Truco: también puedes arrastrar el PDF desde la barra de descargas del navegador hasta el correo.</p>'+
+    '<p class="section-note" style="margin:8px 0 0">¿No se ha abierto el correo? <button class="inline-link" data-reabrir>Ábrelo otra vez</button>.</p>',
+    function(){ marcarEnviada(inv, destinos, dlg); },
+    {okLabel:"Ya la he enviado"});
+  var re=document.querySelector("#dlg [data-reabrir]");
+  if(re) re.addEventListener("click", function(){ openMail(inv); });
+}
+function preguntarEnviada(inv, destinos, dlg){
+  openDialog("¿Se ha enviado?",
+    '<p style="margin:0">Si has mandado la factura '+esc(inv.number)+', la dejo apuntada como enviada para que no se te olvide ni la mandes dos veces.</p>',
+    function(){ marcarEnviada(inv, destinos, dlg); },
+    {okLabel:"Sí, enviada"});
+}
+function marcarEnviada(inv, destinos, dlg){
+  var real=(state.invoices||[]).filter(function(x){ return x.id===inv.id; })[0] || inv;
+  real.sentAt=todayISO(); real.sentTo=destinos.slice();
+  if(real!==inv){ inv.sentAt=real.sentAt; inv.sentTo=real.sentTo; }
+  touch(); render();
+  if(dlg){
+    var caja=dlg.querySelector(".send-box");
+    if(caja){ var nueva=document.createElement("div"); nueva.innerHTML=sendBoxHTML(inv); caja.replaceWith(nueva.firstChild); engancharEnvio(dlg, inv); }
+  }
+  toast("Factura "+inv.number+" apuntada como enviada");
+}
 function openWhatsApp(inv){
   var tel=waNumber(inv);
   openExternal("https://wa.me/"+tel+"?text="+encodeURIComponent(waText(inv)),
@@ -2115,6 +2184,7 @@ async function shareInvoice(inv){
       } else { toast("Este dispositivo no permite compartir archivos.", true); return; }
     }
     await navigator.share({files:files, title:"Factura "+inv.number, text:waText(inv)});
+    return true;
   }catch(e){
     if(e && (e.name==="AbortError")) return;
     toast("No se pudo compartir aquí. Descarga el PDF y adjúntalo a mano.", true);
