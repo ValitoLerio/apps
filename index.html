@@ -22,6 +22,7 @@
     --recetas:#f0a48c; --recetas-tenue:#33191299;
     --agenda:#8ed3ad; --agenda-tenue:#13291f99;
   --libros:#e3c088; --libros-tenue:#2b221499;
+  --hojas:#8fbbe6; --hojas-tenue:#16222f99;
     --alerta:#ef8a76; --alerta-tenue:#331a16;
     --display:'Fraunces',Georgia,serif;
     --texto:'Archivo','Helvetica Neue',sans-serif;
@@ -45,6 +46,7 @@
     --recetas:#a8442c; --recetas-tenue:#f7e6e0;
     --agenda:#2f6b52; --agenda-tenue:#e2efe8;
   --libros:#6b4f2a; --libros-tenue:#f2e9dc;
+  --hojas:#2c5a86; --hojas-tenue:#e2ebf4;
       --alerta:#96331f; --alerta-tenue:#f7e2de;
       --sombra:0 16px 34px -26px rgba(15,22,24,.5);
     }
@@ -175,6 +177,7 @@
   .p-recetas{--tono:var(--recetas)}
   .p-agenda{--tono:var(--agenda)}
   .p-libros{--tono:var(--libros)}
+  .p-hojas{--tono:var(--hojas)}
 
   /* ── Colocar: mover las tarjetas a donde te parezca ───────────── */
   .colocando .puerta{cursor:default}
@@ -585,6 +588,22 @@
         <div class="entrar">Abrir <span class="flecha">&rarr;</span></div>
       </a>
 
+      <a class="puerta p-hojas" data-app="hojas" href="hojas.html">
+        <span class="rotulo">Archivador</span>
+        <h2>Hojas</h2>
+        <p class="que">Las hojas que imprimes, de Google Sheets o en PDF, a la primera y en A4.</p>
+        <div class="cifra">
+          <span class="n" id="d-hoj-total">&mdash;</span>
+          <span class="u">hojas guardadas</span>
+        </div>
+        <div class="tira">
+          <div class="celda"><span class="k">Favoritas</span><span class="v" id="d-hoj-fav">—</span></div>
+          <div class="celda"><span class="k">Carpetas</span><span class="v" id="d-hoj-carp">—</span></div>
+          <div class="celda"><span class="k">Impresas</span><span class="v" id="d-hoj-imp">—</span></div>
+        </div>
+        <div class="entrar">Abrir <span class="flecha">&rarr;</span></div>
+      </a>
+
       <a class="puerta p-patrimonio" data-app="patrimonio" href="patrimonio.html">
         <span class="rotulo">Patrimonio</span>
         <h2>Lo que tengo</h2>
@@ -625,7 +644,7 @@
 
 </div>
 
-<script src="sync.js?v=202610281102"></script>
+<script src="sync.js?v=202610311200"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
@@ -1010,11 +1029,13 @@
   var TARJETAS = {piso:'.p-piso', horario:'.p-resto', comanda:'.p-comanda',
                   casa:'.p-casa', caja:'.p-caja',
                   patrimonio:'.p-patrimonio', pedidos:'.p-pedidos',
-                  vacaciones:'.p-vacaciones', recetas:'.p-recetas', agenda:'.p-agenda'};
+                  vacaciones:'.p-vacaciones', recetas:'.p-recetas', agenda:'.p-agenda',
+                  libros:'.p-libros', hojas:'.p-hojas'};
   var NOMBRES  = {piso:'Piso Soldeu', horario:'Horario Restaurante',
                   comanda:'Comanda', casa:'Casa', caja:'Caja',
                   patrimonio:'Patrimonio', pedidos:'Pedidos',
-                  vacaciones:'Vacaciones', recetas:'Recetas', agenda:'Agenda'};
+                  vacaciones:'Vacaciones', recetas:'Recetas', agenda:'Agenda',
+                  libros:'Libros', hojas:'Hojas'};
   var seguridad = {};
 
   function pintarCandados(){
@@ -1051,7 +1072,8 @@
       vacaciones: ['d-vac-total','d-vac-gente','d-vac-gastos','d-vac-cuadre'],
       recetas: ['d-rec-total','d-rec-hoy','d-rec-1','d-rec-2'],
       agenda:  ['d-ag-total','d-ag-tel','d-ag-clave','d-ag-correo'],
-      libros:  ['d-lib-total','d-lib-porleer','d-lib-leidos','d-lib-prestados']
+      libros:  ['d-lib-total','d-lib-porleer','d-lib-leidos','d-lib-prestados'],
+      hojas:   ['d-hoj-total','d-hoj-fav','d-hoj-carp','d-hoj-imp']
     }[sec] || [];
     ids.forEach(function(id){ pon(id, '···'); });
   }
@@ -1389,6 +1411,15 @@
     pon('d-lib-prestados', String(lista.filter(function(l){ return (l.prestado||'').trim(); }).length));
   }
 
+  function resumenHojas(seccion){
+    var libro = leer(seccion['hojas.libro.v1'], {});
+    var lista = libro.hojas || [];
+    pon('d-hoj-total', String(lista.length));
+    pon('d-hoj-fav',   String(lista.filter(function(h){ return h.fav; }).length));
+    pon('d-hoj-carp',  String((libro.carpetas || []).length));
+    pon('d-hoj-imp',   String(lista.reduce(function(n, h){ return n + (+h.impresa || 0); }, 0)));
+  }
+
   function pintarResumen(){
     return Sync.descargarTodo().then(function(datos){
       datos = datos || {};
@@ -1398,7 +1429,7 @@
                    patrimonio: !!seg.patrimonio,
                    pedidos: !!seg.pedidos,
                    vacaciones: !!seg.vacaciones, recetas: !!seg.recetas,
-                   agenda: !!seg.agenda, libros: !!seg.libros};
+                   agenda: !!seg.agenda, libros: !!seg.libros, hojas: !!seg.hojas};
       resumenPiso(datos.piso || {});
       resumenHorario(datos.horario || {});
       resumenComanda(datos.comanda || {});
@@ -1410,6 +1441,7 @@
       resumenRecetas(datos.recetas || {});
       resumenAgenda(datos.agenda || {});
       resumenLibros(datos.libros || {});
+      resumenHojas(datos.hojas || {});
       Object.keys(seguridad).forEach(function(sec){ if (seguridad[sec]) ocultarCifras(sec); });
       pintarCandados();
       aplicarOrden((datos.escritorio || {}).orden);
