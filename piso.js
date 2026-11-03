@@ -809,6 +809,7 @@ function renderRecibos(){
           <div style="display:flex;gap:6px;justify-content:flex-end">
             <button class="btn btn-primary" style="padding:5px 12px;font-size:12px;background:#25D366;color:#0b3d24" onclick="whatsappRecibo('${m.mes}')" title="Enviar la factura por WhatsApp">📱 WhatsApp</button>
             <button class="btn btn-secondary" style="padding:5px 12px;font-size:12px" onclick="verRecibo('${m.mes}')">👁 Ver</button>
+            <button class="btn btn-secondary" style="padding:5px 12px;font-size:12px" onclick="facturaPropietario('${m.mes}')" title="Factura detallada solo para mí">🔒 Mi copia</button>
             <button class="btn btn-secondary" style="padding:5px 12px;font-size:12px;color:var(--info)" onclick="editarRecibo('${m.mes}')">✏️ Editar</button>
             <button class="btn btn-ghost" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);color:var(--danger)" onclick="this.dataset.c=this.dataset.c||0;this.dataset.c++;if(this.dataset.c==1){this.textContent='¿Seguro?';setTimeout(()=>{this.textContent='🗑';this.dataset.c=0;},3000);}else{borrarRecibo('${m.mes}');}">🗑</button>
           </div>
@@ -1613,6 +1614,181 @@ function ventanaWhatsApp(m, blob, nombre, movil){
     catch(e){ fin(); }
   };
   elegir('inq');
+}
+
+/* ── MI COPIA: factura detallada solo para el propietario ───────────────
+   Aparte de la del inquilino (esa no se toca). Lleva todo: lecturas,
+   precio, coste real, margen, lo cobrado, lo ganado y la cuenta del fondo
+   de consumos con su saldo. Es para guardarla uno, no para mandarla. */
+function datosPropietario(m){
+  const cuota=cuotaDelMes(m);
+  const saldoAnt=(m.saldo_ant!=null)?m.saldo_ant:calcularSaldoAcumulado(m.mes);
+  const sum=k=>{
+    const lect=(k!=='elec');
+    const real=m[k+'_con']||0, cob=m[k+'_cob']||0;
+    return {k, lect,
+      ant:m[k+'_ant']||0, act:m[k+'_act']||0, cons:m[k+'_cons']||0, preu:m[k+'_preu']||0,
+      real, cob, pct:pctGuardado(m,k), gan:cob-real};
+  };
+  const s=[sum('cal'),sum('agua'),sum('elec')];
+  const real=s.reduce((a,x)=>a+x.real,0), cob=s.reduce((a,x)=>a+x.cob,0);
+  return {m, mes:fmtMes(m.mes), codigo:m.mes, inq:inqDelMes(m.mes),
+    alq:m.alq||0, otros:m.otros||0, cuota, s, real, cob, ganMargen:cob-real,
+    saldoAnt, saldoFinal:saldoAnt+cuota-cob};
+}
+
+/* Quién vivía en el piso ese mes (el último que entró), según Inquilinos. */
+function inqDelMes(mes){
+  const ini=mes+'-01', fin=mes+'-31';
+  const ahi=(inquilinos||[]).filter(i=>i.entrada && i.entrada<=fin && (!i.salida || i.salida>=ini))
+    .sort((a,b)=>b.entrada.localeCompare(a.entrada));
+  return ahi.length ? ahi[0].nombre : (cfg.inq||'(Inquilino)');
+}
+
+function dibujarPropietario(d, cv){
+  const SC=2, W=680, H=1700;
+  cv.width=W*SC; cv.height=H*SC; cv.style.width=W+'px';
+  const c=cv.getContext('2d'); c.scale(SC,SC);
+  const AC='#1f4d3a', ACL='#eef4f0', DK='#1b1f1d', MD='#4d5551', LT='#8a918d', LN='#e3e6e4';
+  const RD='#a33a2c', AM='#8a5a00', AML='#fbf3e2';
+  const L=48, R=W-48, CW=R-L;
+  const FUENTE='-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif';
+  function t(txt,x,yy,col,sz,wt,al,esp){
+    c.font=(wt||400)+' '+sz+'px '+FUENTE; c.fillStyle=col; c.textAlign=al||'left';
+    if(esp && c.letterSpacing!==undefined) c.letterSpacing=esp+'px';
+    c.fillText(txt,x,yy);
+    if(c.letterSpacing!==undefined) c.letterSpacing='0px';
+    c.textAlign='left';
+  }
+  function ln(yy,col,lw){ c.beginPath(); c.strokeStyle=col||LN; c.lineWidth=lw||1;
+    c.moveTo(L,yy+.5); c.lineTo(R,yy+.5); c.stroke(); }
+  function rect(x,yy,w,h,col){ c.fillStyle=col; c.fillRect(x,yy,w,h); }
+  const eur=v=>fmtMil(v)+' €';
+  const signo=v=>(v<-0.004?'− ':'')+eur(Math.abs(v));
+  function titulo(txt){ y+=46; t(txt,L,y,AC,10.5,700,'left',1.6); y+=10; ln(y,AC,1.2); }
+  function fila(txt,val,col,fuerte,sub){
+    y+=28; t(txt,L,y,fuerte?DK:MD,13,fuerte?600:400);
+    if(sub) t(sub,L+250,y,LT,11.5,400);
+    t(val,R,y,col||DK,13,fuerte?700:500,'right'); y+=10;
+  }
+
+  rect(0,0,W,H,'#ffffff'); rect(0,0,W,6,AC);
+  let y=56;
+  t('PISO SOLDEU',L,y,AC,13,700,'left',2.4);
+  t('Copia del propietario',L,y+20,LT,11.5,400);
+  t('DETALLE',R,y+4,DK,28,300,'right',3);
+  t(d.mes,R,y+26,MD,12,500,'right');
+  y+=40;
+  rect(L,y,CW,30,AML);
+  t('USO INTERNO · NO ENVIAR AL INQUILINO',L+CW/2,y+20,AM,10.5,700,'center',1.4);
+  y+=30;
+  y+=30;
+  t('ARRENDATARIO',L,y,LT,9.5,700,'left',1.4);
+  t('FECHA',R,y,LT,9.5,700,'right',1.4);
+  y+=22;
+  t(d.inq,L,y,DK,16,600);
+  t(new Date().toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'}),R,y,DK,14,500,'right');
+
+  // Lo que paga el inquilino
+  titulo('LO QUE PAGA EL INQUILINO');
+  fila('Alquiler',eur(d.alq));
+  if(d.cuota>0) fila('Fondo de consumos',eur(d.cuota));
+  if(d.otros) fila('Otros',eur(d.otros));
+  y+=4; ln(y,LN);
+  fila('Total del recibo',eur(d.m.total!=null?d.m.total:d.alq+d.cuota+d.otros),AC,true);
+
+  // Consumos: tabla
+  titulo('CONSUMOS DEL MES');
+  const X={con:L, lec:L+150, prc:L+300, real:L+400, mg:L+465, cob:R};
+  y+=26;
+  [['CONCEPTO',X.con,'left'],['LECTURAS',X.lec,'left'],['PRECIO',X.prc,'right'],
+   ['COSTE',X.real,'right'],['MARGEN',X.mg+28,'right'],['COBRADO',X.cob,'right']]
+    .forEach(([s,x,al])=>t(s,x,y,LT,9,700,al,1.1));
+  y+=8; ln(y,LN);
+  const NOM={cal:'Calefacción',agua:'Agua caliente',elec:'Electricidad'};
+  d.s.forEach(x=>{
+    y+=26;
+    t(NOM[x.k],X.con,y,DK,13,500);
+    if(x.lect){
+      t(fmtNum(x.ant)+' → '+fmtNum(x.act),X.lec,y,MD,12,400);
+      t(fmtNum(x.cons)+' uds',X.lec,y+16,LT,11,400);
+      t(x.preu?x.preu.toFixed(4).replace('.',','):'—',X.prc,y,MD,12,400,'right');
+    } else {
+      t('factura',X.lec,y,LT,12,400);
+      t('—',X.prc,y,LT,12,400,'right');
+    }
+    t(eur(x.real),X.real,y,MD,12.5,400,'right');
+    t('+'+fmtNum(x.pct)+'%',X.mg+28,y,LT,12,400,'right');
+    t(eur(x.cob),X.cob,y,DK,13,600,'right');
+    y+=x.lect?22:10; ln(y,LN);
+  });
+  fila('Total consumos',eur(d.real)+'  →  '+eur(d.cob),DK,true);
+
+  // Beneficio
+  titulo('LO QUE GANO ESTE MES');
+  fila('Alquiler',eur(d.alq+d.otros));
+  fila('Margen sobre consumos',signo(d.ganMargen),d.ganMargen<-0.004?RD:AC);
+  y+=4; ln(y,LN);
+  y+=12; rect(L,y,CW,46,AC);
+  t('BENEFICIO DEL MES',L+14,y+29,'rgba(255,255,255,.8)',10.5,700,'left',1.4);
+  t(signo(d.alq+d.otros+d.ganMargen),R-14,y+30,'#ffffff',20,700,'right');
+  y+=46;
+
+  // Fondo de consumos
+  if(d.cuota>0 || Math.abs(d.saldoAnt)>0.004){
+    titulo('CUENTA DEL FONDO DE CONSUMOS');
+    fila('Saldo anterior',signo(d.saldoAnt));
+    fila('Aportación del mes','+ '+eur(d.cuota));
+    fila('Consumos cobrados','− '+eur(d.cob),RD);
+    y+=4; ln(y,LN);
+    const sf=d.saldoFinal, pos=sf>0.004, neg=sf<-0.004;
+    y+=12; rect(L,y,CW,44,pos?ACL:(neg?'#f8ecea':'#f3f4f3'));
+    t(pos?'Saldo a favor del inquilino':neg?'Saldo a mi favor':'Cuenta al día',L+14,y+28,pos?AC:(neg?RD:MD),13.5,700);
+    t(eur(Math.abs(sf)),R-14,y+28,pos?AC:(neg?RD:MD),15,700,'right');
+    y+=44;
+    y+=22; t('Es dinero del inquilino que guardo para sus consumos: no es beneficio.',L,y,LT,11,400);
+  }
+
+  y+=40; ln(y,LN); y+=24;
+  t('Piso Soldeu · copia interna · '+d.codigo,L,y,LT,10.5,400);
+  y+=22; rect(0,y,W,6,AC); y+=6;
+
+  const altoFinal=Math.round(y*SC);
+  if(altoFinal!==cv.height){
+    const copia=document.createElement('canvas');
+    copia.width=cv.width; copia.height=altoFinal;
+    copia.getContext('2d').drawImage(cv,0,0);
+    cv.height=altoFinal; cv.getContext('2d').drawImage(copia,0,0);
+  }
+  cv.style.height=y+'px';
+}
+
+function facturaPropietario(mes){
+  const m=meses.find(r=>r.mes===mes);
+  if(!m){ alert('No encuentro ese recibo.'); return; }
+  const previo=document.getElementById('prop-modal'); if(previo) previo.remove();
+  const fondo=document.createElement('div');
+  fondo.id='prop-modal';
+  fondo.style.cssText='position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.55);overflow:auto;padding:24px 12px';
+  fondo.innerHTML='<div style="max-width:700px;margin:0 auto;background:var(--surface);border-radius:14px;padding:16px">'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;align-items:center;margin-bottom:12px">'+
+      '<b style="font-size:15px">🔒 Mi copia · '+fmtMes(mes)+'</b>'+
+      '<div style="display:flex;gap:8px"><button class="btn btn-primary" id="prop-bajar">⬇️ Descargar</button>'+
+      '<button class="btn btn-secondary" id="prop-cerrar">Cerrar</button></div></div>'+
+    '<div style="overflow:auto"><canvas id="prop-canvas" style="max-width:100%;height:auto;display:block;margin:0 auto;border:1px solid var(--border);border-radius:6px"></canvas></div></div>';
+  document.body.appendChild(fondo);
+  const cv=document.getElementById('prop-canvas');
+  try{ dibujarPropietario(datosPropietario(m), cv); }
+  catch(err){ alert('No he podido hacer la copia: '+err.message); fondo.remove(); return; }
+  cv.style.width='100%'; cv.style.maxWidth='680px'; cv.style.height='auto';
+  const cerrar=()=>fondo.remove();
+  document.getElementById('prop-cerrar').onclick=cerrar;
+  fondo.addEventListener('click',e=>{ if(e.target===fondo) cerrar(); });
+  document.getElementById('prop-bajar').onclick=function(){
+    const nombre='mi-copia-'+mes+'.png';
+    const local=()=>{ const a=document.createElement('a'); a.download=nombre; a.href=cv.toDataURL('image/png'); a.click(); };
+    cv.toBlob(b=>{ if(!b){ local(); return; } guardarArchivo(nombre, b, local); },'image/png');
+  };
 }
 
 function getDatosFactura(){
