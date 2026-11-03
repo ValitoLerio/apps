@@ -346,7 +346,7 @@ function calcular(){
     const cons=Math.max(0, act-ant);
     const costeReal=cons*preu;
     const costeCob=costeReal*(1+pctRecibo(pctKey)/100);
-    set(pref+'-cons', cons%1===0?cons.toFixed(0):cons.toFixed(3));
+    set(pref+'-cons', fmtNum(cons));
     set('r-'+pref, fmt(costeReal)+' €');
     set(pref+'-cob', fmt(costeCob)+' €');
     return {ant,act,preu,cons,costeReal,costeCob,modo:'lect'};
@@ -492,7 +492,7 @@ function calcular(){
       </tr>
     </table>`;
 }
-function fmtNum(x){const v=x||0;return v%1===0?v.toFixed(0):v.toFixed(3)}
+function fmtNum(x){const v=Math.round((x||0)*1000)/1000;return String(v).replace('.',',')}
 function fmtP(x){return(x||0).toFixed(4)}
 function guardarRecibo(){
   const mes=document.getElementById('r-mes').value;
