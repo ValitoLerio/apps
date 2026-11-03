@@ -1278,12 +1278,13 @@ function dibujarFactura(datos, lienzo){
     y+=sub?28:14; ln(y,LN);
   }
   concepto('Alquiler mensual','Vivienda · '+datos.mes,datos.alq);
-  concepto('Fondo de gastos de consumo','Agua, calefacción y electricidad',datos.cuota);
+  concepto('Gastos de consumo',null,datos.cuota);
 
   // Total
   y+=18;
-  rect(col2-14,y,R-col2+14,54,AC);
-  t('TOTAL A PAGAR',col2+2,y+33,'rgba(255,255,255,.75)',10,700,'left',1.4);
+  const xt=L+CW*0.40;
+  rect(xt,y,R-xt,54,AC);
+  t('TOTAL A PAGAR',xt+16,y+33,'rgba(255,255,255,.75)',10,700,'left',1.4);
   t(eur(datos.alq+datos.cuota),R-14,y+35,'#ffffff',22,700,'right');
   y+=54;
 
@@ -1439,7 +1440,7 @@ function textoWhatsApp(m){
   const l=['Hola '+nom+',', '',
            'Te envío el recibo del alquiler de *'+d.mes.toLowerCase()+'*.', '',
            '*Total a pagar: '+fmtMil(d.alq+d.cuota)+' €*',
-           'Alquiler '+fmtMil(d.alq)+' € + fondo de consumos '+fmtMil(d.cuota)+' €', '',
+           'Alquiler '+fmtMil(d.alq)+' € + gastos de consumo '+fmtMil(d.cuota)+' €', '',
            reciboSimple ? null
          : sf>0.004 ? 'Cuenta de consumos: saldo a tu favor de '+fmtMil(sf)+' €.'
          : sf<-0.004 ? 'Cuenta de consumos: saldo pendiente de '+fmtMil(Math.abs(sf))+' €.'
