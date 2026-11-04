@@ -1522,21 +1522,32 @@ function elegirDestino(m, blob, nombre, movil){
     if(yo) texto='Para '+(cfg.inq||nombreInq())+':\n\n'+texto;
     else if(primero) texto=texto.replace(/^Hola [^,\n]*,/, 'Hola '+primero+',');
     caja.remove();
+    /* Solo la factura, sin escrito. */
     if(movil){
       try{
         const file=new File([blob], nombre, {type:'image/png'});
         if(navigator.canShare && navigator.share && navigator.canShare({files:[file]})){
-          navigator.share({files:[file], text:texto, title:'Recibo '+fmtMes(m.mes)}).catch(()=>{});
+          navigator.share({files:[file]}).catch(()=>{});
           return;
         }
       }catch(e){}
-      window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(texto), '_blank', 'noopener');
-      return;
     }
-    const url=URL.createObjectURL(blob), a=document.createElement('a');
-    a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url), 4000);
-    window.open('https://web.whatsapp.com/send?phone='+tel+'&text='+encodeURIComponent(texto), '_blank', 'noopener');
+    /* Ordenador: la factura se copia (como si hicieras copiar en la imagen),
+       se abre el chat vacío y solo hay que pegar. */
+    let copiada=false;
+    try{
+      if(navigator.clipboard && window.ClipboardItem){
+        navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+        copiada=true;
+      }
+    }catch(e){ copiada=false; }
+    if(!copiada){
+      const url=URL.createObjectURL(blob), a=document.createElement('a');
+      a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    }
+    window.open('https://web.whatsapp.com/send?phone='+tel, '_blank', 'noopener');
+    avisoPegar(copiada, nombre);
   }
 
   caja.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{
@@ -1546,6 +1557,20 @@ function elegirDestino(m, blob, nombre, movil){
     enviar(document.getElementById('wa-otro-nom').value, soloNumero(document.getElementById('wa-otro-tel').value), false);
   document.getElementById('wa-dest-cerrar').onclick=()=>caja.remove();
   caja.addEventListener('click', e=>{ if(e.target===caja) caja.remove(); });
+}
+
+function avisoPegar(copiada, nombre){
+  const mac=/Mac|iPhone|iPad/.test(navigator.platform||navigator.userAgent);
+  const t=document.createElement('div');
+  t.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2100;'+
+    'background:#0b3d24;color:#fff;padding:14px 18px;border-radius:12px;font-size:15px;'+
+    'box-shadow:0 10px 30px rgba(0,0,0,.35);max-width:92vw;text-align:center;line-height:1.5';
+  t.innerHTML=copiada
+    ? '✅ Factura copiada. En el chat de WhatsApp pulsa <b>'+(mac?'⌘ Cmd + V':'Ctrl + V')+'</b> y luego <b>Enviar</b>.'
+    : '⬇️ Factura descargada (<b>'+nombre+'</b>). Arrástrala al chat de WhatsApp y pulsa <b>Enviar</b>.';
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 12000);
+  t.onclick=()=>t.remove();
 }
 
 /* Movil o tableta: pantalla de dedo. En el Mac el puntero es fino
