@@ -1465,6 +1465,31 @@ function whatsappRecibo(mes){
   catch(err){ alert('No he podido generar la factura: '+err.message); return; }
 
   const movil=esAparatoDeDedo();
+
+  /* Un solo toque. Móvil: menú de compartir con la factura dentro.
+     Ordenador: se descarga y se abre el chat del inquilino. Solo si
+     falta algo sale la ventana de antes. */
+  if(movil){
+    try{
+      const file=new File([blob], nombre, {type:'image/png'});
+      if(navigator.canShare && navigator.share && navigator.canShare({files:[file]})){
+        navigator.share({files:[file], text:textoWhatsApp(m), title:'Recibo '+fmtMes(m.mes)})
+          .catch(err=>{ if(err && err.name!=='AbortError') ventanaWhatsApp(m, blob, nombre, movil); });
+        return;
+      }
+    }catch(e){}
+  } else {
+    const num=telDelInq();
+    if(num){
+      const url=URL.createObjectURL(blob), a=document.createElement('a');
+      a.href=url; a.download=nombre;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 4000);
+      window.open('https://web.whatsapp.com/send?phone='+num+'&text='+encodeURIComponent(textoWhatsApp(m)), '_blank', 'noopener');
+      return;
+    }
+  }
+
   if(!movil){
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
