@@ -1466,29 +1466,9 @@ function whatsappRecibo(mes){
 
   const movil=esAparatoDeDedo();
 
-  /* Un solo toque. Móvil: menú de compartir con la factura dentro.
-     Ordenador: se descarga y se abre el chat del inquilino. Solo si
-     falta algo sale la ventana de antes. */
-  if(movil){
-    try{
-      const file=new File([blob], nombre, {type:'image/png'});
-      if(navigator.canShare && navigator.share && navigator.canShare({files:[file]})){
-        navigator.share({files:[file], text:textoWhatsApp(m), title:'Recibo '+fmtMes(m.mes)})
-          .catch(err=>{ if(err && err.name!=='AbortError') ventanaWhatsApp(m, blob, nombre, movil); });
-        return;
-      }
-    }catch(e){}
-  } else {
-    const num=telDelInq();
-    if(num){
-      const url=URL.createObjectURL(blob), a=document.createElement('a');
-      a.href=url; a.download=nombre;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url), 4000);
-      window.open('https://web.whatsapp.com/send?phone='+num+'&text='+encodeURIComponent(textoWhatsApp(m)), '_blank', 'noopener');
-      return;
-    }
-  }
+  /* Eliges tú a quién le llega: un inquilino, tú, u otro número. */
+  elegirDestino(m, blob, nombre, movil);
+  return;
 
   if(!movil){
     const url=URL.createObjectURL(blob);
@@ -1498,6 +1478,74 @@ function whatsappRecibo(mes){
     setTimeout(()=>URL.revokeObjectURL(url), 4000);
   }
   ventanaWhatsApp(m, blob, nombre, movil);
+}
+
+/* Lista para elegir a quién mandar la factura. Un toque y se envía:
+   en el ordenador se descarga la factura y se abre el chat de esa persona;
+   en el móvil sale compartir con la factura dentro y el saludo con su nombre. */
+function elegirDestino(m, blob, nombre, movil){
+  const previo=document.getElementById('wa-destino'); if(previo) previo.remove();
+  const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const lista=[];
+  (inquilinos||[]).filter(i=>i.tel&&soloNumero(i.tel)).forEach(i=>
+    lista.push({nombre:i.nombre, tel:soloNumero(i.tel), vivo:!i.salida||new Date(i.salida)>=new Date()}));
+  lista.sort((a,b)=>(b.vivo-a.vivo));
+  const ultimo=cfg.waUltimo||'';
+  lista.sort((a,b)=>(b.tel===ultimo)-(a.tel===ultimo));
+  lista.push({nombre:'A mí', tel:miTelefono(), yo:true});
+
+  const caja=document.createElement('div');
+  caja.id='wa-destino';
+  caja.style.cssText='position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px';
+  caja.innerHTML=
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;width:min(420px,100%);max-height:90vh;overflow:auto;font-size:14px">'+
+    '<div style="font-weight:600;font-size:16px;margin-bottom:12px">¿A quién le mando el recibo de '+fmtMes(m.mes)+'?</div>'+
+    lista.map((p,k)=>
+      '<button class="btn btn-secondary btn-full" data-k="'+k+'" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:12px 14px;text-align:left'+
+        (p.tel===ultimo?';border-color:#25D366':'')+'">'+
+        '<span><b>'+esc(p.nombre)+'</b>'+(p.vivo?' <span style="color:var(--muted);font-size:12px">· actual</span>':'')+'</span>'+
+        '<span style="color:var(--muted);font-size:12.5px">'+esc(bonitoTel(p.tel))+'</span></button>').join('')+
+    '<div style="margin-top:6px;padding-top:10px;border-top:1px solid var(--border)">'+
+      '<div style="color:var(--muted);font-size:12.5px;margin-bottom:6px">Otra persona</div>'+
+      '<input id="wa-otro-nom" placeholder="Nombre" style="width:100%;margin-bottom:6px">'+
+      '<input id="wa-otro-tel" type="tel" inputmode="tel" placeholder="Teléfono, ej. +376 300 000" style="width:100%;margin-bottom:8px">'+
+      '<button class="btn btn-primary btn-full" id="wa-otro" style="background:#25D366;color:#0b3d24">📱 Enviar a este número</button>'+
+    '</div>'+
+    '<button class="btn btn-secondary btn-full" id="wa-dest-cerrar" style="margin-top:10px">Cancelar</button></div>';
+  document.body.appendChild(caja);
+
+  function enviar(nom, tel, yo){
+    if(!tel){ alert('Pon el teléfono, empezando por el país.'); return; }
+    cfg.waUltimo=tel; LS.set('piso_cfg', cfg);
+    const primero=(String(nom||'').trim().split(/\s+/)[0])||'';
+    let texto=textoWhatsApp(m);
+    if(yo) texto='Para '+(cfg.inq||nombreInq())+':\n\n'+texto;
+    else if(primero) texto=texto.replace(/^Hola [^,\n]*,/, 'Hola '+primero+',');
+    caja.remove();
+    if(movil){
+      try{
+        const file=new File([blob], nombre, {type:'image/png'});
+        if(navigator.canShare && navigator.share && navigator.canShare({files:[file]})){
+          navigator.share({files:[file], text:texto, title:'Recibo '+fmtMes(m.mes)}).catch(()=>{});
+          return;
+        }
+      }catch(e){}
+      window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(texto), '_blank', 'noopener');
+      return;
+    }
+    const url=URL.createObjectURL(blob), a=document.createElement('a');
+    a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    window.open('https://web.whatsapp.com/send?phone='+tel+'&text='+encodeURIComponent(texto), '_blank', 'noopener');
+  }
+
+  caja.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{
+    const p=lista[+b.getAttribute('data-k')]; enviar(p.nombre, p.tel, p.yo);
+  });
+  document.getElementById('wa-otro').onclick=()=>
+    enviar(document.getElementById('wa-otro-nom').value, soloNumero(document.getElementById('wa-otro-tel').value), false);
+  document.getElementById('wa-dest-cerrar').onclick=()=>caja.remove();
+  caja.addEventListener('click', e=>{ if(e.target===caja) caja.remove(); });
 }
 
 /* Movil o tableta: pantalla de dedo. En el Mac el puntero es fino
