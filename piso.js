@@ -1369,6 +1369,19 @@ async function compartirFactura(){
   },'image/png');
 }
 
+/* Botón grande de la sección "Factura para WhatsApp": manda la factura
+   que se está viendo, eligiendo a quién. */
+function enviarFacturaWhatsApp(){
+  const canvas=document.getElementById('factura-canvas');
+  if(!canvas) return;
+  const mes=document.getElementById('r-mes').value||'';
+  const datos=canvas.toDataURL('image/png').split(',')[1];
+  const bin=atob(datos), bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  const blob=new Blob([bytes],{type:'image/png'});
+  elegirDestino({mes}, blob, 'recibo-'+(mes||'factura')+'.png', esAparatoDeDedo());
+}
+
 function activarCompartir(){
   if(navigator.canShare && navigator.share){
     const btn=document.getElementById('btn-compartir');
@@ -1517,10 +1530,6 @@ function elegirDestino(m, blob, nombre, movil){
   function enviar(nom, tel, yo){
     if(!tel){ alert('Pon el teléfono, empezando por el país.'); return; }
     cfg.waUltimo=tel; LS.set('piso_cfg', cfg);
-    const primero=(String(nom||'').trim().split(/\s+/)[0])||'';
-    let texto=textoWhatsApp(m);
-    if(yo) texto='Para '+(cfg.inq||nombreInq())+':\n\n'+texto;
-    else if(primero) texto=texto.replace(/^Hola [^,\n]*,/, 'Hola '+primero+',');
     caja.remove();
     /* Solo la factura, sin escrito. */
     if(movil){

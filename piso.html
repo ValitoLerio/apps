@@ -243,11 +243,12 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
           <span><b>Recibo simple</b> · sin gastos ni saldo anterior</span></label>
         <canvas id="factura-canvas" style="width:100%;border-radius:8px;border:1px solid var(--border);display:block"></canvas>
         <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
-          <button class="btn btn-primary btn-full" style="font-size:15px;padding:13px" onclick="descargarFactura()">⬇️ Guardar imagen para WhatsApp</button>
+          <button class="btn btn-primary btn-full" style="font-size:16px;padding:14px;background:#25D366;color:#0b3d24" onclick="enviarFacturaWhatsApp()">📱 Enviar factura por WhatsApp</button>
+          <button class="btn btn-secondary btn-full" style="font-size:14px" onclick="descargarFactura()">⬇️ Guardar imagen</button>
           <button class="btn btn-secondary btn-full" id="btn-compartir" onclick="compartirFactura()" style="display:none;font-size:14px">📤 Compartir directamente</button>
         </div>
         <div style="background:var(--accent-bg);border:1px solid var(--accent-light);border-radius:8px;padding:11px 14px;margin-top:10px;font-size:13px;color:var(--accent);line-height:1.5">
-          <strong>¿Cómo enviarlo?</strong> En la lista de recibos pulsa <b>📱 WhatsApp</b>: en el móvil eliges WhatsApp y el contacto y la factura ya va dentro.
+          <strong>¿Cómo enviarlo?</strong> Pulsa <b>📱 Enviar factura por WhatsApp</b>, elige a quién, y en el chat pega la factura (Cmd+V) y envía.
         </div>
         <div id="preview" style="display:none"></div>
       </div>
