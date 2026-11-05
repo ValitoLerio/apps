@@ -1541,22 +1541,20 @@ function elegirDestino(m, blob, nombre, movil){
         }
       }catch(e){}
     }
-    /* Ordenador: la factura se copia (como si hicieras copiar en la imagen),
-       se abre el chat vacío y solo hay que pegar. */
-    let copiada=false;
-    try{
-      if(navigator.clipboard && window.ClipboardItem){
-        navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
-        copiada=true;
+    /* Ordenador: PRIMERO se copia la factura (esperando a que termine;
+       si se abre WhatsApp antes, el navegador pierde el foco y cancela la
+       copia). Luego sale una ventana con los botones para abrir el chat. */
+    const p=(navigator.clipboard && window.ClipboardItem)
+      ? navigator.clipboard.write([new ClipboardItem({'image/png':blob})]).then(()=>true, ()=>false)
+      : Promise.resolve(false);
+    p.then(copiada=>{
+      if(!copiada){
+        const url=URL.createObjectURL(blob), a=document.createElement('a');
+        a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url), 4000);
       }
-    }catch(e){ copiada=false; }
-    if(!copiada){
-      const url=URL.createObjectURL(blob), a=document.createElement('a');
-      a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url), 4000);
-    }
-    window.open('https://web.whatsapp.com/send?phone='+tel, '_blank', 'noopener');
-    avisoPegar(copiada, nombre);
+      ventanaAbrirChat(nom, tel, copiada, nombre);
+    });
   }
 
   caja.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{
@@ -1565,6 +1563,30 @@ function elegirDestino(m, blob, nombre, movil){
   document.getElementById('wa-otro').onclick=()=>
     enviar(document.getElementById('wa-otro-nom').value, soloNumero(document.getElementById('wa-otro-tel').value), false);
   document.getElementById('wa-dest-cerrar').onclick=()=>caja.remove();
+  caja.addEventListener('click', e=>{ if(e.target===caja) caja.remove(); });
+}
+
+/* Segundo paso: la factura ya está copiada; abre el chat y pega. */
+function ventanaAbrirChat(nom, tel, copiada, nombre){
+  const mac=/Mac|iPhone|iPad/.test(navigator.platform||navigator.userAgent);
+  const pegar=mac?'⌘ Cmd + V':'Ctrl + V';
+  const previo=document.getElementById('wa-paso2'); if(previo) previo.remove();
+  const caja=document.createElement('div');
+  caja.id='wa-paso2';
+  caja.style.cssText='position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px';
+  caja.innerHTML=
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;width:min(420px,100%);font-size:14.5px;line-height:1.5">'+
+    '<div style="font-weight:600;font-size:16px;margin-bottom:10px">'+
+      (copiada?'✅ Factura copiada':'⬇️ Factura descargada')+'</div>'+
+    '<div style="margin-bottom:14px">'+
+      (copiada
+        ? 'Abre el chat de <b>'+String(nom||bonitoTel(tel)).replace(/</g,'&lt;')+'</b>, haz clic donde se escribe, pulsa <b>'+pegar+'</b> y <b>Enviar</b>.'
+        : 'Abre el chat, arrastra <b>'+nombre+'</b> (está en Descargas) y pulsa <b>Enviar</b>.')+'</div>'+
+    '<a class="btn btn-primary btn-full" href="whatsapp://send?phone='+tel+'" style="display:block;text-align:center;background:#25D366;color:#0b3d24;padding:13px;font-size:15px;margin-bottom:8px;text-decoration:none">📱 Abrir en la app de WhatsApp</a>'+
+    '<a class="btn btn-secondary btn-full" href="https://web.whatsapp.com/send?phone='+tel+'" target="_blank" rel="noopener" style="display:block;text-align:center;margin-bottom:8px;text-decoration:none">🌐 Abrir en WhatsApp Web</a>'+
+    '<button class="btn btn-secondary btn-full" id="wa-paso2-cerrar">Cerrar</button></div>';
+  document.body.appendChild(caja);
+  document.getElementById('wa-paso2-cerrar').onclick=()=>caja.remove();
   caja.addEventListener('click', e=>{ if(e.target===caja) caja.remove(); });
 }
 
