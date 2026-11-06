@@ -1576,13 +1576,10 @@ function elegirDestino(m, blob, nombre, movil, completa){
     if(tipo==='completa' && completa){ blob=completa; nombre=nomCompleta; }
     else if(completa && !movil){ descargarBlob(completa, nomCompleta); guardadaCompleta=nomCompleta; }
     if(movil){
-      try{
-        const file=new File([blob], nombre, {type:'image/png'});
-        if(navigator.canShare && navigator.share && navigator.canShare({files:[file]})){
-          navigator.share({files:[file]}).catch(()=>{});
-          return;
-        }
-      }catch(e){}
+      /* Móvil: la factura a pantalla completa. Botón Compartir (si el
+         navegador deja) y, si no, mantener el dedo sobre la imagen. */
+      facturaEnPantalla(blob, nombre, nom, tel);
+      return;
     }
     /* Ordenador: PRIMERO se copia la factura (esperando a que termine;
        si se abre WhatsApp antes, el navegador pierde el foco y cancela la
@@ -1607,6 +1604,30 @@ function elegirDestino(m, blob, nombre, movil, completa){
     enviar(document.getElementById('wa-otro-nom').value, soloNumero(document.getElementById('wa-otro-tel').value), false);
   document.getElementById('wa-dest-cerrar').onclick=()=>caja.remove();
   caja.addEventListener('click', e=>{ if(e.target===caja) caja.remove(); });
+}
+
+/* Móvil: la factura grande en pantalla para compartirla como foto. */
+function facturaEnPantalla(blob, nombre, nom, tel){
+  const previo=document.getElementById('wa-movil'); if(previo) previo.remove();
+  const url=URL.createObjectURL(blob);
+  let file=null, puede=false;
+  try{ file=new File([blob], nombre, {type:'image/png'});
+       puede=!!(navigator.share && navigator.canShare && navigator.canShare({files:[file]})); }catch(e){}
+  const caja=document.createElement('div');
+  caja.id='wa-movil';
+  caja.style.cssText='position:fixed;inset:0;z-index:2100;background:#111;display:flex;flex-direction:column;padding:12px;gap:10px';
+  caja.innerHTML=
+    (puede?'<button id="wa-m-share" style="background:#25D366;color:#0b3d24;border:0;border-radius:12px;padding:16px;font-size:18px;font-weight:700">📤 Compartir por WhatsApp</button>':'')+
+    '<div style="color:#fff;font-size:15px;line-height:1.45;text-align:center">'+
+      (puede?'Pulsa el botón verde → <b>WhatsApp</b> → elige <b>'+String(nom||'el contacto').replace(/</g,'&lt;')+'</b> → Enviar.<br><span style="color:#aaa;font-size:13px">Si no sale: mantén el dedo sobre la factura → Compartir → WhatsApp.</span>'
+             :'<b>Mantén el dedo sobre la factura</b> → <b>Compartir</b> → <b>WhatsApp</b> → elige <b>'+String(nom||'el contacto').replace(/</g,'&lt;')+'</b> → Enviar.')+
+    '</div>'+
+    '<div style="flex:1;overflow:auto"><img src="'+url+'" alt="Factura" style="width:100%;display:block;border-radius:8px;-webkit-touch-callout:default;user-select:auto"></div>'+
+    '<button id="wa-m-cerrar" style="background:#333;color:#fff;border:0;border-radius:12px;padding:13px;font-size:16px">Cerrar</button>';
+  document.body.appendChild(caja);
+  const sh=document.getElementById('wa-m-share');
+  if(sh) sh.onclick=()=>{ navigator.share({files:[file]}).catch(()=>{}); };
+  document.getElementById('wa-m-cerrar').onclick=()=>{ caja.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000); };
 }
 
 /* Segundo paso: la factura ya está copiada; abre el chat y pega. */
