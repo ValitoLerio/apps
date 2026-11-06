@@ -1641,7 +1641,7 @@ function ventanaAbrirChat(nom, tel, copiada, nombre, guardadaCompleta){
   caja.innerHTML=
     '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;width:min(420px,100%);font-size:14.5px;line-height:1.5">'+
     '<div style="font-weight:600;font-size:16px;margin-bottom:10px">'+
-      (copiada?'✅ Factura copiada':'⬇️ Factura descargada')+'</div>'+
+      (copiada?'✅ Ya está copiada: lo ha hecho la app por ti':'⬇️ Factura descargada')+'</div>'+
     '<div style="margin-bottom:14px">'+
       (copiada
         ? 'Abre el chat de <b>'+String(nom||bonitoTel(tel)).replace(/</g,'&lt;')+'</b>, haz clic donde se escribe, pulsa <b>'+pegar+'</b> y <b>Enviar</b>.'
