@@ -1343,6 +1343,12 @@ function dibujarFactura(datos, lienzo){
   cv.style.height=realH+'px';
 }
 
+/* Guardar MI factura completa (con cuenta de consumos y saldo). */
+function guardarMiFacturaCompleta(){
+  const mes=document.getElementById('r-mes').value||'factura';
+  descargarBlob(blobDeFactura(Object.assign({},getDatosFactura(),{simple:false})), 'MI-COPIA-completa-'+mes+'.png');
+}
+
 function descargarFactura(){
   const canvas=document.getElementById('factura-canvas');
   if(!canvas) return;
@@ -1533,11 +1539,6 @@ function elegirDestino(m, blob, nombre, movil, completa){
   caja.innerHTML=
     '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;width:min(420px,100%);max-height:90vh;overflow:auto;font-size:14px">'+
     '<div style="font-weight:600;font-size:16px;margin-bottom:10px">Recibo de '+fmtMes(m.mes)+'</div>'+
-    (completa?'<div style="color:var(--muted);font-size:12.5px;margin-bottom:6px">¿Cómo la mando?</div>'+
-    '<div style="display:flex;gap:8px;margin-bottom:14px">'+
-      '<button class="btn btn-full" data-tipo="simple" style="flex:1;padding:11px;border:2px solid var(--border)">Simple<br><span style="font-size:11.5px;font-weight:400">alquiler + consumo</span></button>'+
-      '<button class="btn btn-full" data-tipo="completa" style="flex:1;padding:11px;border:2px solid var(--border)">Completa<br><span style="font-size:11.5px;font-weight:400">con gastos y saldo</span></button>'+
-    '</div>':'')+
     '<div style="color:var(--muted);font-size:12.5px;margin-bottom:6px">¿A quién?</div>'+
     lista.map((p,k)=>
       '<button class="btn btn-secondary btn-full" data-k="'+k+'" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:12px 14px;text-align:left'+
@@ -1573,8 +1574,8 @@ function elegirDestino(m, blob, nombre, movil, completa){
     const nomCompleta='recibo-completo-'+(m.mes||'factura')+'.png';
     /* Se manda la que elijas. Si mandas la simple, la completa se te
        guarda en Descargas. */
-    if(tipo==='completa' && completa){ blob=completa; nombre=nomCompleta; }
-    else if(completa && !movil){ descargarBlob(completa, nomCompleta); guardadaCompleta=nomCompleta; }
+    /* Por WhatsApp va SIEMPRE la simple (sin saldo). La completa no se
+       descarga sola: se guarda con su propio botón. */
     if(movil){
       /* Móvil: la factura a pantalla completa. Botón Compartir (si el
          navegador deja) y, si no, mantener el dedo sobre la imagen. */
