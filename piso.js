@@ -1203,13 +1203,11 @@ function importarDatos(event){
 // ── FACTURA VISUAL PROFESIONAL ────────────────────────────────────────────────
 /* Recibo simple: solo conceptos y total, sin la cuenta de consumos (ni
    gastos del mes ni saldo anterior). Se elige al mandarlo. */
-/* Por defecto SIEMPRE simple (alquiler + consumo + total). Solo si se
-   desmarca a mano sale la completa, y se recuerda. */
+/* Al inquilino SIEMPRE la simple (alquiler + consumo + total).
+   La completa de siempre es para Lito: se le guarda al mandar. */
 var reciboSimple=true;
-try{ const c=JSON.parse(localStorage.getItem('piso_cfg')||'{}'); if(c && c.reciboCompleto) reciboSimple=false; }catch(e){}
 function ponerReciboSimple(v){
   reciboSimple=!!v;
-  try{ if(typeof cfg!=='undefined'){ cfg.reciboCompleto=!reciboSimple; LS.set('piso_cfg', cfg); } }catch(e){}
   document.querySelectorAll('.chk-simple').forEach(c=>{ c.checked=reciboSimple; });
   try{ dibujarFactura(getDatosFactura()); }catch(e){}
 }
@@ -1379,11 +1377,10 @@ function enviarFacturaWhatsApp(){
   const canvas=document.getElementById('factura-canvas');
   if(!canvas) return;
   const mes=document.getElementById('r-mes').value||'';
-  const datos=canvas.toDataURL('image/png').split(',')[1];
-  const bin=atob(datos), bytes=new Uint8Array(bin.length);
-  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
-  const blob=new Blob([bytes],{type:'image/png'});
-  elegirDestino({mes}, blob, 'recibo-'+(mes||'factura')+'.png', esAparatoDeDedo());
+  const d=getDatosFactura();
+  const simple=blobDeFactura(Object.assign({},d,{simple:true}));
+  const completa=blobDeFactura(Object.assign({},d,{simple:false}));
+  elegirDestino({mes}, simple, 'recibo-'+(mes||'factura')+'.png', esAparatoDeDedo(), completa);
 }
 
 function activarCompartir(){
@@ -1425,6 +1422,20 @@ function imagenDeRecibo(m){
   const bytes=new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
   return new Blob([bytes], {type:'image/png'});
+}
+
+/* Pinta una factura en un lienzo aparte y la da como imagen. */
+function blobDeFactura(datos){
+  const cv=document.createElement('canvas');
+  dibujarFactura(datos, cv);
+  const b=cv.toDataURL('image/png').split(',')[1], bin=atob(b), bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  return new Blob([bytes],{type:'image/png'});
+}
+function descargarBlob(blob, nombre){
+  const url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
 }
 
 /* El telefono del inquilino que este viviendo ahora, si lo hay. */
@@ -1483,8 +1494,13 @@ function whatsappRecibo(mes){
 
   const movil=esAparatoDeDedo();
 
-  /* Eliges tú a quién le llega: un inquilino, tú, u otro número. */
-  elegirDestino(m, blob, nombre, movil);
+  /* Eliges tú a quién le llega: un inquilino, tú, u otro número.
+     Al inquilino la simple; la completa se guarda para mí. */
+  const dd=datosFacturaDeRecibo(m);
+  let simple=blob, completa=null;
+  try{ simple=blobDeFactura(Object.assign({},dd,{simple:true}));
+       completa=blobDeFactura(Object.assign({},dd,{simple:false})); }catch(e){}
+  elegirDestino(m, simple, nombre, movil, completa);
   return;
 
   if(!movil){
@@ -1500,7 +1516,7 @@ function whatsappRecibo(mes){
 /* Lista para elegir a quién mandar la factura. Un toque y se envía:
    en el ordenador se descarga la factura y se abre el chat de esa persona;
    en el móvil sale compartir con la factura dentro y el saludo con su nombre. */
-function elegirDestino(m, blob, nombre, movil){
+function elegirDestino(m, blob, nombre, movil, completa){
   const previo=document.getElementById('wa-destino'); if(previo) previo.remove();
   const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const lista=[];
@@ -1531,11 +1547,16 @@ function elegirDestino(m, blob, nombre, movil){
     '<button class="btn btn-secondary btn-full" id="wa-dest-cerrar" style="margin-top:10px">Cancelar</button></div>';
   document.body.appendChild(caja);
 
+  let guardadaCompleta='';
   function enviar(nom, tel, yo){
     if(!tel){ alert('Pon el teléfono, empezando por el país.'); return; }
     cfg.waUltimo=tel; LS.set('piso_cfg', cfg);
     caja.remove();
-    /* Solo la factura, sin escrito. */
+    const nomCompleta='recibo-completo-'+(m.mes||'factura')+'.png';
+    /* A mí: la completa de siempre. A otro: la simple, y la completa
+       se me guarda en Descargas. */
+    if(yo && completa){ blob=completa; nombre=nomCompleta; }
+    else if(completa && !movil){ descargarBlob(completa, nomCompleta); guardadaCompleta=nomCompleta; }
     if(movil){
       try{
         const file=new File([blob], nombre, {type:'image/png'});
@@ -1557,7 +1578,7 @@ function elegirDestino(m, blob, nombre, movil){
         a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); a.remove();
         setTimeout(()=>URL.revokeObjectURL(url), 4000);
       }
-      ventanaAbrirChat(nom, tel, copiada, nombre);
+      ventanaAbrirChat(nom, tel, copiada, nombre, guardadaCompleta);
     });
   }
 
@@ -1571,7 +1592,7 @@ function elegirDestino(m, blob, nombre, movil){
 }
 
 /* Segundo paso: la factura ya está copiada; abre el chat y pega. */
-function ventanaAbrirChat(nom, tel, copiada, nombre){
+function ventanaAbrirChat(nom, tel, copiada, nombre, guardadaCompleta){
   const mac=/Mac|iPhone|iPad/.test(navigator.platform||navigator.userAgent);
   const pegar=mac?'⌘ Cmd + V':'Ctrl + V';
   const previo=document.getElementById('wa-paso2'); if(previo) previo.remove();
@@ -1586,6 +1607,7 @@ function ventanaAbrirChat(nom, tel, copiada, nombre){
       (copiada
         ? 'Abre el chat de <b>'+String(nom||bonitoTel(tel)).replace(/</g,'&lt;')+'</b>, haz clic donde se escribe, pulsa <b>'+pegar+'</b> y <b>Enviar</b>.'
         : 'Abre el chat, arrastra <b>'+nombre+'</b> (está en Descargas) y pulsa <b>Enviar</b>.')+'</div>'+
+    (guardadaCompleta?'<div style="margin:-6px 0 14px;color:var(--muted);font-size:13px">📁 Tu factura completa está guardada en Descargas: <b>'+guardadaCompleta+'</b></div>':'')+
     '<a class="btn btn-primary btn-full" href="whatsapp://send?phone='+tel+'" style="display:block;text-align:center;background:#25D366;color:#0b3d24;padding:13px;font-size:15px;margin-bottom:8px;text-decoration:none">📱 Abrir en la app de WhatsApp</a>'+
     '<a class="btn btn-secondary btn-full" href="https://web.whatsapp.com/send?phone='+tel+'" target="_blank" rel="noopener" style="display:block;text-align:center;margin-bottom:8px;text-decoration:none">🌐 Abrir en WhatsApp Web</a>'+
     '<button class="btn btn-secondary btn-full" id="wa-paso2-cerrar">Cerrar</button></div>';
