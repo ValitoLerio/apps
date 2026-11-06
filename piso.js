@@ -1203,9 +1203,13 @@ function importarDatos(event){
 // ── FACTURA VISUAL PROFESIONAL ────────────────────────────────────────────────
 /* Recibo simple: solo conceptos y total, sin la cuenta de consumos (ni
    gastos del mes ni saldo anterior). Se elige al mandarlo. */
-var reciboSimple=false;
+/* Por defecto SIEMPRE simple (alquiler + consumo + total). Solo si se
+   desmarca a mano sale la completa, y se recuerda. */
+var reciboSimple=true;
+try{ const c=JSON.parse(localStorage.getItem('piso_cfg')||'{}'); if(c && c.reciboCompleto) reciboSimple=false; }catch(e){}
 function ponerReciboSimple(v){
   reciboSimple=!!v;
+  try{ if(typeof cfg!=='undefined'){ cfg.reciboCompleto=!reciboSimple; LS.set('piso_cfg', cfg); } }catch(e){}
   document.querySelectorAll('.chk-simple').forEach(c=>{ c.checked=reciboSimple; });
   try{ dibujarFactura(getDatosFactura()); }catch(e){}
 }
