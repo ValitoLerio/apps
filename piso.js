@@ -1527,8 +1527,15 @@ function elegirDestino(m, blob, nombre, movil, completa){
   const previo=document.getElementById('wa-destino'); if(previo) previo.remove();
   const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const lista=[];
-  (inquilinos||[]).filter(i=>i.tel&&soloNumero(i.tel)).forEach(i=>
-    lista.push({nombre:i.nombre, tel:soloNumero(i.tel), vivo:!i.salida||new Date(i.salida)>=new Date()}));
+  /* Salen los inquilinos que viven ahora (aunque no tengan teléfono:
+     se pide al tocarlos) y los antiguos que sí lo tengan. */
+  (inquilinos||[]).forEach(i=>{
+    const vivo=!i.salida||new Date(i.salida)>=new Date();
+    const tel=soloNumero(i.tel||'') || (vivo?soloNumero(cfg.inqTel||''):'');
+    if(vivo||tel) lista.push({nombre:i.nombre, tel, vivo, ref:i});
+  });
+  if(!lista.some(p=>p.vivo) && (cfg.inq||'').trim())
+    lista.push({nombre:cfg.inq.trim(), tel:soloNumero(cfg.inqTel||''), vivo:true});
   lista.sort((a,b)=>(b.vivo-a.vivo));
   const ultimo=cfg.waUltimo||'';
   lista.sort((a,b)=>(b.tel===ultimo)-(a.tel===ultimo));
@@ -1544,7 +1551,12 @@ function elegirDestino(m, blob, nombre, movil, completa){
     lista.map((p,k)=>
       '<button class="btn btn-primary btn-full" data-k="'+k+'" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:14px;text-align:left;background:#25D366;color:#0b3d24;font-size:15px">'+
         '<span><b>'+esc(p.nombre)+'</b>'+(p.vivo?' <span style="font-size:12px;opacity:.75">· actual</span>':'')+'</span>'+
-        '<span style="color:#0b3d24;opacity:.75;font-size:12.5px">'+esc(bonitoTel(p.tel))+'</span></button>').join('')+
+        '<span style="color:#0b3d24;opacity:.75;font-size:12.5px">'+(p.tel?esc(bonitoTel(p.tel)):'sin teléfono')+'</span></button>').join('')+
+    '<div id="wa-pedir" style="display:none;margin:4px 0 10px;padding:10px;border:2px solid #25D366;border-radius:10px">'+
+      '<div id="wa-pedir-txt" style="font-weight:600;margin-bottom:6px"></div>'+
+      '<input id="wa-pedir-tel" type="tel" inputmode="tel" placeholder="+376 300 000" style="width:100%;margin-bottom:8px;font-size:16px;padding:8px">'+
+      '<div id="wa-pedir-err" style="color:#a33a2c;font-size:12.5px;margin-bottom:6px"></div>'+
+      '<button class="btn btn-primary btn-full" id="wa-pedir-ok" style="background:#25D366;color:#0b3d24;padding:12px">Guardar y enviar</button></div>'+
     '<button class="btn btn-secondary btn-full" id="wa-otro-abrir" style="margin-top:4px;font-size:13px">➕ Otra persona (escribir teléfono)</button>'+
     '<div id="wa-otro-caja" style="display:none;margin-top:6px;padding-top:10px;border-top:1px solid var(--border)">'+
       '<input id="wa-otro-nom" placeholder="Nombre" style="width:100%;margin-bottom:6px">'+
@@ -1600,7 +1612,22 @@ function elegirDestino(m, blob, nombre, movil, completa){
   }
 
   caja.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{
-    const p=lista[+b.getAttribute('data-k')]; enviar(p.nombre, p.tel, p.yo);
+    const p=lista[+b.getAttribute('data-k')];
+    if(p.tel){ enviar(p.nombre, p.tel, p.yo); return; }
+    /* Falta su teléfono: se pide aquí mismo y se guarda para siempre. */
+    const box=document.getElementById('wa-pedir');
+    box.style.display='block';
+    document.getElementById('wa-pedir-txt').textContent='Teléfono de '+p.nombre+' (solo esta vez, se guarda)';
+    const inp=document.getElementById('wa-pedir-tel'); inp.focus();
+    document.getElementById('wa-pedir-ok').onclick=()=>{
+      const t=soloNumero(inp.value);
+      if(!t || t.length<6){ document.getElementById('wa-pedir-err').textContent='Escribe el teléfono.'; return; }
+      p.tel=t;
+      if(p.ref){ p.ref.tel=bonitoTel(t); try{ LS.set('piso_inq', inquilinos); }catch(e){} }
+      if(p.vivo){ cfg.inqTel=t; try{ LS.set('piso_cfg', cfg); }catch(e){} }
+      try{ if(typeof guardarEnRepo==='function') guardarEnRepo(); }catch(e){}
+      enviar(p.nombre, t, false);
+    };
   });
   document.getElementById('wa-otro').onclick=()=>
     enviar(document.getElementById('wa-otro-nom').value, soloNumero(document.getElementById('wa-otro-tel').value), false);
