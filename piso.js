@@ -1291,7 +1291,8 @@ function dibujarFactura(datos, lienzo){
   y+=54;
 
   // ── Cuenta de consumos (el recibo simple no la lleva)
-  if(!datos.simple){
+  /* El saldo SOLO sale en mi copia completa; en todo lo demás, nunca. */
+  if(datos.paraMi===true){
   y+=52;
   t('CUENTA DE CONSUMOS',L,y,AC,10.5,700,'left',1.6);
   y+=10; ln(y,AC,1.2);
@@ -1346,7 +1347,7 @@ function dibujarFactura(datos, lienzo){
 /* Guardar MI factura completa (con cuenta de consumos y saldo). */
 function guardarMiFacturaCompleta(){
   const mes=document.getElementById('r-mes').value||'factura';
-  descargarBlob(blobDeFactura(Object.assign({},getDatosFactura(),{simple:false})), 'MI-COPIA-completa-'+mes+'.png');
+  descargarBlob(blobDeFactura(Object.assign({},getDatosFactura(),{simple:false,paraMi:true})), 'MI-COPIA-completa-'+mes+'.png');
 }
 
 function descargarFactura(){
