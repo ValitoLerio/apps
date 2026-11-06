@@ -1542,15 +1542,15 @@ function elegirDestino(m, blob, nombre, movil, completa){
     '<div style="font-weight:600;font-size:16px;margin-bottom:10px">Recibo de '+fmtMes(m.mes)+'</div>'+
     '<div style="color:var(--muted);font-size:12.5px;margin-bottom:6px">¿A quién?</div>'+
     lista.map((p,k)=>
-      '<button class="btn btn-secondary btn-full" data-k="'+k+'" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:12px 14px;text-align:left'+
-        (p.tel===ultimo?';border-color:#25D366':'')+'">'+
-        '<span><b>'+esc(p.nombre)+'</b>'+(p.vivo?' <span style="color:var(--muted);font-size:12px">· actual</span>':'')+'</span>'+
-        '<span style="color:var(--muted);font-size:12.5px">'+esc(bonitoTel(p.tel))+'</span></button>').join('')+
-    '<div style="margin-top:6px;padding-top:10px;border-top:1px solid var(--border)">'+
-      '<div style="color:var(--muted);font-size:12.5px;margin-bottom:6px">Otra persona</div>'+
+      '<button class="btn btn-primary btn-full" data-k="'+k+'" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:14px;text-align:left;background:#25D366;color:#0b3d24;font-size:15px">'+
+        '<span><b>'+esc(p.nombre)+'</b>'+(p.vivo?' <span style="font-size:12px;opacity:.75">· actual</span>':'')+'</span>'+
+        '<span style="color:#0b3d24;opacity:.75;font-size:12.5px">'+esc(bonitoTel(p.tel))+'</span></button>').join('')+
+    '<button class="btn btn-secondary btn-full" id="wa-otro-abrir" style="margin-top:4px;font-size:13px">➕ Otra persona (escribir teléfono)</button>'+
+    '<div id="wa-otro-caja" style="display:none;margin-top:6px;padding-top:10px;border-top:1px solid var(--border)">'+
       '<input id="wa-otro-nom" placeholder="Nombre" style="width:100%;margin-bottom:6px">'+
       '<input id="wa-otro-tel" type="tel" inputmode="tel" placeholder="Teléfono, ej. +376 300 000" style="width:100%;margin-bottom:8px">'+
-      '<button class="btn btn-primary btn-full" id="wa-otro" style="background:#25D366;color:#0b3d24">📱 Enviar a este número</button>'+
+      '<div id="wa-otro-err" style="color:var(--danger,#a33a2c);font-size:12.5px;margin-bottom:6px"></div>'+
+      '<button class="btn btn-secondary btn-full" id="wa-otro">Enviar a este número</button>'+
     '</div>'+
     '<button class="btn btn-secondary btn-full" id="wa-dest-cerrar" style="margin-top:10px">Cancelar</button></div>';
   document.body.appendChild(caja);
@@ -1569,7 +1569,7 @@ function elegirDestino(m, blob, nombre, movil, completa){
   caja.querySelectorAll('[data-tipo]').forEach(b=>b.onclick=()=>ponerTipo(b.getAttribute('data-tipo')));
   ponerTipo('simple');
   function enviar(nom, tel, yo){
-    if(!tel){ alert('Pon el teléfono, empezando por el país.'); return; }
+    if(!tel){ const e=document.getElementById('wa-otro-err'); if(e) e.textContent='Escribe el teléfono.'; return; }
     cfg.waUltimo=tel; LS.set('piso_cfg', cfg);
     caja.remove();
     const nomCompleta='recibo-completo-'+(m.mes||'factura')+'.png';
@@ -1604,6 +1604,7 @@ function elegirDestino(m, blob, nombre, movil, completa){
   });
   document.getElementById('wa-otro').onclick=()=>
     enviar(document.getElementById('wa-otro-nom').value, soloNumero(document.getElementById('wa-otro-tel').value), false);
+  document.getElementById('wa-otro-abrir').onclick=function(){ this.style.display='none'; document.getElementById('wa-otro-caja').style.display='block'; document.getElementById('wa-otro-nom').focus(); };
   document.getElementById('wa-dest-cerrar').onclick=()=>caja.remove();
   caja.addEventListener('click', e=>{ if(e.target===caja) caja.remove(); });
 }
