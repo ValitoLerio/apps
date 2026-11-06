@@ -1532,7 +1532,13 @@ function elegirDestino(m, blob, nombre, movil, completa){
   caja.style.cssText='position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px';
   caja.innerHTML=
     '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;width:min(420px,100%);max-height:90vh;overflow:auto;font-size:14px">'+
-    '<div style="font-weight:600;font-size:16px;margin-bottom:12px">¿A quién le mando el recibo de '+fmtMes(m.mes)+'?</div>'+
+    '<div style="font-weight:600;font-size:16px;margin-bottom:10px">Recibo de '+fmtMes(m.mes)+'</div>'+
+    (completa?'<div style="color:var(--muted);font-size:12.5px;margin-bottom:6px">¿Cómo la mando?</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:14px">'+
+      '<button class="btn btn-full" data-tipo="simple" style="flex:1;padding:11px;border:2px solid var(--border)">Simple<br><span style="font-size:11.5px;font-weight:400">alquiler + consumo</span></button>'+
+      '<button class="btn btn-full" data-tipo="completa" style="flex:1;padding:11px;border:2px solid var(--border)">Completa<br><span style="font-size:11.5px;font-weight:400">con gastos y saldo</span></button>'+
+    '</div>':'')+
+    '<div style="color:var(--muted);font-size:12.5px;margin-bottom:6px">¿A quién?</div>'+
     lista.map((p,k)=>
       '<button class="btn btn-secondary btn-full" data-k="'+k+'" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:12px 14px;text-align:left'+
         (p.tel===ultimo?';border-color:#25D366':'')+'">'+
@@ -1548,14 +1554,26 @@ function elegirDestino(m, blob, nombre, movil, completa){
   document.body.appendChild(caja);
 
   let guardadaCompleta='';
+  let tipo='simple';
+  function ponerTipo(t){
+    tipo=t;
+    caja.querySelectorAll('[data-tipo]').forEach(b=>{
+      const on=b.getAttribute('data-tipo')===t;
+      b.style.borderColor=on?'#25D366':'var(--border)';
+      b.style.background=on?'rgba(37,211,102,.15)':'transparent';
+      b.style.fontWeight=on?'700':'500';
+    });
+  }
+  caja.querySelectorAll('[data-tipo]').forEach(b=>b.onclick=()=>ponerTipo(b.getAttribute('data-tipo')));
+  ponerTipo('simple');
   function enviar(nom, tel, yo){
     if(!tel){ alert('Pon el teléfono, empezando por el país.'); return; }
     cfg.waUltimo=tel; LS.set('piso_cfg', cfg);
     caja.remove();
     const nomCompleta='recibo-completo-'+(m.mes||'factura')+'.png';
-    /* A mí: la completa de siempre. A otro: la simple, y la completa
-       se me guarda en Descargas. */
-    if(yo && completa){ blob=completa; nombre=nomCompleta; }
+    /* Se manda la que elijas. Si mandas la simple, la completa se te
+       guarda en Descargas. */
+    if(tipo==='completa' && completa){ blob=completa; nombre=nomCompleta; }
     else if(completa && !movil){ descargarBlob(completa, nomCompleta); guardadaCompleta=nomCompleta; }
     if(movil){
       try{
