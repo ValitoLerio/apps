@@ -213,6 +213,7 @@ function vHoy(box){
 function quienAhora(){ var q=$("#q_quien"); var n=q?q.value.trim():quien(); if(n){ ponQuien(n); apuntarGente(n); } return n; }
 function ponerTemp(f, eqId, t, val, box){
   var e=porId(state.equipos, eqId), r=tempDe(f,eqId,t), v=num(val);
+  if(v!=null && v>0 && e && e.max<=0) v=-v; /* congelador: el teclado del móvil no tiene «−» */
   if(String(val).trim()===""){ if(r){ state.temps=state.temps.filter(function(x){ return x!==r; }); guardar(); } vHoy(box); refrescarRail(); return; }
   if(v==null || v<-40 || v>40){ aviso("Pon la temperatura en grados, por ejemplo 3 o -19,5", true); vHoy(box); return; }
   var esHoy=f===iso(new Date());
@@ -273,6 +274,7 @@ function editarRec(r, f, luego){
   var val=function(g){ var b=$('.seg[data-g="'+g+'"] [aria-pressed="true"]', d); return b?b.getAttribute("data-val"):""; };
   $("[data-ok]", d).addEventListener("click", function(){
     var t=$("#r_temp", d).value.trim(), tv=num(t);
+    if(tv!=null && tv>0 && /congel/i.test($("#r_prod", d).value)) tv=-tv;
     if(t && tv==null){ aviso("La temperatura tiene que ser un número", true); return; }
     r.proveedor=$("#r_prov", d).value.trim(); r.producto=$("#r_prod", d).value.trim();
     if(!r.proveedor && !r.producto){ aviso("Pon al menos el proveedor o qué llega", true); return; }
@@ -482,6 +484,7 @@ function editarEq(e, luego){
   $("#e_t", d).addEventListener("change", function(){ var r=RANGO[this.value]; $("#e_min", d).value=String(r[0]); $("#e_max", d).value=String(r[1]); });
   $("[data-ok]", d).addEventListener("click", function(){
     var n=$("#e_n", d).value.trim(), mn=num($("#e_min", d).value), mx=num($("#e_max", d).value);
+    if($("#e_t", d).value==="congelador"){ if(mn!=null&&mn>0) mn=-mn; if(mx!=null&&mx>0) mx=-mx; if(mn!=null&&mx!=null&&mn>mx){ var tmp=mn; mn=mx; mx=tmp; } }
     if(!n){ aviso("Ponle un nombre", true); return; }
     if(mn==null||mx==null||mn>mx){ aviso("Revisa el mínimo y el máximo", true); return; }
     e.nombre=n; e.tipo=$("#e_t", d).value; e.min=mn; e.max=mx;
