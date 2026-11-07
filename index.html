@@ -23,6 +23,7 @@
     --agenda:#8ed3ad; --agenda-tenue:#13291f99;
   --libros:#e3c088; --libros-tenue:#2b221499;
   --hojas:#8fbbe6; --hojas-tenue:#16222f99;
+  --sanidad:#7fd0d8; --sanidad-tenue:#132a2d99;
     --alerta:#ef8a76; --alerta-tenue:#331a16;
     --display:'Fraunces',Georgia,serif;
     --texto:'Archivo','Helvetica Neue',sans-serif;
@@ -47,6 +48,7 @@
     --agenda:#2f6b52; --agenda-tenue:#e2efe8;
   --libros:#6b4f2a; --libros-tenue:#f2e9dc;
   --hojas:#2c5a86; --hojas-tenue:#e2ebf4;
+  --sanidad:#1e6b73; --sanidad-tenue:#dff0f1;
       --alerta:#96331f; --alerta-tenue:#f7e2de;
       --sombra:0 16px 34px -26px rgba(15,22,24,.5);
     }
@@ -178,6 +180,7 @@
   .p-agenda{--tono:var(--agenda)}
   .p-libros{--tono:var(--libros)}
   .p-hojas{--tono:var(--hojas)}
+  .p-sanidad{--tono:var(--sanidad)}
 
   /* ── Colocar: mover las tarjetas a donde te parezca ───────────── */
   .colocando .puerta{cursor:default}
@@ -588,6 +591,22 @@
         <div class="entrar">Abrir <span class="flecha">&rarr;</span></div>
       </a>
 
+      <a class="puerta p-sanidad" data-app="sanidad" href="sanidad.html">
+        <span class="rotulo">Cocina</span>
+        <h2>Control sanitario</h2>
+        <p class="que">Temperaturas, limpieza, mercancía recibida e incidencias, al día para la inspección.</p>
+        <div class="cifra">
+          <span class="n" id="d-san-hoy">&mdash;</span>
+          <span class="u">pendiente hoy</span>
+        </div>
+        <div class="tira">
+          <div class="celda"><span class="k">Temperaturas</span><span class="v" id="d-san-temp">—</span></div>
+          <div class="celda"><span class="k">Limpieza</span><span class="v" id="d-san-limp">—</span></div>
+          <div class="celda"><span class="k">Incidencias</span><span class="v" id="d-san-inc">—</span></div>
+        </div>
+        <div class="entrar">Abrir <span class="flecha">&rarr;</span></div>
+      </a>
+
       <a class="puerta p-hojas" data-app="hojas" href="hojas.html">
         <span class="rotulo">Archivador</span>
         <h2>Hojas</h2>
@@ -644,7 +663,7 @@
 
 </div>
 
-<script src="sync.js?v=202610311200"></script>
+<script src="sync.js?v=202611071800"></script>
 <script>
 (function(){
   // ── Tema ───────────────────────────────────────────────
@@ -1030,12 +1049,12 @@
                   casa:'.p-casa', caja:'.p-caja',
                   patrimonio:'.p-patrimonio', pedidos:'.p-pedidos',
                   vacaciones:'.p-vacaciones', recetas:'.p-recetas', agenda:'.p-agenda',
-                  libros:'.p-libros', hojas:'.p-hojas'};
+                  libros:'.p-libros', hojas:'.p-hojas', sanidad:'.p-sanidad'};
   var NOMBRES  = {piso:'Piso Soldeu', horario:'Horario Restaurante',
                   comanda:'Comanda', casa:'Casa', caja:'Caja',
                   patrimonio:'Patrimonio', pedidos:'Pedidos',
                   vacaciones:'Vacaciones', recetas:'Recetas', agenda:'Agenda',
-                  libros:'Libros', hojas:'Hojas'};
+                  libros:'Libros', hojas:'Hojas', sanidad:'Control sanitario'};
   var seguridad = {};
 
   function pintarCandados(){
@@ -1073,7 +1092,8 @@
       recetas: ['d-rec-total','d-rec-hoy','d-rec-1','d-rec-2'],
       agenda:  ['d-ag-total','d-ag-tel','d-ag-clave','d-ag-correo'],
       libros:  ['d-lib-total','d-lib-porleer','d-lib-leidos','d-lib-prestados'],
-      hojas:   ['d-hoj-total','d-hoj-fav','d-hoj-carp','d-hoj-imp']
+      hojas:   ['d-hoj-total','d-hoj-fav','d-hoj-carp','d-hoj-imp'],
+      sanidad: ['d-san-hoy','d-san-temp','d-san-limp','d-san-inc']
     }[sec] || [];
     ids.forEach(function(id){ pon(id, '···'); });
   }
@@ -1420,6 +1440,27 @@
     pon('d-hoj-imp',   String(lista.reduce(function(n, h){ return n + (+h.impresa || 0); }, 0)));
   }
 
+  function resumenSanidad(seccion){
+    var l = leer(seccion['sanidad.libro.v1'], {});
+    var d = new Date(), f = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    var equipos = l.equipos || [], tareas = l.tareas || [], temps = l.temps || [], limp = l.limpiezas || [];
+    var turnos = l.turnos === 'uno' ? ['m'] : ['m','t'];
+    var tomas = equipos.length * turnos.length;
+    var hechas = temps.filter(function(t){ return t.fecha === f && equipos.some(function(e){ return e.id === t.equipo; }) && turnos.indexOf(t.turno) >= 0; }).length;
+    function toca(t){
+      if (t.frec === 'semanal') return d.getDay() === (t.dia == null ? 1 : +t.dia);
+      if (t.frec === 'mensual') { var ult = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate(); return d.getDate() === Math.min(t.dia == null ? 1 : +t.dia, ult); }
+      return true;
+    }
+    var hoyT = tareas.filter(toca);
+    var hechasL = hoyT.filter(function(t){ return limp.some(function(x){ return x.fecha === f && x.tarea === t.id; }); }).length;
+    var abiertas = (l.incidencias || []).filter(function(i){ return !i.cerrada; }).length;
+    pon('d-san-hoy',  String((tomas - hechas) + (hoyT.length - hechasL)));
+    pon('d-san-temp', hechas + '/' + tomas);
+    pon('d-san-limp', hechasL + '/' + hoyT.length);
+    pon('d-san-inc',  String(abiertas));
+  }
+
   function pintarResumen(){
     return Sync.descargarTodo().then(function(datos){
       datos = datos || {};
@@ -1429,7 +1470,8 @@
                    patrimonio: !!seg.patrimonio,
                    pedidos: !!seg.pedidos,
                    vacaciones: !!seg.vacaciones, recetas: !!seg.recetas,
-                   agenda: !!seg.agenda, libros: !!seg.libros, hojas: !!seg.hojas};
+                   agenda: !!seg.agenda, libros: !!seg.libros, hojas: !!seg.hojas,
+                   sanidad: !!seg.sanidad};
       resumenPiso(datos.piso || {});
       resumenHorario(datos.horario || {});
       resumenComanda(datos.comanda || {});
@@ -1442,6 +1484,7 @@
       resumenAgenda(datos.agenda || {});
       resumenLibros(datos.libros || {});
       resumenHojas(datos.hojas || {});
+      resumenSanidad(datos.sanidad || {});
       Object.keys(seguridad).forEach(function(sec){ if (seguridad[sec]) ocultarCifras(sec); });
       pintarCandados();
       aplicarOrden((datos.escritorio || {}).orden);

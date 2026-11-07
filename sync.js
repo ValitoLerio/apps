@@ -54,7 +54,8 @@ var SECCIONES = {
   recetas: ['recetas.libro.v1'],
   agenda:  ['agenda.libro.v1'],
   libros:  ['libros.libro.v1'],
-  hojas:   ['hojas.libro.v1']
+  hojas:   ['hojas.libro.v1'],
+  sanidad: ['sanidad.libro.v1']
 };
 
 var seccionActiva = null;
