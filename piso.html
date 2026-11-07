@@ -239,7 +239,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
       <div class="section-title">Factura para WhatsApp</div>
       <div class="card" style="padding:1rem">
         <button class="btn btn-primary btn-full" style="font-size:17px;padding:15px;background:#25D366;color:#0b3d24;margin-bottom:12px" onclick="enviarFacturaWhatsApp()">📱 Enviar factura por WhatsApp</button>
-        <div style="font-size:13px;color:var(--muted);margin:0 0 10px">Por WhatsApp se manda esta: alquiler + consumo, sin saldo. Tu factura completa la guardas con el botón de abajo.</div>
+        <div style="font-size:13px;color:var(--muted);margin:0 0 10px">Al enviar eliges: <b>Simple</b> (alquiler + consumo, sin saldo) o <b>Completa</b> (con consumos y saldo).</div>
         <canvas id="factura-canvas" style="width:100%;border-radius:8px;border:1px solid var(--border);display:block"></canvas>
         <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
           <button class="btn btn-secondary btn-full" style="font-size:14px" onclick="guardarMiFacturaCompleta()">⬇️ Guardar mi factura completa (solo para mí)</button>

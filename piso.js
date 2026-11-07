@@ -1386,7 +1386,7 @@ function enviarFacturaWhatsApp(){
   const mes=document.getElementById('r-mes').value||'';
   const d=getDatosFactura();
   const simple=blobDeFactura(Object.assign({},d,{simple:true}));
-  const completa=blobDeFactura(Object.assign({},d,{simple:false}));
+  const completa=blobDeFactura(Object.assign({},d,{simple:false,paraMi:true}));
   elegirDestino({mes}, simple, 'recibo-'+(mes||'factura')+'.png', esAparatoDeDedo(), completa);
 }
 
@@ -1506,7 +1506,7 @@ function whatsappRecibo(mes){
   const dd=datosFacturaDeRecibo(m);
   let simple=blob, completa=null;
   try{ simple=blobDeFactura(Object.assign({},dd,{simple:true}));
-       completa=blobDeFactura(Object.assign({},dd,{simple:false})); }catch(e){}
+       completa=blobDeFactura(Object.assign({},dd,{simple:false,paraMi:true})); }catch(e){}
   elegirDestino(m, simple, nombre, movil, completa);
   return;
 
@@ -1547,6 +1547,11 @@ function elegirDestino(m, blob, nombre, movil, completa){
   caja.innerHTML=
     '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;width:min(420px,100%);max-height:90vh;overflow:auto;font-size:14px">'+
     '<div style="font-weight:600;font-size:16px;margin-bottom:10px">Recibo de '+fmtMes(m.mes)+'</div>'+
+    (completa?'<div style="color:var(--muted);font-size:12.5px;margin-bottom:6px">¿Qué factura?</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:14px">'+
+      '<button type="button" data-tipo="simple" style="flex:1;padding:12px 8px;border-radius:10px;border:2px solid var(--border);background:transparent;color:inherit;font-size:15px;cursor:pointer">Simple<br><span style="font-size:11.5px;font-weight:400">alquiler + consumo</span></button>'+
+      '<button type="button" data-tipo="completa" style="flex:1;padding:12px 8px;border-radius:10px;border:2px solid var(--border);background:transparent;color:inherit;font-size:15px;cursor:pointer">Completa<br><span style="font-size:11.5px;font-weight:400">con consumos y saldo</span></button>'+
+    '</div>':'')+
     '<div style="color:var(--muted);font-size:12.5px;margin-bottom:6px">¿A quién?</div>'+
     lista.map((p,k)=>
       '<button class="btn btn-primary btn-full" data-k="'+k+'" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:14px;text-align:left;background:#25D366;color:#0b3d24;font-size:15px">'+
@@ -1585,10 +1590,8 @@ function elegirDestino(m, blob, nombre, movil, completa){
     cfg.waUltimo=tel; LS.set('piso_cfg', cfg);
     caja.remove();
     const nomCompleta='recibo-completo-'+(m.mes||'factura')+'.png';
-    /* Se manda la que elijas. Si mandas la simple, la completa se te
-       guarda en Descargas. */
-    /* Por WhatsApp va SIEMPRE la simple (sin saldo). La completa no se
-       descarga sola: se guarda con su propio botón. */
+    /* Se manda la que elijas: simple (sin saldo) o completa. */
+    if(tipo==='completa' && completa){ blob=completa; nombre=nomCompleta; }
     if(movil){
       /* Móvil: la factura a pantalla completa. Botón Compartir (si el
          navegador deja) y, si no, mantener el dedo sobre la imagen. */
