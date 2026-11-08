@@ -34,6 +34,9 @@ try{ state=JSON.parse(localStorage.getItem(LS)||"null"); }catch(e){ state=null; 
 if(!state || !Array.isArray(state.equipos)) state=inicial();
 ["temps","limpiezas","recepciones","incidencias","gente","tareas","equipos"].forEach(function(k){ if(!Array.isArray(state[k])) state[k]=[]; });
 if(!state.turnos) state.turnos="dos";
+/* Los encargados salen para elegirlos con un toque en «Recibe» */
+if(!Array.isArray(state.encargados)) state.encargados=["Valeriano","Luis","Martin"];
+state.encargados.forEach(function(n){ if(state.gente.indexOf(n)<0) state.gente.push(n); });
 /* Desde cuándo se lleva el registro: lo de antes no cuenta como olvidado */
 if(!state.desde){ state.desde=iso(new Date()); try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){} }
 /* Si se apunta algo de antes de cuando se empezó, el registro empieza ese día */
@@ -278,8 +281,9 @@ function abrirRueda(f, eqId, t, poner){
     '<div class="rueda-caja"><button type="button" class="btn rueda-paso" data-paso="1" aria-label="Medio grado más">▲</button>'+
       '<div class="rueda" tabindex="0" aria-label="Ruleta de temperatura"><div class="rueda-marco"></div><ul>'+
         vals.map(function(v,i){ return '<li data-i="'+i+'" class="'+(fuera(e,v)?"r-mal":"r-bien")+'">'+String(v).replace(".",",")+' °C</li>'; }).join("")+
-      '</ul></div><button type="button" class="btn rueda-paso" data-paso="-1" aria-label="Medio grado menos">▼</button></div>',
-    '<button class="btn" data-x>Cancelar</button><button class="btn fuerte" data-ok>Poner</button>');
+      '</ul></div><button type="button" class="btn rueda-paso" data-paso="-1" aria-label="Medio grado menos">▼</button>'+
+      '<button type="button" class="btn fuerte rueda-poner" data-ok>Poner</button></div>',
+    '<button class="btn" data-x>Cancelar</button>');
   d.classList.add("dlg-rueda");
   var rueda=$(".rueda", d), lis=$$("li", d), ok=$("[data-ok]", d), sel=vals.indexOf(ini);
   function marcar(i){
@@ -311,6 +315,45 @@ function abrirRueda(f, eqId, t, poner){
   setTimeout(function(){ listo=true; try{ rueda.focus({preventScroll:true}); }catch(e){} }, 260);
 }
 
+/* Lo último que trajo un proveedor */
+function ultimaRec(prov){
+  if(!prov) return null;
+  var l=state.recepciones.filter(function(x){ return (x.proveedor||"").toLowerCase()===prov.toLowerCase(); });
+  l.sort(function(a,b){ return a.fecha<b.fecha?1:-1; });
+  return l[0]||null;
+}
+var PRODUCTOS=["Carne","Pescado","Marisco","Pollo y aves","Embutidos","Lácteos","Huevos","Fruta y verdura","Congelados","Pan","Pastelería","Bebidas","Secos y conservas","Aceite","Limpieza","Otros"];
+/* Ruleta de una lista cualquiera: se gira y se pulsa Poner. Se abre
+   encima de la ventana de la entrega, sin cerrarla. */
+function ruedaLista(titulo, items, sel, poner){
+  var d=document.createElement("dialog"); d.className="dlg-rueda dlg-sub";
+  d.innerHTML='<div class="dlg-cab"><h3>'+esc(titulo)+'</h3><button class="btn suave" data-cerrar>Cerrar</button></div>'+
+    '<div class="dlg-cuerpo"><div class="rueda-caja"><button type="button" class="btn rueda-paso" data-paso="-1" aria-label="Anterior">▲</button>'+
+      '<div class="rueda" tabindex="0"><div class="rueda-marco"></div><ul>'+
+        items.map(function(it,i){ return '<li data-i="'+i+'" class="'+(it.cls||"")+'">'+esc(it.txt)+'</li>'; }).join("")+
+      '</ul></div><button type="button" class="btn rueda-paso" data-paso="1" aria-label="Siguiente">▼</button>'+
+      '<button type="button" class="btn fuerte rueda-poner" data-poner>Poner</button></div></div>';
+  document.body.appendChild(d);
+  d.addEventListener("close", function(){ d.remove(); });
+  $("[data-cerrar]", d).addEventListener("click", function(){ d.close(); });
+  d.showModal();
+  var rueda=$(".rueda", d), lis=$$("li", d), ok=$("[data-poner]", d), listo=false;
+  function marcar(i){ sel=Math.max(0, Math.min(items.length-1, i)); lis.forEach(function(li,k){ li.classList.toggle("sel", k===sel); }); ok.textContent="Poner "+items[sel].txt; }
+  function ir(i){ marcar(i); rueda.scrollTo({top:sel*ALTO_R, behavior:"smooth"}); }
+  rueda.addEventListener("scroll", function(){ if(listo) marcar(Math.round(rueda.scrollTop/ALTO_R)); });
+  lis.forEach(function(li){ li.addEventListener("click", function(){ ir(+li.getAttribute("data-i")); }); });
+  $$("[data-paso]", d).forEach(function(b){ b.addEventListener("click", function(){ ir(sel + (+b.getAttribute("data-paso"))); }); });
+  rueda.addEventListener("keydown", function(ev){
+    if(ev.key==="ArrowUp"){ ev.preventDefault(); ir(sel-1); }
+    if(ev.key==="ArrowDown"){ ev.preventDefault(); ir(sel+1); }
+    if(ev.key==="Enter"){ ev.preventDefault(); ok.click(); }
+  });
+  ok.addEventListener("click", function(){ var v=items[sel].val; d.close(); poner(v); });
+  var inicio=sel; marcar(inicio);
+  [0,60,180].forEach(function(ms){ setTimeout(function(){ if(!listo){ rueda.scrollTop=inicio*ALTO_R; marcar(inicio); } }, ms); });
+  setTimeout(function(){ listo=true; try{ rueda.focus({preventScroll:true}); }catch(e){} }, 260);
+}
+
 /* ── mercancía ─────────────────────────────────────────────────── */
 function filaRec(r){
   return '<button class="fila-rec" data-rec="'+r.id+'"><span><b>'+esc(r.proveedor||"Sin proveedor")+'</b> · '+esc(r.producto||"")+'</span>'+
@@ -324,10 +367,10 @@ function editarRec(r, f, luego){
   var d=dialogo(nuevo?"Mercancía recibida":"Entrega del "+dm(r.fecha),
     '<div class="dos">'+
       '<div class="campo"><label class="lbl" for="r_prov">Proveedor</label><input id="r_prov" list="r_provl" value="'+esc(r.proveedor||"")+'" autocomplete="off"><datalist id="r_provl">'+provs.map(function(p){ return '<option value="'+esc(p)+'">'; }).join("")+'</datalist></div>'+
-      '<div class="campo"><label class="lbl" for="r_prod">Qué llega</label><input id="r_prod" value="'+esc(r.producto||"")+'" placeholder="Carne, pescado, lácteos…"></div>'+
+      '<div class="campo"><label class="lbl" for="r_prod">Qué llega</label><div class="t-fila"><input id="r_prod" value="'+esc(r.producto||"")+'" placeholder="Carne, pescado, lácteos…"><button type="button" class="rueda-btn" data-rp aria-label="Elegir qué llega con la ruleta" title="Ruleta">⟳</button></div></div>'+
     '</div>'+
     '<div class="tres" style="margin-top:10px">'+
-      '<div class="campo"><label class="lbl" for="r_temp">Temperatura</label><input id="r_temp" inputmode="decimal" placeholder="°C (si es de frío)" value="'+(r.temp!=null?String(r.temp).replace(".",","):"")+'"></div>'+
+      '<div class="campo"><label class="lbl" for="r_temp">Temperatura</label><div class="t-fila"><input id="r_temp" inputmode="decimal" placeholder="°C · congelado sin el menos" value="'+(r.temp!=null?String(r.temp).replace(".",","):"")+'"><button type="button" class="rueda-btn" data-rt aria-label="Elegir la temperatura con la ruleta" title="Ruleta">⟳</button></div></div>'+
       '<div class="campo"><label class="lbl" for="r_lote">Lote</label><input id="r_lote" value="'+esc(r.lote||"")+'"></div>'+
       '<div class="campo"><label class="lbl" for="r_cad">Caducidad</label><input id="r_cad" type="date" value="'+esc(r.cad||"")+'"></div>'+
     '</div>'+
@@ -336,17 +379,43 @@ function editarRec(r, f, luego){
       '<div class="campo"><span class="lbl">¿Se acepta?</span><div class="seg" data-g="acepta"><button data-val="si" aria-pressed="'+(r.acepta!==false)+'">Aceptado</button><button data-val="no" aria-pressed="'+(r.acepta===false)+'">Rechazado</button></div></div>'+
     '</div>'+
     '<div class="dos" style="margin-top:10px">'+
-      '<div class="campo"><label class="lbl" for="r_quien">Recibe</label>'+selGente("r_quien", r.quien)+'</div>'+
+      '<div class="campo"><label class="lbl" for="r_quien">Recibe</label>'+selGente("r_quien", r.quien)+
+        (state.encargados.length?'<div class="chips-q">'+state.encargados.map(function(n){ return '<button type="button" class="chip-q'+(n===r.quien?' on':'')+'" data-enc="'+esc(n)+'">'+esc(n)+'</button>'; }).join("")+'</div>':'')+'</div>'+
       '<div class="campo"><label class="lbl" for="r_nota">Nota</label><input id="r_nota" value="'+esc(r.nota||"")+'" placeholder="Albarán, motivo del rechazo…"></div>'+
     '</div>'+
     '<p class="nota" style="margin:10px 0 0">De frío: refrigerado hasta 4 °C, congelado −18 °C o menos.</p>',
     (nuevo?'':'<button class="btn malo" data-borrar style="margin-right:auto">Borrar</button>')+'<button class="btn" data-x>Cancelar</button><button class="btn fuerte" data-ok>Guardar</button>');
+  $$("[data-enc]", d).forEach(function(b){ b.addEventListener("click", function(){
+    $("#r_quien", d).value=b.getAttribute("data-enc");
+    $$("[data-enc]", d).forEach(function(x){ x.classList.toggle("on", x===b); });
+  }); });
+  /* Ruletas de «Qué llega» y de la temperatura */
+  $("[data-rp]", d).addEventListener("click", function(){
+    var prov=$("#r_prov", d).value.trim(), act=$("#r_prod", d).value.trim();
+    var lista=PRODUCTOS.slice();
+    state.recepciones.forEach(function(x){ if(x.producto && lista.indexOf(x.producto)<0) lista.push(x.producto); });
+    if(act && lista.indexOf(act)<0) lista.unshift(act);
+    var ini=act || (ultimaRec(prov)||{}).producto || lista[0];
+    ruedaLista("Qué llega", lista.map(function(t){ return {txt:t, val:t}; }), Math.max(0, lista.indexOf(ini)), function(v){ $("#r_prod", d).value=v; });
+  });
+  $("[data-rt]", d).addEventListener("click", function(){
+    var prov=$("#r_prov", d).value.trim(), act=num($("#r_temp", d).value);
+    var vals=[]; for(var x=30; x>=-50; x--) vals.push(x/2);
+    var esCong=/congel/i.test($("#r_prod", d).value);
+    if(act!=null && act>0 && esCong && $("#r_temp", d).value.trim().charAt(0)!=="+") act=-act;
+    var ini=act!=null?act:((ultimaRec(prov)||{}).temp); if(ini==null || (esCong && ini>-10)) ini=esCong?-18:3;
+    ini=Math.max(-25, Math.min(15, Math.round(ini*2)/2));
+    ruedaLista("Temperatura al llegar", vals.map(function(v){ return {txt:String(v).replace(".",",")+" °C", val:v, cls:(v<=4)?"r-bien":(v>8?"r-mal":"")}; }),
+      Math.max(0, vals.indexOf(ini)), function(v){ $("#r_temp", d).value=String(v).replace(".",","); });
+  });
   $$(".seg[data-g] button", d).forEach(function(b){ b.addEventListener("click", function(){
     $$("button", b.parentNode).forEach(function(x){ x.setAttribute("aria-pressed", x===b); });
   }); });
   var val=function(g){ var b=$('.seg[data-g="'+g+'"] [aria-pressed="true"]', d); return b?b.getAttribute("data-val"):""; };
   $("[data-ok]", d).addEventListener("click", function(){
     var t=$("#r_temp", d).value.trim(), tv=num(t);
+    /* Si llega congelado, no hace falta poner el menos: 18 es −18 (con + se queda en positivo) */
+    if(tv!=null && tv>0 && t.charAt(0)!=="+" && /congel/i.test($("#r_prod", d).value)) tv=-tv;
     if(t && tv==null){ aviso("La temperatura tiene que ser un número", true); return; }
     r.proveedor=$("#r_prov", d).value.trim(); r.producto=$("#r_prod", d).value.trim();
     if(!r.proveedor && !r.producto){ aviso("Pon al menos el proveedor o qué llega", true); return; }
@@ -536,6 +605,11 @@ function vAjustes(box){
       '<p class="nota">Lo de antes de esta fecha no sale como olvidado. Si quieres meter meses atrasados, pon aquí desde cuándo; también cambia sola al apuntar algo más antiguo.</p>'+
       '<div style="display:flex;gap:8px;align-items:center;max-width:360px"><input type="date" id="a_desde" max="'+iso(new Date())+'" value="'+esc(state.desde)+'"><button class="btn" data-desde>Guardar</button></div>'+
     '</div></section>'+
+    '<section class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab"><h2>Encargados</h2></div><div class="tarjeta-cuerpo">'+
+      '<p class="nota">Salen con un toque en «Recibe» al apuntar la mercancía.</p>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+state.encargados.map(function(g,i){ return '<span class="chapa neutra" style="font-size:12.5px;padding:4px 10px">'+esc(g)+' <button class="btn suave sm" data-eq-q="'+i+'" aria-label="Quitar '+esc(g)+'" style="padding:0 4px">✕</button></span>'; }).join("")+'</div>'+
+      '<div style="display:flex;gap:6px;margin-top:10px;max-width:360px"><input id="enc_n" placeholder="Nombre del encargado"><button class="btn" data-enc-add>Añadir</button></div>'+
+    '</div></section>'+
     '<section class="tarjeta"><div class="tarjeta-cab"><h2>Personal de cocina</h2></div><div class="tarjeta-cuerpo">'+
       '<p class="nota">Salen para elegir quién apunta. También se añaden solos al escribir un nombre nuevo.</p>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap">'+state.gente.map(function(g,i){ return '<span class="chapa neutra" style="font-size:12.5px;padding:4px 10px">'+esc(g)+' <button class="btn suave sm" data-gq="'+i+'" aria-label="Quitar '+esc(g)+'" style="padding:0 4px">✕</button></span>'; }).join("")+'</div>'+
@@ -557,6 +631,11 @@ function vAjustes(box){
   $("[data-desde]", box).addEventListener("click", function(){
     var v=$("#a_desde", box).value; if(!v) return;
     state.desde=v; try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){} aviso("Registro desde el "+dm(state.desde)); vAjustes(box);
+  });
+  $$("[data-eq-q]", box).forEach(function(b){ b.addEventListener("click", function(){ state.encargados.splice(+b.getAttribute("data-eq-q"),1); guardar(); vAjustes(box); }); });
+  $("[data-enc-add]", box).addEventListener("click", function(){
+    var n=$("#enc_n", box).value.trim(); if(!n) return;
+    if(state.encargados.indexOf(n)<0) state.encargados.push(n); apuntarGente(n); guardar(); vAjustes(box);
   });
   $("[data-g-add]", box).addEventListener("click", function(){ var n=$("#g_n", box).value; if(apuntarGente(n)){ guardar(); vAjustes(box); } });
 }
