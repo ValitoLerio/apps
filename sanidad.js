@@ -605,6 +605,12 @@ function vAjustes(box){
       '<p class="nota">Lo de antes de esta fecha no sale como olvidado. Si quieres meter meses atrasados, pon aquí desde cuándo; también cambia sola al apuntar algo más antiguo.</p>'+
       '<div style="display:flex;gap:8px;align-items:center;max-width:360px"><input type="date" id="a_desde" max="'+iso(new Date())+'" value="'+esc(state.desde)+'"><button class="btn" data-desde>Guardar</button></div>'+
     '</div></section>'+
+    '<section class="tarjeta" style="margin-bottom:16px;border-color:var(--malo)"><div class="tarjeta-cab"><h2>Empezar de cero</h2></div><div class="tarjeta-cuerpo">'+
+      '<p class="nota">Borra todas las temperaturas, limpiezas, mercancía e incidencias apuntadas ('+
+        (state.temps.length+state.limpiezas.length+state.recepciones.length+state.incidencias.length)+' registros) y el registro empieza hoy. '+
+        'Las neveras, el plan de limpieza y los nombres se quedan. Antes de borrar se descarga una copia por si acaso.</p>'+
+      '<button class="btn malo" data-cero>Borrar todos los registros</button>'+
+    '</div></section>'+
     '<section class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab"><h2>Encargados</h2></div><div class="tarjeta-cuerpo">'+
       '<p class="nota">Salen con un toque en «Recibe» al apuntar la mercancía.</p>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap">'+state.encargados.map(function(g,i){ return '<span class="chapa neutra" style="font-size:12.5px;padding:4px 10px">'+esc(g)+' <button class="btn suave sm" data-eq-q="'+i+'" aria-label="Quitar '+esc(g)+'" style="padding:0 4px">✕</button></span>'; }).join("")+'</div>'+
@@ -631,6 +637,21 @@ function vAjustes(box){
   $("[data-desde]", box).addEventListener("click", function(){
     var v=$("#a_desde", box).value; if(!v) return;
     state.desde=v; try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){} aviso("Registro desde el "+dm(state.desde)); vAjustes(box);
+  });
+  $("[data-cero]", box).addEventListener("click", function(){
+    var n=state.temps.length+state.limpiezas.length+state.recepciones.length+state.incidencias.length;
+    if(!n){ aviso("No hay registros que borrar"); return; }
+    confirmar("Borrar todos los registros", "Vas a borrar <b>"+n+" registros</b> (temperaturas, limpiezas, mercancía e incidencias) y empezar de cero hoy. Las neveras, el plan de limpieza y los nombres se quedan.<br><br>Antes se descarga una copia.", function(){
+      var a=document.createElement("a");
+      a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,1)],{type:"application/json"}));
+      a.download="control-sanitario-copia-"+iso(new Date())+".json"; document.body.appendChild(a); a.click(); a.remove();
+      state.temps=[]; state.limpiezas=[]; state.recepciones=[]; state.incidencias=[];
+      state.desde=iso(new Date());
+      try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){}
+      ui.fecha=iso(new Date()); ui.mes=ui.fecha.slice(0,7);
+      aviso("Registros borrados. Empiezas de cero hoy.");
+      render();
+    }, "Borrar todo");
   });
   $$("[data-eq-q]", box).forEach(function(b){ b.addEventListener("click", function(){ state.encargados.splice(+b.getAttribute("data-eq-q"),1); guardar(); vAjustes(box); }); });
   $("[data-enc-add]", box).addEventListener("click", function(){
