@@ -36,7 +36,13 @@ if(!state || !Array.isArray(state.equipos)) state=inicial();
 if(!state.turnos) state.turnos="dos";
 /* Desde cuándo se lleva el registro: lo de antes no cuenta como olvidado */
 if(!state.desde){ state.desde=iso(new Date()); try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){} }
-function guardar(){ try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){ aviso("No se ha podido guardar.", true); } }
+/* Si se apunta algo de antes de cuando se empezó, el registro empieza ese día */
+function ajustarDesde(){
+  var min=state.desde;
+  ["temps","limpiezas","recepciones","incidencias"].forEach(function(k){ state[k].forEach(function(x){ if(x.fecha && x.fecha<min) min=x.fecha; }); });
+  state.desde=min;
+}
+function guardar(){ ajustarDesde(); try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){ aviso("No se ha podido guardar.", true); } }
 
 var hoy0=new Date();
 var ui={vista:"hoy", fecha:iso(hoy0), mes:iso(hoy0).slice(0,7)};
@@ -147,7 +153,8 @@ function vHoy(box){
   var rec=state.recepciones.filter(function(r){ return r.fecha===f; });
   var inc=abiertas();
   box.innerHTML=
-    cabecera(esHoy?"Hoy":"El "+esc(largo(f)), esHoy?esc(largo(f).replace(/^./,function(c){return c.toUpperCase();})):"Puedes completar o corregir un día pasado.",
+    cabecera(esHoy?"Hoy":"El "+esc(largo(f)), esHoy?esc(largo(f).replace(/^./,function(c){return c.toUpperCase();})):"Estás apuntando un día pasado. Para ir a otro, elige la fecha arriba o usa ‹ ›.",
+      '<input type="date" id="ir_dia" max="'+iso(new Date())+'" value="'+f+'" aria-label="Ir a un día" title="Ir a cualquier día, también de meses atrás" style="width:auto;padding:6px 8px">'+
       '<div class="seg"><button data-dia="-1" aria-label="Día anterior">‹</button><button data-dia="0"'+(esHoy?' aria-pressed="true"':'')+'>Hoy</button><button data-dia="1" aria-label="Día siguiente"'+(esHoy?' disabled':'')+'>›</button></div>')+
     '<div class="quien"><label class="lbl" for="q_quien">¿Quién apunta?</label>'+selGente("q_quien", quien())+'</div>'+
     /* Temperaturas */
@@ -173,7 +180,7 @@ function vHoy(box){
         var l=limpiezaDe(f,ta.id);
         return '<label class="tarea'+(l?" hecha":"")+'"><input type="checkbox" data-ta="'+ta.id+'"'+(l?" checked":"")+'>'+
           '<span class="t-nom">'+esc(ta.nombre)+(ta.frec!=="diaria"?' <span class="chapa neutra">'+esc(FREC[ta.frec])+'</span>':'')+'</span>'+
-          '<span class="t-quien">'+(l?esc((l.quien||"")+" · "+(l.hora||"")):"")+'</span></label>';
+          '<span class="t-quien">'+(l?esc([l.quien,l.hora].filter(Boolean).join(" · ")):"")+'</span></label>';
       }).join("") : '<p class="nota" style="margin:10px 0">Ese día no toca ninguna limpieza.</p>')+
     '</div></section>'+
     /* Mercancía */
@@ -192,6 +199,8 @@ function vHoy(box){
     if(k===0) ui.fecha=iso(new Date()); else { var d=deIso(ui.fecha); d.setDate(d.getDate()+k); if(d<=new Date()) ui.fecha=iso(d); }
     vHoy(box);
   }); });
+  var ir=$("#ir_dia", box);
+  ir.addEventListener("change", function(){ if(ir.value && ir.value<=iso(new Date())){ ui.fecha=ir.value; vHoy(box); } });
   var qi=$("#q_quien", box);
   qi.addEventListener("change", function(){ ponQuien(qi.value.trim()); apuntarGente(qi.value); guardar(); });
   $$("input[data-eq]", box).forEach(function(inp){
@@ -344,7 +353,7 @@ function vIncidencias(box){
 function vTemps(box){
   var dias=diasMes(ui.mes), tt=turnos(), hoyS=iso(new Date());
   var fueraN=0, faltan=0;
-  box.innerHTML=cabecera("Temperaturas", esc(mesTxt(ui.mes))+" · pulsa un día para apuntar o corregir", selMes())+
+  box.innerHTML=cabecera("Temperaturas", esc(mesTxt(ui.mes))+" · pulsa un día para apuntar o corregir; con ‹ vas a meses atrasados", selMes())+
     (state.equipos.length ? '<div class="tarjeta"><div class="tabla-caja"><table class="mes-t"><thead><tr><th>Día</th>'+
       state.equipos.map(function(e){ return '<th colspan="'+tt.length+'" style="text-align:center">'+esc(e.nombre)+'<br><span style="text-transform:none;letter-spacing:0">'+fmtT(e.min)+' / '+fmtT(e.max)+'</span></th>'; }).join("")+'</tr>'+
       (tt.length>1?'<tr><th></th>'+state.equipos.map(function(){ return tt.map(function(t){ return '<th class="num">'+t[1].slice(0,1)+'</th>'; }).join(""); }).join("")+'</tr>':'')+
@@ -458,6 +467,10 @@ function vAjustes(box){
         state.tareas.map(function(t,i){ return '<tr class="clic" data-fila-ta="'+t.id+'"><td>'+flechas("ta",i,state.tareas.length)+esc(t.nombre)+'</td><td>'+esc(textoFrec(t))+'</td><td class="num"><button class="btn suave sm" data-ta="'+t.id+'">Cambiar</button></td></tr>'; }).join("")+
       '</tbody></table></div>':'<p class="nota" style="margin:0">Sin tareas.</p>')+
     '</div></section>'+
+    '<section class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab"><h2>Desde cuándo llevas el registro</h2></div><div class="tarjeta-cuerpo">'+
+      '<p class="nota">Lo de antes de esta fecha no sale como olvidado. Si quieres meter meses atrasados, pon aquí desde cuándo; también cambia sola al apuntar algo más antiguo.</p>'+
+      '<div style="display:flex;gap:8px;align-items:center;max-width:360px"><input type="date" id="a_desde" max="'+iso(new Date())+'" value="'+esc(state.desde)+'"><button class="btn" data-desde>Guardar</button></div>'+
+    '</div></section>'+
     '<section class="tarjeta"><div class="tarjeta-cab"><h2>Personal de cocina</h2></div><div class="tarjeta-cuerpo">'+
       '<p class="nota">Salen para elegir quién apunta. También se añaden solos al escribir un nombre nuevo.</p>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap">'+state.gente.map(function(g,i){ return '<span class="chapa neutra" style="font-size:12.5px;padding:4px 10px">'+esc(g)+' <button class="btn suave sm" data-gq="'+i+'" aria-label="Quitar '+esc(g)+'" style="padding:0 4px">✕</button></span>'; }).join("")+'</div>'+
@@ -476,6 +489,10 @@ function vAjustes(box){
   $$("[data-ta]", box).forEach(function(b){ b.addEventListener("click", function(){ editarTa(porId(state.tareas,b.getAttribute("data-ta")), function(){ vAjustes(box); }); }); });
   $$("[data-tur]", box).forEach(function(b){ b.addEventListener("click", function(){ state.turnos=b.getAttribute("data-tur"); guardar(); vAjustes(box); refrescarRail(); }); });
   $$("[data-gq]", box).forEach(function(b){ b.addEventListener("click", function(){ state.gente.splice(+b.getAttribute("data-gq"),1); guardar(); vAjustes(box); }); });
+  $("[data-desde]", box).addEventListener("click", function(){
+    var v=$("#a_desde", box).value; if(!v) return;
+    state.desde=v; try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){} aviso("Registro desde el "+dm(state.desde)); vAjustes(box);
+  });
   $("[data-g-add]", box).addEventListener("click", function(){ var n=$("#g_n", box).value; if(apuntarGente(n)){ guardar(); vAjustes(box); } });
 }
 /* Subir y bajar en la lista: en ese orden salen en «Hoy» */
