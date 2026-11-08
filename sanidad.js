@@ -6,6 +6,14 @@
    ================================================================ */
 (function(){
 "use strict";
+/* Los estilos propios de la app van aquí también, para que se vea bien
+   aunque el sanidad.html subido sea uno anterior. */
+(function(){
+  if(document.getElementById("sanidad-css")) return;
+  var st=document.createElement("style"); st.id="sanidad-css";
+  st.textContent="/* \u2500\u2500 Sanidad \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */\n.quien{display:flex;align-items:center;gap:10px;margin:0 0 14px;max-width:420px}\n.quien .lbl{white-space:nowrap}\n.fila-eq{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 4px;border-bottom:1px solid var(--linea-suave);flex-wrap:wrap}\n.fila-eq:last-of-type{border-bottom:0}\n.eq-nom{display:flex;flex-direction:column;min-width:150px}\n.eq-nom small{color:var(--muted);font-size:12px}\n.eq-ts{display:flex;gap:10px}\n.t-caja{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em}\n.t-caja input{width:96px;text-align:center;font-size:20px;font-weight:600;padding:8px 6px;font-family:var(--texto);border-width:1.5px}\n.t-caja small{font-size:10.5px;text-transform:none;letter-spacing:0;font-family:var(--texto)}\n.t-caja.bien input{border-color:var(--ok);background:var(--ok-suave);color:var(--ok)}\n.t-caja.mal input{border-color:var(--malo);background:var(--malo-suave);color:var(--malo)}\n.accion{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 4px 10px;font-size:13px}\n.tarea{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid var(--linea-suave);cursor:pointer}\n.tarea:last-child{border-bottom:0}\n.tarea input{width:22px;height:22px;accent-color:var(--acento);flex:none;margin:0}\n.tarea .t-nom{flex:1;font-size:14.5px}\n.tarea .t-quien{font-size:12px;color:var(--muted);white-space:nowrap}\n.tarea.hecha .t-nom{color:var(--muted);text-decoration:line-through}\n.fila-rec{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;border:0;border-bottom:1px solid var(--linea-suave);\n          background:transparent;padding:11px 4px;cursor:pointer;font:inherit;color:inherit;flex-wrap:wrap}\n.fila-rec:last-child{border-bottom:0}\n.fila-rec:hover{background:var(--sup2)}\n.meta-r{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}\ntr.clic{cursor:pointer}\ntr.clic:hover td{background:var(--sup2)}\n.mes-t td,.mes-t th{padding:6px 8px}\n.mes-t tr.dom td{border-bottom:2px solid var(--linea)}\n.mes-t td.falta{color:var(--linea)}\n.mes-t td.t-mal{color:var(--malo);font-weight:700;background:var(--malo-suave)}\n.mes-l th,.mes-l td{padding:5px 4px}\n.mes-l td:first-child{min-width:170px;position:sticky;left:0;background:var(--sup);z-index:1}\n.mes-l th:first-child{position:sticky;left:0;background:var(--sup);z-index:1}\n.l-c{text-align:center;cursor:pointer;min-width:24px;font-weight:700;font-size:13px}\n.l-c.ok-c{color:var(--ok);background:var(--ok-suave)}\n.l-c.mal-c{color:var(--malo);background:var(--malo-suave)}\n.l-c.toca-c{color:var(--acento)}\nth.hoy-c{color:var(--acento)}\n.rapidas{display:flex;flex-wrap:wrap;gap:6px}\n.t-fila{display:flex;gap:4px;align-items:stretch}\n.rueda-btn{border:1.5px solid var(--linea);background:var(--sup);color:var(--acento);border-radius:var(--radio-s);width:40px;font-size:20px;cursor:pointer;padding:0}\n.rueda-btn:hover{border-color:var(--acento)}\n.dlg-rueda{max-width:340px}\n.rueda-caja{display:flex;flex-direction:column;align-items:center;gap:6px}\n.rueda-paso{width:120px;justify-content:center}\n.rueda-poner{width:200px;justify-content:center;padding:12px;font-size:16px;margin-top:4px}\n.dlg-rueda .dlg-pie{padding-top:8px;padding-bottom:8px}\n.rueda{position:relative;height:230px;width:200px;overflow-y:auto;scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;\n       border:1px solid var(--linea);border-radius:12px;background:var(--sup2);scrollbar-width:none;outline:none}\n.rueda::-webkit-scrollbar{display:none}\n.rueda ul{list-style:none;margin:0;padding:92px 0}\n.rueda li{height:46px;line-height:46px;text-align:center;font-size:19px;scroll-snap-align:center;cursor:pointer;opacity:.45;font-variant-numeric:tabular-nums;transition:opacity .1s,font-size .1s}\n.rueda li.r-bien{color:var(--ok)}\n.rueda li.r-mal{color:var(--malo)}\n.dlg-sub{max-width:340px}\n.dlg-cab .reco{margin-left:auto;margin-right:6px;white-space:nowrap}\n.dlg-rueda .dlg-cab{gap:8px}\n.rueda li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 8px}\n.rueda li.sel{opacity:1;font-size:26px;font-weight:700}\n.rueda-marco{position:sticky;top:92px;height:46px;margin-bottom:-46px;border-top:2px solid var(--acento);border-bottom:2px solid var(--acento);pointer-events:none;z-index:1}\n.chips-q{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}\n.chip-q{border:1px solid var(--linea);background:var(--sup);color:var(--tinta);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}\n.chip-q.on,.chip-q:hover{border-color:var(--acento);background:var(--acento-suave);color:var(--acento);font-weight:600}\n.flechas{display:inline-flex;gap:2px;margin-right:8px;vertical-align:middle}\n.flechas .btn{padding:2px 7px;font-size:11px;line-height:1.4}\n.flechas .btn:disabled{opacity:.25;cursor:default}\n.btn.malo-f{background:var(--malo);border-color:var(--malo);color:#fff}\n.dos{display:grid;grid-template-columns:1fr 1fr;gap:10px}\n.tres{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}\n.seg{display:inline-flex;border:1px solid var(--linea);border-radius:8px;overflow:hidden}\n.seg button{border:0;background:var(--sup);padding:7px 12px;cursor:pointer;font-size:13px;color:var(--muted);border-right:1px solid var(--linea-suave)}\n.seg button:last-child{border-right:0}\n.seg button[aria-pressed=\"true\"]{background:var(--acento-suave);color:var(--acento);font-weight:600}\n.seg button:disabled{cursor:default}\n@media (max-width:560px){\n  .dos,.tres{grid-template-columns:1fr}\n  .eq-ts{width:100%;justify-content:flex-start}\n  .t-caja input{width:110px}\n  .quien{flex-direction:column;align-items:stretch;gap:4px}\n}\n";
+  document.head.appendChild(st);
+})();
 
 var LS = "sanidad.libro.v1";
 var TIPOS = {nevera:"Nevera", congelador:"Congelador", camara:"Cámara", otro:"Otro"};
@@ -493,7 +501,7 @@ function vIncidencias(box){
 function vTemps(box){
   var dias=diasMes(ui.mes), tt=turnos(), hoyS=iso(new Date());
   var fueraN=0, faltan=0;
-  box.innerHTML=cabecera("Temperaturas", esc(mesTxt(ui.mes))+" · pulsa un día para apuntar o corregir; con ‹ vas a meses atrasados", selMes())+
+  box.innerHTML=cabecera("Temperaturas", esc(mesTxt(ui.mes))+" · pulsa un día para apuntar o corregir; con ‹ vas a meses atrasados", selMes()+'<button class="btn" data-a-hojas>📄 Pasar a Hojas</button>')+
     (state.equipos.length ? '<div class="tarjeta"><div class="tabla-caja"><table class="mes-t"><thead><tr><th>Día</th>'+
       state.equipos.map(function(e){ return '<th colspan="'+tt.length+'" style="text-align:center">'+esc(e.nombre)+'<br><span style="text-transform:none;letter-spacing:0">'+fmtT(e.min)+' / '+fmtT(e.max)+'</span></th>'; }).join("")+'</tr>'+
       (tt.length>1?'<tr><th></th>'+state.equipos.map(function(){ return tt.map(function(t){ return '<th class="num">'+t[1].slice(0,1)+'</th>'; }).join(""); }).join("")+'</tr>':'')+
@@ -511,13 +519,99 @@ function vTemps(box){
       '<p class="nota" style="margin-top:10px">'+(faltan?faltan+' tomas sin apuntar este mes. ':'Todas las tomas apuntadas. ')+(fueraN?fueraN+' fuera de límite (en rojo; con «!» si falta apuntar qué se hizo).':'Ninguna fuera de límite.')+'</p>'
     : '<div class="vacio"><strong>No hay equipos</strong>Añade tus neveras y congeladores en Ajustes.</div>');
   engancharMes(box, vTemps);
+  var ah=$("[data-a-hojas]", box); if(ah) ah.addEventListener("click", function(){ pasarAHojas("temperaturas", ui.mes); });
   $$("[data-ir]", box).forEach(function(tr){ tr.addEventListener("click", function(){ var f=tr.getAttribute("data-ir"); if(f>hoyS) return; ui.fecha=f; ui.vista="hoy"; render(); window.scrollTo(0,0); }); });
+}
+
+/* ── pasar una hoja del mes a la app Hojas ─────────────────────── */
+/* Se dibuja la tabla del mes en una imagen tamaño A4 apaisado y se deja
+   preparada para la app Hojas, que la recoge al abrirse (las dos están
+   en la misma web y comparten el navegador). Si ya hay una hoja con el
+   mismo título, se cambia por la nueva. */
+function tablaImagen(titulo, sub, cab, filas){
+  var W=2339, H=1654, M=70, c=document.createElement("canvas"); c.width=W; c.height=H;
+  var x=c.getContext("2d");
+  x.fillStyle="#fff"; x.fillRect(0,0,W,H);
+  x.fillStyle="#111"; x.font="bold 54px Georgia, serif"; x.textBaseline="alphabetic"; x.fillText(titulo, M, M+44);
+  x.fillStyle="#555"; x.font="28px Helvetica, Arial, sans-serif"; x.fillText(sub, M, M+90);
+  var top=M+130, colL=430, nC=cab.length, cw=(W-2*M-colL)/nC;
+  var rh=Math.min(110, (H-top-M-70)/filas.length);
+  /* cabecera */
+  x.fillStyle="#eef3f3"; x.fillRect(M, top, W-2*M, 70);
+  x.fillStyle="#333"; x.font="bold 24px Helvetica, Arial, sans-serif"; x.textAlign="center";
+  cab.forEach(function(h,i){
+    var cx=M+colL+cw*i+cw/2;
+    if(h.fin) { x.fillStyle="#e6ecec"; x.fillRect(M+colL+cw*i, top, cw, 70+rh*filas.length); x.fillStyle="#333"; }
+    x.fillText(h.a, cx, top+30); x.font="bold 26px Helvetica, Arial, sans-serif"; x.fillText(h.b, cx, top+60); x.font="bold 24px Helvetica, Arial, sans-serif";
+  });
+  x.textAlign="left";
+  filas.forEach(function(f,r){
+    var y=top+70+rh*r;
+    x.fillStyle="#111"; x.font="bold "+Math.min(28,rh*.32)+"px Helvetica, Arial, sans-serif"; x.fillText(f.nom, M+12, y+rh*.45);
+    x.fillStyle="#666"; x.font=Math.min(22,rh*.26)+"px Helvetica, Arial, sans-serif"; x.fillText(f.sub||"", M+12, y+rh*.8);
+    f.celdas.forEach(function(t,i){
+      if(!t) return;
+      var cx=M+colL+cw*i, col=t.color||"#111";
+      if(t.fondo){ x.fillStyle=t.fondo; x.fillRect(cx+2, y+2, cw-4, rh-4); }
+      x.fillStyle=col; x.textAlign="center"; x.font="bold "+Math.min(t.g?40:26, rh*.42, cw*.42)+"px Helvetica, Arial, sans-serif";
+      x.fillText(t.t, cx+cw/2, y+rh/2+Math.min(t.g?14:9, rh*.15)); x.textAlign="left";
+    });
+  });
+  /* líneas */
+  x.strokeStyle="#bbb"; x.lineWidth=2;
+  for(var r=0;r<=filas.length;r++){ var yy=top+70+rh*r; x.beginPath(); x.moveTo(M,yy); x.lineTo(W-M,yy); x.stroke(); }
+  for(var i=0;i<=nC;i++){ var xx=M+colL+cw*i; x.beginPath(); x.moveTo(xx,top); x.lineTo(xx,top+70+rh*filas.length); x.stroke(); }
+  x.strokeStyle="#333"; x.strokeRect(M, top, W-2*M, 70+rh*filas.length);
+  x.beginPath(); x.moveTo(M+colL, top); x.lineTo(M+colL, top+70+rh*filas.length); x.stroke();
+  x.fillStyle="#888"; x.font="20px Helvetica, Arial, sans-serif"; x.fillText("La Palmera de Soldeu · Control sanitario · sacado el "+dm(iso(new Date()))+"/"+new Date().getFullYear(), M, H-M+20);
+  return c.toDataURL("image/png");
+}
+function pasarAHojas(cual, m){
+  var dias=diasMes(m), hoyS=iso(new Date()), titulo, sub, cab, filas;
+  cab=dias.map(function(f){ var d=deIso(f); return {a:DIAS_C[d.getDay()], b:String(d.getDate()), fin:d.getDay()===0}; });
+  if(cual==="limpieza"){
+    if(!state.tareas.length){ aviso("No hay tareas de limpieza", true); return; }
+    titulo="Plan de limpieza · "+mesTxt(m); sub="✓ hecha   ·   ✕ tocaba y no se hizo   ·   □ por hacer";
+    filas=state.tareas.map(function(ta){
+      return {nom:ta.nombre, sub:textoFrec(ta), celdas:dias.map(function(f){
+        var toca=tocaHoy(ta,f), l=limpiezaDe(f,ta.id);
+        if(l) return {t:"✓", color:"#1e7a3c", fondo:"#e3f3e8", g:1};
+        if(!toca) return null;
+        if(f<hoyS && f>=state.desde) return {t:"✕", color:"#b3261e", fondo:"#fbe4e1", g:1};
+        return {t:"□", color:"#999"};
+      })};
+    });
+  } else {
+    if(!state.equipos.length){ aviso("No hay neveras", true); return; }
+    var tt=turnos();
+    titulo="Temperaturas · "+mesTxt(m); sub="°C de cada equipo"+(tt.length>1?" (arriba mañana, abajo tarde)":"")+"   ·   en rojo, fuera de límite";
+    filas=[];
+    state.equipos.forEach(function(e){ tt.forEach(function(t){
+      filas.push({nom:e.nombre+(tt.length>1?" · "+t[1]:""), sub:fmtT(e.min)+" a "+fmtT(e.max), celdas:dias.map(function(f){
+        var r=tempDe(f,e.id,t[0]); if(!r) return null;
+        var mal=fuera(e,r.valor);
+        return {t:String(Math.round(r.valor*10)/10).replace(".",","), color:mal?"#b3261e":"#111", fondo:mal?"#fbe4e1":null};
+      })});
+    }); });
+  }
+  var url=tablaImagen(titulo, sub, cab, filas);
+  var nombre=titulo.replace(/ · /g," ").replace(/[^\wÀ-ÿ ]+/g,"").trim()+".png";
+  try{
+    localStorage.setItem("hojas.entrada", JSON.stringify({titulo:titulo, carpeta:"Restaurante", nombre:nombre, url:url, notas:"Sacada de Control sanitario", etiquetas:["sanidad", cual]}));
+  }catch(e){
+    var a=document.createElement("a"); a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); a.remove();
+    aviso("No cabe para pasarla sola: la tienes en Descargas para añadirla en Hojas.", true); return;
+  }
+  var d=dialogo("Pasar a Hojas",
+    '<p style="margin:0 0 12px">La hoja <b>'+esc(titulo)+'</b> está lista. Al abrir la app <b>Hojas</b> se guarda sola en la carpeta <b>Restaurante</b>'+
+    ' (si ya estaba la de este mes, se cambia por esta).</p><img src="'+url+'" alt="" style="width:100%;border:1px solid var(--linea);border-radius:6px">',
+    '<button class="btn" data-x>Ahora no</button><a class="btn fuerte" href="hojas.html">Abrir Hojas</a>');
 }
 
 /* ── limpieza del mes ──────────────────────────────────────────── */
 function vLimpieza(box){
   var dias=diasMes(ui.mes), hoyS=iso(new Date()), debidas=0, hechas=0;
-  box.innerHTML=cabecera("Plan de limpieza", esc(mesTxt(ui.mes))+" · pulsa una casilla para marcarla o desmarcarla", selMes())+
+  box.innerHTML=cabecera("Plan de limpieza", esc(mesTxt(ui.mes))+" · pulsa una casilla para marcarla o desmarcarla", selMes()+'<button class="btn" data-a-hojas>📄 Pasar a Hojas</button>')+
     (state.tareas.length ? '<div class="tarjeta"><div class="tabla-caja"><table class="mes-l"><thead><tr><th>Tarea</th>'+
       dias.map(function(f){ var d=deIso(f); return '<th class="num'+(f===hoyS?' hoy-c':'')+'">'+DIAS_C[d.getDay()]+'<br>'+d.getDate()+'</th>'; }).join("")+'</tr></thead><tbody>'+
       state.tareas.map(function(ta){
@@ -534,6 +628,7 @@ function vLimpieza(box){
       '<p class="nota" style="margin-top:10px">'+hechas+' de '+debidas+' limpiezas hechas hasta hoy'+(state.desde>diasMes(ui.mes)[0]&&state.desde.slice(0,7)===ui.mes?' (cuenta desde el '+dm(state.desde)+', cuando empezaste)':'')+(debidas?' ('+Math.round(hechas/debidas*100)+' %)':'')+'. ✕ = tocaba y no se marcó.</p>'
     : '<div class="vacio"><strong>Sin tareas</strong>Añade las limpiezas en Ajustes.</div>');
   engancharMes(box, vLimpieza);
+  $("[data-a-hojas]", box).addEventListener("click", function(){ pasarAHojas("limpieza", ui.mes); });
   $$("[data-tg]", box).forEach(function(td){ td.addEventListener("click", function(){
     var p=td.getAttribute("data-tg").split("|"), l=limpiezaDe(p[1],p[0]);
     if(l) state.limpiezas=state.limpiezas.filter(function(x){ return x!==l; });

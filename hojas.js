@@ -738,7 +738,34 @@ function abrirAjustes(){
   d.addEventListener("close", function(){ guardar(); render(); });
 }
 
+/* ── hojas que llegan de otras apps (Control sanitario…) ───────── */
+/* La otra app deja la hoja en el navegador con la clave
+   «hojas.entrada»; aquí se recoge al abrir. Si ya hay una con el mismo
+   título, se le cambia el archivo para no tener repetidas. */
+async function recogerEntrada(){
+  var raw=null;
+  try{ raw=localStorage.getItem("hojas.entrada"); }catch(e){}
+  if(!raw) return;
+  try{ localStorage.removeItem("hojas.entrada"); }catch(e){}
+  var e; try{ e=JSON.parse(raw); }catch(x){ return; }
+  if(!e || !e.url) return;
+  var blob=await (await fetch(e.url)).blob();
+  var f=new File([blob], e.nombre||"hoja.png", {type:blob.type||"image/png"});
+  var hay=state.hojas.filter(function(h){ return h.titulo===e.titulo && !esGoogle(h); })[0];
+  if(hay){ hay.usada=hoyISO(); await sustituir(hay, f); aviso("Actualizada: "+e.titulo); return; }
+  if(e.carpeta && state.carpetas.indexOf(e.carpeta)<0) state.carpetas.push(e.carpeta);
+  var id=uid(), limpio=f.name.normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^A-Za-z0-9._-]+/g,"-").slice(-80);
+  var h={id:id, titulo:e.titulo||tituloDeNombre(f.name), nombre:f.name, tipo:f.type, tam:f.size, carpeta:e.carpeta||"",
+         etiquetas:e.etiquetas||[], notas:e.notas||"", fav:false, creada:new Date().toISOString(), ruta:"hojas/"+id+"-"+limpio, subida:false, impresa:0};
+  await idbPut("f", id, f); blobs[id]=f;
+  state.hojas.push(h); guardar(); render();
+  aviso("Añadida: "+h.titulo);
+  subirPendientes();
+}
+
 /* ── arranque ──────────────────────────────────────────────────── */
 render();
 subirPendientes();
+recogerEntrada().catch(function(){ aviso("No se ha podido recoger la hoja que llegaba", true); });
+window.addEventListener("focus", function(){ recogerEntrada().catch(function(){}); });
 })();
