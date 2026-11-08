@@ -285,6 +285,12 @@ function abrirRueda(f, eqId, t, poner){
       '<button type="button" class="btn fuerte rueda-poner" data-ok>Poner</button></div>',
     '<button class="btn" data-x>Cancelar</button>');
   d.classList.add("dlg-rueda");
+  /* Arriba, al lado de Cerrar: la recomendada (la última apuntada o el
+     punto medio del límite), para ponerla con un solo toque */
+  var reco=document.createElement("button"); reco.type="button"; reco.className="btn fuerte sm reco";
+  reco.textContent="Poner "+fmtT(ini); reco.title="Temperatura recomendada";
+  $(".dlg-cab", d).insertBefore(reco, $(".dlg-cab [data-x]", d));
+  reco.addEventListener("click", function(){ d.close(); poner(ini); });
   var rueda=$(".rueda", d), lis=$$("li", d), ok=$("[data-ok]", d), sel=vals.indexOf(ini);
   function marcar(i){
     sel=Math.max(0, Math.min(vals.length-1, i));
