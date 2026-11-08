@@ -213,7 +213,6 @@ function vHoy(box){
 function quienAhora(){ var q=$("#q_quien"); var n=q?q.value.trim():quien(); if(n){ ponQuien(n); apuntarGente(n); } return n; }
 function ponerTemp(f, eqId, t, val, box){
   var e=porId(state.equipos, eqId), r=tempDe(f,eqId,t), v=num(val);
-  if(v!=null && v>0 && e && e.max<=0) v=-v; /* congelador: el teclado del móvil no tiene «−» */
   if(String(val).trim()===""){ if(r){ state.temps=state.temps.filter(function(x){ return x!==r; }); guardar(); } vHoy(box); refrescarRail(); return; }
   if(v==null || v<-40 || v>40){ aviso("Pon la temperatura en grados, por ejemplo 3 o -19,5", true); vHoy(box); return; }
   var esHoy=f===iso(new Date());
@@ -253,10 +252,8 @@ function editarRec(r, f, luego){
       '<div class="campo"><label class="lbl" for="r_prov">Proveedor</label><input id="r_prov" list="r_provl" value="'+esc(r.proveedor||"")+'" autocomplete="off"><datalist id="r_provl">'+provs.map(function(p){ return '<option value="'+esc(p)+'">'; }).join("")+'</datalist></div>'+
       '<div class="campo"><label class="lbl" for="r_prod">Qué llega</label><input id="r_prod" value="'+esc(r.producto||"")+'" placeholder="Carne, pescado, lácteos…"></div>'+
     '</div>'+
-    '<div class="campo" style="margin-top:10px"><span class="lbl">Cómo llega</span><div class="seg" data-g="frio">'+
-      '<button data-val="ref" aria-pressed="'+(!(r.temp<0))+'">Refrigerado</button><button data-val="con" aria-pressed="'+(r.temp<0)+'">Congelado (bajo cero)</button></div></div>'+
     '<div class="tres" style="margin-top:10px">'+
-      '<div class="campo"><label class="lbl" for="r_temp">Temperatura</label><input id="r_temp" inputmode="decimal" placeholder="°C (si es de frío)" value="'+(r.temp!=null?String(Math.abs(r.temp)).replace(".",","):"")+'"></div>'+
+      '<div class="campo"><label class="lbl" for="r_temp">Temperatura</label><input id="r_temp" inputmode="decimal" placeholder="°C (si es de frío)" value="'+(r.temp!=null?String(r.temp).replace(".",","):"")+'"></div>'+
       '<div class="campo"><label class="lbl" for="r_lote">Lote</label><input id="r_lote" value="'+esc(r.lote||"")+'"></div>'+
       '<div class="campo"><label class="lbl" for="r_cad">Caducidad</label><input id="r_cad" type="date" value="'+esc(r.cad||"")+'"></div>'+
     '</div>'+
@@ -276,7 +273,6 @@ function editarRec(r, f, luego){
   var val=function(g){ var b=$('.seg[data-g="'+g+'"] [aria-pressed="true"]', d); return b?b.getAttribute("data-val"):""; };
   $("[data-ok]", d).addEventListener("click", function(){
     var t=$("#r_temp", d).value.trim(), tv=num(t);
-    if(tv!=null){ tv=Math.abs(tv); if(val("frio")==="con") tv=-tv; }
     if(t && tv==null){ aviso("La temperatura tiene que ser un número", true); return; }
     r.proveedor=$("#r_prov", d).value.trim(); r.producto=$("#r_prod", d).value.trim();
     if(!r.proveedor && !r.producto){ aviso("Pon al menos el proveedor o qué llega", true); return; }
@@ -412,7 +408,7 @@ function vInforme(box){
   var rec=state.recepciones.filter(function(r){ return r.fecha.slice(0,7)===ui.mes; });
   var inc=state.incidencias.filter(function(i){ return i.fecha.slice(0,7)===ui.mes; });
   var pct=function(a,b){ return b?Math.round(a/b*100)+" %":"—"; };
-  box.innerHTML=cabecera("Resumen del mes", "Lo que enseñarías en una inspección, de "+esc(mesTxt(ui.mes))+".", selMes()+'<button class="btn fuerte" data-imp>Imprimir el mes</button><button class="btn" data-csv>Descargar el mes (Excel)</button>')+
+  box.innerHTML=cabecera("Resumen del mes", "Lo que enseñarías en una inspección, de "+esc(mesTxt(ui.mes))+".", selMes()+'<button class="btn" data-csv>Descargar el mes (Excel)</button>')+
     '<div class="cifras">'+
       '<div class="cifra"><div class="k">Temperaturas</div><div class="v'+(hechasT<tomas?' malo':' acento')+'">'+pct(hechasT,tomas)+'</div><div class="n">'+hechasT+' de '+tomas+' tomas</div></div>'+
       '<div class="cifra"><div class="k">Fuera de límite</div><div class="v'+(fueraL.length?' malo':'')+'">'+fueraL.length+'</div><div class="n">'+(sinAcc?sinAcc+' sin acción apuntada':'todas con acción')+'</div></div>'+
@@ -429,108 +425,6 @@ function vInforme(box){
         : '<p class="nota" style="margin:0">Todas marcadas. ✓</p>')+'</div></section>';
   engancharMes(box, vInforme);
   $("[data-csv]", box).addEventListener("click", function(){ csvMes(ui.mes); });
-  $("[data-imp]", box).addEventListener("click", function(){ imprimirMes(ui.mes); });
-}
-
-/* ── hoja para imprimir (A4 apaisado, para enseñar en una inspección) ── */
-var CSS_IMP=
-  '#hoja-imp{display:none}'+
-  '@media print{'+
-    '@page{size:A4 landscape;margin:11mm 10mm}'+
-    'html,body{background:#fff!important;color:#000!important}'+
-    'body>*:not(#hoja-imp){display:none!important}'+
-    '#hoja-imp{display:block;font-family:Archivo,"Helvetica Neue",Arial,sans-serif;font-size:9pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
-    '#hoja-imp .cab{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1.5pt solid #000;padding-bottom:5pt;margin-bottom:8pt}'+
-    '#hoja-imp h1{font-family:Fraunces,Georgia,serif;font-size:17pt;font-weight:600;margin:0;letter-spacing:-.01em}'+
-    '#hoja-imp .cab p{margin:2pt 0 0;font-size:9.5pt;color:#333}'+
-    '#hoja-imp .cab .der{text-align:right;font-size:8.5pt;color:#333}'+
-    '#hoja-imp h2{font-family:Fraunces,Georgia,serif;font-size:12pt;font-weight:600;margin:12pt 0 4pt}'+
-    '#hoja-imp .rango{font-weight:400;font-size:8pt;color:#444}'+
-    '#hoja-imp .sec{break-inside:auto}'+
-    '#hoja-imp .blq{break-inside:avoid}'+'#hoja-imp h2{break-after:avoid}'+
-    '#hoja-imp table{width:100%;border-collapse:collapse;font-size:8pt}'+
-    '#hoja-imp th,#hoja-imp td{border:.5pt solid #888;padding:2.2pt 3pt;text-align:left;vertical-align:top}'+
-    '#hoja-imp th{background:#ececec;font-weight:600;font-size:7.5pt;font-family:inherit;text-transform:none;letter-spacing:0;color:#000;position:static}'+
-    '#hoja-imp .tt td{padding:.9pt 3pt;line-height:1.15}'+
-    '#hoja-imp td.n,#hoja-imp th.n{text-align:center;white-space:nowrap}'+
-    '#hoja-imp tr{break-inside:avoid}'+
-    '#hoja-imp thead{display:table-header-group}'+
-    '#hoja-imp .dom td{background:#f6f6f6}'+
-    '#hoja-imp .fuera{font-weight:700;background:#f3d9d3!important}'+
-    '#hoja-imp .lt td.n,#hoja-imp .lt th.n{padding:2pt 0;width:2.4%}'+
-    '#hoja-imp .no{color:#96331f;font-weight:700}'+
-    '#hoja-imp .resumen{display:flex;gap:14pt;flex-wrap:wrap;font-size:9pt;margin:0 0 4pt}'+
-    '#hoja-imp .resumen b{font-size:10.5pt}'+
-    '#hoja-imp .nota{font-size:7.5pt;color:#444;margin:3pt 0 0}'+
-    '#hoja-imp .vacio{font-size:8.5pt;color:#444;margin:2pt 0}'+
-    '#hoja-imp .firma{display:flex;gap:30pt;margin-top:24pt;font-size:9pt}'+
-    '#hoja-imp .firma div{flex:1;border-top:.75pt solid #000;padding-top:3pt}'+
-  '}';
-function imprimirMes(m){
-  if(!$("#css-imp")){ var st=document.createElement("style"); st.id="css-imp"; st.textContent=CSS_IMP; document.head.appendChild(st); }
-  var v=$("#hoja-imp"); if(v) v.remove();
-  var dias=diasMes(m), tt=turnos(), hoyS=iso(new Date());
-  var cuenta=function(f){ return f<=hoyS && f>=state.desde; };
-  var t1=function(v){ return String(Math.round(v*10)/10).replace(".",","); };
-  /* cifras */
-  var tomas=0, hechasT=0, fueraL=[], deb=0, hec=0;
-  dias.forEach(function(f){ if(!cuenta(f)) return;
-    state.equipos.forEach(function(e){ tt.forEach(function(t){ tomas++; var r=tempDe(f,e.id,t[0]); if(r){ hechasT++; if(fuera(e,r.valor)) fueraL.push({r:r,e:e}); } }); });
-    state.tareas.forEach(function(ta){ if(tocaHoy(ta,f)){ deb++; if(limpiezaDe(f,ta.id)) hec++; } });
-  });
-  var rec=state.recepciones.filter(function(r){ return r.fecha.slice(0,7)===m; }).sort(function(a,b){ return a.fecha<b.fecha?-1:1; });
-  var inc=state.incidencias.filter(function(i){ return i.fecha.slice(0,7)===m; }).sort(function(a,b){ return a.fecha<b.fecha?-1:1; });
-  var resp=state.gente.length?state.gente.join(", "):"";
-  var h='<div class="cab"><div><h1>Registro de control sanitario</h1><p>La palmera de Soldeu · '+esc(mesTxt(m).replace(/^./,function(c){return c.toUpperCase();}))+'</p></div>'+
-    '<div class="der">Impreso el '+dm(hoyS)+'/'+hoyS.slice(0,4)+(resp?'<br>Apuntan: '+esc(resp):'')+'</div></div>'+
-    '<div class="resumen"><span>Temperaturas apuntadas: <b>'+hechasT+' de '+tomas+'</b></span><span>Fuera de límite: <b>'+fueraL.length+'</b></span>'+
-      '<span>Limpiezas hechas: <b>'+hec+' de '+deb+'</b></span><span>Entregas recibidas: <b>'+rec.length+'</b></span><span>Incidencias: <b>'+inc.length+'</b></span></div>';
-  /* temperaturas */
-  h+='<div class="sec"><h2>1. Temperaturas de neveras y congeladores (°C)</h2>';
-  if(state.equipos.length){
-    h+='<table class="tt"><thead><tr><th>Día</th>'+state.equipos.map(function(e){ return '<th class="n" colspan="'+tt.length+'">'+esc(e.nombre)+'<br><span class="rango">'+t1(e.min)+' a '+t1(e.max)+'</span></th>'; }).join("")+'<th>Firma / quién</th></tr>'+
-      (tt.length>1?'<tr><th></th>'+state.equipos.map(function(){ return tt.map(function(t){ return '<th class="n">'+t[1]+'</th>'; }).join(""); }).join("")+'<th></th></tr>':'')+'</thead><tbody>'+
-      dias.map(function(f){
-        var d=deIso(f), q=[];
-        var celdas=state.equipos.map(function(e){ return tt.map(function(t){
-          var r=tempDe(f,e.id,t[0]); if(!r) return '<td class="n">'+(cuenta(f)?'—':'')+'</td>';
-          if(r.quien && q.indexOf(r.quien)<0) q.push(r.quien);
-          return '<td class="n'+(fuera(e,r.valor)?' fuera':'')+'">'+t1(r.valor)+(fuera(e,r.valor)?'*':'')+'</td>';
-        }).join(""); }).join("");
-        return '<tr'+(d.getDay()===0?' class="dom"':'')+'><td style="white-space:nowrap">'+DIAS_C[d.getDay()]+' '+d.getDate()+'</td>'+celdas+'<td>'+esc(q.join(", "))+'</td></tr>';
-      }).join("")+'</tbody></table>'+
-      '<p class="nota">* Fuera de límite: ver abajo qué se hizo. — = no apuntado.</p>';
-    if(fueraL.length) h+='<div class="blq"><h2>Medidas tomadas con las temperaturas fuera de límite</h2><table><thead><tr><th>Día</th><th>Equipo</th><th class="n">Temp.</th><th class="n">Límite</th><th>Qué se hizo</th><th>Quién</th></tr></thead><tbody>'+
-      fueraL.map(function(x){ return '<tr><td>'+dm(x.r.fecha)+(tt.length>1?' '+(x.r.turno==="t"?"tarde":"mañana"):'')+'</td><td>'+esc(x.e.nombre)+'</td><td class="n fuera">'+t1(x.r.valor)+'</td><td class="n">'+t1(x.e.min)+' a '+t1(x.e.max)+'</td><td>'+(x.r.accion?esc(x.r.accion):'<span class="no">Sin apuntar</span>')+'</td><td>'+esc(x.r.quien||"")+'</td></tr>'; }).join("")+'</tbody></table></div>';
-  } else h+='<p class="vacio">No hay equipos dados de alta.</p>';
-  h+='</div>';
-  /* limpieza */
-  h+='<div class="sec blq"><h2>2. Plan de limpieza</h2>';
-  if(state.tareas.length){
-    h+='<table class="lt"><thead><tr><th>Tarea</th>'+dias.map(function(f){ var d=deIso(f); return '<th class="n">'+DIAS_C[d.getDay()]+'<br>'+d.getDate()+'</th>'; }).join("")+'</tr></thead><tbody>'+
-      state.tareas.map(function(ta){
-        return '<tr><td><b>'+esc(ta.nombre)+'</b><br><span class="rango">'+esc(textoFrec(ta))+'</span></td>'+dias.map(function(f){
-          if(!tocaHoy(ta,f)) return '<td class="n"></td>';
-          var l=limpiezaDe(f,ta.id);
-          return '<td class="n">'+(l?'✓':(cuenta(f)?'<span class="no">✕</span>':''))+'</td>';
-        }).join("")+'</tr>';
-      }).join("")+'</tbody></table><p class="nota">✓ = hecha · ✕ = tocaba y no se marcó · en blanco = ese día no toca.</p>';
-  } else h+='<p class="vacio">No hay tareas de limpieza dadas de alta.</p>';
-  h+='</div>';
-  /* mercancía */
-  h+='<div class="sec"><h2>3. Mercancía recibida</h2>'+(rec.length?
-    '<table><thead><tr><th>Día</th><th>Proveedor</th><th>Producto</th><th class="n">Temp.</th><th>Lote</th><th class="n">Caducidad</th><th class="n">Envase</th><th class="n">Estado</th><th>Recibe</th><th>Nota</th></tr></thead><tbody>'+
-    rec.map(function(r){ return '<tr><td>'+dm(r.fecha)+'</td><td>'+esc(r.proveedor||"")+'</td><td>'+esc(r.producto||"")+'</td><td class="n">'+(r.temp!=null?t1(r.temp):"—")+'</td><td>'+esc(r.lote||"")+'</td><td class="n">'+(r.cad?dm(r.cad):"")+'</td><td class="n">'+(r.envase==="mal"?'<span class="no">Mal</span>':'Bien')+'</td><td class="n">'+(r.acepta===false?'<span class="no">Rechazado</span>':'Aceptado')+'</td><td>'+esc(r.quien||"")+'</td><td>'+esc(r.nota||"")+'</td></tr>'; }).join("")+'</tbody></table>'
-    : '<p class="vacio">No se ha apuntado ninguna entrega este mes.</p>')+'</div>';
-  /* incidencias */
-  h+='<div class="sec blq"><h2>4. Incidencias</h2>'+(inc.length?
-    '<table><thead><tr><th>Día</th><th>Qué pasó</th><th>Qué se hizo</th><th>Quién</th><th class="n">Estado</th></tr></thead><tbody>'+
-    inc.map(function(i){ return '<tr><td>'+dm(i.fecha)+'</td><td>'+esc(i.texto)+'</td><td>'+esc(i.accion||"—")+'</td><td>'+esc(i.quien||"")+'</td><td class="n">'+(i.cerrada?'Resuelta':'<span class="no">Abierta</span>')+'</td></tr>'; }).join("")+'</tbody></table>'
-    : '<p class="vacio">Ninguna incidencia este mes.</p>')+
-    '<div class="firma"><div>Revisado por (responsable)</div><div>Firma</div><div>Fecha</div></div></div>';
-  var hoja=document.createElement("div"); hoja.id="hoja-imp"; hoja.innerHTML=h;
-  document.body.appendChild(hoja);
-  setTimeout(function(){ window.print(); }, 60);
 }
 function csvMes(m){
   var dias=diasMes(m), tt=turnos(), filas=[];
@@ -551,17 +445,17 @@ function csvMes(m){
 
 /* ── ajustes ───────────────────────────────────────────────────── */
 function vAjustes(box){
-  box.innerHTML=cabecera("Ajustes", "Tus neveras y congeladores, las limpiezas que tocan y quién trabaja en cocina.")+
+  box.innerHTML=cabecera("Ajustes", "Tus neveras y congeladores, las limpiezas que tocan y quién trabaja en cocina. Con ▲ ▼ los pones en el orden en que salen en «Hoy».")+
     '<section class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab"><h2>Neveras y congeladores</h2><button class="btn fuerte sm" data-eq-nuevo>+ Añadir</button></div><div class="tarjeta-cuerpo">'+
       (state.equipos.length?'<div class="tabla-caja"><table><thead><tr><th>Nombre</th><th>Tipo</th><th class="num">Mínimo</th><th class="num">Máximo</th><th></th></tr></thead><tbody>'+
-        state.equipos.map(function(e){ return '<tr><td>'+esc(e.nombre)+'</td><td>'+esc(TIPOS[e.tipo]||e.tipo)+'</td><td class="num">'+fmtT(e.min)+'</td><td class="num">'+fmtT(e.max)+'</td><td class="num"><button class="btn suave sm" data-eq="'+e.id+'">Cambiar</button></td></tr>'; }).join("")+
+        state.equipos.map(function(e,i){ return '<tr class="clic" data-fila-eq="'+e.id+'"><td>'+flechas("eq",i,state.equipos.length)+esc(e.nombre)+'</td><td>'+esc(TIPOS[e.tipo]||e.tipo)+'</td><td class="num">'+fmtT(e.min)+'</td><td class="num">'+fmtT(e.max)+'</td><td class="num"><button class="btn suave sm" data-eq="'+e.id+'">Cambiar</button></td></tr>'; }).join("")+
       '</tbody></table></div>':'<p class="nota" style="margin:0">Sin equipos.</p>')+
       '<div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="lbl">Tomas al día</span>'+
         '<div class="seg"><button data-tur="dos" aria-pressed="'+(state.turnos!=="uno")+'">Dos (mañana y tarde)</button><button data-tur="uno" aria-pressed="'+(state.turnos==="uno")+'">Una</button></div></div>'+
     '</div></section>'+
     '<section class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab"><h2>Plan de limpieza</h2><button class="btn fuerte sm" data-ta-nueva>+ Añadir</button></div><div class="tarjeta-cuerpo">'+
       (state.tareas.length?'<div class="tabla-caja"><table><thead><tr><th>Tarea</th><th>Cuándo</th><th></th></tr></thead><tbody>'+
-        state.tareas.map(function(t){ return '<tr><td>'+esc(t.nombre)+'</td><td>'+esc(textoFrec(t))+'</td><td class="num"><button class="btn suave sm" data-ta="'+t.id+'">Cambiar</button></td></tr>'; }).join("")+
+        state.tareas.map(function(t,i){ return '<tr class="clic" data-fila-ta="'+t.id+'"><td>'+flechas("ta",i,state.tareas.length)+esc(t.nombre)+'</td><td>'+esc(textoFrec(t))+'</td><td class="num"><button class="btn suave sm" data-ta="'+t.id+'">Cambiar</button></td></tr>'; }).join("")+
       '</tbody></table></div>':'<p class="nota" style="margin:0">Sin tareas.</p>')+
     '</div></section>'+
     '<section class="tarjeta"><div class="tarjeta-cab"><h2>Personal de cocina</h2></div><div class="tarjeta-cuerpo">'+
@@ -570,12 +464,24 @@ function vAjustes(box){
       '<div style="display:flex;gap:6px;margin-top:10px;max-width:360px"><input id="g_n" placeholder="Nombre"><button class="btn" data-g-add>Añadir</button></div>'+
     '</div></section>';
   $("[data-eq-nuevo]", box).addEventListener("click", function(){ editarEq(null, function(){ vAjustes(box); }); });
+  $$("[data-fila-eq]", box).forEach(function(tr){ tr.addEventListener("click", function(ev){ if(ev.target.closest("button")) return; editarEq(porId(state.equipos,tr.getAttribute("data-fila-eq")), function(){ vAjustes(box); }); }); });
+  $$("[data-fila-ta]", box).forEach(function(tr){ tr.addEventListener("click", function(ev){ if(ev.target.closest("button")) return; editarTa(porId(state.tareas,tr.getAttribute("data-fila-ta")), function(){ vAjustes(box); }); }); });
+  $$("[data-mover]", box).forEach(function(b){ b.addEventListener("click", function(){
+    var p=b.getAttribute("data-mover").split("|"), l=p[0]==="eq"?state.equipos:state.tareas, i=+p[1], j=i+(+p[2]);
+    if(j<0||j>=l.length) return;
+    var x=l[i]; l[i]=l[j]; l[j]=x; guardar(); vAjustes(box);
+  }); });
   $$("[data-eq]", box).forEach(function(b){ b.addEventListener("click", function(){ editarEq(porId(state.equipos,b.getAttribute("data-eq")), function(){ vAjustes(box); }); }); });
   $("[data-ta-nueva]", box).addEventListener("click", function(){ editarTa(null, function(){ vAjustes(box); }); });
   $$("[data-ta]", box).forEach(function(b){ b.addEventListener("click", function(){ editarTa(porId(state.tareas,b.getAttribute("data-ta")), function(){ vAjustes(box); }); }); });
   $$("[data-tur]", box).forEach(function(b){ b.addEventListener("click", function(){ state.turnos=b.getAttribute("data-tur"); guardar(); vAjustes(box); refrescarRail(); }); });
   $$("[data-gq]", box).forEach(function(b){ b.addEventListener("click", function(){ state.gente.splice(+b.getAttribute("data-gq"),1); guardar(); vAjustes(box); }); });
   $("[data-g-add]", box).addEventListener("click", function(){ var n=$("#g_n", box).value; if(apuntarGente(n)){ guardar(); vAjustes(box); } });
+}
+/* Subir y bajar en la lista: en ese orden salen en «Hoy» */
+function flechas(k, i, n){
+  return '<span class="flechas"><button class="btn suave sm" data-mover="'+k+'|'+i+'|-1"'+(i===0?' disabled':'')+' aria-label="Subir">▲</button>'+
+    '<button class="btn suave sm" data-mover="'+k+'|'+i+'|1"'+(i===n-1?' disabled':'')+' aria-label="Bajar">▼</button></span>';
 }
 function editarEq(e, luego){
   var nuevo=!e; e=e||{tipo:"nevera", min:0, max:4};
@@ -588,7 +494,6 @@ function editarEq(e, luego){
   $("#e_t", d).addEventListener("change", function(){ var r=RANGO[this.value]; $("#e_min", d).value=String(r[0]); $("#e_max", d).value=String(r[1]); });
   $("[data-ok]", d).addEventListener("click", function(){
     var n=$("#e_n", d).value.trim(), mn=num($("#e_min", d).value), mx=num($("#e_max", d).value);
-    if($("#e_t", d).value==="congelador"){ if(mn!=null&&mn>0) mn=-mn; if(mx!=null&&mx>0) mx=-mx; if(mn!=null&&mx!=null&&mn>mx){ var tmp=mn; mn=mx; mx=tmp; } }
     if(!n){ aviso("Ponle un nombre", true); return; }
     if(mn==null||mx==null||mn>mx){ aviso("Revisa el mínimo y el máximo", true); return; }
     e.nombre=n; e.tipo=$("#e_t", d).value; e.min=mn; e.max=mx;
