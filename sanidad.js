@@ -161,12 +161,13 @@ function vHoy(box){
     '<section class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab"><h2>🌡️ Temperaturas</h2><span class="pista">'+state.equipos.length+' equipos · en rojo si se sale del límite</span></div>'+
       '<div class="tarjeta-cuerpo" style="padding:6px 12px">'+
       (state.equipos.length ? state.equipos.map(function(e){
-        return '<div class="fila-eq"><div class="eq-nom"><b>'+esc(e.nombre)+'</b><small>'+esc(TIPOS[e.tipo]||"")+' · de '+fmtT(e.min)+' a '+fmtT(e.max)+'</small></div>'+
+        return '<div class="fila-eq"><div class="eq-nom"><b>'+esc(e.nombre)+'</b><small>'+esc(TIPOS[e.tipo]||"")+' · de '+fmtT(e.min)+' a '+fmtT(e.max)+(e.tipo==="congelador"?' · el menos se pone solo':'')+'</small></div>'+
           '<div class="eq-ts">'+tt.map(function(t){
             var r=tempDe(f,e.id,t[0]), v=r?r.valor:null, mal=fuera(e,v);
-            return '<label class="t-caja'+(r?(mal?" mal":" bien"):"")+'"><span>'+t[1]+'</span>'+
-              '<input type="text" inputmode="decimal" data-eq="'+e.id+'" data-t="'+t[0]+'" value="'+(r?String(v).replace(".",","):"")+'" placeholder="°C" aria-label="'+esc(e.nombre+" "+t[1])+'">'+
-              (r?'<small>'+esc(r.hora||"")+(r.quien?' · '+esc(r.quien):'')+'</small>':'<small>&nbsp;</small>')+'</label>';
+            return '<div class="t-caja'+(r?(mal?" mal":" bien"):"")+'"><span>'+t[1]+'</span>'+
+              '<div class="t-fila"><input type="text" inputmode="decimal" data-eq="'+e.id+'" data-t="'+t[0]+'" value="'+(r?String(v).replace(".",","):"")+'" placeholder="'+(e.tipo==="congelador"?"−°C":"°C")+'" aria-label="'+esc(e.nombre+" "+t[1])+'">'+
+              '<button type="button" class="rueda-btn" data-rueda="'+e.id+'|'+t[0]+'" aria-label="Elegir la temperatura de '+esc(e.nombre+" "+t[1])+' con la ruleta" title="Ruleta">⟳</button></div>'+
+              (r?'<small>'+esc([r.hora,r.quien].filter(Boolean).join(" · "))+'</small>':'<small>&nbsp;</small>')+'</div>';
           }).join("")+'</div></div>'+
           tt.map(function(t){ var r=tempDe(f,e.id,t[0]); return (r && fuera(e,r.valor)) ? '<div class="accion"><span class="chapa malo">'+t[1]+': '+fmtT(r.valor)+'</span> '+
             (r.accion?'<span>Acción: '+esc(r.accion)+'</span> <button class="btn suave sm" data-acc="'+r.id+'">Cambiar</button>':'<button class="btn sm malo" data-acc="'+r.id+'">Apuntar qué se ha hecho</button>')+'</div>' : ''; }).join("");
@@ -203,6 +204,10 @@ function vHoy(box){
   ir.addEventListener("change", function(){ if(ir.value && ir.value<=iso(new Date())){ ui.fecha=ir.value; vHoy(box); } });
   var qi=$("#q_quien", box);
   qi.addEventListener("change", function(){ ponQuien(qi.value.trim()); apuntarGente(qi.value); guardar(); });
+  $$("[data-rueda]", box).forEach(function(b){ b.addEventListener("click", function(){
+    var p=b.getAttribute("data-rueda").split("|");
+    abrirRueda(f, p[0], p[1], function(v){ ponerTemp(f, p[0], p[1], String(v), box); });
+  }); });
   $$("input[data-eq]", box).forEach(function(inp){
     inp.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); inp.blur(); } });
     inp.addEventListener("change", function(){ ponerTemp(f, inp.getAttribute("data-eq"), inp.getAttribute("data-t"), inp.value, box); });
@@ -222,6 +227,9 @@ function vHoy(box){
 function quienAhora(){ var q=$("#q_quien"); var n=q?q.value.trim():quien(); if(n){ ponQuien(n); apuntarGente(n); } return n; }
 function ponerTemp(f, eqId, t, val, box){
   var e=porId(state.equipos, eqId), r=tempDe(f,eqId,t), v=num(val);
+  /* En los congeladores no hace falta poner el menos: 19 es −19.
+     Si de verdad está por encima de cero, se escribe con + (+2). */
+  if(e && e.tipo==="congelador" && v!=null && v>0 && String(val).trim().charAt(0)!=="+") v=-v;
   if(String(val).trim()===""){ if(r){ state.temps=state.temps.filter(function(x){ return x!==r; }); guardar(); } vHoy(box); refrescarRail(); return; }
   if(v==null || v<-40 || v>40){ aviso("Pon la temperatura en grados, por ejemplo 3 o -19,5", true); vHoy(box); return; }
   var esHoy=f===iso(new Date());
@@ -244,6 +252,63 @@ function pedirAccion(r, luego){
   $$("[data-r]", d).forEach(function(b){ b.addEventListener("click", function(){ ta.value=(ta.value?ta.value.replace(/\s+$/,"")+". ":"")+b.textContent; ta.focus(); }); });
   $("[data-ok]", d).addEventListener("click", function(){ r.accion=ta.value.trim(); guardar(); d.close(); });
   d.addEventListener("close", function(){ if(luego) luego(); });
+}
+
+/* ── ruleta para la temperatura ────────────────────────────────── */
+/* Se gira con el dedo (o la rueda del ratón) y se para en un valor; en
+   verde lo que está dentro del límite y en rojo lo que no. Sale ya en
+   la última temperatura apuntada de ese equipo, que suele ser la buena. */
+var ALTO_R=46;
+function ultimaDe(eqId, antesDe){
+  var l=state.temps.filter(function(x){ return x.equipo===eqId && x.fecha<=antesDe; });
+  l.sort(function(a,b){ return a.fecha===b.fecha ? (a.turno<b.turno?1:-1) : (a.fecha<b.fecha?1:-1); });
+  return l.length ? l[0].valor : null;
+}
+function abrirRueda(f, eqId, t, poner){
+  var e=porId(state.equipos, eqId); if(!e) return;
+  var r=tempDe(f, eqId, t);
+  var desde=Math.floor(Math.min(e.min-8, e.min)), hasta=Math.ceil(e.max+10);
+  if(e.tipo==="congelador"){ desde=Math.floor(Math.min(-32, e.min-6)); hasta=Math.ceil(Math.max(0, e.max+10)); }
+  var vals=[]; for(var x=hasta*2; x>=desde*2; x--) vals.push(x/2);   /* de más calor arriba a más frío abajo, como un termómetro */
+  var ini=r?r.valor:ultimaDe(eqId, f); if(ini==null) ini=(e.min+e.max)/2;
+  ini=Math.round(ini*2)/2; if(ini<desde) ini=desde; if(ini>hasta) ini=hasta;
+  var nomT=(turnos().filter(function(x){ return x[0]===t; })[0]||["",""])[1];
+  var d=dialogo(e.nombre+" · "+nomT,
+    '<p class="nota" style="margin:0 0 10px;text-align:center">Gira la ruleta hasta la temperatura · tiene que estar entre '+fmtT(e.min)+' y '+fmtT(e.max)+'</p>'+
+    '<div class="rueda-caja"><button type="button" class="btn rueda-paso" data-paso="1" aria-label="Medio grado más">▲</button>'+
+      '<div class="rueda" tabindex="0" aria-label="Ruleta de temperatura"><div class="rueda-marco"></div><ul>'+
+        vals.map(function(v,i){ return '<li data-i="'+i+'" class="'+(fuera(e,v)?"r-mal":"r-bien")+'">'+String(v).replace(".",",")+' °C</li>'; }).join("")+
+      '</ul></div><button type="button" class="btn rueda-paso" data-paso="-1" aria-label="Medio grado menos">▼</button></div>',
+    '<button class="btn" data-x>Cancelar</button><button class="btn fuerte" data-ok>Poner</button>');
+  d.classList.add("dlg-rueda");
+  var rueda=$(".rueda", d), lis=$$("li", d), ok=$("[data-ok]", d), sel=vals.indexOf(ini);
+  function marcar(i){
+    sel=Math.max(0, Math.min(vals.length-1, i));
+    lis.forEach(function(li,k){ li.classList.toggle("sel", k===sel); });
+    ok.textContent="Poner "+fmtT(vals[sel]);
+    ok.classList.toggle("malo-f", fuera(e, vals[sel]));
+  }
+  function ir(i, suave){ marcar(i); rueda.scrollTo({top:sel*ALTO_R, behavior:suave?"smooth":"auto"}); }
+  var tScroll;
+  var listo=false;
+  rueda.addEventListener("scroll", function(){
+    if(!listo) return;
+    marcar(Math.round(rueda.scrollTop/ALTO_R));
+    clearTimeout(tScroll);
+  });
+  lis.forEach(function(li){ li.addEventListener("click", function(){ ir(+li.getAttribute("data-i"), true); }); });
+  $$("[data-paso]", d).forEach(function(b){ b.addEventListener("click", function(){ ir(sel + (+b.getAttribute("data-paso")) * -1, true); }); });
+  rueda.addEventListener("keydown", function(ev){
+    if(ev.key==="ArrowUp"){ ev.preventDefault(); ir(sel-1, true); }
+    if(ev.key==="ArrowDown"){ ev.preventDefault(); ir(sel+1, true); }
+    if(ev.key==="Enter"){ ev.preventDefault(); ok.click(); }
+  });
+  ok.addEventListener("click", function(){ var v=vals[sel]; d.close(); poner(v); });
+  var inicio=sel;
+  marcar(inicio);
+  /* se coloca en el valor de partida en cuanto la ventana está pintada */
+  [0,60,180].forEach(function(ms){ setTimeout(function(){ if(!listo){ rueda.scrollTop=inicio*ALTO_R; marcar(inicio); } }, ms); });
+  setTimeout(function(){ listo=true; try{ rueda.focus({preventScroll:true}); }catch(e){} }, 260);
 }
 
 /* ── mercancía ─────────────────────────────────────────────────── */
