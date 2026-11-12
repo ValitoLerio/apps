@@ -5829,8 +5829,17 @@ function ocrATexto(txt){
   return {
     texto: lineas.map(function(x){ return x.nombre + ': ' + x.vals.join(' '); }).join('\n'),
     cuantos: lineas.length,
+    filas: lineas,
     sueltas: sueltas
   };
+}
+var ocrCrudo = '';
+/* Para poder ver qué ha leído de verdad cuando sale mal. */
+function ocrVerCrudo(){
+  if (!ocrCrudo) return '';
+  return '<details style="margin-top:6px"><summary style="cursor:pointer;color:var(--gold2)">Ver lo que ha leído</summary>' +
+    '<pre style="white-space:pre-wrap;font-size:.72rem;color:var(--text2);margin:6px 0 0;max-height:160px;overflow:auto">' +
+    esc(ocrCrudo.slice(0, 1200)) + '</pre></details>';
 }
 function ocrEstado(h){ var e = document.getElementById('pegar-ocr'); if (e) e.innerHTML = h; }
 function fotoSemana(ev){
@@ -5853,20 +5862,41 @@ function fotoSemana(ev){
           if (m && m.status === 'recognizing text')
             ocrEstado('<span style="color:var(--text2)">Leyendo la foto… ' + Math.round((m.progress || 0) * 100) + '%</span>');
         }
+      }, {
+        /* 6 = un bloque de texto con renglones, que es lo que es una
+           tabla de horarios. Por defecto busca columnas y se pierde. */
+        tessedit_pageseg_mode: '6',
+        preserve_interword_spaces: '1',
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.:- '
       });
     }).then(function(r){
       var t = (r && r.data && r.data.text) || '';
       var o = ocrATexto(t);
+      ocrCrudo = t;
+      /* Cuantos dias se han entendido de verdad. Si casi ninguno, lo
+         leido no sirve y es mejor decirlo que dar un churro por bueno. */
+      var buenos = 0, total = 0;
+      o.filas.forEach(function(f){ f.vals.forEach(function(v){ total++; if (ocrDia(v) != null) buenos++; }); });
+      if (o.cuantos && total && buenos / total < 0.5) {
+        var ta0 = document.getElementById('pegar-txt');
+        ta0.value = o.texto;
+        ocrEstado('<b style="color:#e87c6f">La foto no se lee bien.</b>' +
+          '<div style="color:var(--text2);margin-top:4px">De ' + total + ' días solo he entendido ' + buenos + '. ' +
+          'Prueba otra foto: de cerca, el papel plano y derecho, con luz y sin sombra ni brillo encima. ' +
+          'Si la letra es a mano corrida no hay nada que hacer; escríbelo tú en el cuadro, es un minuto.</div>' +
+          ocrVerCrudo());
+        return;
+      }
       if (!o.cuantos) {
         ocrEstado('<span style="color:#e87c6f">No he reconocido a nadie en la foto.</span>' +
-          '<div style="color:var(--text2);margin-top:4px">Prueba con la foto más de cerca y derecha, con buena luz, y que los nombres estén como en Personal.</div>');
+          '<div style="color:var(--text2);margin-top:4px">Prueba con la foto más de cerca y derecha, con buena luz, y que los nombres estén como en Personal.</div>' + ocrVerCrudo());
         return;
       }
       var ta = document.getElementById('pegar-txt');
       ta.value = o.texto;
       ocrEstado('<b style="color:var(--gold2)">Leídas ' + o.cuantos + ' personas.</b>' +
         '<div style="color:var(--text2);margin-top:4px">Repásalo antes de darle a «Poner en la semana»: con letra a mano casi siempre hay algo mal.</div>' +
-        (o.sueltas.length ? '<div style="color:var(--text2);margin-top:4px">Sin usar: ' + esc(o.sueltas.slice(0, 4).join(' · ')) + '</div>' : ''));
+        (o.sueltas.length ? '<div style="color:var(--text2);margin-top:4px">Sin usar: ' + esc(o.sueltas.slice(0, 4).join(' · ')) + '</div>' : '') + ocrVerCrudo());
     }).catch(function(){
       ocrEstado('<span style="color:#e87c6f">No he podido leer la foto.</span>' +
         '<div style="color:var(--text2);margin-top:4px">La primera vez hace falta internet para bajarse el lector. Escríbelo a mano en el cuadro de abajo.</div>');
