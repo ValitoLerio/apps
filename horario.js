@@ -5684,12 +5684,14 @@ function abrirPegarSemana(conFoto){
   var f = function(d){ return d.getDate() + '/' + (d.getMonth() + 1); };
   document.getElementById('pegar-cuerpo').innerHTML =
     '<h3>Pegar semana del ' + f(ini) + ' al ' + f(fin) + '</h3>' +
-    '<div style="font-size:.8rem;color:var(--text2);line-height:1.5">Una línea por persona: el nombre y los 7 días, de lunes a domingo. ' +
-      'Turno <b>7-15</b> · <b>F</b> festivo · <b>V</b> vacaciones · <b>B</b> baja · <b>A</b> ausencia · <b>-</b> lo deja como está.</div>' +
+    '<div style="font-size:.8rem;color:var(--text2);line-height:1.5">Una línea por persona: el nombre y los 7 días, de lunes a domingo.<br>' +
+      'Basta con la hora de entrar, como en el papel: <b>7</b>, <b>12</b>, <b>17</b>… y la de salir la pone la jornada de la temporada. ' +
+      'Si quieres el turno entero, <b>7-15</b>.<br>' +
+      '<b>F</b> festivo · <b>V</b> vacaciones · <b>B</b> baja · <b>A</b> ausencia · <b>-</b> lo deja como está.</div>' +
     '<label style="display:inline-flex;align-items:center;gap:7px;margin-top:10px;cursor:pointer;background:linear-gradient(#f0d472,#c9a84c);color:#241c08;font-weight:800;border-radius:7px;padding:8px 14px;font-size:.84rem">&#128247; Leer una foto del papel' +
       '<input id="pegar-foto" type="file" accept="image/*" style="display:none" onchange="fotoSemana(event)"></label>' +
     '<div id="pegar-ocr" style="margin-top:6px;font-size:.76rem;line-height:1.5"></div>' +
-    '<textarea id="pegar-txt" rows="10" style="width:100%;margin-top:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px;font-family:monospace;font-size:.85rem" placeholder="Valeriano: 16-1 17-1 16-1 16-1 16-1 16-1 F"></textarea>' +
+    '<textarea id="pegar-txt" rows="10" style="width:100%;margin-top:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px;font-family:monospace;font-size:.85rem" placeholder="Tamara: 7 7 7 7 F 7 7&#10;Valeriano: 16 17 16 16 16 16 F"></textarea>' +
     '<div id="pegar-res" style="margin-top:8px;font-size:.78rem;line-height:1.5"></div>' +
     '<div class="mact" style="margin-top:12px;flex-wrap:wrap">' +
       '<button class="bp" onclick="pegarSemana()">Poner en la semana</button>' +
@@ -5775,7 +5777,9 @@ function ocrDia(t){
   if (/^[-._,]+$/.test(u)) return '-';
   if (/^[FX]$/.test(u)) return 'F';
   if (/^[VBA]$/.test(u)) return u;
-  var m = crudo.match(/^(.{1,5})-(.{1,5})$/);
+  var n1 = ocrNum(crudo).replace(/\D/g, '');
+  if (/^[0-9OoQIiLlSsBbZzGgTt]{1,2}$/.test(crudo) && n1 && +n1 <= 24) return String(+n1);
+  var m = crudo.match(/^(.{1,5})[-+](.{1,5})$/);
   if (m) {
     var a = ocrNum(m[1]).replace(/\D/g, ''), b = ocrNum(m[2]).replace(/\D/g, '');
     if (a && b && +a <= 24 && +b <= 24) return (+a) + '-' + (+b);
@@ -5911,7 +5915,8 @@ function pegarLeer(txt){
     linea = linea.trim(); if (!linea) return;
     /* El nombre es lo de delante hasta el primer día (un turno o una letra) */
     var toks = linea.replace(/[:;\t|,]+(?=\s|$)/g, ' ').split(/\s+/).filter(Boolean), k = 0;
-    var esDia = function(t){ return /^[-._]$/.test(t) || /^[FXVBA]$/i.test(t) || /^\d{1,2}([:.h]\d{2})?-\d{1,2}([:.h]\d{2})?$/.test(t); };
+    var esDia = function(t){ return /^[-._]$/.test(t) || /^[FXVBA]$/i.test(t) || /^\d{1,2}$/.test(t) ||
+      /^\d{1,2}([:.h]\d{2})?[-+]\d{1,2}([:.h]\d{2})?$/.test(t); };
     while (k < toks.length && !esDia(toks[k])) k++;
     var m = [null, toks.slice(0, k).join(' '), toks.slice(k).join(' ')];
     if (!m[1]) { errores.push('Falta el nombre: ' + linea); return; }
@@ -5926,7 +5931,16 @@ function pegarLeer(txt){
       if (v === '-' || v === '.' || v === '_') { dias.push(null); continue; }
       var est = {F:'festivo', X:'festivo', V:'vacaciones', B:'baja', A:'ausencia'}[v];
       if (est) { dias.push({estado:est, nota:''}); continue; }
-      var t = vals[i].split('-'), a = pegarHora(t[0]), b = t.length === 2 ? pegarHora(t[1]) : null;
+      /* Una hora sola es la hora de entrar, como se apunta en el papel:
+         la de salir sale de la jornada que le toque esa temporada
+         (verano 8 h y 9 los encargados, invierno 9 y 10). */
+      if (/^\d{1,2}$/.test(vals[i]) && +vals[i] <= 24) {
+        var fx = new Date(weekStart); fx.setDate(fx.getDate() + i);
+        var H = horasDe(s, autoS(fx.getMonth())), h0 = +vals[i];
+        dias.push({estado:'trabajo', inicio: dosD(h0) + ':00', fin: dosD((h0 + H) % 24) + ':00', nota:''});
+        continue;
+      }
+      var t = vals[i].split(/[-+]/), a = pegarHora(t[0]), b = t.length === 2 ? pegarHora(t[1]) : null;
       if (!a || !b) { errores.push(s.name + ': no entiendo «' + vals[i] + '»'); dias = null; break; }
       dias.push({estado:'trabajo', inicio:a, fin:b, nota:''});
     }
