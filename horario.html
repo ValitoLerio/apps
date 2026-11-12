@@ -218,7 +218,7 @@
 :root[data-goma="1"] #wk-tbl td:hover{background:rgba(192,57,43,.22) !important;}
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="comun.css?v=202611121054">
+<link rel="stylesheet" href="comun.css?v=202611121058">
 </head>
 <body>
 
@@ -241,9 +241,9 @@
   </select>
   <button class="sb v" id="bv" onclick="setSeason('verano')">&#9728;&#65039; Verano</button>
   <button class="sb i" id="bi" onclick="setSeason('invierno')">&#10052;&#65039; Invierno</button>
+  <button class="tbtn" style="background:linear-gradient(#f0d472,#c9a84c);border-color:#f0d472;color:#241c08;font-weight:800;font-size:.84rem;padding:7px 15px;box-shadow:0 0 0 2px rgba(240,212,114,.22)" onclick="abrirPlan()" title="Rellenar el mes con turnos rotativos por semanas, y borrar semanas">&#129668; Hacer horario</button>
   <button class="tbtn" style="border-color:#5b9bd5;color:#5b9bd5" onclick="openAddModal()">+ Personal</button>
   <button class="tbtn" id="bwk" style="border-color:#27ae60;color:#27ae60" onclick="toggleWeekMode()">&#128197; Vista semana</button>
-  <button class="tbtn" style="border-color:#c9a84c;color:#e8c96a" onclick="abrirPlan()" title="Rellenar el mes con turnos rotativos por semanas, y borrar semanas">&#129668; Hacer horario</button>
   <button class="tbtn" id="banch" style="border-color:var(--gold);color:var(--gold)" onclick="cambiarAncho()" title="Lo ancho que es cada d&iacute;a en el cuadrante del mes">&#8596; Ancho</button>
   <button class="tbtn" id="bgoma" style="border-color:#e87c6f;color:#e87c6f" onclick="ponerGoma()" title="Borrar varios d&iacute;as de una vez: p&aacute;sale el dedo o el rat&oacute;n por encima">&#129529; Borrar</button>
   <button class="tbtn" id="balto" style="border-color:var(--gold);color:var(--gold)" onclick="cambiarAlto()" title="Lo alto que es cada fila: apretando caben los doce empleados de una vez">&#8597; Normal</button>
@@ -583,7 +583,7 @@
 
 
 
-<script src="sync.js?v=202611121054"></script>
+<script src="sync.js?v=202611121058"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -591,7 +591,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202611121054' + Date.now();
+    s.src = 'horario.js?v=202611121058' + Date.now();
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

@@ -3629,13 +3629,28 @@ function horasDeEntrada(p){
 function dosD(n){ return (n < 10 ? '0' : '') + n; }
 /* El turno de una persona si entra a la hora h: sus horas seguidas. Si
    es de los fijos y en Personal tiene su horario, ese. */
+/* Las horas que le tocan a uno en esa temporada: verano 8 h y los
+   encargados 9; invierno 9 h y los encargados 10. */
+function horasDe(s, est){
+  var e = (est && SCFG[est]) ? SCFG[est] : SCFG[curS];
+  return s.role === 'enc' ? e.eH : e.rH;
+}
 function turnoDe(s, g, h, est){
   if (g && g.grupo === 'fijo' && s.fijo && s.fijo.ini && s.fijo.fin) {
     var a = aMin(s.fijo.ini), b = aMin(s.fijo.fin); if (b <= a) b += 1440;
+    /* El horario fijo dice a qué hora entra. Si lo que hace es una
+       jornada entera, la de la temporada manda: Tamara entra a las 7 y
+       sale a las 3 en verano y a las 4 en invierno, no siempre a las 3.
+       Media jornada o un horario corto a propósito se respeta tal cual. */
+    var Hf = (b - a) / 60, esJornada = Hf === SCFG.verano.rH || Hf === SCFG.verano.eH ||
+                                        Hf === SCFG.invierno.rH || Hf === SCFG.invierno.eH;
+    if (esJornada && !(g && +g.jornada > 0)) {
+      var Ht = horasDe(s, est);
+      if (Ht !== Hf) { b = a + Ht * 60; return {h: Math.floor(a / 60), a:a, b:b, ini:s.fijo.ini, fin:dosD(Math.floor(b / 60) % 24) + ':' + dosD(b % 60)}; }
+    }
     return {h: Math.floor(a / 60), a:a, b:b, ini:s.fijo.ini, fin:s.fijo.fin};
   }
-  var H = tgtH(s.id);
-  if (est && SCFG[est]) H = s.role === 'enc' ? SCFG[est].eH : SCFG[est].rH;
+  var H = horasDe(s, est);
   if (g && +g.jornada > 0) H = +g.jornada;   /* su jornada, si se la han puesto */
   var a0 = minHora(h);
   return {h:h, a:a0, b:a0 + H*60, ini:dosD(h) + ':00', fin:dosD((h + H) % 24) + ':00'};
@@ -4710,6 +4725,12 @@ function planRevisar(){
       if (!c) return;
       hayAlguien = true;
       var t2 = tramo(c); hor[s.id] = t2;
+      /* Las horas de la temporada: verano 8 y 9 los encargados,
+         invierno 9 y 10. Se salta a quien tenga jornada propia puesta. */
+      if (!(+g.jornada > 0) && g.grupo !== 'fijo') {
+        var Ht = horasDe(s, autoS(dia.m)), Hr = Math.round((t2[1] - t2[0]) / 6) / 10;
+        if (Math.abs(Hr - Ht) > 0.01) av.push(et + s.name + ' hace ' + Hr + ' h y le tocan ' + Ht);
+      }
       var esEnc = g.grupo === 'enc' || g.grupo === 'enccoc', esCoc = g.grupo === 'coc' || g.grupo === 'enccoc';
       if (t2[0] <= E[0] * 60) { abrenN++; if (g.abre) abreOk = true; }
       else if (g.abre) abreFalla.push(s.name);
