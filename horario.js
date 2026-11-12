@@ -4239,21 +4239,26 @@ function planRellenar(){
         if (cocs[i] && tt.a <= 13*60 && tt.b >= 15*60) cocDia = true;
         if (cocs[i] && tt.b >= 23*60) cocNoche = true;
       }
-      /* Cada hora, los que tienen que entrar. Si no da para todo, primero
-         los que abren y los últimos; de más, solo un poco (al abrir, más). */
+      /* Cada hora, los que tienen que entrar. Cuando no da para todos hay
+         que dejar algun hueco, y no da igual cual: el que se queda sin
+         cubrir tiene que ser el del mediodia. La mañana y la noche son
+         las que sacan el trabajo adelante; el mediodia es el que aguanta
+         con menos. Antes todas las horas del medio costaban lo mismo, asi
+         que el hueco caia donde cayera y lo normal era que le tocase a
+         la mañana. */
       if (!SPLIT) for (var k = 0; k < E.length; k++) {
         var h = E[k], need = +ENT[h] || 0, c = cov[h];
         var punta = k === 0 || k === E.length - 1;
-        if (c < need) coste += (need - c) * (punta ? 320 : 200);
+        if (c < need) coste += (need - c) * (punta ? 340 : costeHueco(h));
         else if (c > need) coste += (c - need) * (punta ? 40 : 3);
       }
       /* Encargados y los demás, cada uno con sus horas */
       else for (var k2 = 0; k2 < E.length; k2++) {
         var h2 = E[k2], nE = +ENT_E[h2] || 0, nO = +ENT_O[h2] || 0;
         var pO = E_O.length && (h2 === E_O[0] || h2 === E_O[E_O.length - 1]);
-        if (covE[h2] < nE) coste += (nE - covE[h2]) * 200;
+        if (covE[h2] < nE) coste += (nE - covE[h2]) * costeHueco(h2);
         else if (covE[h2] > nE) coste += (covE[h2] - nE) * 20;
-        if (covO[h2] < nO) coste += (nO - covO[h2]) * (pO ? 320 : 200);
+        if (covO[h2] < nO) coste += (nO - covO[h2]) * (pO ? 340 : costeHueco(h2));
         else if (covO[h2] > nO) coste += (covO[h2] - nO) * (pO ? 40 : 3);
       }
       JUN.forEach(function(par){
@@ -5006,6 +5011,10 @@ function planPetResumen(p, lista, dias){
 }
 
 /* ── Más opciones de cada persona y reglas de equipo ─────────────── */
+/* Lo que cuesta dejar una hora sin cubrir, segun el momento del dia.
+   El mediodia es el que cede: si falta gente, el hueco va ahi y no en la
+   mañana ni en la noche. */
+function costeHueco(h){ return h < 11 ? 300 : h < 15 ? 110 : 300; }
 /* El segundo festivo de la semana: un dia fijo, el de despues del
    primero, o uno que va rotando cada semana (nunca cae en el primero). */
 function fest2Dia(g, sem){
