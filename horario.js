@@ -127,6 +127,11 @@ function autoS(m)       { return VERANO.indexOf(m) >= 0 ? 'verano' : 'invierno';
 function esc(t)         { return String(t==null?'':t).replace(/[&<>"']/g, function(c){
                             return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 function fmtH(t)        { if (!t) return '?'; return t; }
+/* La hora de salir. Las 12 de la noche se escriben 24, no 0: un turno
+   que pone «16-0» se lee fatal, y «16-24» es lo que es, de 4 de la
+   tarde a 12 de la noche. */
+function fmtF(t)        { return (t === '00:00' || t === '24:00') ? '24' : fmtC(t); }
+function fmtHF(t)       { return (t === '00:00' || t === '24:00') ? '24:00' : fmtH(t); }
 /* La hora en corto, solo para el cuadrante del mes, donde el sitio esta
    contado: las horas en punto pierden los minutos (09:00 -> 9) y asi el
    turno cabe en una celda estrecha. En el horario de WhatsApp, en la
@@ -159,7 +164,7 @@ function horasDeCelda(c) {
 
 function textoTurno(c) {
   if (!c || !c.inicio) return '';
-  return fmtH(c.inicio)+'-'+fmtH(c.fin) + (esPartido(c) ? ' / '+fmtH(c.inicio2)+'-'+fmtH(c.fin2) : '');
+  return fmtH(c.inicio)+'-'+fmtHF(c.fin) + (esPartido(c) ? ' / '+fmtH(c.inicio2)+'-'+fmtHF(c.fin2) : '');
 }
 
 function tgtH(sid) {
@@ -2088,8 +2093,8 @@ function renderTable() {
         inn = '<div style="position:relative;width:100%;display:flex;justify-content:'+align+';'+pad+'">'
             + rayaM(33.33) + rayaM(66.66)
             + '<span class="tb '+cls+'" title="'+esc(textoTurno(cell)+(cell.nota?' - '+cell.nota:''))+'" style="position:relative;min-width:62%;justify-content:center;'+radius+';background:'+bgCol+';color:'+letraSobre(bgCol)+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'
-            + '<span class="th">'+fmtC(cell.inicio)+'-'+fmtC(cell.fin)
-            + (esPartido(cell) ? '<br>'+fmtC(cell.inicio2)+'-'+fmtC(cell.fin2) : '')
+            + '<span class="th">'+fmtC(cell.inicio)+'-'+fmtF(cell.fin)
+            + (esPartido(cell) ? '<br>'+fmtC(cell.inicio2)+'-'+fmtF(cell.fin2) : '')
             + '</span></span></div>';
         if (cell.nota && altoFila === 'normal') inn += '<div style="width:100%;display:flex;justify-content:'+align+';'+pad+'"><span style="font-size:.6rem;color:var(--text2);max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+cell.nota+'</span></div>';
       } else if (est !== 'libre') {
@@ -2213,9 +2218,9 @@ function renderWeekTable() {
               + '<div title="' + textoTurno(cell) + '" style="position:relative;display:inline-flex;align-items:center;justify-content:center;gap:3px;'
               +   'min-width:42%;'+wradius+';background:'+wbgCol+';padding:4px 9px;box-shadow:0 1px 3px rgba(0,0,0,.35)">'
               + '<div style="font-size:.92rem;font-weight:900;color:'+letraSobre(wbgCol)+';white-space:nowrap">'+fmtC(cell.inicio)+'</div>'
-              + '<div style="font-size:.82rem;font-weight:700;color:'+letraFloja(wbgCol)+'">-'+fmtC(cell.fin)+'</div>'
+              + '<div style="font-size:.82rem;font-weight:700;color:'+letraFloja(wbgCol)+'">-'+fmtF(cell.fin)+'</div>'
               + (esPartido(cell)
-                  ? '<div style="font-size:.82rem;font-weight:700;color:'+letraFloja(wbgCol)+'">/ '+fmtC(cell.inicio2)+'-'+fmtC(cell.fin2)+'</div>'
+                  ? '<div style="font-size:.82rem;font-weight:700;color:'+letraFloja(wbgCol)+'">/ '+fmtC(cell.inicio2)+'-'+fmtF(cell.fin2)+'</div>'
                   : '')
               + (cell.nota?'<div style="font-size:.62rem;color:'+letraFloja(wbgCol)+';margin-left:2px">'+cell.nota+'</div>':'')
               + '</div>'
@@ -2787,8 +2792,8 @@ function textoSemana(lunes, sid){
       if (!c || !c.estado || c.estado==='libre') return;
       var txt;
       if (c.estado==='trabajo') {
-        txt = c.inicio ? (fmtH(c.inicio)+'-'+fmtH(c.fin) +
-                (esPartido(c) ? ' y '+fmtH(c.inicio2)+'-'+fmtH(c.fin2) : '')) : 'trabaja';
+        txt = c.inicio ? (fmtH(c.inicio)+'-'+fmtHF(c.fin) +
+                (esPartido(c) ? ' y '+fmtH(c.inicio2)+'-'+fmtHF(c.fin2) : '')) : 'trabaja';
         horas[s.id] = (horas[s.id]||0) + horasDeCelda(c);
       } else {
         txt = nombres[c.estado] || c.estado;
