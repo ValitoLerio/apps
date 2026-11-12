@@ -4197,6 +4197,25 @@ function planRellenar(){
       var c = gcAt(s.id, dia); if (!c || c.estado !== 'trabajo' || !c.inicio) return;
       if (aMin(c.inicio) < 11 * 60) manFijos++;
     });
+    /* Las comidas, de 13 a 15. Esto no es cuantos entran, es cuantos hay
+       a la vez: uno que entra a las 8 y otro que entra a las 12 estan los
+       dos dentro a las 13. Se mira a las 13 y a las 14 y manda la peor. */
+    var COMIDAS = p.comidas == null ? 4 : (+p.comidas || 0);
+    var comFijos = [0, 0];
+    lista.forEach(function(s){
+      var g = p.gente[s.id]; if (!g || g.grupo === 'no') return;
+      var c = gcAt(s.id, dia); if (!c || c.estado !== 'trabajo' || !c.inicio) return;
+      var tramos = [[aMin(c.inicio), aMin(c.fin)]];
+      if (c.inicio2 && c.fin2) tramos.push([aMin(c.inicio2), aMin(c.fin2)]);
+      var d13 = false, d14 = false;
+      tramos.forEach(function(t){
+        var a = t[0], b = t[1]; if (b <= a) b += 1440;
+        if (a <= 13*60 && b > 13*60) d13 = true;
+        if (a <= 14*60 && b > 14*60) d14 = true;
+      });
+      if (d13) comFijos[0]++;
+      if (d14) comFijos[1]++;
+    });
     /* Cocina con lo que ya estaba puesto ese día */
     var cocFijoD = false, cocFijoN = false;
     lista.forEach(function(s){
@@ -4212,6 +4231,7 @@ function planRellenar(){
       var encCierra = false, encAbre = false, cocDia = cocFijoD, cocNoche = cocFijoN;
       var cubD = false, cubN = false, encCierran = 0, cubNenc = false;
       var abreQuienDebe = abreFijo, abren = abrenFijo, encUnicoAbre = false, deMan = manFijos;
+      var com13 = comFijos[0], com14 = comFijos[1];
       var otroCierra = otroFijoCierra, alCierre = 0, cats = {}, hors = {};
       for (var i = 0; i < n; i++) {
         var r = elec[i], tt = libres[i].prefs[r];
@@ -4228,6 +4248,8 @@ function planRellenar(){
         if (cubre[i] && tt.a <= 13*60 && tt.b >= 15*60) cubD = true;
         if (cubre[i] && tt.b >= 23*60) { if (encs[i] && tt.b >= CIERRE - 1) cubNenc = true; else cubN = true; }
         if (tt.a < 11*60) deMan++;
+        if (tt.a <= 13*60 && tt.b > 13*60) com13++;
+        if (tt.a <= 14*60 && tt.b > 14*60) com14++;
         if (tt.a <= E[0]*60) {
           abren++;
           if (abreS[i]) abreQuienDebe = true;
@@ -4249,16 +4271,16 @@ function planRellenar(){
       if (!SPLIT) for (var k = 0; k < E.length; k++) {
         var h = E[k], need = +ENT[h] || 0, c = cov[h];
         var punta = k === 0 || k === E.length - 1;
-        if (c < need) coste += (need - c) * (punta ? 340 : costeHueco(h));
+        if (c < need) coste += (need - c) * (punta ? 340 : costeHueco(h, p));
         else if (c > need) coste += (c - need) * (punta ? 40 : 3);
       }
       /* Encargados y los demás, cada uno con sus horas */
       else for (var k2 = 0; k2 < E.length; k2++) {
         var h2 = E[k2], nE = +ENT_E[h2] || 0, nO = +ENT_O[h2] || 0;
         var pO = E_O.length && (h2 === E_O[0] || h2 === E_O[E_O.length - 1]);
-        if (covE[h2] < nE) coste += (nE - covE[h2]) * costeHueco(h2);
+        if (covE[h2] < nE) coste += (nE - covE[h2]) * costeHueco(h2, p);
         else if (covE[h2] > nE) coste += (covE[h2] - nE) * 20;
-        if (covO[h2] < nO) coste += (nO - covO[h2]) * (pO ? 340 : costeHueco(h2));
+        if (covO[h2] < nO) coste += (nO - covO[h2]) * (pO ? 340 : costeHueco(h2, p));
         else if (covO[h2] > nO) coste += (covO[h2] - nO) * (pO ? 40 : 3);
       }
       JUN.forEach(function(par){
@@ -4277,6 +4299,10 @@ function planRellenar(){
          corta que dejar un hueco a cualquier otra hora, así que si falta
          gente la quita de la noche o del mediodía, no de la mañana. */
       if (deMan < MIN_MAN) coste += (MIN_MAN - deMan) * 360;
+      /* En las comidas no se puede estar corto: va por delante de dejar
+         un hueco a cualquier hora, y solo cede ante abrir y cerrar. */
+      var comN = Math.min(com13, com14);
+      if (COMIDAS && comN < COMIDAS) coste += (COMIDAS - comN) * 370;
       if (!encCierra && !encFijoCierra) coste += 300;   /* siempre cierra un encargado */
       if (!otroCierra) coste += 280;                    /* y con él, un camarero o cocinero */
       if (alCierre > 1) coste += (alCierre - 1) * 200;  /* uno solo de más para cerrar */
@@ -4561,8 +4587,14 @@ function pintarPlan(){
         return '<div style="font-size:.7rem;font-weight:700;color:' + color + ';margin:8px 0 4px">' + titulo + '</div>' +
           '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:5px">' +
           ENT_HORAS.map(function(h){
+            var cede = (p.ceden || {})[h];
             return '<label style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.66rem;color:' + (h < 7 ? '#c090e8' : 'var(--text2)') + '">' + dosD(h) + ':00' +
-              '<input type="number" min="0" max="20" ' + attr + '="' + h + '" value="' + (+ent[h] || 0) + '" style="' + inp + ';width:100%;text-align:center' + ((+ent[h] || 0) ? ';border-color:' + color : '') + '"></label>';
+              '<input type="number" min="0" max="20" ' + attr + '="' + h + '" value="' + (+ent[h] || 0) + '" style="' + inp + ';width:100%;text-align:center' + ((+ent[h] || 0) ? ';border-color:' + color : '') + '">' +
+              (attr === 'data-e'
+                ? '<span title="Si un día falta gente, el hueco se deja en las horas marcadas así. Las demás se cubren siempre." ' +
+                    'style="font-size:.6rem;color:' + (cede ? '#e8a84c' : 'var(--border)') + '">' +
+                    '<input type="checkbox" data-cede="' + h + '"' + (cede ? ' checked' : '') + ' style="width:13px;height:13px;accent-color:#e8a84c;vertical-align:-2px"> cede</span>'
+                : '') + '</label>';
           }).join('') + '</div>';
       };
       return rej('data-ee', planEntEnc(p), 'var(--enc)', 'Encargados') + rej('data-e', planEntOtros(p), 'var(--cam)', 'Camareros y cocina');
@@ -4631,6 +4663,11 @@ function leerPlanDeLaVentana(){
     cuerpo.querySelectorAll('input[data-ee]').forEach(function(i){ var v = Math.max(0, parseInt(i.value, 10) || 0); if (v) p.entEnc[i.dataset.ee] = v; });
   }
   cuerpo.querySelectorAll('input[data-e]').forEach(function(i){ p.entradas[i.dataset.e] = Math.max(0, parseInt(i.value, 10) || 0); });
+  /* Las horas que pueden quedarse cortas cuando falta gente */
+  if (cuerpo.querySelector('input[data-cede]')) {
+    p.ceden = {};
+    cuerpo.querySelectorAll('input[data-cede]').forEach(function(i){ if (i.checked) p.ceden[i.dataset.cede] = 1; });
+  }
   /* La «1ª semana» es la que el usuario elija; si no ha elegido ninguna,
      la primera del rango. */
   var selb = cuerpo.querySelector('[data-k="base"]');
@@ -4813,8 +4850,9 @@ function planRevisar(){
     var fecha = new Date(dia.y, dia.m, dia.d), et = DC_FULL[fecha.getDay()] + ' ' + fecha.getDate() + '/' + (fecha.getMonth() + 1) + ': ';
     var CIERRE = autoS(dia.m) === 'invierno' ? 27*60 : 25*60;
     var encT = 0, encA = false, encC = false, otroC = false, cocD = false, cocN = false, hayAlguien = false, hor = {};
-    var abreOk = false, abrenN = 0, abreFalla = [], manN = 0;
+    var abreOk = false, abrenN = 0, abreFalla = [], manN = 0, com13 = 0, com14 = 0;
     var MIN_MAN = p.minMan == null ? 3 : (+p.minMan || 0);
+    var COMIDAS = p.comidas == null ? 4 : (+p.comidas || 0);
     lista.forEach(function(s){
       var g = p.gente[s.id] || {}; if (g.grupo === 'no') return;
       var c = cel(s.id, dia);
@@ -4842,6 +4880,8 @@ function planRevisar(){
       }
       var esEnc = g.grupo === 'enc' || g.grupo === 'enccoc', esCoc = g.grupo === 'coc' || g.grupo === 'enccoc';
       if (t2[0] < 11 * 60) manN++;
+      if (t2[0] <= 13*60 && t2[1] > 13*60) com13++;
+      if (t2[0] <= 14*60 && t2[1] > 14*60) com14++;
       if (t2[0] <= E[0] * 60) { abrenN++; if (g.abre) abreOk = true; }
       else if (g.abre) abreFalla.push(s.name);
       if (esEnc) { encT++; if (t2[0] <= E[0] * 60) encA = true; if (t2[1] >= CIERRE - 1) encC = true; }
@@ -4854,6 +4894,7 @@ function planRevisar(){
     if (!encC) f.push('no cierra ningún encargado');
     if (!abrenN) f.push('no abre nadie a las ' + E[0] + ' h');
     if (MIN_MAN && manN < MIN_MAN) f.push('por la mañana solo hay ' + manN + ' y tienen que ser ' + MIN_MAN);
+    if (COMIDAS && Math.min(com13, com14) < COMIDAS) f.push('en las comidas solo hay ' + Math.min(com13, com14) + ' y tienen que ser ' + COMIDAS);
     else if (abrenN < 2) f.push('a las ' + E[0] + ' h abre uno solo');
     if (abrenN && !abreOk && abreFalla.length) f.push(abreFalla.join(' y ') + ' no abre');
     if (encT >= 2 && !encA) f.push('no abre ningún encargado');
@@ -5011,10 +5052,11 @@ function planPetResumen(p, lista, dias){
 }
 
 /* ── Más opciones de cada persona y reglas de equipo ─────────────── */
-/* Lo que cuesta dejar una hora sin cubrir, segun el momento del dia.
-   El mediodia es el que cede: si falta gente, el hueco va ahi y no en la
-   mañana ni en la noche. */
-function costeHueco(h){ return h < 11 ? 300 : h < 15 ? 110 : 300; }
+/* Lo que cuesta dejar una hora sin cubrir. Que hora puede quedarse corta
+   lo sabe el, no yo: las que marque con «cede» son las que aguantan con
+   menos gente, y ahi va el hueco antes que en ninguna otra. Si no ha
+   marcado ninguna, todas valen igual y el hueco cae donde salga. */
+function costeHueco(h, p){ return (p && p.ceden && p.ceden[h]) ? 90 : 300; }
 /* El segundo festivo de la semana: un dia fijo, el de despues del
    primero, o uno que va rotando cada semana (nunca cae en el primero). */
 function fest2Dia(g, sem){
@@ -5120,6 +5162,8 @@ function planReglasHtml(p, lista, inp, tit){
         '<input type="number" min="0" max="7" data-n="minLibres" value="' + (+p.minLibres || 0) + '" style="' + inp + ';width:56px"></label>' +
       '<label style="display:flex;align-items:center;gap:6px" title="Los que entran antes de las 11. Si falta gente se quita de la noche o del mediodía, nunca de la mañana.">Mín. por la mañana' +
         '<input type="number" min="0" max="12" data-n3="minMan" value="' + (p.minMan == null ? 3 : (+p.minMan || 0)) + '" style="' + inp + ';width:56px"></label>' +
+      '<label style="display:flex;align-items:center;gap:6px" title="Los que hay trabajando a la vez entre las 13 y las 15, entren a la hora que entren.">En las comidas (13 a 15)' +
+        '<input type="number" min="0" max="12" data-n3="comidas" value="' + (p.comidas == null ? 4 : (+p.comidas || 0)) + '" style="' + inp + ';width:56px"></label>' +
       '<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" data-c="justo"' + (p.justo ? ' checked' : '') + ' style="width:16px;height:16px;accent-color:#c9a84c">Repartir los cierres por igual</label>' +
       '<label style="display:flex;align-items:center;gap:6px" title="Si un día libran dos y otro no libra nadie, se pasa una fiesta al día vacío"><input type="checkbox" data-c="repFiestas"' + (p.repFiestas !== false ? ' checked' : '') + ' style="width:16px;height:16px;accent-color:#c9a84c">Repartir las fiestas por la semana</label>' +
     '</div>' +
@@ -5135,6 +5179,7 @@ function planLeerReglas(cuerpo, p){
   p.justo = !!j.checked;
   var rf = cuerpo.querySelector('[data-c="repFiestas"]'); if (rf) p.repFiestas = !!rf.checked;
   var mm = cuerpo.querySelector('[data-n3="minMan"]'); if (mm) p.minMan = Math.max(0, parseInt(mm.value, 10) || 0);
+  var mc = cuerpo.querySelector('[data-n3="comidas"]'); if (mc) p.comidas = Math.max(0, parseInt(mc.value, 10) || 0);
   var de = cuerpo.querySelector('[data-n2="descEnc"]');
   if (de) { var v = parseFloat(String(de.value).replace(',', '.')); p.descEnc = v > 0 ? v : ''; }
   ['noCoinciden','juntos'].forEach(function(k){
