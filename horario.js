@@ -3722,6 +3722,7 @@ function planPersonas(p){
     g = {grupo: s.role === 'enc' ? 'enc' : s.role === 'coc' ? 'coc' : 'cam', fest: ap.fest, ini:'man', fijoT:'O'};
     if (/^valeriano/i.test(s.name)) g.grupo = 'enccoc';
     if (/^(melo|martin)/i.test(s.name)) g.cubreCoc = true;
+    if (/^tamara/i.test(s.name)) g.abre = true;
 
     if (ap.entra && ap.entra === p.turnos.O[0] && g.grupo === 'cam') g.grupo = 'fijo';
     p.gente[s.id] = g;
@@ -3731,6 +3732,21 @@ function planPersonas(p){
     var g = p.gente[s.id];
     if (g && s.fijo && s.fijo.libra !== '' && s.fijo.libra != null) g.fest = +s.fijo.libra;
   });
+  /* Lo que dijo Lito de la cocina y de quién abre (una sola vez: luego
+     se cambia en la ventana).
+       · A las 7 entra siempre Tamara, con un encargado.
+       · Cocina: Valeriano y José Antonio, uno de mañana y otro de tarde.
+       · Si falta uno de los dos, la cubren Martín o Melo. */
+  if ((p._reglas27 || 0) < 1) {
+    lista.forEach(function(s){
+      var g = p.gente[s.id]; if (!g) return;
+      if (/^tamara/i.test(s.name)) g.abre = true;
+      if (/^valeriano/i.test(s.name) && g.grupo !== 'enccoc') g.grupo = 'enccoc';
+      if (/^j(os[eé])?\.?\s*ant/i.test(s.name)) { g.grupo = 'coc'; g.cubreCoc = false; }
+      if (/^(melo|martin)/i.test(s.name) && g.grupo !== 'coc' && g.grupo !== 'enccoc') g.cubreCoc = true;
+    });
+    p._reglas27 = 1;
+  }
   /* Festivos que dijo Lito (una sola vez: luego se cambian en la ventana) */
   if ((p._fest || 0) < 1) {
     var FEST_DICHOS = [[/^luis/i, 1], [/^martin/i, 2], [/^cris/i, 3]];
@@ -4085,6 +4101,13 @@ function planRellenar(){
     var encs = libres.map(function(l){ return l.g.grupo === 'enc' || l.g.grupo === 'enccoc'; });
     var cocs = libres.map(function(l){ return l.g.grupo === 'coc' || l.g.grupo === 'enccoc'; });
     var cubre = libres.map(function(l){ return !!l.g.cubreCoc && l.g.grupo !== 'coc' && l.g.grupo !== 'enccoc'; });
+    var abreS = libres.map(function(l){ return !!l.g.abre; });
+    /* ¿Alguno de los que abren siempre ya está puesto a la primera hora? */
+    var abreFijo = lista.some(function(s){
+      var g = p.gente[s.id]; if (!g || !g.abre) return false;
+      var c = gcAt(s.id, dia); if (!c || c.estado !== 'trabajo' || !c.inicio) return false;
+      return aMin(c.inicio) <= E[0] * 60;
+    });
     /* Cocina con lo que ya estaba puesto ese día */
     var cocFijoD = false, cocFijoN = false;
     lista.forEach(function(s){
@@ -4099,6 +4122,7 @@ function planRellenar(){
       E.forEach(function(h){ cov[h] = base0[h]; covE[h] = base0E[h]; covO[h] = base0O[h]; });
       var encCierra = false, encAbre = false, cocDia = cocFijoD, cocNoche = cocFijoN;
       var cubD = false, cubN = false, encCierran = 0, cubNenc = false;
+      var abreQuienDebe = abreFijo, abreAlguien = false, encUnicoAbre = false;
       var otroCierra = otroFijoCierra, alCierre = 0, cats = {}, hors = {};
       for (var i = 0; i < n; i++) {
         var r = elec[i], tt = libres[i].prefs[r];
@@ -4114,7 +4138,14 @@ function planRellenar(){
         if (encs[i] && tt.b >= CIERRE - 1) { encCierra = true; encCierran++; }
         if (cubre[i] && tt.a <= 13*60 && tt.b >= 15*60) cubD = true;
         if (cubre[i] && tt.b >= 23*60) { if (encs[i] && tt.b >= CIERRE - 1) cubNenc = true; else cubN = true; }
-        if (encs[i] && tt.a <= E[0]*60) encAbre = true;
+        if (tt.a <= E[0]*60) {
+          abreAlguien = true;
+          if (abreS[i]) abreQuienDebe = true;
+          if (encs[i]) { encAbre = true; if (encsLibres < 2) encUnicoAbre = true; }
+        }
+        /* El que abre siempre, puesto a otra hora teniendo la primera */
+        if (abreS[i] && tt.a > E[0]*60 &&
+            libres[i].prefs.some(function(x){ return x.a <= E[0]*60; })) coste += 400;
         if (cocs[i] && tt.a <= 13*60 && tt.b >= 15*60) cocDia = true;
         if (cocs[i] && tt.b >= 23*60) cocNoche = true;
       }
@@ -4150,8 +4181,13 @@ function planRellenar(){
       if (!encCierra && !encFijoCierra) coste += 300;   /* siempre cierra un encargado */
       if (!otroCierra) coste += 280;                    /* y con él, un camarero o cocinero */
       if (alCierre > 1) coste += (alCierre - 1) * 200;  /* uno solo de más para cerrar */
-      /* Si hay encargados ese dia, uno abre (despues de que uno cierre) */
-      if (!encAbre && !encFijoAbre) coste += encsLibres >= 2 ? 260 : 8;
+      /* A la primera hora entra siempre el que abre (Tamara) */
+      if (!abreQuienDebe && hayQuienAbre) coste += 500;
+      if (!abreAlguien) coste += 300;
+      /* Y con él un encargado. Si sólo queda uno libre, ese tiene que
+         cerrar: entonces no abre él, abre otro, y eso no cuesta nada. */
+      if (!encAbre && !encFijoAbre) coste += encsLibres >= 2 ? 260 : 0;
+      if (encUnicoAbre) coste += 450;                   /* el único encargado del día cierra, no abre */
       /* Cocina: el cocinero, o si no, uno de los que pueden cubrirla. Un
          encargado que cubre la cocina no cuenta como el que cierra. */
       if (cubNenc && encCierran >= 2) cubN = true;
@@ -4183,11 +4219,17 @@ function planRellenar(){
     encs = libres.map(function(l){ return l.g.grupo === 'enc' || l.g.grupo === 'enccoc'; });
     cocs = libres.map(function(l){ return l.g.grupo === 'coc' || l.g.grupo === 'enccoc'; });
     cubre = libres.map(function(l){ return !!l.g.cubreCoc && l.g.grupo !== 'coc' && l.g.grupo !== 'enccoc'; });
+    abreS = libres.map(function(l){ return !!l.g.abre; });
     elec = new Array(n);
     var encsLibres = encs.filter(Boolean).length + lista.filter(function(s){
       var g = p.gente[s.id]; if (!g || (g.grupo !== 'enc' && g.grupo !== 'enccoc')) return false;
       var c = gcAt(s.id, dia); return !!(c && c.estado === 'trabajo' && c.inicio);
     }).length;
+    /* ¿Hay alguien marcado «abre» que ese día pueda hacerlo? Si libra o
+       está de vacaciones no se le puede exigir, y abre quien toque. */
+    var hayQuienAbre = abreFijo || libres.some(function(l){
+      return l.g.abre && l.prefs.some(function(t){ return t.a <= E[0]*60; });
+    });
     probar(0);
     if (!mejor) return;
     libres.forEach(function(l, i){
@@ -4217,11 +4259,14 @@ function planRellenar(){
     /* Lo que no es una cuenta pero conviene saber: que cierre un
        encargado y que haya cocina a mediodía y por la noche. */
     var encC = false, cocD = false, cocN = false, otroC = false, encA = false, encHoy = 0;
+    var abreOk = false, abreNadie = true, abreDebe = [];
     lista.forEach(function(s){
       var g = p.gente[s.id]; if (!g) return;
+      if (g.abre && g.grupo !== 'no') abreDebe.push(s);
       var c = gcAt(s.id, dia); if (!c || c.estado !== 'trabajo' || !c.inicio) return;
       var a = aMin(c.inicio), b = aMin(c.fin); if (b <= a) b += 1440;
       var esEnc = g.grupo === 'enc' || g.grupo === 'enccoc', esCoc = g.grupo === 'coc' || g.grupo === 'enccoc';
+      if (a <= E[0] * 60) { abreNadie = false; if (g.abre) abreOk = true; }
       if (esEnc && b >= CIERRE - 1) encC = true;
       if (esEnc) encHoy++;
       if (esEnc && a <= E[0] * 60) encA = true;
@@ -4246,7 +4291,17 @@ function planRellenar(){
     }
     if (libres.length) {
       if (!encC) falta.push('no cierra ningún encargado');
+      /* Quien abre siempre, y con él un encargado. Con un solo encargado
+         ese día no se le pide: tiene que cerrar, y abre otro. */
+      if (abreNadie) falta.push('no abre nadie a las ' + E[0] + ' h');
+      else if (!abreOk && abreDebe.length) {
+        var pend = abreDebe.filter(function(s){
+          var c = gcAt(s.id, dia); return c && c.estado === 'trabajo';
+        });
+        if (pend.length) falta.push(pend.map(function(s){ return s.name; }).join(' y ') + ' no abre');
+      }
       if (!encA && encHoy >= 2) falta.push('no abre ningún encargado');
+      if (!encA && encHoy === 1) coberturas.push(DC_FULL[fecha.getDay()] + ' ' + etiquetaDia(dia, curM) + ': sólo hay un encargado y cierra, así que abre otro');
       if (!otroC) falta.push('el encargado cierra solo (sin camarero ni cocinero)');
       if (!cocD && !cubrirCocina(false)) falta.push('sin cocina a mediodía');
       if (!cocN && !cubrirCocina(true)) falta.push('sin cocina por la noche');
@@ -4350,10 +4405,11 @@ function pintarPlan(){
     '<div style="' + tit + '">Personas</div>' +
     planPetResumen(p, lista, dias) +
     '<div style="font-size:.72rem;color:var(--text2);margin-bottom:6px">«1ª semana» es el turno que hace cada uno la semana del ' +
-      etiquetaDia(dias[0], curM) + '; a partir de ahí rota solo. Encargados: abre → mediodía → cierra. Camareros: mañana → mediodía → noche. Cocina: mañana / noche. «Cocina» marca quién puede cubrirla cuando falta cocinero.</div>' +
+      etiquetaDia(dias[0], curM) + '; a partir de ahí rota solo. Encargados: abre → mediodía → cierra. Camareros: mañana → mediodía → noche. Cocina: mañana / noche. «Cocina» marca quién puede cubrirla cuando falta cocinero. ' +
+      '«Abre» es quien entra siempre a la primera hora: con él entra un encargado, y si ese día no queda ninguno libre (el que hay tiene que cerrar), abre otro.</div>' +
     (function(){ pd = estrecho ? '2px 1px' : '3px'; return ''; })() +
     '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:.8rem">' +
-    '<tr style="color:var(--text2);font-size:.68rem;text-align:left"><th style="padding:' + pd + '">Nombre</th><th style="padding:' + pd + '">Grupo</th><th style="padding:' + pd + '">Festivo</th><th style="padding:' + pd + '">1ª semana</th><th style="padding:' + pd + '" title="Puede cubrir la cocina cuando falta cocinero">Cocina</th><th style="padding:' + pd + '"></th></tr>';
+    '<tr style="color:var(--text2);font-size:.68rem;text-align:left"><th style="padding:' + pd + '">Nombre</th><th style="padding:' + pd + '">Grupo</th><th style="padding:' + pd + '">Festivo</th><th style="padding:' + pd + '">1ª semana</th><th style="padding:' + pd + '" title="Puede cubrir la cocina cuando falta cocinero">Cocina</th><th style="padding:' + pd + '" title="Siempre que trabaje, entra a la primera hora">Abre</th><th style="padding:' + pd + '"></th></tr>';
   lista.forEach(function(s){
     var g = p.gente[s.id];
     var tipo0 = planTipo(g, sem0) || 'man';
@@ -4372,6 +4428,8 @@ function pintarPlan(){
       '</td>' +
       '<td style="padding:' + pd + ';text-align:center"><input type="checkbox" data-k="cubreCoc" title="Puede cubrir la cocina"' +
         (g.cubreCoc ? ' checked' : '') + ((g.grupo === 'coc' || g.grupo === 'enccoc') ? ' disabled' : '') + ' style="width:18px;height:18px;accent-color:#c9a84c"></td>' +
+      '<td style="padding:' + pd + ';text-align:center"><input type="checkbox" data-k="abre" title="Siempre que trabaje, entra a la primera hora"' +
+        (g.abre ? ' checked' : '') + ' style="width:18px;height:18px;accent-color:#5dca82"></td>' +
       '<td style="padding:' + pd + ';text-align:center"><button type="button" class="bs" title="Festivo 2, jornada, horas a la semana y horario propio" onclick="planVerMas(\'' + s.id + '\')" style="padding:3px 8px;font-size:.74rem' + (planTieneMas(g) ? ';color:var(--gold2);border-color:var(--gold)' : '') + '">Más' + (g.pet && g.pet.length ? ' · ' + g.pet.length : '') + '</button></td></tr>' +
       planFilaMas(s, g, inp);
   });
@@ -4474,6 +4532,7 @@ function leerPlanDeLaVentana(){
     if (g.grupo === 'coc' && g.ini === 'med') g.ini = 'man';
     var fh = tr.querySelector('[data-k="fijoH"]'); if (fh) g.fijoH = parseInt(fh.value, 10);
     g.cubreCoc = !!tr.querySelector('[data-k="cubreCoc"]').checked;
+    var ab = tr.querySelector('[data-k="abre"]'); g.abre = !!(ab && ab.checked);
     planLeerMas(cuerpo, sid, g);
     g._puesto = 1; g._previo = 1;
     p.gente[sid] = g;
@@ -4509,7 +4568,10 @@ function planHerramientasHtml(lista, inp, tit){
     });
     return o + '</optgroup>';
   };
-  var gente = lista.map(function(s){ return '<option value="' + s.id + '">' + esc(s.name) + '</option>'; }).join('');
+  /* Con «—» delante se puede dejar la herramienta sin nadie puesto,
+     como las parejas de No coinciden. */
+  var gente = '<option value="">—</option>' +
+    lista.map(function(s){ return '<option value="' + s.id + '">' + esc(s.name) + '</option>'; }).join('');
   var fila = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:.78rem;color:var(--text2)';
   var btn = 'padding:6px 12px;font-size:.76rem;color:var(--gold2);border-color:var(--gold)';
   return '<div style="' + tit + '">Herramientas</div>' +
@@ -4525,7 +4587,7 @@ function planHerramientasHtml(lista, inp, tit){
     '<div style="font-size:.78rem;color:var(--text);margin-top:14px">🔄 Cambiar turnos entre dos</div>' +
     '<div style="font-size:.7rem;color:var(--text2)">Para cuando se cambian el turno entre ellos: lo que tiene uno pasa al otro, ese día o entre dos fechas.</div>' +
     '<div style="' + fila + '"><select id="hx-a" style="' + inp + ';width:auto">' + gente + '</select> y ' +
-      '<select id="hx-b" style="' + inp + ';width:auto">' + gente.replace('<option value="' + (lista[1] ? lista[1].id : '') + '">', '<option value="' + (lista[1] ? lista[1].id : '') + '" selected>') + '</select></div>' +
+      '<select id="hx-b" style="' + inp + ';width:auto">' + gente + '</select></div>' +
     '<div style="' + fila + '">del <input id="hx-d1" type="date" value="' + isoDe(new Date()) + '" style="' + inp + ';width:auto"> al ' +
       '<input id="hx-d2" type="date" style="' + inp + ';width:auto"> <span style="font-size:.68rem">(vacío = solo ese día)</span>' +
       '<button type="button" class="bs" style="' + btn + '" onclick="planCambiarTurnos()">Cambiar</button></div>' +
@@ -4576,6 +4638,7 @@ function planCopiarSemana(){
 function planCambiarTurnos(){
   var a = document.getElementById('hx-a').value, b = document.getElementById('hx-b').value;
   var d1 = document.getElementById('hx-d1').value, d2 = document.getElementById('hx-d2').value || d1;
+  if (!a || !b) { toast('Elige las dos personas'); return; }
   if (!d1) { toast('Pon el día'); return; }
   if (a === b) { toast('Elige dos personas distintas'); return; }
   var f1 = deIso(d1), f2 = deIso(d2); if (f2 < f1) { var t = f1; f1 = f2; f2 = t; }
@@ -4617,6 +4680,7 @@ function planRevisar(){
     var fecha = new Date(dia.y, dia.m, dia.d), et = DC_FULL[fecha.getDay()] + ' ' + fecha.getDate() + '/' + (fecha.getMonth() + 1) + ': ';
     var CIERRE = autoS(dia.m) === 'invierno' ? 27*60 : 25*60;
     var encT = 0, encA = false, encC = false, otroC = false, cocD = false, cocN = false, hayAlguien = false, hor = {};
+    var abreOk = false, abreNadie = true, abreFalla = [];
     lista.forEach(function(s){
       var g = p.gente[s.id] || {}; if (g.grupo === 'no') return;
       var c = cel(s.id, dia);
@@ -4637,6 +4701,8 @@ function planRevisar(){
       hayAlguien = true;
       var t2 = tramo(c); hor[s.id] = t2;
       var esEnc = g.grupo === 'enc' || g.grupo === 'enccoc', esCoc = g.grupo === 'coc' || g.grupo === 'enccoc';
+      if (t2[0] <= E[0] * 60) { abreNadie = false; if (g.abre) abreOk = true; }
+      else if (g.abre) abreFalla.push(s.name);
       if (esEnc) { encT++; if (t2[0] <= E[0] * 60) encA = true; if (t2[1] >= CIERRE - 1) encC = true; }
       else if (t2[1] >= CIERRE - 1) otroC = true;
       if ((esCoc || (g.cubreCoc && c.nota === 'Cocina')) && t2[0] <= 13*60 && t2[1] >= 15*60) cocD = true;
@@ -4645,6 +4711,8 @@ function planRevisar(){
     if (!hayAlguien) return;
     var f = [];
     if (!encC) f.push('no cierra ningún encargado');
+    if (abreNadie) f.push('no abre nadie a las ' + E[0] + ' h');
+    else if (!abreOk && abreFalla.length) f.push(abreFalla.join(' y ') + ' no abre');
     if (encT >= 2 && !encA) f.push('no abre ningún encargado');
     if (!otroC) f.push('el encargado cierra solo');
     if (!cocD) f.push('sin cocina a mediodía');
@@ -4882,7 +4950,10 @@ function planLeerMas(cuerpo, sid, g){
 }
 function planReglasHtml(p, lista, inp, tit){
   var sel = function(v, k, i, j){
-    return '<select data-par="' + k + '" data-i="' + i + '" data-j="' + j + '" style="' + inp + '">' + lista.map(function(s){
+    /* «—» deja la pareja sin efecto sin tener que borrarla: al guardar
+       se cae sola, igual que una a medio poner. */
+    return '<select data-par="' + k + '" data-i="' + i + '" data-j="' + j + '" style="' + inp + '">' +
+      '<option value=""' + (v ? '' : ' selected') + '>—</option>' + lista.map(function(s){
       return '<option value="' + s.id + '"' + (s.id === v ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('') + '</select>';
   };
   var parejas = function(k, txt, ayuda){
@@ -4905,7 +4976,7 @@ function planReglasHtml(p, lista, inp, tit){
     '<div style="font-size:.7rem;color:var(--text2);margin-top:4px">0 = sin límite.</div>' +
     '<label style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px;font-size:.78rem;color:var(--text2)">Encargados: un día a la semana pueden descansar solo' +
       '<input type="number" min="0" max="16" step="0.5" data-n2="descEnc" value="' + (+p.descEnc > 0 ? p.descEnc : '') + '" placeholder="—" style="' + inp + ';width:56px">h para cambiar de turno</label>' +
-    '<div style="font-size:.7rem;color:var(--text2)">Vacío = nunca. Así el que viene cerrando puede pasar a abrir y se alternan. Sale avisado.</div>' +
+    '<div style="font-size:.7rem;color:var(--text2)">Vacío o 0 = nunca, nadie descansa de menos. Con un número, el que viene cerrando puede pasar a abrir y se alternan. Sale avisado.</div>' +
     parejas('noCoinciden', 'No coinciden', '(avisa si libran o tienen vacaciones el mismo día)') +
     parejas('juntos', 'Van juntos', '(se intenta que hagan el mismo turno)');
 }
