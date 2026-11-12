@@ -982,6 +982,19 @@ function comprobarVersionApp(){
       /* Si ya venimos de darle a Actualizar y sigue vieja, el navegador
          no suelta su copia. Mejor decirlo que dejarle picando en balde. */
       if (/[?&]nueva=[0-9]+/.test(location.search)) { avisarVersionTerca(); return; }
+      /* Acabamos de abrir y la copia es vieja: se recarga sola, una vez.
+         Aqui no hay nada escrito a medias que perder, asi que preguntar
+         solo es una molestia. Si ya se ha probado con esta version y
+         sigue vieja, entonces si se avisa y decide el. */
+      var yaProbado = null;
+      try { yaProbado = sessionStorage.getItem('recargaAuto'); } catch (e) {}
+      if (yaProbado !== nueva && !haycambios) {
+        try { sessionStorage.setItem('recargaAuto', nueva); } catch (e) {}
+        saliendoAProposito = true;
+        var u = location.href.split('#')[0].replace(/[?&]$/, '');
+        location.replace(u + (u.indexOf('?') >= 0 ? '&' : '?') + 'nueva=' + nueva);
+        return;
+      }
       avisarVersionNueva(nueva);
     })
     .catch(function(){});
