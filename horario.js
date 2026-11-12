@@ -5667,7 +5667,7 @@ function vacRecuperar(){
 // Turno «7-15» o «7:30-15:30», F festivo, V vacaciones, B baja,
 // A ausencia, y «-» para dejar el día como está.
 var pegarDeshacer = null;
-function abrirPegarSemana(){
+function abrirPegarSemana(conFoto){
   var ov = document.getElementById('pegarov');
   if (!ov) {
     ov = document.createElement('div'); ov.className = 'ov'; ov.id = 'pegarov';
@@ -5682,7 +5682,7 @@ function abrirPegarSemana(){
     '<div style="font-size:.8rem;color:var(--text2);line-height:1.5">Una línea por persona: el nombre y los 7 días, de lunes a domingo. ' +
       'Turno <b>7-15</b> · <b>F</b> festivo · <b>V</b> vacaciones · <b>B</b> baja · <b>A</b> ausencia · <b>-</b> lo deja como está.</div>' +
     '<label style="display:inline-flex;align-items:center;gap:7px;margin-top:10px;cursor:pointer;background:linear-gradient(#f0d472,#c9a84c);color:#241c08;font-weight:800;border-radius:7px;padding:8px 14px;font-size:.84rem">&#128247; Leer una foto del papel' +
-      '<input type="file" accept="image/*" style="display:none" onchange="fotoSemana(event)"></label>' +
+      '<input id="pegar-foto" type="file" accept="image/*" style="display:none" onchange="fotoSemana(event)"></label>' +
     '<div id="pegar-ocr" style="margin-top:6px;font-size:.76rem;line-height:1.5"></div>' +
     '<textarea id="pegar-txt" rows="10" style="width:100%;margin-top:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px;font-family:monospace;font-size:.85rem" placeholder="Valeriano: 16-1 17-1 16-1 16-1 16-1 16-1 F"></textarea>' +
     '<div id="pegar-res" style="margin-top:8px;font-size:.78rem;line-height:1.5"></div>' +
@@ -5692,6 +5692,8 @@ function abrirPegarSemana(){
       '<button class="bs" onclick="document.getElementById(\'pegarov\').classList.remove(\'show\')">Cerrar</button>' +
     '</div>';
   ov.classList.add('show');
+  /* Si se ha entrado por el boton de la foto, se abre la camara sola */
+  if (conFoto) { var fi = document.getElementById('pegar-foto'); if (fi) fi.click(); return; }
   document.getElementById('pegar-txt').focus();
 }
 function pegarHora(t){
