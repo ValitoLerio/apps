@@ -4686,7 +4686,7 @@ function planHerramientasHtml(lista, inp, tit){
       '<button type="button" class="bs" style="' + btn + '" onclick="planCopiarSemana()">Copiar</button></div>' +
     /* Cambiar turnos */
     '<div style="font-size:.78rem;color:var(--text);margin-top:14px">🔄 Cambiar turnos entre dos</div>' +
-    '<div style="font-size:.7rem;color:var(--text2)">Para cuando se cambian el turno entre ellos: lo que tiene uno pasa al otro, ese día o entre dos fechas.</div>' +
+    '<div style="font-size:.7rem;color:var(--text2)">Para cuando se cambian el turno entre ellos: el turno de uno pasa al otro, ese día o entre dos fechas. Solo cambia el turno: si uno libra o tiene vacaciones, baja o ausencia, ese día se queda como está.</div>' +
     '<div style="' + fila + '"><select id="hx-a" style="' + inp + ';width:auto">' + gente + '</select> y ' +
       '<select id="hx-b" style="' + inp + ';width:auto">' + gente + '</select></div>' +
     '<div style="' + fila + '">del <input id="hx-d1" type="date" value="' + isoDe(new Date()) + '" style="' + inp + ';width:auto"> al ' +
@@ -4744,7 +4744,7 @@ function planCambiarTurnos(){
   if (a === b) { toast('Elige dos personas distintas'); return; }
   var f1 = deIso(d1), f2 = deIso(d2); if (f2 < f1) { var t = f1; f1 = f2; f2 = t; }
   planDeshacer = JSON.stringify(sched);
-  var n = 0, lineas = [];
+  var n = 0, lineas = [], saltados = [];
   function ponerC(sid, dia, c){
     if (!sched[dia.y]) sched[dia.y] = {};
     if (!sched[dia.y][dia.m]) sched[dia.y][dia.m] = {};
@@ -4756,14 +4756,27 @@ function planCambiarTurnos(){
     var dia = {y:f.getFullYear(), m:f.getMonth(), d:f.getDate()};
     var ca = celdaDe(a, dia), cb = celdaDe(b, dia);
     if (!ca && !cb) continue;
-    ponerC(a, dia, cb ? JSON.parse(JSON.stringify(cb)) : null);
-    ponerC(b, dia, ca ? JSON.parse(JSON.stringify(ca)) : null);
+    var et2 = DC_FULL[f.getDay()] + ' ' + f.getDate() + '/' + (f.getMonth() + 1) + ': ';
+    /* Se cambia el turno, no la fiesta. Si uno de los dos libra, tiene
+       vacaciones, baja o ausencia, ese día se queda como está: el día
+       libre es suyo y no se le pasa a nadie. */
+    var trabA = ca && ca.estado === 'trabajo' && ca.inicio, trabB = cb && cb.estado === 'trabajo' && cb.inicio;
+    if (!trabA || !trabB) {
+      var quien = !trabA && !trabB ? 'ninguno de los dos trabaja'
+                : !trabA ? nombrePet(a) + ' ' + txt(ca)
+                : nombrePet(b) + ' ' + txt(cb);
+      saltados.push(et2 + 'sin cambiar, ' + quien);
+      continue;
+    }
+    ponerC(a, dia, JSON.parse(JSON.stringify(cb)));
+    ponerC(b, dia, JSON.parse(JSON.stringify(ca)));
     n++;
-    lineas.push(DC_FULL[f.getDay()] + ' ' + f.getDate() + '/' + (f.getMonth() + 1) + ': ' + nombrePet(a) + ' → ' + txt(cb) + ', ' + nombrePet(b) + ' → ' + txt(ca));
+    lineas.push(et2 + nombrePet(a) + ' → ' + txt(cb) + ', ' + nombrePet(b) + ' → ' + txt(ca));
   }
   save(); renderAll();
-  planHerrResultado(n ? '<b style="color:var(--gold2)">Turnos cambiados</b> entre ' + esc(nombrePet(a)) + ' y ' + esc(nombrePet(b)) + ':<br>' + lineas.map(esc).join('<br>') + '<br>Si no es lo que querías, dale a Deshacer.'
-                      : 'Ninguno de los dos tenía nada esos días.', n > 0);
+  var cola = saltados.length ? '<div style="color:var(--text2);margin-top:6px">' + saltados.map(esc).join('<br>') + '</div>' : '';
+  planHerrResultado(n ? '<b style="color:var(--gold2)">Turnos cambiados</b> entre ' + esc(nombrePet(a)) + ' y ' + esc(nombrePet(b)) + ':<br>' + lineas.map(esc).join('<br>') + cola + '<br>Si no es lo que querías, dale a Deshacer.'
+                      : 'No he cambiado nada: hace falta que los dos trabajen ese día.' + cola, n > 0);
   if (n) toast('Turnos cambiados');
 }
 /* Repasa lo que hay puesto con las reglas y peticiones, sin tocar nada. */
