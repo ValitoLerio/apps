@@ -3978,6 +3978,54 @@ function planRellenar(){
     return (tiposSem[sem] = r);
   }
 
+  /* Reparto de las fiestas por la semana. El dia de cada uno manda; solo
+     se toca cuando se amontonan: si un dia libran dos o mas y otro dia de
+     esa misma semana no libra nadie, se pasa una fiesta al dia vacio. */
+  var festMov = {};
+  if (p.repFiestas !== false) (function(){
+    var sems = {};
+    dias.forEach(function(d){
+      var f = new Date(d.y, d.m, d.d), k = semanasEntre(base, f);
+      (sems[k] = sems[k] || {})[f.getDay()] = d;
+    });
+    Object.keys(sems).forEach(function(k){
+      var dd = sems[k], cuenta = [0,0,0,0,0,0,0], quien = [[],[],[],[],[],[],[]];
+      lista.forEach(function(st){
+        var g = p.gente[st.id]; if (!g || g.grupo === 'no') return;
+        var fd = g.fest; if (!(fd >= 0)) return;
+        var dia = dd[fd]; if (!dia) return;                     /* ese dia queda fuera del rango */
+        var c = gcAt(st.id, dia);
+        if (c && c.estado && c.estado !== 'festivo') return;    /* vacaciones, baja o turno puesto a mano */
+        cuenta[fd]++;
+        if (!c) quien[fd].push(st);                             /* solo se mueve lo que pone el generador */
+      });
+      for (var vuelta = 0; vuelta < 14; vuelta++) {
+        var lleno = -1, vacio = -1, i;
+        for (i = 0; i < 7; i++) {
+          if (dd[i] == null) continue;
+          if (cuenta[i] === 0 && vacio < 0) vacio = i;
+          if (cuenta[i] >= 2 && quien[i].length && (lleno < 0 || cuenta[i] > cuenta[lleno])) lleno = i;
+        }
+        if (lleno < 0 || vacio < 0) break;
+        var movido = null, dDest = dd[vacio];
+        for (var j = quien[lleno].length - 1; j >= 0; j--) {
+          var cand = quien[lleno][j], g2 = p.gente[cand.id];
+          if (gcAt(cand.id, dDest)) continue;                   /* ese dia ya tiene algo puesto */
+          if (g2.propio && g2.propio[vacio] && !g2.propio[vacio].libre) continue;
+          if (fest2Dia(g2, +k) === vacio) continue;             /* ya es su segunda fiesta */
+          var fe = new Date(dDest.y, dDest.m, dDest.d);
+          if (petActivas(g2, fe).some(function(x){ return x.t === 'libre'; })) continue;
+          movido = cand; quien[lleno].splice(j, 1); break;
+        }
+        if (!movido) { quien[lleno] = []; continue; }            /* no hay a quien mover: se deja */
+        festMov[movido.id + '|' + k] = vacio;
+        cuenta[lleno]--; cuenta[vacio]++;
+        avisos.push(DC_FULL[vacio] + ' ' + etiquetaDia(dDest, curM) + ': ' + movido.name +
+          ' libra este día en vez del ' + DC_FULL[lleno] + ', para repartir las fiestas de la semana');
+      }
+    });
+  })();
+
   dias.forEach(function(dia){
     /* La hora de cerrar: en invierno a las 3, en verano a la 1 */
     var CIERRE = (dia.est || curS) === 'invierno' ? 27*60 : 25*60;
@@ -3992,7 +4040,8 @@ function planRellenar(){
       var pets = petActivas(g, fecha);
       var petLibre = pets.filter(function(x){ return x.t === 'libre'; })[0];
       if (petLibre) { poner(s.id, dia, {estado:'festivo', nota: petLibre.nota || ''}); return; }
-      if (g.fest === fecha.getDay()) { poner(s.id, dia, {estado:'festivo', nota:''}); return; }
+      var fMov = festMov[s.id + '|' + sem];
+      if ((fMov == null ? g.fest : fMov) === fecha.getDay()) { poner(s.id, dia, {estado:'festivo', nota:''}); return; }
       if (fest2Dia(g, sem) === fecha.getDay()) { poner(s.id, dia, {estado:'festivo', nota:''}); return; }
       /* Su horario propio de ese dia de la semana, tal cual */
       var pr = g.propio && g.propio[fecha.getDay()];
@@ -5026,6 +5075,7 @@ function planReglasHtml(p, lista, inp, tit){
       '<label style="display:flex;align-items:center;gap:6px">Mín. días libres a la semana' +
         '<input type="number" min="0" max="7" data-n="minLibres" value="' + (+p.minLibres || 0) + '" style="' + inp + ';width:56px"></label>' +
       '<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" data-c="justo"' + (p.justo ? ' checked' : '') + ' style="width:16px;height:16px;accent-color:#c9a84c">Repartir los cierres por igual</label>' +
+      '<label style="display:flex;align-items:center;gap:6px" title="Si un día libran dos y otro no libra nadie, se pasa una fiesta al día vacío"><input type="checkbox" data-c="repFiestas"' + (p.repFiestas !== false ? ' checked' : '') + ' style="width:16px;height:16px;accent-color:#c9a84c">Repartir las fiestas por la semana</label>' +
     '</div>' +
     '<div style="font-size:.7rem;color:var(--text2);margin-top:4px">0 = sin límite.</div>' +
     '<label style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px;font-size:.78rem;color:var(--text2)">Encargados: un día a la semana pueden descansar solo' +
@@ -5037,6 +5087,7 @@ function planReglasHtml(p, lista, inp, tit){
 function planLeerReglas(cuerpo, p){
   var j = cuerpo.querySelector('[data-c="justo"]'); if (!j) return;
   p.justo = !!j.checked;
+  var rf = cuerpo.querySelector('[data-c="repFiestas"]'); if (rf) p.repFiestas = !!rf.checked;
   var de = cuerpo.querySelector('[data-n2="descEnc"]');
   if (de) { var v = parseFloat(String(de.value).replace(',', '.')); p.descEnc = v > 0 ? v : ''; }
   ['noCoinciden','juntos'].forEach(function(k){
