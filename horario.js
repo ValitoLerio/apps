@@ -4188,6 +4188,15 @@ function planRellenar(){
     /* Nunca abre uno solo: dos a la primera hora. Si él ha puesto más en
        «cuántos entran a cada hora», manda lo suyo. */
     var MIN_ABREN = Math.max(2, SPLIT ? (+ENT_E[E[0]] || 0) + (+ENT_O[E[0]] || 0) : (+ENT[E[0]] || 0));
+    /* La mañana no se queda corta. Si falta gente se quita de otro sitio:
+       de dos no baja, aunque ese día haya vacaciones o fiestas. */
+    var MIN_MAN = p.minMan == null ? 3 : (+p.minMan || 0);
+    var manFijos = 0;
+    lista.forEach(function(s){
+      var g = p.gente[s.id]; if (!g || g.grupo === 'no') return;
+      var c = gcAt(s.id, dia); if (!c || c.estado !== 'trabajo' || !c.inicio) return;
+      if (aMin(c.inicio) < 11 * 60) manFijos++;
+    });
     /* Cocina con lo que ya estaba puesto ese día */
     var cocFijoD = false, cocFijoN = false;
     lista.forEach(function(s){
@@ -4202,7 +4211,7 @@ function planRellenar(){
       E.forEach(function(h){ cov[h] = base0[h]; covE[h] = base0E[h]; covO[h] = base0O[h]; });
       var encCierra = false, encAbre = false, cocDia = cocFijoD, cocNoche = cocFijoN;
       var cubD = false, cubN = false, encCierran = 0, cubNenc = false;
-      var abreQuienDebe = abreFijo, abren = abrenFijo, encUnicoAbre = false;
+      var abreQuienDebe = abreFijo, abren = abrenFijo, encUnicoAbre = false, deMan = manFijos;
       var otroCierra = otroFijoCierra, alCierre = 0, cats = {}, hors = {};
       for (var i = 0; i < n; i++) {
         var r = elec[i], tt = libres[i].prefs[r];
@@ -4218,6 +4227,7 @@ function planRellenar(){
         if (encs[i] && tt.b >= CIERRE - 1) { encCierra = true; encCierran++; }
         if (cubre[i] && tt.a <= 13*60 && tt.b >= 15*60) cubD = true;
         if (cubre[i] && tt.b >= 23*60) { if (encs[i] && tt.b >= CIERRE - 1) cubNenc = true; else cubN = true; }
+        if (tt.a < 11*60) deMan++;
         if (tt.a <= E[0]*60) {
           abren++;
           if (abreS[i]) abreQuienDebe = true;
@@ -4258,6 +4268,10 @@ function planRellenar(){
         var a = hors[par[0]] || horFijo[par[0]], b = hors[par[1]] || horFijo[par[1]];
         if (a && b && Math.min(a[1], b[1]) - Math.max(a[0], b[0]) >= 60) coste += 220;   /* peticion: no coincide con */
       });
+      /* La mañana, lo primero después del cierre: sale más caro dejarla
+         corta que dejar un hueco a cualquier otra hora, así que si falta
+         gente la quita de la noche o del mediodía, no de la mañana. */
+      if (deMan < MIN_MAN) coste += (MIN_MAN - deMan) * 360;
       if (!encCierra && !encFijoCierra) coste += 300;   /* siempre cierra un encargado */
       if (!otroCierra) coste += 280;                    /* y con él, un camarero o cocinero */
       if (alCierre > 1) coste += (alCierre - 1) * 200;  /* uno solo de más para cerrar */
@@ -4794,7 +4808,8 @@ function planRevisar(){
     var fecha = new Date(dia.y, dia.m, dia.d), et = DC_FULL[fecha.getDay()] + ' ' + fecha.getDate() + '/' + (fecha.getMonth() + 1) + ': ';
     var CIERRE = autoS(dia.m) === 'invierno' ? 27*60 : 25*60;
     var encT = 0, encA = false, encC = false, otroC = false, cocD = false, cocN = false, hayAlguien = false, hor = {};
-    var abreOk = false, abrenN = 0, abreFalla = [];
+    var abreOk = false, abrenN = 0, abreFalla = [], manN = 0;
+    var MIN_MAN = p.minMan == null ? 3 : (+p.minMan || 0);
     lista.forEach(function(s){
       var g = p.gente[s.id] || {}; if (g.grupo === 'no') return;
       var c = cel(s.id, dia);
@@ -4821,6 +4836,7 @@ function planRevisar(){
         if (Math.abs(Hr - Ht) > 0.01) av.push(et + s.name + ' hace ' + Hr + ' h y le tocan ' + Ht);
       }
       var esEnc = g.grupo === 'enc' || g.grupo === 'enccoc', esCoc = g.grupo === 'coc' || g.grupo === 'enccoc';
+      if (t2[0] < 11 * 60) manN++;
       if (t2[0] <= E[0] * 60) { abrenN++; if (g.abre) abreOk = true; }
       else if (g.abre) abreFalla.push(s.name);
       if (esEnc) { encT++; if (t2[0] <= E[0] * 60) encA = true; if (t2[1] >= CIERRE - 1) encC = true; }
@@ -4832,6 +4848,7 @@ function planRevisar(){
     var f = [];
     if (!encC) f.push('no cierra ningún encargado');
     if (!abrenN) f.push('no abre nadie a las ' + E[0] + ' h');
+    if (MIN_MAN && manN < MIN_MAN) f.push('por la mañana solo hay ' + manN + ' y tienen que ser ' + MIN_MAN);
     else if (abrenN < 2) f.push('a las ' + E[0] + ' h abre uno solo');
     if (abrenN && !abreOk && abreFalla.length) f.push(abreFalla.join(' y ') + ' no abre');
     if (encT >= 2 && !encA) f.push('no abre ningún encargado');
@@ -5092,6 +5109,8 @@ function planReglasHtml(p, lista, inp, tit){
         '<input type="number" min="0" max="14" data-n="maxSeguidos" value="' + (+p.maxSeguidos || 0) + '" style="' + inp + ';width:56px"></label>' +
       '<label style="display:flex;align-items:center;gap:6px">Mín. días libres a la semana' +
         '<input type="number" min="0" max="7" data-n="minLibres" value="' + (+p.minLibres || 0) + '" style="' + inp + ';width:56px"></label>' +
+      '<label style="display:flex;align-items:center;gap:6px" title="Los que entran antes de las 11. Si falta gente se quita de la noche o del mediodía, nunca de la mañana.">Mín. por la mañana' +
+        '<input type="number" min="0" max="12" data-n3="minMan" value="' + (p.minMan == null ? 3 : (+p.minMan || 0)) + '" style="' + inp + ';width:56px"></label>' +
       '<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" data-c="justo"' + (p.justo ? ' checked' : '') + ' style="width:16px;height:16px;accent-color:#c9a84c">Repartir los cierres por igual</label>' +
       '<label style="display:flex;align-items:center;gap:6px" title="Si un día libran dos y otro no libra nadie, se pasa una fiesta al día vacío"><input type="checkbox" data-c="repFiestas"' + (p.repFiestas !== false ? ' checked' : '') + ' style="width:16px;height:16px;accent-color:#c9a84c">Repartir las fiestas por la semana</label>' +
     '</div>' +
@@ -5106,6 +5125,7 @@ function planLeerReglas(cuerpo, p){
   var j = cuerpo.querySelector('[data-c="justo"]'); if (!j) return;
   p.justo = !!j.checked;
   var rf = cuerpo.querySelector('[data-c="repFiestas"]'); if (rf) p.repFiestas = !!rf.checked;
+  var mm = cuerpo.querySelector('[data-n3="minMan"]'); if (mm) p.minMan = Math.max(0, parseInt(mm.value, 10) || 0);
   var de = cuerpo.querySelector('[data-n2="descEnc"]');
   if (de) { var v = parseFloat(String(de.value).replace(',', '.')); p.descEnc = v > 0 ? v : ''; }
   ['noCoinciden','juntos'].forEach(function(k){
