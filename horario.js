@@ -3545,6 +3545,10 @@ function planCambiarDesde(v){
   planDesdeIdx = parseInt(v, 10) || 0;
   pintarPlan();
 }
+function planCambiarBase(){
+  guardarPlan(leerPlanDeLaVentana());
+  pintarPlan();
+}
 function planCambiarHasta(v){
   guardarPlan(leerPlanDeLaVentana());
   planHastaMes = parseInt(v, 10) || 0;
@@ -4388,7 +4392,8 @@ function pintarPlan(){
   var lista = planPersonas(p);
   var dias = planDiasDesde();
   var primero = new Date(dias[0].y, dias[0].m, dias[0].d);
-  var sem0 = p.base ? semanasEntre(deIso(p.base), primero) : 0;
+  if (!p.base) p.base = isoDe(lunesDe(primero));
+  var baseL = deIso(p.base), sem0 = 0;
   var estrecho = window.innerWidth < 520, pd = '3px';
   var inp = 'background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:' + (estrecho ? '4px 2px' : '5px 6px') + ';font-family:inherit;font-size:' + (estrecho ? '.72rem' : '.8rem');
   var tit = 'font-size:.66rem;color:var(--gold);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 6px;font-weight:700';
@@ -4429,8 +4434,22 @@ function pintarPlan(){
 
     '<div style="' + tit + '">Personas</div>' +
     planPetResumen(p, lista, dias) +
-    '<div style="font-size:.72rem;color:var(--text2);margin-bottom:6px">«1ª semana» es el turno que hace cada uno la semana del ' +
-      etiquetaDia(dias[0], curM) + '; a partir de ahí rota solo. Encargados: abre → mediodía → cierra. Camareros: mañana → mediodía → noche. Cocina: mañana / noche. «Cocina» marca quién puede cubrirla cuando falta cocinero. ' +
+    /* Cuál es la «1ª semana»: la elige el usuario, y desde ahí rota. */
+    (function(){
+      var sem = planSemanasLargo(), o = '', k = -1, hay = false, vistas = {};
+      sem.forEach(function(w){
+        var l = isoDe(lunesDe(new Date(w.dias[0].y, w.dias[0].m, w.dias[0].d)));
+        if (vistas[l]) return; vistas[l] = 1;
+        if (w.k !== k) { if (k >= 0) o += '</optgroup>'; k = w.k; o += '<optgroup label="' + MESES[w.mes] + ' ' + w.y + '">'; }
+        var sel = l === p.base; if (sel) hay = true;
+        o += '<option value="' + l + '"' + (sel ? ' selected' : '') + '>' + esc(w.txt) + '</option>';
+      });
+      o += '</optgroup>';
+      if (!hay) o = '<option value="' + p.base + '" selected>' + baseL.getDate() + '/' + (baseL.getMonth() + 1) + '/' + baseL.getFullYear() + '</option>' + o;
+      return '<label style="display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:.8rem;color:var(--text2)">La «1ª semana» es la del ' +
+        '<select data-k="base" onchange="planCambiarBase()" style="' + inp + '">' + o + '</select></label>';
+    })() +
+    '<div style="font-size:.72rem;color:var(--text2);margin-bottom:6px">«1ª semana» es el turno que hace cada uno esa semana; a partir de ahí rota solo. Encargados: abre → mediodía → cierra. Camareros: mañana → mediodía → noche. Cocina: mañana / noche. «Cocina» marca quién puede cubrirla cuando falta cocinero. ' +
       '«Abre» es quien entra siempre a la primera hora. Nunca se abre de uno en uno: con él entra un encargado, y si ese día él no está, abre el encargado con otro. Si sólo queda un encargado libre, ese cierra y abren dos de los demás.</div>' +
     (function(){ pd = estrecho ? '2px 1px' : '3px'; return ''; })() +
     '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:.8rem">' +
@@ -4539,8 +4558,11 @@ function leerPlanDeLaVentana(){
     cuerpo.querySelectorAll('input[data-ee]').forEach(function(i){ var v = Math.max(0, parseInt(i.value, 10) || 0); if (v) p.entEnc[i.dataset.ee] = v; });
   }
   cuerpo.querySelectorAll('input[data-e]').forEach(function(i){ p.entradas[i.dataset.e] = Math.max(0, parseInt(i.value, 10) || 0); });
-  var dias = planDiasDesde();
-  p.base = isoDe(lunesDe(new Date(dias[0].y, dias[0].m, dias[0].d)));
+  /* La «1ª semana» es la que el usuario elija; si no ha elegido ninguna,
+     la primera del rango. */
+  var selb = cuerpo.querySelector('[data-k="base"]');
+  if (selb && selb.value) p.base = selb.value;
+  else if (!p.base) { var dias = planDiasDesde(); p.base = isoDe(lunesDe(new Date(dias[0].y, dias[0].m, dias[0].d))); }
   planLeerReglas(cuerpo, p);
   cuerpo.querySelectorAll('tr[data-pid]').forEach(function(tr){
     var sid = tr.dataset.pid, g = p.gente[sid] || {};
