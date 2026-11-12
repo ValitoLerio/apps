@@ -921,11 +921,53 @@ function avisarVersionNueva(nueva){
   document.body.appendChild(d);
   d.querySelector('[data-luego]').addEventListener('click', function(){ d.remove(); });
   d.querySelector('[data-ahora]').addEventListener('click', function(){
-    /* Con un parametro nuevo en la direccion, el navegador no puede
-       darnos la copia guardada: para el es otra pagina. */
-    var u = location.href.split('#')[0].replace(/[?&]nueva=\d+/, '');
-    location.href = u + (u.indexOf('?') >= 0 ? '&' : '?') + 'nueva=' + nueva;
+    d.querySelector('[data-ahora]').textContent = 'Actualizando…';
+    /* Lo primero, dejar lo que haya sin subir a salvo, y apagar el aviso
+       de «queda algo sin guardar»: en el movil ese aviso para la recarga
+       y el cartel se queda ahi para siempre. */
+    saliendoAProposito = true;
+    var sigue = function(){
+      /* Si el navegador guarda copias aparte (Cache Storage), fuera */
+      var limpiar = (window.caches && caches.keys)
+        ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
+        : Promise.resolve();
+      limpiar.catch(function(){}).then(function(){
+        /* Con un parametro nuevo en la direccion, el navegador no puede
+           darnos la copia guardada: para el es otra pagina. */
+        var u = location.href.split('#')[0].replace(/[?&]nueva=[0-9]+/, '').replace(/[?&]$/, '');
+        location.replace(u + (u.indexOf('?') >= 0 ? '&' : '?') + 'nueva=' + nueva);
+      });
+    };
+    var t = setTimeout(sigue, 2500);          /* si la subida se atasca, se va igual */
+    try {
+      var r = (haycambios && conectado()) ? hacerSubida() : null;
+      if (r && r.then) r.then(function(){ clearTimeout(t); sigue(); }, function(){ clearTimeout(t); sigue(); });
+      else { clearTimeout(t); sigue(); }
+    } catch (e) { clearTimeout(t); sigue(); }
   });
+}
+
+function avisarVersionTerca(){
+  if (document.getElementById('avisoVersion')) return;
+  var movil = /iPhone|iPad|Android/i.test(navigator.userAgent);
+  var d = document.createElement('div');
+  d.id = 'avisoVersion';
+  d.setAttribute('style',
+    'position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;' +
+    'background:#0f1618;color:#fbfcfb;border-radius:12px;padding:12px 16px;' +
+    'box-shadow:0 12px 34px -12px rgba(0,0,0,.6);' +
+    'font:500 14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto');
+  d.innerHTML =
+    '<div>El navegador sigue dándome la versión de antes.</div>' +
+    '<div style="color:#c3cecb;margin-top:6px">' +
+      (movil ? 'Cierra la pestaña del todo y vuelve a abrir la app. Si aun así sigue igual, se arregla solo en diez minutos.'
+             : 'Recarga con Ctrl+F5 (Cmd+Shift+R en Mac). Si aun así sigue igual, se arregla solo en diez minutos.') +
+    '</div>' +
+    '<div style="text-align:right;margin-top:8px">' +
+      '<button type="button" data-ok style="background:#fbfcfb;border:0;color:#0f1618;' +
+        'border-radius:8px;padding:7px 14px;cursor:pointer;font:inherit;font-weight:600">Vale</button></div>';
+  document.body.appendChild(d);
+  d.querySelector('[data-ok]').addEventListener('click', function(){ d.remove(); });
 }
 
 function comprobarVersionApp(){
@@ -936,7 +978,11 @@ function comprobarVersionApp(){
     .then(function(t){
       if (!t) return;
       var nueva = t.trim();
-      if (/^[0-9]+$/.test(nueva) && nueva > MI_VERSION) avisarVersionNueva(nueva);
+      if (!/^[0-9]+$/.test(nueva) || !(nueva > MI_VERSION)) return;
+      /* Si ya venimos de darle a Actualizar y sigue vieja, el navegador
+         no suelta su copia. Mejor decirlo que dejarle picando en balde. */
+      if (/[?&]nueva=[0-9]+/.test(location.search)) { avisarVersionTerca(); return; }
+      avisarVersionNueva(nueva);
     })
     .catch(function(){});
 }
@@ -947,7 +993,9 @@ if (document.readyState === 'loading') {
 }
 
 // ── Al salir: avisar si queda algo sin subir ──────────────────────
+var saliendoAProposito = false;
 window.addEventListener('beforeunload', function(e){
+  if (saliendoAProposito) return;            /* se va porque se lo hemos pedido */
   if (!haycambios || !conectado()) return;
   hacerSubida();               // se intenta, aunque puede no dar tiempo
   e.preventDefault();

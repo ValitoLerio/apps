@@ -72,7 +72,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
 @media(max-width:640px){header .logo{font-size:16px}}
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="comun.css?v=202610091040">
+<link rel="stylesheet" href="comun.css?v=202611121140">
 </head>
 <body>
 
@@ -475,7 +475,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
 </div>
 
 
-<script src="sync.js?v=202610281102"></script>
+<script src="sync.js?v=202611121140"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -483,7 +483,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
 
   Sync.iniciar('piso').then(function(){
     var s = document.createElement('script');
-    s.src = 'piso-corto.js?v=' + Date.now();
+    s.src = 'piso-corto.js?v=202611121140' + Date.now();
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

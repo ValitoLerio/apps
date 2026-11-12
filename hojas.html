@@ -280,7 +280,7 @@ dialog.ancho{max-width:860px}
 <input type="file" id="elegir" multiple hidden accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,.odt,.ods,.txt,.csv">
 <input type="file" id="sustituir" hidden accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,.odt,.ods,.txt,.csv">
 
-<script src="sync.js?v=202610311200"></script>
+<script src="sync.js?v=202611121140"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -293,7 +293,7 @@ dialog.ancho{max-width:860px}
   }
   Sync.iniciar('hojas').then(function(){
     var s = document.createElement('script');
-    s.src = 'hojas.js?v=' + Date.now();
+    s.src = 'hojas.js?v=202611121140' + Date.now();
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar hojas.js. Recarga la pagina.'; };
     document.body.appendChild(s);
