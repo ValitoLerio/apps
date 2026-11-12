@@ -5672,7 +5672,7 @@ function vacRecuperar(){
 // Turno «7-15» o «7:30-15:30», F festivo, V vacaciones, B baja,
 // A ausencia, y «-» para dejar el día como está.
 var pegarDeshacer = null;
-function abrirPegarSemana(conFoto){
+function abrirPegarSemana(){
   var ov = document.getElementById('pegarov');
   if (!ov) {
     ov = document.createElement('div'); ov.className = 'ov'; ov.id = 'pegarov';
@@ -5688,9 +5688,6 @@ function abrirPegarSemana(conFoto){
       'Basta con la hora de entrar, como en el papel: <b>7</b>, <b>12</b>, <b>17</b>… y la de salir la pone la jornada de la temporada. ' +
       'Si quieres el turno entero, <b>7-15</b>.<br>' +
       '<b>F</b> festivo · <b>V</b> vacaciones · <b>B</b> baja · <b>A</b> ausencia · <b>-</b> lo deja como está.</div>' +
-    '<label style="display:inline-flex;align-items:center;gap:7px;margin-top:10px;cursor:pointer;background:linear-gradient(#f0d472,#c9a84c);color:#241c08;font-weight:800;border-radius:7px;padding:8px 14px;font-size:.84rem">&#128247; Leer una foto del papel' +
-      '<input id="pegar-foto" type="file" accept="image/*" style="display:none" onchange="fotoSemana(event)"></label>' +
-    '<div id="pegar-ocr" style="margin-top:6px;font-size:.76rem;line-height:1.5"></div>' +
     '<textarea id="pegar-txt" rows="10" style="width:100%;margin-top:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px;font-family:monospace;font-size:.85rem" placeholder="Tamara: 7 7 7 7 F 7 7&#10;Valeriano: 16 17 16 16 16 16 F"></textarea>' +
     '<div id="pegar-res" style="margin-top:8px;font-size:.78rem;line-height:1.5"></div>' +
     '<div class="mact" style="margin-top:12px;flex-wrap:wrap">' +
@@ -5699,214 +5696,12 @@ function abrirPegarSemana(conFoto){
       '<button class="bs" onclick="document.getElementById(\'pegarov\').classList.remove(\'show\')">Cerrar</button>' +
     '</div>';
   ov.classList.add('show');
-  /* Si se ha entrado por el boton de la foto, se abre la camara sola */
-  if (conFoto) { var fi = document.getElementById('pegar-foto'); if (fi) fi.click(); return; }
   document.getElementById('pegar-txt').focus();
 }
 function pegarHora(t){
   var m = /^(\d{1,2})(?:[:.h](\d{2}))?$/.exec(t); if (!m) return null;
   var h = +m[1], mi = m[2] ? +m[2] : 0; if (h > 24 || mi > 59) return null;
   return (h % 24 < 10 ? '0' : '') + (h % 24) + ':' + (mi < 10 ? '0' : '') + mi;
-}
-/* ---------- Leer un horario de papel desde una foto ----------
-   Lo lee el propio movil: la foto no sale de aqui. Lo que saca se deja
-   en el cuadro de Pegar semana para repasarlo antes de ponerlo, porque
-   la letra a mano se lee regular y casi siempre hay que tocar algo. */
-var OCR_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-var ocrCargando = null;
-function ocrCargar(){
-  if (window.Tesseract) return Promise.resolve();
-  if (ocrCargando) return ocrCargando;
-  ocrCargando = new Promise(function(ok, mal){
-    var sc = document.createElement('script');
-    sc.src = OCR_CDN;
-    sc.onload = function(){ window.Tesseract ? ok() : mal(new Error('sin lector')); };
-    sc.onerror = function(){ ocrCargando = null; mal(new Error('sin lector')); };
-    document.head.appendChild(sc);
-  });
-  return ocrCargando;
-}
-/* La foto, en gris y con el contraste estirado: se lee bastante mejor. */
-function ocrPreparar(img){
-  var anchoQuiero = 1700;
-  var esc = Math.min(3, Math.max(1, anchoQuiero / (img.naturalWidth || img.width)));
-  var cv = document.createElement('canvas');
-  cv.width = Math.round((img.naturalWidth || img.width) * esc);
-  cv.height = Math.round((img.naturalHeight || img.height) * esc);
-  var cx = cv.getContext('2d');
-  cx.drawImage(img, 0, 0, cv.width, cv.height);
-  var d, a;
-  try { d = cx.getImageData(0, 0, cv.width, cv.height); a = d.data; } catch(e){ return cv; }
-  var hist = [], i;
-  for (i = 0; i < 256; i++) hist[i] = 0;
-  for (i = 0; i < a.length; i += 4) {
-    var v = (a[i] * 0.299 + a[i+1] * 0.587 + a[i+2] * 0.114) | 0;
-    a[i] = a[i+1] = a[i+2] = v; hist[v]++;
-  }
-  /* Se tiran el 2% mas oscuro y el 2% mas claro y se estira el resto */
-  var tot = cv.width * cv.height, corte = tot * 0.02, acc = 0, lo = 0, hi = 255;
-  for (i = 0; i < 256; i++) { acc += hist[i]; if (acc > corte) { lo = i; break; } }
-  acc = 0;
-  for (i = 255; i >= 0; i--) { acc += hist[i]; if (acc > corte) { hi = i; break; } }
-  if (hi - lo < 20) { lo = 0; hi = 255; }
-  var k = 255 / (hi - lo);
-  for (i = 0; i < a.length; i += 4) {
-    var n = (a[i] - lo) * k;
-    n = n < 0 ? 0 : n > 255 ? 255 : n;
-    a[i] = a[i+1] = a[i+2] = n;
-  }
-  cx.putImageData(d, 0, 0);
-  return cv;
-}
-function ocrNum(t){
-  return String(t).replace(/[oOQ]/g, '0').replace(/[lIij|!\[\]]/g, '1').replace(/[sS]/g, '5')
-    .replace(/[bB]/g, '8').replace(/[zZ]/g, '2').replace(/[gG]/g, '6').replace(/[tT]/g, '7');
-}
-function ocrDist(a, b){
-  var m = a.length, n = b.length, f = [], i, j;
-  for (i = 0; i <= m; i++) f[i] = [i];
-  for (j = 0; j <= n; j++) f[0][j] = j;
-  for (i = 1; i <= m; i++) for (j = 1; j <= n; j++)
-    f[i][j] = Math.min(f[i-1][j] + 1, f[i][j-1] + 1, f[i-1][j-1] + (a.charAt(i-1) === b.charAt(j-1) ? 0 : 1));
-  return f[m][n];
-}
-/* Un dia suelto: F, V, B, A, un guion o un turno tipo 7-15. */
-function ocrDia(t){
-  var crudo = String(t).replace(/[\u2013\u2014]/g, '-').replace(/\s/g, '');
-  var u = crudo.toUpperCase();
-  if (/^[-._,]+$/.test(u)) return '-';
-  if (/^[FX]$/.test(u)) return 'F';
-  if (/^[VBA]$/.test(u)) return u;
-  var n1 = ocrNum(crudo).replace(/\D/g, '');
-  if (/^[0-9OoQIiLlSsBbZzGgTt]{1,2}$/.test(crudo) && n1 && +n1 <= 24) return String(+n1);
-  var m = crudo.match(/^(.{1,5})[-+](.{1,5})$/);
-  if (m) {
-    var a = ocrNum(m[1]).replace(/\D/g, ''), b = ocrNum(m[2]).replace(/\D/g, '');
-    if (a && b && +a <= 24 && +b <= 24) return (+a) + '-' + (+b);
-  }
-  return null;
-}
-/* El texto que ha salido de la foto, pasado al formato de Pegar semana. */
-function ocrATexto(txt){
-  var gente = staff();
-  var norm = function(x){ return String(x).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z]/g, ''); };
-  var nombres = gente.map(function(s){ return {s:s, n:norm(s.name)}; });
-  var lineas = [], sueltas = [];
-  String(txt).split(/\n/).forEach(function(l){
-    var bruto = l.replace(/[|¦│]/g, ' ').trim();
-    if (bruto.length < 2) return;
-    var toks = bruto.split(/[\s:;,]+/).filter(Boolean);
-    if (!toks.length) return;
-    /* El nombre: una palabra, o dos si la primera sola no se parece a nadie */
-    var mejor = null, usa = 0;
-    [1, 2].forEach(function(cuantas){
-      if (mejor && mejor.d === 0) return;
-      if (toks.length < cuantas) return;
-      var cand = norm(toks.slice(0, cuantas).join(''));
-      if (cand.length < 3) return;
-      nombres.forEach(function(x){
-        var d = ocrDist(cand, x.n);
-        var tope = Math.max(1, Math.floor(x.n.length / 3));
-        if (x.n.indexOf(cand) === 0 && cand.length >= 4) d = Math.min(d, 1);
-        if (d <= tope && (!mejor || d < mejor.d)) { mejor = {s:x.s, d:d}; usa = cuantas; }
-      });
-    });
-    if (!mejor) { sueltas.push(bruto); return; }
-    /* El lector parte los turnos de muchas maneras: «7-15», «7 - 15»,
-       «7- 15», «7 -15». Se vuelven a juntar, pero un guion suelto entre
-       dos turnos es un día sin tocar y se queda como está. */
-    var crudos = toks.slice(usa).map(function(x){ return x.replace(/[\u2013\u2014]/g, '-'); });
-    var esN = function(x){ return /^[0-9OoQIiLlSsBbZzGgTt]{1,2}$/.test(x || '') && /\d/.test(ocrNum(x)); };
-    var vals = [], q;
-    for (q = 0; q < crudos.length; q++) {
-      var t0 = crudos[q], s1 = crudos[q+1] || '', s2 = crudos[q+2] || '';
-      if (esN(t0) && s1 === '-' && esN(s2)) { vals.push(t0 + '-' + s2); q += 2; continue; }
-      if (esN(t0) && /^-./.test(s1) && esN(s1.slice(1))) { vals.push(t0 + '-' + s1.slice(1)); q += 1; continue; }
-      if (/-$/.test(t0) && esN(t0.slice(0, -1)) && esN(s1)) { vals.push(t0 + s1); q += 1; continue; }
-      vals.push(t0);
-    }
-    vals = vals.map(function(v){ var d = ocrDia(v); return d == null ? v : d; })
-               .filter(function(v){ return v !== ''; });
-    while (vals.length < 7) vals.push('-');
-    lineas.push({nombre: mejor.s.name, vals: vals.slice(0, 7)});
-  });
-  return {
-    texto: lineas.map(function(x){ return x.nombre + ': ' + x.vals.join(' '); }).join('\n'),
-    cuantos: lineas.length,
-    filas: lineas,
-    sueltas: sueltas
-  };
-}
-var ocrCrudo = '';
-/* Para poder ver qué ha leído de verdad cuando sale mal. */
-function ocrVerCrudo(){
-  if (!ocrCrudo) return '';
-  return '<details style="margin-top:6px"><summary style="cursor:pointer;color:var(--gold2)">Ver lo que ha leído</summary>' +
-    '<pre style="white-space:pre-wrap;font-size:.72rem;color:var(--text2);margin:6px 0 0;max-height:160px;overflow:auto">' +
-    esc(ocrCrudo.slice(0, 1200)) + '</pre></details>';
-}
-function ocrEstado(h){ var e = document.getElementById('pegar-ocr'); if (e) e.innerHTML = h; }
-function fotoSemana(ev){
-  var f = ev.target.files && ev.target.files[0];
-  ev.target.value = '';
-  if (!f) return;
-  ocrEstado('<span style="color:var(--text2)">Abriendo la foto…</span>');
-  var url = URL.createObjectURL(f), img = new Image();
-  img.onerror = function(){ URL.revokeObjectURL(url); ocrEstado('<span style="color:#e87c6f">Esa foto no se puede abrir.</span>'); };
-  img.onload = function(){
-    var cv;
-    try { cv = ocrPreparar(img); } catch(e){ cv = null; }
-    URL.revokeObjectURL(url);
-    if (!cv) { ocrEstado('<span style="color:#e87c6f">No he podido preparar la foto.</span>'); return; }
-    ocrEstado('<span style="color:var(--text2)">Cargando el lector… la primera vez tarda, luego ya queda guardado.</span>');
-    ocrCargar().then(function(){
-      ocrEstado('<span style="color:var(--text2)">Leyendo la foto… 0%</span>');
-      return Tesseract.recognize(cv, 'eng', {
-        logger: function(m){
-          if (m && m.status === 'recognizing text')
-            ocrEstado('<span style="color:var(--text2)">Leyendo la foto… ' + Math.round((m.progress || 0) * 100) + '%</span>');
-        }
-      }, {
-        /* 6 = un bloque de texto con renglones, que es lo que es una
-           tabla de horarios. Por defecto busca columnas y se pierde. */
-        tessedit_pageseg_mode: '6',
-        preserve_interword_spaces: '1',
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.:- '
-      });
-    }).then(function(r){
-      var t = (r && r.data && r.data.text) || '';
-      var o = ocrATexto(t);
-      ocrCrudo = t;
-      /* Cuantos dias se han entendido de verdad. Si casi ninguno, lo
-         leido no sirve y es mejor decirlo que dar un churro por bueno. */
-      var buenos = 0, total = 0;
-      o.filas.forEach(function(f){ f.vals.forEach(function(v){ total++; if (ocrDia(v) != null) buenos++; }); });
-      if (o.cuantos && total && buenos / total < 0.5) {
-        var ta0 = document.getElementById('pegar-txt');
-        ta0.value = o.texto;
-        ocrEstado('<b style="color:#e87c6f">La foto no se lee bien.</b>' +
-          '<div style="color:var(--text2);margin-top:4px">De ' + total + ' días solo he entendido ' + buenos + '. ' +
-          'Prueba otra foto: de cerca, el papel plano y derecho, con luz y sin sombra ni brillo encima. ' +
-          'Si la letra es a mano corrida no hay nada que hacer; escríbelo tú en el cuadro, es un minuto.</div>' +
-          ocrVerCrudo());
-        return;
-      }
-      if (!o.cuantos) {
-        ocrEstado('<span style="color:#e87c6f">No he reconocido a nadie en la foto.</span>' +
-          '<div style="color:var(--text2);margin-top:4px">Prueba con la foto más de cerca y derecha, con buena luz, y que los nombres estén como en Personal.</div>' + ocrVerCrudo());
-        return;
-      }
-      var ta = document.getElementById('pegar-txt');
-      ta.value = o.texto;
-      ocrEstado('<b style="color:var(--gold2)">Leídas ' + o.cuantos + ' personas.</b>' +
-        '<div style="color:var(--text2);margin-top:4px">Repásalo antes de darle a «Poner en la semana»: con letra a mano casi siempre hay algo mal.</div>' +
-        (o.sueltas.length ? '<div style="color:var(--text2);margin-top:4px">Sin usar: ' + esc(o.sueltas.slice(0, 4).join(' · ')) + '</div>' : '') + ocrVerCrudo());
-    }).catch(function(){
-      ocrEstado('<span style="color:#e87c6f">No he podido leer la foto.</span>' +
-        '<div style="color:var(--text2);margin-top:4px">La primera vez hace falta internet para bajarse el lector. Escríbelo a mano en el cuadro de abajo.</div>');
-    });
-  };
-  img.src = url;
 }
 function pegarLeer(txt){
   var gente = staff(), filas = [], errores = [];
