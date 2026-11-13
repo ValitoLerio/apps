@@ -118,6 +118,15 @@ function selGente(id, val){
   return '<input id="'+id+'" list="'+id+'_l" value="'+esc(val||"")+'" placeholder="Nombre" autocomplete="off">'+
     '<datalist id="'+id+'_l">'+l.map(function(g){ return '<option value="'+esc(g)+'">'; }).join("")+'</datalist>';
 }
+/* Quién hizo esa limpieza: se elige de la lista, no se escribe. El
+   personal sale de Ajustes, y «Otro» es para alguien de paso. */
+function selQuienLimp(l){
+  var g=state.gente.slice(); if(l.quien && g.indexOf(l.quien)<0) g.push(l.quien);
+  return '<select data-ql="'+l.id+'" style="width:140px;flex:none;font-size:13px;padding:5px 6px">'+
+    '<option value=""'+(l.quien?"":" selected")+'>¿Quién?</option>'+
+    g.map(function(n){ return '<option value="'+esc(n)+'"'+(n===l.quien?" selected":"")+'>'+esc(n)+'</option>'; }).join("")+
+    '<option value="__otro">Otro…</option></select>';
+}
 function apuntarGente(n){ n=(n||"").trim(); if(n && state.gente.indexOf(n)<0) state.gente.push(n); return n; }
 
 /* ── armazón ───────────────────────────────────────────────────── */
@@ -188,8 +197,7 @@ function vHoy(box){
     '<section class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab"><h2>🧽 Limpieza que toca '+(esHoy?'hoy':'ese día')+'</h2><span class="pista">'+
       tareas.filter(function(ta){ return limpiezaDe(f,ta.id); }).length+' de '+tareas.length+' hechas</span></div>'+
       '<div class="tarjeta-cuerpo" style="padding:4px 12px">'+
-      (tareas.length ? '<datalist id="limp_g">'+state.gente.map(function(g){ return '<option value="'+esc(g)+'">'; }).join("")+'</datalist>'+
-        tareas.map(function(ta){
+      (tareas.length ? tareas.map(function(ta){
         var l=limpiezaDe(f,ta.id);
         /* La casilla del nombre va fuera del label a propósito: dentro,
            tocarla marcaría y desmarcaría la tarea. */
@@ -198,9 +206,7 @@ function vHoy(box){
             '<input type="checkbox" data-ta="'+ta.id+'"'+(l?" checked":"")+'>'+
             '<span class="t-nom">'+esc(ta.nombre)+(ta.frec!=="diaria"?' <span class="chapa neutra">'+esc(FREC[ta.frec])+'</span>':'')+'</span>'+
           '</label>'+
-          (l ? '<input data-ql="'+l.id+'" list="limp_g" value="'+esc(l.quien||"")+'" placeholder="¿Quién la hizo?" autocomplete="off" '+
-                 'style="width:130px;flex:none;font-size:13px;padding:5px 8px">'+
-               (l.hora?'<span class="t-quien">'+esc(l.hora)+'</span>':'')
+          (l ? selQuienLimp(l) + (l.hora?'<span class="t-quien">'+esc(l.hora)+'</span>':'')
              : '<span class="t-quien"></span>')+
         '</div>';
       }).join("") : '<p class="nota" style="margin:10px 0">Ese día no toca ninguna limpieza.</p>')+
@@ -242,7 +248,12 @@ function vHoy(box){
   }); });
   $$("[data-ql]", box).forEach(function(i){ i.addEventListener("change", function(){
     var l=porId(state.limpiezas, i.getAttribute("data-ql")); if(!l) return;
-    l.quien=apuntarGente(i.value); guardar();
+    if(i.value==="__otro"){
+      var n=(window.prompt("¿Quién hizo esta limpieza?", "")||"").trim();
+      if(!n){ vHoy(box); return; }
+      l.quien=apuntarGente(n);
+    } else l.quien=i.value;
+    guardar(); vHoy(box);
   }); });
   $("[data-rec-nueva]", box).addEventListener("click", function(){ editarRec(null, f, function(){ vHoy(box); }); });
   $$("[data-rec]", box).forEach(function(b){ b.addEventListener("click", function(){ editarRec(porId(state.recepciones,b.getAttribute("data-rec")), f, function(){ vHoy(box); }); }); });

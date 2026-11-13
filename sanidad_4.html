@@ -322,7 +322,7 @@ th.hoy-c{color:var(--acento)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202611130226"></script>
+<script src="sync.js?v=202611130230"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -335,7 +335,7 @@ th.hoy-c{color:var(--acento)}
   }
   Sync.iniciar('sanidad').then(function(){
     var s = document.createElement('script');
-    s.src = 'sanidad.js?v=202611130226' + Date.now();
+    s.src = 'sanidad.js?v=202611130230' + Date.now();
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ sub.textContent = 'No se pudo cargar sanidad.js. Recarga la pagina.'; };
     document.body.appendChild(s);
