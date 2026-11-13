@@ -218,7 +218,7 @@
 :root[data-goma="1"] #wk-tbl td:hover{background:rgba(192,57,43,.22) !important;}
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="comun.css?v=202611130212">
+<link rel="stylesheet" href="comun.css?v=202611130226">
 </head>
 <body>
 
@@ -583,7 +583,7 @@
 
 
 
-<script src="sync.js?v=202611130212"></script>
+<script src="sync.js?v=202611130226"></script>
 <script>
 (function(){
   var capa = document.getElementById('cargando');
@@ -591,7 +591,7 @@
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202611130212' + Date.now();
+    s.src = 'horario.js?v=202611130226' + Date.now();
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

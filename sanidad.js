@@ -188,11 +188,21 @@ function vHoy(box){
     '<section class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab"><h2>🧽 Limpieza que toca '+(esHoy?'hoy':'ese día')+'</h2><span class="pista">'+
       tareas.filter(function(ta){ return limpiezaDe(f,ta.id); }).length+' de '+tareas.length+' hechas</span></div>'+
       '<div class="tarjeta-cuerpo" style="padding:4px 12px">'+
-      (tareas.length ? tareas.map(function(ta){
+      (tareas.length ? '<datalist id="limp_g">'+state.gente.map(function(g){ return '<option value="'+esc(g)+'">'; }).join("")+'</datalist>'+
+        tareas.map(function(ta){
         var l=limpiezaDe(f,ta.id);
-        return '<label class="tarea'+(l?" hecha":"")+'"><input type="checkbox" data-ta="'+ta.id+'"'+(l?" checked":"")+'>'+
-          '<span class="t-nom">'+esc(ta.nombre)+(ta.frec!=="diaria"?' <span class="chapa neutra">'+esc(FREC[ta.frec])+'</span>':'')+'</span>'+
-          '<span class="t-quien">'+(l?esc([l.quien,l.hora].filter(Boolean).join(" · ")):"")+'</span></label>';
+        /* La casilla del nombre va fuera del label a propósito: dentro,
+           tocarla marcaría y desmarcaría la tarea. */
+        return '<div class="tarea'+(l?" hecha":"")+'">'+
+          '<label style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer;margin:0">'+
+            '<input type="checkbox" data-ta="'+ta.id+'"'+(l?" checked":"")+'>'+
+            '<span class="t-nom">'+esc(ta.nombre)+(ta.frec!=="diaria"?' <span class="chapa neutra">'+esc(FREC[ta.frec])+'</span>':'')+'</span>'+
+          '</label>'+
+          (l ? '<input data-ql="'+l.id+'" list="limp_g" value="'+esc(l.quien||"")+'" placeholder="¿Quién la hizo?" autocomplete="off" '+
+                 'style="width:130px;flex:none;font-size:13px;padding:5px 8px">'+
+               (l.hora?'<span class="t-quien">'+esc(l.hora)+'</span>':'')
+             : '<span class="t-quien"></span>')+
+        '</div>';
       }).join("") : '<p class="nota" style="margin:10px 0">Ese día no toca ninguna limpieza.</p>')+
     '</div></section>'+
     /* Mercancía */
@@ -229,6 +239,10 @@ function vHoy(box){
     if(c.checked && !l){ state.limpiezas.push({id:uid(), tarea:id, fecha:f, quien:quienAhora(), hora:esHoy?hora():""}); }
     else if(!c.checked && l){ state.limpiezas=state.limpiezas.filter(function(x){ return x!==l; }); }
     guardar(); vHoy(box); refrescarRail();
+  }); });
+  $$("[data-ql]", box).forEach(function(i){ i.addEventListener("change", function(){
+    var l=porId(state.limpiezas, i.getAttribute("data-ql")); if(!l) return;
+    l.quien=apuntarGente(i.value); guardar();
   }); });
   $("[data-rec-nueva]", box).addEventListener("click", function(){ editarRec(null, f, function(){ vHoy(box); }); });
   $$("[data-rec]", box).forEach(function(b){ b.addEventListener("click", function(){ editarRec(porId(state.recepciones,b.getAttribute("data-rec")), f, function(){ vHoy(box); }); }); });
