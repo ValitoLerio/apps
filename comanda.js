@@ -431,7 +431,7 @@ function viewServicios(main){
         '<input id="q_desc" placeholder="Escribe la descripción" style="display:none; margin-top:6px"></div>'+
       '<div class="field"><label class="lbl" for="q_ext">Extras (€)</label><input type="number" id="q_ext" min="0" step="0.01" placeholder="0,00"></div>'+
       '<div class="field"><label class="lbl" for="q_alb">Nº albarán</label><input id="q_alb" class="mono" placeholder="ALB-0001"></div>'+
-      '<div class="field"><label class="lbl" for="q_din">Comens.</label><input type="number" id="q_din" min="0" step="1" value="1" required></div>'+
+      '<div class="field"><label class="lbl" for="q_din">Comens.</label><input type="number" id="q_din" min="0" step="1" value="0" required></div>'+
       '<div class="field"><label class="lbl" for="q_pri">€/persona'+(state.settings.pricesIncludeIgi?" (IGI incl.)":"")+'</label><input type="number" id="q_pri" min="0" step="0.01" value="'+esc(precioTipo(ui.fCompany, ui.lastTipo||defaultDesc()))+'" required></div>'+
       '<div style="display:flex; gap:10px; align-items:end"><span class="total-preview" id="q_total">—</span>'+
       '<button class="btn" type="button" id="q_more" title="Guarda esta línea y deja el mismo albarán abierto para añadir otra cosa (p. ej. bocadillos)">+ Otra línea</button>'+
@@ -483,6 +483,10 @@ function viewServicios(main){
     if(!pedirFoto(qc.value, document.getElementById("q_date").value, false) && !qc.value) qc.focus();
   });
 
+  /* Empieza en 0: así se ve que el servicio nuevo aún no está puesto.
+     Al tocar el hueco se selecciona el 0 y se escribe encima. */
+  qd.addEventListener("focus", function(){ try{ qd.select(); }catch(e){} });
+  qd.addEventListener("mouseup", function(e){ e.preventDefault(); });
   var masLineas=false;
   document.getElementById("q_more").addEventListener("click", function(){
     masLineas=true;
@@ -1880,6 +1884,9 @@ function engancharEnvio(d, inv){
   d.querySelector("[data-mail]").addEventListener("click", function(){ copyMail(inv); });
   d.querySelector("[data-mailto]").addEventListener("click", function(){ openMail(inv); });
   d.querySelector("[data-enviar]").addEventListener("click", function(){ enviarPorCorreo(inv, d); });
+  var oc=d.querySelector("#otroCorreo");
+  if(oc) oc.addEventListener("keydown", function(e){
+    if(e.key==="Enter"){ e.preventDefault(); enviarPorCorreo(inv, d); } });
     /* Elegir con que correo sale: se repinta solo el panel de envio, que
        los destinatarios marcados se quedan como estan. */
   d.querySelectorAll("[data-remite]").forEach(function(b){
@@ -2026,16 +2033,39 @@ function sendBoxHTML(inv){
 }
 
 /* Los correos marcados en el panel, mas el que se haya escrito a mano. */
+var CORREO_OK=/^[^\s@,;<>()]+@[^\s@,;<>()]+\.[a-z]{2,}$/i;
 function destinatariosElegidos(inv){
   var marcados = Array.prototype.slice.call(document.querySelectorAll(".dest-mail:checked"))
-                   .map(function(x){ return x.value; });
+                   .map(function(x){ return x.value.trim(); });
+  /* Si no hay casillas en pantalla (se llama sin el panel), los de la empresa */
+  if (!document.querySelector(".dest-mail") && !document.getElementById("otroCorreo"))
+    marcados = correosDeFactura(inv);
   var otro = document.getElementById("otroCorreo");
   if (otro && otro.value.trim()) {
-    otro.value.split(/[;,\s]+/).forEach(function(x){ x=x.trim(); if(x) marcados.push(x); });
+    otro.value.replace(/[<>"]/g," ").split(/[;,\s]+/).forEach(function(x){
+      x=x.trim().replace(/^mailto:/i,"").replace(/[.]+$/,""); if(x) marcados.push(x); });
   }
-  if (!marcados.length) marcados = correosDeFactura(inv);
-  // sin repetidos
-  return marcados.filter(function(x,i){ return marcados.indexOf(x) === i; });
+  // sin repetidos (sin mirar mayúsculas)
+  var vistos={};
+  return marcados.filter(function(x){ var k=x.toLowerCase(); if(vistos[k]) return false; vistos[k]=1; return true; });
+}
+/* Comprueba los destinatarios antes de abrir nada. Devuelve la lista
+   buena, o null si hay que corregir algo (y ya lo ha dicho). */
+function destinosValidos(inv){
+  var destinos=destinatariosElegidos(inv);
+  var otro=document.getElementById("otroCorreo");
+  if(!destinos.length){
+    toast("Marca al menos un correo, o escribe uno en el hueco de «Más correos».", true);
+    if(otro) otro.focus();
+    return null;
+  }
+  var malos=destinos.filter(function(x){ return !CORREO_OK.test(x); });
+  if(malos.length){
+    toast((malos.length>1?"Estos correos no están bien escritos: ":"Este correo no está bien escrito: ")+malos.join(", "), true);
+    if(otro){ otro.focus(); }
+    return null;
+  }
+  return destinos;
 }
 function waNumber(inv){
   var vivo=company(inv.companyId)||{};
@@ -2073,31 +2103,35 @@ function waText(inv){
   l.push("", "Te adjunto el PDF." , (st.name||""));
   return l.join("\n");
 }
+/* Abre el correo o WhatsApp en UNA sola pestaña. Antes se usaba
+   window.open con "noopener", que siempre devuelve null aunque abra, y
+   entonces se abría otra pestaña repetida. Un mailto: no necesita
+   pestaña: abre el programa de correo y esta página se queda igual. */
 function openExternal(url, aviso){
-  var w=null;
-  try{ w=window.open(url,"_blank","noopener"); }catch(e){}
-  if(!w){
-    var a=document.createElement("a");
-    a.href=url; a.target="_blank"; a.rel="noopener noreferrer";
-    document.body.appendChild(a); a.click(); a.remove();
-  }
+  var a=document.createElement("a");
+  a.href=url;
+  if(!/^mailto:/i.test(url)){ a.target="_blank"; a.rel="noopener noreferrer"; }
+  a.style.display="none";
+  document.body.appendChild(a);
+  try{ a.click(); }catch(e){ try{ window.open(url,"_blank"); }catch(e2){} }
+  a.remove();
   if(aviso) toast(aviso);
 }
-function openMail(inv){
-  var destinos=destinatariosElegidos(inv);
-  if(!destinos.length){
-    toast("Marca al menos un correo, o escribe uno en «Otro correo».", true);
-    var otro=document.getElementById("otroCorreo"); if(otro) otro.focus();
-    return;
-  }
+function openMail(inv, destinosYa){
+  var destinos=destinosYa || destinosValidos(inv);
+  if(!destinos) return false;
   var m=mailText(inv, destinos);
   var desde=(ui.remitente && ui.remitente!=="__mailto__") ? ui.remitente : "";
-  var cuenta=remitentesDe(inv.issuer).indexOf(desde);
+  /* El número de cuenta se cuenta solo entre las del mismo tipo: con un
+     Gmail y un Hotmail, los dos son la cuenta 0 de su web. */
+  var modo=comoSeAbre(desde);
+  var cuenta=remitentesDe(inv.issuer).filter(function(x){ return comoSeAbre(x)===modo; }).indexOf(desde);
   openExternal(urlDelCorreo(desde, destinos, m.subject, m.body, cuenta),
     (desde ? "Se abre con "+desde+". " : "")+
     (destinos.length>1
       ? "Van "+destinos.length+" destinatarios. Adjunta el PDF antes de enviar."
       : "Adjunta el PDF antes de enviar."));
+  return true;
 }
 /* ¿Es un móvil o tablet que puede mandar el PDF dentro del correo? */
 function movilComparte(){
@@ -2111,20 +2145,26 @@ function movilComparte(){
    En el ordenador: baja el PDF y abre el correo ya escrito con los
    destinatarios; lo único que queda es adjuntar el PDF. Al acabar se
    puede apuntar que la factura ya está enviada. */
+var enviando=false;
 function enviarPorCorreo(inv, dlg){
-  var destinos=destinatariosElegidos(inv);
-  if(!destinos.length){
-    toast("Marca al menos un correo, o escribe uno en el hueco de «Más correos».", true);
-    var otro=document.getElementById("otroCorreo"); if(otro) otro.focus();
-    return;
-  }
+  if(enviando) return;              /* doble clic: no abrir dos correos */
+  var destinos=destinosValidos(inv);
+  if(!destinos) return;
+  enviando=true; setTimeout(function(){ enviando=false; }, 1500);
   if(movilComparte()){
+    /* Los correos quedan copiados para pegarlos en «Para» */
     try{ navigator.clipboard.writeText(destinos.join(", ")).catch(function(){}); }catch(e){}
-    shareInvoice(inv).then(function(ok){ if(ok) preguntarEnviada(inv, destinos, dlg); });
+    shareInvoice(inv).then(function(r){
+      if(r===true){
+        preguntarEnviada(inv, destinos, dlg);
+      } else if(r==="error"){
+        envioAMano(inv, destinos, dlg);
+      }
+    });
     return;
   }
-  downloadInvoice(inv, "pdf");
-  openMail(inv);
+  downloadInvoice(inv, "pdf", {sinMenu:true});
+  openMail(inv, destinos);
   var nombre=invFilename(inv, "pdf");
   openDialog("Adjunta el PDF y envía",
     '<ol style="margin:0;padding-left:20px;line-height:1.7">'+
@@ -2134,11 +2174,30 @@ function enviarPorCorreo(inv, dlg){
       '<li>Dale a <b>Enviar</b>.</li>'+
     '</ol>'+
     '<p class="section-note" style="margin:12px 0 0">Truco: también puedes arrastrar el PDF desde la barra de descargas del navegador hasta el correo.</p>'+
-    '<p class="section-note" style="margin:8px 0 0">¿No se ha abierto el correo? <button class="inline-link" data-reabrir>Ábrelo otra vez</button>.</p>',
+    '<p class="section-note" style="margin:8px 0 0">¿No se ha abierto el correo? <button class="inline-link" data-reabrir>Ábrelo otra vez</button>. '+
+    '¿No encuentras el PDF? <button class="inline-link" data-rebajar>Bájalo otra vez</button>.</p>',
     function(){ marcarEnviada(inv, destinos, dlg); },
     {okLabel:"Ya la he enviado"});
   var re=document.querySelector("#dlg [data-reabrir]");
-  if(re) re.addEventListener("click", function(){ openMail(inv); });
+  if(re) re.addEventListener("click", function(){ openMail(inv, destinos); });
+  var rb=document.querySelector("#dlg [data-rebajar]");
+  if(rb) rb.addEventListener("click", function(){ downloadInvoice(inv, "pdf", {sinMenu:true}); });
+}
+/* Si el móvil no deja compartir: lo mismo que en el ordenador, con
+   botones para que cada cosa vaya con su propio toque. */
+function envioAMano(inv, destinos, dlg){
+  openDialog("Envíala a mano",
+    '<p style="margin:0 0 12px">Este móvil no ha dejado meter el PDF en el correo. Hazlo en dos toques:</p>'+
+    '<div style="display:flex;flex-direction:column;gap:8px">'+
+      '<button class="btn" data-m-pdf>1 · Descargar el PDF</button>'+
+      '<button class="btn" data-m-mail>2 · Abrir el correo ya escrito</button>'+
+    '</div>'+
+    '<p class="section-note" style="margin:12px 0 0">En el correo, adjunta el PDF desde <b>Descargas</b> (o Archivos) y envía.</p>',
+    function(){ marcarEnviada(inv, destinos, dlg); },
+    {okLabel:"Ya la he enviado"});
+  var d=document.getElementById("dlg");
+  d.querySelector("[data-m-pdf]").addEventListener("click", function(){ downloadInvoice(inv, "pdf", {sinMenu:true}); });
+  d.querySelector("[data-m-mail]").addEventListener("click", function(){ openMail(inv, destinos); });
 }
 function preguntarEnviada(inv, destinos, dlg){
   openDialog("¿Se ha enviado?",
@@ -2169,9 +2228,9 @@ async function shareInvoice(inv){
       files=(pdfListo && pdfListo.clave===clavePdf(inv)) ? pdfListo.files : null;
       if(!files){
         toast("Preparando las fotos… vuelve a pulsar en un momento.");
-        prepararPdf(inv).then(function(){ toast("Listo. Pulsa «Compartir PDF»."); })
+        prepararPdf(inv).then(function(){ toast("Listo. Vuelve a pulsar «Enviar por correo»."); })
           .catch(function(){ toast("No se pudieron preparar las fotos. Mira la conexión.", true); });
-        return;
+        return "espera";
       }
     } else {
       files=[new File([buildPDF(layoutInvoice(inv))], invFilename(inv,"pdf"), {type:"application/pdf"})];
@@ -2181,13 +2240,14 @@ async function shareInvoice(inv){
         files.slice(1).forEach(function(f,i){ setTimeout(function(){ descargarArchivo(f.name, f, f.type); }, 400*i); });
         files=[files[0]];
         toast("Las fotos se han descargado: adjúntalas también.", true);
-      } else { toast("Este dispositivo no permite compartir archivos.", true); return; }
+      } else { toast("Este dispositivo no permite compartir archivos.", true); return "error"; }
     }
     await navigator.share({files:files, title:"Factura "+inv.number, text:waText(inv)});
     return true;
   }catch(e){
-    if(e && (e.name==="AbortError")) return;
+    if(e && (e.name==="AbortError")) return "abort";
     toast("No se pudo compartir aquí. Descarga el PDF y adjúntalo a mano.", true);
+    return "error";
   }
 }
 function invTaxes(inv){
@@ -2243,11 +2303,24 @@ function invoiceHTML(inv){
 }
 
 /* ============================ email text ============================ */
+/* El saludo del final («Un saludo,») va al final del correo, debajo de
+   los importes y justo antes del nombre, aunque en Ajustes esté escrito
+   al final del texto de entrada. Y si se ha escrito dos veces, una. */
+var DESPEDIDA=/^(un saludo|saludos|un cordial saludo|cordiales saludos|atentamente|muchas gracias|gracias)\b[^\n]*$/i;
+function partirIntro(txt){
+  var l=String(txt||"").replace(/\r/g,"").split("\n"), fin=[];
+  while(l.length && (!l[l.length-1].trim() || DESPEDIDA.test(l[l.length-1].trim()))){
+    var x=l.pop().trim();
+    if(x && !fin.some(function(y){ return y.toLowerCase().replace(/[,.]/g,"")===x.toLowerCase().replace(/[,.]/g,""); })) fin.unshift(x);
+  }
+  return {intro:l.join("\n").replace(/\s+$/,""), despedida:fin.join("\n")};
+}
 function mailText(inv, destinos){
   var c=inv.client||{};
   var para=(destinos && destinos.length) ? destinos : correosDeFactura(inv);
   var subject="Factura "+inv.number+" — "+(inv.issuer&&inv.issuer.name?inv.issuer.name:"")+" — "+monthLabel(inv.period);
-  var body=(state.settings.mailIntro||"")+"\n\n"+
+  var pi=partirIntro(state.settings.mailIntro);
+  var body=(pi.intro?pi.intro+"\n\n":"")+
     "Factura: "+inv.number+"\n"+
     "Periodo: "+monthLabel(inv.period)+"\n"+
     "Albaranes: "+nAlb(inv.lines)+"  ·  Comensales: "+num(inv.diners)+"\n"+
@@ -2255,7 +2328,7 @@ function mailText(inv, destinos){
     invTaxes(inv).map(function(tx){ return "IGI "+pct(tx.rate)+": "+eur(tx.amount)+"\n"; }).join("")+
     "TOTAL: "+eur(inv.total)+"\n"+
     (inv.iban?"IBAN: "+inv.iban+"\n":"")+
-    "\n"+(inv.issuer&&inv.issuer.name?inv.issuer.name:"")+(inv.issuer&&inv.issuer.phone?" · "+inv.issuer.phone:"");
+    "\n"+(pi.despedida?pi.despedida+"\n":"")+(inv.issuer&&inv.issuer.name?inv.issuer.name:"")+(inv.issuer&&inv.issuer.phone?" · "+inv.issuer.phone:"");
   return {to:para.join(","), subject:subject, body:body, lista:para};
 }
 async function copyMail(inv){
@@ -2591,7 +2664,8 @@ function invFilename(inv, ext){
   var who=(inv.client&&inv.client.name?inv.client.name:"cliente").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^A-Za-z0-9]+/g,"-").replace(/^-|-$/g,"");
   return ("Factura-"+inv.number+"-"+who).slice(0,80)+"."+ext;
 }
-async function downloadInvoice(inv, kind){
+async function downloadInvoice(inv, kind, op){
+  op=op||{};
   var paper=(kind==="paper");
   var pages=paper ? layoutPaper(inv, state.settings.paperCopy!==false) : layoutInvoice(inv);
   try{
@@ -2603,7 +2677,7 @@ async function downloadInvoice(inv, kind){
         toast("Preparando las fotos…");
         fa=await archivosDeFotos(inv);
         var compartibles=false;
-        try{ compartibles=!fotosEnZip() && fa.length && canShareFiles() && navigator.canShare({files:fa}); }catch(e){}
+        try{ compartibles=!op.sinMenu && movilComparte() && !fotosEnZip() && fa.length && navigator.canShare({files:fa}); }catch(e){}
         if(compartibles){
           /* En el móvil solo baja un archivo de golpe: las fotos sueltas se
              guardan todas de una vez desde el menú de compartir. */
