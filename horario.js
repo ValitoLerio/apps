@@ -4256,12 +4256,12 @@ function planRellenar(){
         var tSemI = libres[i].tipo, grI = libres[i].g.grupo;
         if (tSemI && !libres[i].g.abre && (grI === 'cam' || grI === 'enc' || grI === 'enccoc' || grI === 'coc')) {
           var catI = (encs[i] && tt.b >= CIERRE - 1) ? 'noc' : catDe(tt.a);
-          if (catI !== tSemI) coste += (grI === 'coc' && tSemI === 'man' && catI === 'med') ? 40 : ((grI === 'enc' || grI === 'enccoc') ? 250 : 420);
+          if (catI !== tSemI) coste += (grI === 'coc' && tSemI === 'man' && catI === 'med') ? 40 : ((grI === 'enc' || grI === 'enccoc') ? (tSemI === 'man' && catI === 'noc' ? 900 : 250) : 420);
         }
         /* Y dentro de la semana, a la misma hora que el día anterior:
            el turno cambia de una semana a otra, no de un día a otro. */
         var cAntI = fecha.getDay() !== 1 ? gcAt(libres[i].s.id, diaAntes(dia)) : null;
-        if (cAntI && cAntI.estado === 'trabajo' && cAntI.inicio && Math.floor(aMin(cAntI.inicio) / 60) !== tt.h) coste += 60;
+        if (cAntI && cAntI.estado === 'trabajo' && cAntI.inicio && Math.floor(aMin(cAntI.inicio) / 60) !== tt.h && (!libres[i].tipo || catDe(aMin(cAntI.inicio)) === libres[i].tipo)) coste += 60;
         hors[libres[i].s.id] = [tt.a, tt.b];
         if (p.justo && tt.b >= CIERRE - 1) coste += (cierresCnt[libres[i].s.id] || 0) * 6;   /* reparto de cierres */
         if (cov[tt.h] != null) { cov[tt.h]++; if (encs[i]) covE[tt.h]++; else covO[tt.h]++; }
@@ -4326,7 +4326,7 @@ function planRellenar(){
          un hueco a cualquier hora, y solo cede ante abrir y cerrar. */
       var comN = Math.min(com13, com14);
       if (COMIDAS && comN < COMIDAS) coste += (COMIDAS - comN) * 370;
-      if (!encCierra && !encFijoCierra) coste += 300;   /* siempre cierra un encargado */
+      if (!encCierra && !encFijoCierra) coste += 2000;   /* siempre cierra un encargado */
       if (!otroCierra) coste += 280;                    /* y con él, un camarero o cocinero */
       if (alCierre > 1) coste += (alCierre - 1) * 200;  /* uno solo de más para cerrar */
       /* A la primera hora entra siempre el que abre (Tamara) */
@@ -4337,7 +4337,7 @@ function planRellenar(){
       /* Y con él un encargado. Si sólo queda uno libre, ese tiene que
          cerrar: entonces no abre él, abre otro, y eso no cuesta nada. */
       if (!encAbre && !encFijoAbre) coste += encsLibres >= 2 ? 260 : 0;
-      if (encUnicoAbre) coste += 450;                   /* el único encargado del día cierra, no abre */
+      if (encUnicoAbre) coste += 1500;                   /* el único encargado del día cierra, no abre */
       /* Cocina: el cocinero, o si no, uno de los que pueden cubrirla. Un
          encargado que cubre la cocina no cuenta como el que cierra. */
       if (cubNenc && encCierran >= 2) cubN = true;
