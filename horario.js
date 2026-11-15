@@ -4256,8 +4256,12 @@ function planRellenar(){
         var tSemI = libres[i].tipo, grI = libres[i].g.grupo;
         if (tSemI && !libres[i].g.abre && (grI === 'cam' || grI === 'enc' || grI === 'enccoc' || grI === 'coc')) {
           var catI = (encs[i] && tt.b >= CIERRE - 1) ? 'noc' : catDe(tt.a);
-          if (catI !== tSemI) coste += grI === 'coc' ? ((tSemI === 'man' && catI === 'med') ? 40 : 260) : 140;
+          if (catI !== tSemI) coste += (grI === 'coc' && tSemI === 'man' && catI === 'med') ? 40 : ((grI === 'enc' || grI === 'enccoc') ? 250 : 420);
         }
+        /* Y dentro de la semana, a la misma hora que el día anterior:
+           el turno cambia de una semana a otra, no de un día a otro. */
+        var cAntI = fecha.getDay() !== 1 ? gcAt(libres[i].s.id, diaAntes(dia)) : null;
+        if (cAntI && cAntI.estado === 'trabajo' && cAntI.inicio && Math.floor(aMin(cAntI.inicio) / 60) !== tt.h) coste += 60;
         hors[libres[i].s.id] = [tt.a, tt.b];
         if (p.justo && tt.b >= CIERRE - 1) coste += (cierresCnt[libres[i].s.id] || 0) * 6;   /* reparto de cierres */
         if (cov[tt.h] != null) { cov[tt.h]++; if (encs[i]) covE[tt.h]++; else covO[tt.h]++; }
