@@ -3965,6 +3965,17 @@ function planRellenar(){
       else if (ant[A] === 'man' && ant[B] !== 'man') { r[A] = 'noc'; r[B] = 'man'; }
       else if (ant[B] === 'man' && ant[A] !== 'man') { r[B] = 'noc'; r[A] = 'man'; }
     }
+    /* Tres encargados y uno es también cocina (Valeriano): él va una
+       semana de mañana y otra de cierre, y el cocinero al revés. Los
+       otros dos rotan en lo que queda: en cuatro semanas cada uno
+       abre una, cierra otra y hace dos de mediodía. */
+    var ec3 = encs.filter(function(id){ return p.gente[id].grupo === 'enccoc'; })[0];
+    if (encs.length === 3 && ec3) {
+      var k4 = ((sem % 4) + 4) % 4, otros = encs.filter(function(id){ return id !== ec3; });
+      r[ec3] = (k4 % 2 === 0) ? 'man' : 'noc';
+      r[otros[0]] = ['noc','med','med','man'][k4];
+      r[otros[1]] = ['med','man','noc','med'][k4];
+    }
     var falta = ['man','noc','med'].slice(0, encs.length);
     var quedan = [];
     encs.forEach(function(id){
@@ -4239,6 +4250,14 @@ function planRellenar(){
         if (tt.exc) coste += 10;                                            /* menos descanso: solo para cambiar de turno */
         if (encs[i] && tt.b > CIERRE + 30) coste += (tt.b - CIERRE) / 60 * 30;   /* encargado que se queda de más */
         cats[libres[i].s.id] = catDe(tt.a);
+        /* El turno de su semana (rota cada semana): salirse de él cuesta.
+           Menos que dejar sin cubrir la apertura, las comidas o el
+           cierre, pero lo bastante para que no hagan siempre lo mismo. */
+        var tSemI = libres[i].tipo, grI = libres[i].g.grupo;
+        if (tSemI && !libres[i].g.abre && (grI === 'cam' || grI === 'enc' || grI === 'enccoc' || grI === 'coc')) {
+          var catI = (encs[i] && tt.b >= CIERRE - 1) ? 'noc' : catDe(tt.a);
+          if (catI !== tSemI) coste += grI === 'coc' ? ((tSemI === 'man' && catI === 'med') ? 40 : 260) : 140;
+        }
         hors[libres[i].s.id] = [tt.a, tt.b];
         if (p.justo && tt.b >= CIERRE - 1) coste += (cierresCnt[libres[i].s.id] || 0) * 6;   /* reparto de cierres */
         if (cov[tt.h] != null) { cov[tt.h]++; if (encs[i]) covE[tt.h]++; else covO[tt.h]++; }
@@ -5224,15 +5243,26 @@ function planResumen(p, lista, dias, avisos){
         if (b >= cierre - 1) cie++;
       }
       h = Math.round(h * 10) / 10;
+      var tq = {man:0, med:0, noc:0}, tMax = 0, tSem = '';
+      for (var j = 0; j < 7; j++) {
+        var fj = new Date(f0.getFullYear(), f0.getMonth(), f0.getDate() + j);
+        var cj = gcAt(s.id, {y:fj.getFullYear(), m:fj.getMonth(), d:fj.getDate()});
+        if (!cj || cj.estado !== 'trabajo' || !cj.inicio) continue;
+        var aj = aMin(cj.inicio), bj = aMin(cj.fin); if (bj <= aj) bj += 1440;
+        var cierreJ = autoS(fj.getMonth()) === 'invierno' ? 27*60 : 25*60;
+        tq[bj >= cierreJ - 1 ? 'noc' : aj < 11*60 ? 'man' : aj < 15*60 ? 'med' : 'noc']++;
+      }
+      Object.keys(tq).forEach(function(k){ if (tq[k] > tMax) { tMax = tq[k]; tSem = k; } });
+      var tEt = {man:'Mañ', med:'Tarde', noc:'Noche'}[tSem] || '';
       var col = 'var(--text)', nota = [];
       if (+g.maxSem > 0 && h > +g.maxSem) { col = '#e87c6f'; nota.push('pasa de ' + g.maxSem + ' h'); }
       else if (+g.minSem > 0 && h < +g.minSem) { col = '#e8a020'; nota.push('no llega a ' + g.minSem + ' h'); }
       if (+p.minLibres > 0 && 7 - dT < +p.minLibres) { col = '#e8a020'; nota.push('solo ' + (7 - dT) + ' libres'); }
       if (nota.length) avisos.push('Semana del ' + f0.getDate() + '/' + (f0.getMonth() + 1) + ': ' + s.name + ' ' + nota.join(', '));
-      return '<td style="padding:3px 6px;text-align:center;white-space:nowrap;color:' + col + '"><b>' + h + 'h</b> <span style="color:var(--text2)">' + dT + 'd' + (cie ? ' · ' + cie + 'C' : '') + '</span></td>';
+      return '<td style="padding:3px 6px;text-align:center;white-space:nowrap;color:' + col + '">' + (tEt ? '<span style="color:var(--gold2);font-weight:600">' + tEt + '</span> ' : '') + '<b>' + h + 'h</b> <span style="color:var(--text2)">' + dT + 'd' + (cie ? ' · ' + cie + 'C' : '') + '</span></td>';
     }).join('') + '</tr>';
   }).join('');
-  return '<div style="margin-top:8px;color:var(--text2)">Cómo queda cada semana (horas · días · C = cierres):</div>' +
+  return '<div style="margin-top:8px;color:var(--text2)">Cómo queda cada semana (turno · horas · días · C = cierres):</div>' +
     '<div style="overflow-x:auto;margin-top:4px"><table style="border-collapse:collapse;font-size:.74rem">' + th + tb + '</table></div>';
 }
 
