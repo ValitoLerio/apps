@@ -112,6 +112,52 @@ function urlDelCorreo(dir, para, asunto, cuerpo, cuenta){
          "?subject="+encodeURIComponent(asunto)+"&body="+encodeURIComponent(cuerpo);
 }
 
+/* Todos los correos desde los que se puede mandar: el de la factura, los
+   de los perfiles y los que se han ido apuntando al enviar. */
+function correosDeEnvio(inv){
+  var l=[];
+  remitentesDe(inv&&inv.issuer).forEach(function(x){ l.push(x); });
+  perfiles().forEach(function(p){ remitentesDe(p).forEach(function(x){ l.push(x); }); });
+  (state.settings.correosEnvio||[]).forEach(function(x){ l.push(x); });
+  return l.map(function(x){ return String(x||"").trim(); })
+          .filter(function(x,i,a){ return x && a.indexOf(x)===i; });
+}
+/* Antes de abrir el correo se pregunta desde qué cuenta sale. */
+function pedirRemitente(inv, seguir){
+  var lista=correosDeEnvio(inv);
+  var elegido=(ui.remitente && (lista.indexOf(ui.remitente)>=0 || ui.remitente==="__mailto__")) ? ui.remitente : (lista[0]||"__mailto__");
+  var ops=lista.concat(["__mailto__"]).map(function(dir){
+    return '<label class="check" style="margin:0 0 8px"><input type="radio" name="remite" value="'+esc(dir)+'"'+(dir===elegido?" checked":"")+'>'+
+      '<span><b>'+(dir==="__mailto__"?"Mi programa de correo":esc(dir))+'</b></span></label>';
+  }).join("");
+  openDialog("¿Desde qué correo la mandas?",
+    ops+
+    '<div class="field" style="margin-top:6px"><label class="lbl" for="remiteOtro">Otro correo</label>'+
+      '<input id="remiteOtro" type="email" placeholder="lapalmeradesoldeu@hotmail.com" autocomplete="off"></div>'+
+    '<label class="check" style="margin:8px 0 0"><input type="checkbox" id="remiteGuardar" checked><span>Guardarlo para la próxima vez</span></label>',
+    function(){
+      var dlg=document.getElementById("dlg");
+      var otro=(dlg.querySelector("#remiteOtro").value||"").trim();
+      var dir;
+      if(otro){
+        if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(otro)){ toast("Ese correo no está bien escrito"); return true; }
+        dir=otro;
+        if(dlg.querySelector("#remiteGuardar").checked && lista.indexOf(otro)<0){
+          state.settings.correosEnvio=(state.settings.correosEnvio||[]).concat([otro]); touch();
+        }
+      } else {
+        var r=dlg.querySelector('input[name="remite"]:checked');
+        dir=r ? r.value : "__mailto__";
+      }
+      ui.remitente=dir;
+      seguir();   /* en el mismo clic, para que el navegador deje abrir el correo */
+    },
+    {okLabel:"Seguir"});
+  var o=document.querySelector("#dlg #remiteOtro");
+  if(o) o.addEventListener("input", function(){
+    document.querySelectorAll('#dlg input[name="remite"]').forEach(function(x){ x.checked=false; }); });
+}
+
 /* Los correos de una empresa: admite el campo antiguo y la lista nueva. */
 function correosDe(c){
   if (!c) return [];
@@ -1882,7 +1928,7 @@ function engancharEnvio(d, inv){
   });
   d.querySelector("[data-pdf]").addEventListener("click", function(){ downloadInvoice(inv,"pdf"); });
   d.querySelector("[data-mail]").addEventListener("click", function(){ copyMail(inv); });
-  d.querySelector("[data-mailto]").addEventListener("click", function(){ openMail(inv); });
+  d.querySelector("[data-mailto]").addEventListener("click", function(){ if(destinosValidos(inv)) pedirRemitente(inv, function(){ openMail(inv); }); });
   d.querySelector("[data-enviar]").addEventListener("click", function(){ enviarPorCorreo(inv, d); });
   var oc=d.querySelector("#otroCorreo");
   if(oc) oc.addEventListener("keydown", function(e){
@@ -2125,7 +2171,7 @@ function openMail(inv, destinosYa){
   /* El número de cuenta se cuenta solo entre las del mismo tipo: con un
      Gmail y un Hotmail, los dos son la cuenta 0 de su web. */
   var modo=comoSeAbre(desde);
-  var cuenta=remitentesDe(inv.issuer).filter(function(x){ return comoSeAbre(x)===modo; }).indexOf(desde);
+  var cuenta=correosDeEnvio(inv).filter(function(x){ return comoSeAbre(x)===modo; }).indexOf(desde);
   openExternal(urlDelCorreo(desde, destinos, m.subject, m.body, cuenta),
     (desde ? "Se abre con "+desde+". " : "")+
     (destinos.length>1
@@ -2163,6 +2209,9 @@ function enviarPorCorreo(inv, dlg){
     });
     return;
   }
+  pedirRemitente(inv, function(){ enviarDesdeOrdenador(inv, destinos, dlg); });
+}
+function enviarDesdeOrdenador(inv, destinos, dlg){
   downloadInvoice(inv, "pdf", {sinMenu:true});
   openMail(inv, destinos);
   var nombre=invFilename(inv, "pdf");
