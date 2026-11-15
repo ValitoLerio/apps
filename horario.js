@@ -2493,9 +2493,16 @@ function openCell(sid, day, event, mo, yr) {
   if (pop) {
     pop.style.display = 'block';
     var rect = event.target.closest('td')?event.target.closest('td').getBoundingClientRect():event.target.getBoundingClientRect();
+    /* Que quepa entera en la pantalla, con Guardar y Cancelar a la
+       vista: se mide de verdad y, si no cabe, se le pone barra. */
+    pop.style.maxHeight = (window.innerHeight - 16) + 'px';
+    pop.style.overflowY = 'auto';
+    var pw = pop.offsetWidth, ph = pop.offsetHeight;
     var top = rect.bottom+5, left = rect.left;
-    if (left+215>window.innerWidth) left = window.innerWidth-220;
-    if (top+290>window.innerHeight) top = rect.top-295;
+    if (left+pw>window.innerWidth-8) left = window.innerWidth-pw-8;
+    if (top+ph>window.innerHeight-8) top = rect.top-ph-5;
+    if (top < 8) top = Math.max(8, window.innerHeight-ph-8);
+    if (left < 8) left = 8;
     pop.style.top  = top+'px';
     pop.style.left = left+'px';
   }
