@@ -125,37 +125,39 @@ function correosDeEnvio(inv){
 /* Antes de abrir el correo se pregunta desde qué cuenta sale. */
 function pedirRemitente(inv, seguir){
   var lista=correosDeEnvio(inv);
-  var elegido=(ui.remitente && (lista.indexOf(ui.remitente)>=0 || ui.remitente==="__mailto__")) ? ui.remitente : (lista[0]||"__mailto__");
-  var ops=lista.concat(["__mailto__"]).map(function(dir){
-    return '<label class="check" style="margin:0 0 8px"><input type="radio" name="remite" value="'+esc(dir)+'"'+(dir===elegido?" checked":"")+'>'+
-      '<span><b>'+(dir==="__mailto__"?"Mi programa de correo":esc(dir))+'</b></span></label>';
+  /* Un botón grande por correo: un clic y se abre ya con esa cuenta. */
+  var botones=lista.map(function(dir){
+    return '<button type="button" class="btn primary" data-desde="'+esc(dir)+'" '+
+      'style="display:block;width:100%;margin:0 0 10px;padding:14px 16px;font-size:15px;text-align:center">'+
+      'Enviar desde <b>'+esc(dir)+'</b></button>';
   }).join("");
   openDialog("¿Desde qué correo la mandas?",
-    ops+
-    '<div class="field" style="margin-top:6px"><label class="lbl" for="remiteOtro">Otro correo</label>'+
-      '<input id="remiteOtro" type="email" placeholder="lapalmeradesoldeu@hotmail.com" autocomplete="off"></div>'+
+    botones+
+    '<button type="button" class="btn" data-desde="__mailto__" style="display:block;width:100%;margin:0 0 14px;padding:10px 16px">'+
+      'Con mi programa de correo</button>'+
+    '<div class="field"><label class="lbl" for="remiteOtro">Otro correo</label>'+
+      '<input id="remiteOtro" type="email" placeholder="otro@correo.com" autocomplete="off"></div>'+
     '<label class="check" style="margin:8px 0 0"><input type="checkbox" id="remiteGuardar" checked><span>Guardarlo para la próxima vez</span></label>',
     function(){
       var dlg=document.getElementById("dlg");
       var otro=(dlg.querySelector("#remiteOtro").value||"").trim();
-      var dir;
-      if(otro){
-        if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(otro)){ toast("Ese correo no está bien escrito"); return true; }
-        dir=otro;
-        if(dlg.querySelector("#remiteGuardar").checked && lista.indexOf(otro)<0){
-          state.settings.correosEnvio=(state.settings.correosEnvio||[]).concat([otro]); touch();
-        }
-      } else {
-        var r=dlg.querySelector('input[name="remite"]:checked');
-        dir=r ? r.value : "__mailto__";
+      if(!otro){ toast("Elige un correo de arriba o escribe otro"); return true; }
+      if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(otro)){ toast("Ese correo no está bien escrito"); return true; }
+      if(dlg.querySelector("#remiteGuardar").checked && lista.indexOf(otro)<0){
+        state.settings.correosEnvio=(state.settings.correosEnvio||[]).concat([otro]); touch();
       }
-      ui.remitente=dir;
+      ui.remitente=otro;
       seguir();   /* en el mismo clic, para que el navegador deje abrir el correo */
     },
-    {okLabel:"Seguir"});
-  var o=document.querySelector("#dlg #remiteOtro");
-  if(o) o.addEventListener("input", function(){
-    document.querySelectorAll('#dlg input[name="remite"]').forEach(function(x){ x.checked=false; }); });
+    {okLabel:"Enviar desde el otro"});
+  var d=document.getElementById("dlg");
+  d.querySelectorAll("[data-desde]").forEach(function(b){
+    b.addEventListener("click", function(){
+      ui.remitente=b.dataset.desde;
+      d.close(); d.remove();
+      seguir();
+    });
+  });
 }
 
 /* Los correos de una empresa: admite el campo antiguo y la lista nueva. */
@@ -2171,7 +2173,11 @@ function openMail(inv, destinosYa){
   /* El número de cuenta se cuenta solo entre las del mismo tipo: con un
      Gmail y un Hotmail, los dos son la cuenta 0 de su web. */
   var modo=comoSeAbre(desde);
-  var cuenta=correosDeEnvio(inv).filter(function(x){ return comoSeAbre(x)===modo; }).indexOf(desde);
+  var mismas=correosDeEnvio(inv).filter(function(x){ return comoSeAbre(x)===modo; });
+  var cuenta=mismas.indexOf(desde);
+  /* El navegador numera las cuentas por el orden en que entraste; si
+     abre la que no es, se le da la vuelta y se queda guardado. */
+  if(cuenta>=0 && (state.settings.cuentasAlReves||{})[modo]) cuenta=mismas.length-1-cuenta;
   openExternal(urlDelCorreo(desde, destinos, m.subject, m.body, cuenta),
     (desde ? "Se abre con "+desde+". " : "")+
     (destinos.length>1
@@ -2224,11 +2230,19 @@ function enviarDesdeOrdenador(inv, destinos, dlg){
     '</ol>'+
     '<p class="section-note" style="margin:12px 0 0">Truco: también puedes arrastrar el PDF desde la barra de descargas del navegador hasta el correo.</p>'+
     '<p class="section-note" style="margin:8px 0 0">¿No se ha abierto el correo? <button class="inline-link" data-reabrir>Ábrelo otra vez</button>. '+
-    '¿No encuentras el PDF? <button class="inline-link" data-rebajar>Bájalo otra vez</button>.</p>',
+    '¿No encuentras el PDF? <button class="inline-link" data-rebajar>Bájalo otra vez</button>.</p>'+
+    '<p class="section-note" style="margin:8px 0 0">¿Se ha abierto con la otra cuenta? <button class="inline-link" data-otracuenta>Ábrelo con la buena</button>.</p>',
     function(){ marcarEnviada(inv, destinos, dlg); },
     {okLabel:"Ya la he enviado"});
   var re=document.querySelector("#dlg [data-reabrir]");
   if(re) re.addEventListener("click", function(){ openMail(inv, destinos); });
+  var oc=document.querySelector("#dlg [data-otracuenta]");
+  if(oc) oc.addEventListener("click", function(){
+    var modo=comoSeAbre(ui.remitente);
+    var r=state.settings.cuentasAlReves||(state.settings.cuentasAlReves={});
+    r[modo]=!r[modo]; touch();
+    openMail(inv, destinos);
+  });
   var rb=document.querySelector("#dlg [data-rebajar]");
   if(rb) rb.addEventListener("click", function(){ downloadInvoice(inv, "pdf", {sinMenu:true}); });
 }
