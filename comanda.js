@@ -2168,8 +2168,8 @@ function openExternal(url, aviso){
 function openMail(inv, destinosYa){
   var destinos=destinosYa || destinosValidos(inv);
   if(!destinos) return false;
-  var m=mailText(inv, destinos);
   var desde=(ui.remitente && ui.remitente!=="__mailto__") ? ui.remitente : "";
+  var m=mailText(inv, destinos, desde);
   /* El número de cuenta se cuenta solo entre las del mismo tipo: con un
      Gmail y un Hotmail, los dos son la cuenta 0 de su web. */
   var modo=comoSeAbre(desde);
@@ -2378,10 +2378,20 @@ function partirIntro(txt){
   }
   return {intro:l.join("\n").replace(/\s+$/,""), despedida:fin.join("\n")};
 }
-function mailText(inv, destinos){
+/* El nombre que va delante del asunto, para que quien lo recibe sepa de
+   quién es antes de abrirlo. Si sale del correo de La Palmera, manda La
+   Palmera aunque la factura la emita otro perfil. */
+function nombreDelAsunto(inv, desde){
+  var d=String(desde||"").toLowerCase();
+  if(/palmera/.test(d)) return "La Palmera de Soldeu";
+  return (inv.issuer&&inv.issuer.name) ? inv.issuer.name : "";
+}
+function mailText(inv, destinos, desde){
   var c=inv.client||{};
   var para=(destinos && destinos.length) ? destinos : correosDeFactura(inv);
-  var subject="Factura "+inv.number+" — "+(inv.issuer&&inv.issuer.name?inv.issuer.name:"")+" — "+monthLabel(inv.period);
+  if(desde===undefined) desde=(ui.remitente && ui.remitente!=="__mailto__") ? ui.remitente : "";
+  var quien=nombreDelAsunto(inv, desde);
+  var subject=(quien?quien+" · ":"")+"Factura "+inv.number+" · "+monthLabel(inv.period);
   var pi=partirIntro(state.settings.mailIntro);
   var body=(pi.intro?pi.intro+"\n\n":"")+
     "Factura: "+inv.number+"\n"+
