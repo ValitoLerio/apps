@@ -4,7 +4,7 @@ function planRellenar(){
   var dias;
   if (planModo === 'semana') {
     var w1 = planSemanasLargo()[planDesde()];
-    dias = w1.dias; dias.forEach(function(d){ d.est = planEstacion(w1.k, w1.mes); });
+    dias = w1.dias; dias.forEach(function(d){ d.est = planEstDia(d); });
   } else dias = planDiasDesde();
   var lista = planPersonas(p);
   if (!p.base) p.base = isoDe(lunesDe(new Date(dias[0].y, dias[0].m, dias[0].d)));
@@ -437,8 +437,11 @@ function planRellenar(){
         }
         /* Y dentro de la semana, a la misma hora que el día anterior:
            el turno cambia de una semana a otra, no de un día a otro. */
-        var cAntI = (fecha.getDay() !== 1 && libres[i].hSem == null) ? gcAt(libres[i].s.id, diaAntes(dia)) : null;
-        if (cAntI && cAntI.estado === 'trabajo' && cAntI.inicio && Math.floor(aMin(cAntI.inicio) / 60) !== tt.h && (!libres[i].tipo || catDe(aMin(cAntI.inicio)) === libres[i].tipo)) coste += 60;
+        var cAntI = fecha.getDay() !== 1 ? gcAt(libres[i].s.id, diaAntes(dia)) : null;
+        if (libres[i].hSem != null) {
+          /* Si tiene que moverse de su hora, mejor como ayer: que el que cubre sea siempre el mismo */
+          if (cAntI && cAntI.estado === 'trabajo' && cAntI.inicio && Math.floor(aMin(cAntI.inicio) / 60) !== tt.h && tt.h !== libres[i].hSem) coste += 30;
+        } else if (cAntI && cAntI.estado === 'trabajo' && cAntI.inicio && Math.floor(aMin(cAntI.inicio) / 60) !== tt.h && (!libres[i].tipo || catDe(aMin(cAntI.inicio)) === libres[i].tipo)) coste += 60;
         hors[libres[i].s.id] = [tt.a, tt.b];
         if (p.justo && tt.b >= CIERRE - 1) coste += (cierresCnt[libres[i].s.id] || 0) * 6;   /* reparto de cierres */
         if (cov[tt.h] != null) { cov[tt.h]++; if (encs[i]) covE[tt.h]++; else covO[tt.h]++; }
@@ -658,4 +661,16 @@ function planRellenar(){
   }
   var bd = document.getElementById('plan-deshacer'); if (bd) bd.style.display = '';
   toast(puestos + ' turnos puestos' + (avisos.length ? ' · revisa los avisos' : ''));
+}
+
+/*SEP*/
+function planEstDia(d){ return (d.y === curY && d.m === curM) ? curS : autoS(d.m); }
+function planDiasDesde(){
+  var sem = planSemanasLargo(), i = planDesde(), hasta = planHasta(), out = [];
+  sem.slice(i).forEach(function(w){
+    if (w.k > hasta) return;
+    w.dias.forEach(function(d){ d.est = planEstDia(d); });
+    out = out.concat(w.dias);
+  });
+  return out;
 }
