@@ -3527,6 +3527,9 @@ function planHasta(){
 /* La jornada de cada día va con la temporada de su mes; la del mes que
    se ve, la que esté puesta arriba. */
 function planEstacion(k, mes){ return k === 0 ? curS : autoS(mes); }
+/* La temporada de cada día va por su mes: la semana del 30/11 al 6/12
+   cierra a la hora de verano hasta el 30 y a la de invierno desde el 1. */
+function planEstDia(d){ return (d.y === curY && d.m === curM) ? curS : autoS(d.m); }
 /* Por defecto, la primera semana que tiene algún día sin poner. */
 function planDesde(){
   var sem = planSemanasLargo();
@@ -3547,7 +3550,7 @@ function planDiasDesde(){
   var sem = planSemanasLargo(), i = planDesde(), hasta = planHasta(), out = [];
   sem.slice(i).forEach(function(w){
     if (w.k > hasta) return;
-    w.dias.forEach(function(d){ d.est = planEstacion(w.k, w.mes); });
+    w.dias.forEach(function(d){ d.est = planEstDia(d); });
     out = out.concat(w.dias);
   });
   return out;
@@ -3875,7 +3878,7 @@ function planRellenar(){
   var dias;
   if (planModo === 'semana') {
     var w1 = planSemanasLargo()[planDesde()];
-    dias = w1.dias; dias.forEach(function(d){ d.est = planEstacion(w1.k, w1.mes); });
+    dias = w1.dias; dias.forEach(function(d){ d.est = planEstDia(d); });
   } else dias = planDiasDesde();
   var lista = planPersonas(p);
   if (!p.base) p.base = isoDe(lunesDe(new Date(dias[0].y, dias[0].m, dias[0].d)));
@@ -4001,6 +4004,44 @@ function planRellenar(){
     return (tiposSem[sem] = r);
   }
 
+  /* La hora de entrada de cada camarero y del cocinero en una semana.
+     Las horas de entrada de "camareros/cocina" (menos las 7, que son de
+     quien abre siempre) se reparten: el cocinero a la primera si va de
+     mañana o a la última si va de noche, y los camareros rotan por las
+     que quedan, una semana cada una. Así cada uno entra toda la semana
+     a la misma hora y cambia de una semana a otra. */
+  var horaSem = {};
+  function horasDe(sem, lunes){
+    if (horaSem[sem]) return horaSem[sem];
+    var r = {}, tps = tiposDe(sem, lunes);
+    var hs = Object.keys(p.entradas || {}).filter(function(h){ return +p.entradas[h] > 0; }).map(Number).sort(function(a, b){ return a - b; });
+    var hayAbre = lista.some(function(s){ var g = p.gente[s.id]; return g && g.abre; });
+    if (hayAbre) hs = hs.filter(function(h){ return h !== hs[0]; });
+    if (!hs.length) return (horaSem[sem] = r);
+    function dispo(id){
+      var n = 0;
+      for (var i = 0; i < 7; i++) {
+        var f = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() + i);
+        var c = gcAt(id, {y:f.getFullYear(), m:f.getMonth(), d:f.getDate()});
+        if (!c || c.estado === 'trabajo' || c.estado === 'festivo' || c.estado === 'libre') n++;
+      }
+      return n >= 4;
+    }
+    var quedan = hs.slice();
+    lista.forEach(function(s){
+      var g = p.gente[s.id];
+      if (!g || g.grupo !== 'coc' || !dispo(s.id)) return;
+      var h = tps[s.id] === 'noc' ? quedan[quedan.length - 1] : quedan[0];
+      r[s.id] = h;
+      if (quedan.length > 1) quedan.splice(quedan.indexOf(h), 1);
+    });
+    var cams = lista.filter(function(s){ var g = p.gente[s.id]; return g && g.grupo === 'cam' && !g.abre && dispo(s.id); });
+    cams.forEach(function(s, k){
+      r[s.id] = quedan[(((k + sem) % quedan.length) + quedan.length) % quedan.length];
+    });
+    return (horaSem[sem] = r);
+  }
+
   /* Reparto de las fiestas por la semana. El dia de cada uno manda; solo
      se toca cuando se amontonan: si un dia libran dos o mas y otro dia de
      esa misma semana no libra nadie, se pasa una fiesta al dia vacio. */
@@ -4055,6 +4096,7 @@ function planRellenar(){
     var fecha = new Date(dia.y, dia.m, dia.d);
     var sem = semanasEntre(base, fecha);
     var tSem = tiposDe(sem, lunesDe(fecha));
+    var hSem = horasDe(sem, lunesDe(fecha));
     var fijos = [], libres = [];
     lista.forEach(function(s){
       var g = p.gente[s.id]; if (!g || g.grupo === 'no') return;
@@ -4131,7 +4173,7 @@ function planRellenar(){
       var arm = armar(planPrefsGrupo(g, tipo, E, E_E, E_O, p));
       if (!arm.prefs.length && SPLIT) { var arm2 = armar(planPrefs(g, tipo, E, p)); if (arm2.prefs.length) arm = arm2; }
       var prefs = arm.prefs, porTope = arm.porTope, porPet = arm.porPet;
-      libres.push({s:s, g:g, tipo:tipo, prefs:prefs, porTope:porTope, porPet:porPet});
+      libres.push({s:s, g:g, tipo:tipo, hSem:hSem[s.id], prefs:prefs, porTope:porTope, porPet:porPet});
     });
 
     /* No coinciden: los dos fuera el mismo dia */
@@ -4261,14 +4303,19 @@ function planRellenar(){
            Menos que dejar sin cubrir la apertura, las comidas o el
            cierre, pero lo bastante para que no hagan siempre lo mismo. */
         var tSemI = libres[i].tipo, grI = libres[i].g.grupo;
-        if (tSemI && !libres[i].g.abre && (grI === 'cam' || grI === 'enc' || grI === 'enccoc' || grI === 'coc')) {
+        if (libres[i].hSem != null && !libres[i].g.abre && (grI === 'cam' || grI === 'coc')) {
+          if (tt.h !== libres[i].hSem) coste += 150;
+        } else if (tSemI && !libres[i].g.abre && (grI === 'cam' || grI === 'enc' || grI === 'enccoc' || grI === 'coc')) {
           var catI = (encs[i] && tt.b >= CIERRE - 1) ? 'noc' : catDe(tt.a);
           if (catI !== tSemI) coste += (grI === 'coc' && tSemI === 'man' && catI === 'med') ? 40 : ((grI === 'enc' || grI === 'enccoc') ? (tSemI === 'man' && catI === 'noc' ? 900 : 250) : 420);
         }
         /* Y dentro de la semana, a la misma hora que el día anterior:
            el turno cambia de una semana a otra, no de un día a otro. */
         var cAntI = fecha.getDay() !== 1 ? gcAt(libres[i].s.id, diaAntes(dia)) : null;
-        if (cAntI && cAntI.estado === 'trabajo' && cAntI.inicio && Math.floor(aMin(cAntI.inicio) / 60) !== tt.h && (!libres[i].tipo || catDe(aMin(cAntI.inicio)) === libres[i].tipo)) coste += 60;
+        if (libres[i].hSem != null) {
+          /* Si tiene que moverse de su hora, mejor como ayer: que el que cubre sea siempre el mismo */
+          if (cAntI && cAntI.estado === 'trabajo' && cAntI.inicio && Math.floor(aMin(cAntI.inicio) / 60) !== tt.h && tt.h !== libres[i].hSem) coste += 30;
+        } else if (cAntI && cAntI.estado === 'trabajo' && cAntI.inicio && Math.floor(aMin(cAntI.inicio) / 60) !== tt.h && (!libres[i].tipo || catDe(aMin(cAntI.inicio)) === libres[i].tipo)) coste += 60;
         hors[libres[i].s.id] = [tt.a, tt.b];
         if (p.justo && tt.b >= CIERRE - 1) coste += (cierresCnt[libres[i].s.id] || 0) * 6;   /* reparto de cierres */
         if (cov[tt.h] != null) { cov[tt.h]++; if (encs[i]) covE[tt.h]++; else covO[tt.h]++; }
