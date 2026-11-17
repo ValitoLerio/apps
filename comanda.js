@@ -112,44 +112,29 @@ function urlDelCorreo(dir, para, asunto, cuerpo, cuenta){
          "?subject="+encodeURIComponent(asunto)+"&body="+encodeURIComponent(cuerpo);
 }
 
-/* Todos los correos desde los que se puede mandar: el de la factura, los
-   de los perfiles y los que se han ido apuntando al enviar. */
-function correosDeEnvio(inv){
-  var l=[];
-  remitentesDe(inv&&inv.issuer).forEach(function(x){ l.push(x); });
-  perfiles().forEach(function(p){ remitentesDe(p).forEach(function(x){ l.push(x); }); });
-  (state.settings.correosEnvio||[]).forEach(function(x){ l.push(x); });
-  return l.map(function(x){ return String(x||"").trim(); })
-          .filter(function(x,i,a){ return x && a.indexOf(x)===i; });
+/* Solo se manda desde los correos puestos en los perfiles (La Palmera y
+   VFF): nada de programa de correo ni de otros correos sueltos. */
+function remitentesFijos(){
+  var l=[], vistos={};
+  perfiles().forEach(function(p){
+    remitentesDe(p).forEach(function(dir){
+      var k=dir.toLowerCase(); if(vistos[k]) return; vistos[k]=1;
+      l.push({dir:dir, nombre:/palmera/.test(k) ? "La Palmera de Soldeu" : (p.name||dir)});
+    });
+  });
+  return l;
 }
-/* Antes de abrir el correo se pregunta desde qué cuenta sale. */
+function correosDeEnvio(){ return remitentesFijos().map(function(r){ return r.dir; }); }
+/* Antes de abrir el correo se pregunta desde cuál de los dos sale. */
 function pedirRemitente(inv, seguir){
-  var lista=correosDeEnvio(inv);
-  /* Un botón grande por correo: un clic y se abre ya con esa cuenta. */
-  var botones=lista.map(function(dir){
-    return '<button type="button" class="btn primary" data-desde="'+esc(dir)+'" '+
+  var fijos=remitentesFijos();
+  if(!fijos.length){ toast("Pon el correo de La Palmera y el de VFF en Ajustes › Perfiles"); return; }
+  var botones=fijos.map(function(r){
+    return '<button type="button" class="btn primary" data-desde="'+esc(r.dir)+'" '+
       'style="display:block;width:100%;margin:0 0 10px;padding:14px 16px;font-size:15px;text-align:center">'+
-      'Enviar desde <b>'+esc(dir)+'</b></button>';
+      '<b>'+esc(r.nombre)+'</b><br><span style="font-size:12.5px;opacity:.85">'+esc(r.dir)+'</span></button>';
   }).join("");
-  openDialog("¿Desde qué correo la mandas?",
-    botones+
-    '<button type="button" class="btn" data-desde="__mailto__" style="display:block;width:100%;margin:0 0 14px;padding:10px 16px">'+
-      'Con mi programa de correo</button>'+
-    '<div class="field"><label class="lbl" for="remiteOtro">Otro correo</label>'+
-      '<input id="remiteOtro" type="email" placeholder="otro@correo.com" autocomplete="off"></div>'+
-    '<label class="check" style="margin:8px 0 0"><input type="checkbox" id="remiteGuardar" checked><span>Guardarlo para la próxima vez</span></label>',
-    function(){
-      var dlg=document.getElementById("dlg");
-      var otro=(dlg.querySelector("#remiteOtro").value||"").trim();
-      if(!otro){ toast("Elige un correo de arriba o escribe otro"); return true; }
-      if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(otro)){ toast("Ese correo no está bien escrito"); return true; }
-      if(dlg.querySelector("#remiteGuardar").checked && lista.indexOf(otro)<0){
-        state.settings.correosEnvio=(state.settings.correosEnvio||[]).concat([otro]); touch();
-      }
-      ui.remitente=otro;
-      seguir();   /* en el mismo clic, para que el navegador deje abrir el correo */
-    },
-    {okLabel:"Enviar desde el otro"});
+  openDialog("¿Desde qué correo la mandas?", botones, null, {noOk:true});
   var d=document.getElementById("dlg");
   d.querySelectorAll("[data-desde]").forEach(function(b){
     b.addEventListener("click", function(){
@@ -1862,14 +1847,14 @@ function openDialog(title, bodyHTML, onSave, opts){
   d.innerHTML='<div class="dlg-head"><h3>'+esc(title)+'</h3><button class="btn ghost" data-x>Cerrar</button></div>'+
     '<div class="dlg-body">'+bodyHTML+'</div>'+
     '<div class="dlg-foot"><button class="btn" data-x>Cancelar</button>'+
-    '<button class="btn '+(opts.danger?"solid-danger":"primary")+'" data-ok>'+esc(opts.okLabel||"Guardar")+"</button></div>";
+    (opts.noOk?"":'<button class="btn '+(opts.danger?"solid-danger":"primary")+'" data-ok>'+esc(opts.okLabel||"Guardar")+"</button>")+"</div>";
   document.body.appendChild(d);
   d.querySelectorAll("[data-x]").forEach(function(b){ b.addEventListener("click",function(){ d.close(); d.remove(); }); });
-  d.querySelector("[data-ok]").addEventListener("click", function(){
+  if(!opts.noOk) d.querySelector("[data-ok]").addEventListener("click", function(){
     var keep=onSave(); if(keep===true) return;
     d.close(); d.remove();
   });
-  d.addEventListener("keydown", function(e){ if(e.key==="Enter" && e.target.tagName==="INPUT"){ e.preventDefault(); d.querySelector("[data-ok]").click(); } });
+  d.addEventListener("keydown", function(e){ if(e.key==="Enter" && e.target.tagName==="INPUT"){ e.preventDefault(); var ok=d.querySelector("[data-ok]"); if(ok) ok.click(); } });
   d.showModal();
   var first=d.querySelector("input,select,textarea"); if(first) first.focus();
 }
@@ -2003,18 +1988,8 @@ function sendBoxHTML(inv){
     : '<p class="section-note" style="margin:0 0 8px">Esta empresa no tiene correos guardados. '+
       'Añádelos en Empresas, o escribe uno aquí abajo.</p>';
 
-  /* Con quien se manda: los correos del perfil y, al final, el programa
-     de correo de siempre por si algun dia hace falta. */
-  var remitentes=remitentesDe(em);
-  if(!ui.remitente || (remitentes.indexOf(ui.remitente)<0 && ui.remitente!=="__mailto__"))
-    ui.remitente = remitentes[0] || "__mailto__";
-  var eleccion = remitentes.map(function(dir){
-      var on=(ui.remitente===dir);
-      return '<button class="btn'+(on?" primary":" ghost")+'" data-remite="'+esc(dir)+'" '+
-             'style="padding:5px 10px;font-size:12.5px">'+esc(dir)+'</button>';
-    }).join("")+
-    '<button class="btn'+(ui.remitente==="__mailto__"?" primary":" ghost")+'" data-remite="__mailto__" '+
-    'style="padding:5px 10px;font-size:12.5px">Mi programa de correo</button>';
+  /* El remitente se elige al pulsar Enviar, entre los dos de siempre. */
+  if(correosDeEnvio().indexOf(ui.remitente)<0) ui.remitente="";
 
   return '<div class="send-box"><h4>Enviar a '+esc(c.name||"la empresa")+"</h4>"+
     '<p class="lead">Marca a quién va y pulsa <b>Enviar por correo</b>. Ni el correo ni WhatsApp dejan que una web adjunte el PDF sola, así que lo único que haces tú es adjuntarlo.</p>'+
@@ -2029,12 +2004,6 @@ function sendBoxHTML(inv){
         'style="padding:5px 10px;font-size:12.5px">Guardar en la empresa</button>'+
       "</div>"+
     "</div>"+
-    (remitentes.length
-      ? '<div style="margin:0 0 10px">'+
-          '<div class="lbl" style="margin-bottom:6px">Enviar desde</div>'+
-          '<div style="display:flex;gap:6px;flex-wrap:wrap">'+eleccion+'</div>'+
-        '</div>'
-      : "")+
     (function(){
       var n=fotosDeFactura(inv).length;
       if(!n) return "";
@@ -2066,17 +2035,8 @@ function sendBoxHTML(inv){
       '<button class="btn ghost" data-mail>Copiar texto</button>'+
     "</div>"+
     '<div class="dest">'+
-      "<span>Sale desde: <b>"+esc(ui.remitente==="__mailto__"?"tu programa de correo":ui.remitente)+"</b></span>"+
       "<span>WhatsApp: <b>"+esc(tel?waDisplay(inv):"elegirás el contacto")+"</b></span>"+
     "</div>"+
-    (ui.remitente==="__mailto__"
-      ? '<p class="section-note" style="margin:10px 0 0">Se abre tu programa de correo, que manda con la cuenta '+
-        'que tenga puesta. Si quieres que salga a nombre del restaurante, elige arriba su correo, o cámbialo '+
-        'en el campo «De:» antes de enviar.</p>'
-      : '<p class="section-note" style="margin:10px 0 0">Se abre <strong>'+
-        esc(comoSeAbre(ui.remitente)==="gmail"?"Gmail":"Outlook")+'</strong> en el navegador con el mensaje escrito. '+
-        'Comprueba arriba a la derecha que estás dentro de <strong>'+esc(ui.remitente)+'</strong>; si no, cambia de '+
-        'cuenta y vuelve a darle.</p>')+
     "</div>";
 }
 
