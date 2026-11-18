@@ -1915,6 +1915,14 @@ function engancharEnvio(d, inv){
   });
   d.querySelector("[data-pdf]").addEventListener("click", function(){ downloadInvoice(inv,"pdf"); });
   d.querySelector("[data-mail]").addEventListener("click", function(){ copyMail(inv); });
+  d.querySelector("[data-copiar-correos]").addEventListener("click", function(){
+    var ds=destinosValidos(inv); if(!ds) return;
+    try{
+      navigator.clipboard.writeText(ds.join(", "))
+        .then(function(){ toast("Correos copiados: pégalos en «Para»."); })
+        .catch(function(){ toast("No se pudieron copiar. Correos: "+ds.join(", "), true); });
+    }catch(e){ toast("Correos: "+ds.join(", "), true); }
+  });
   d.querySelector("[data-mailto]").addEventListener("click", function(){ if(destinosValidos(inv)) pedirRemitente(inv, function(){ openMail(inv); }); });
   d.querySelector("[data-enviar]").addEventListener("click", function(){ enviarPorCorreo(inv, d); });
   var oc=d.querySelector("#otroCorreo");
@@ -2024,7 +2032,7 @@ function sendBoxHTML(inv){
     '<button class="btn primary" data-enviar style="width:100%;justify-content:center;padding:12px 16px;font-size:15px;margin:0 0 6px">'+
       '✉️ Enviar por correo</button>'+
     '<p class="section-note" style="margin:0 0 14px">'+(movilComparte()
-      ? 'Se abre el menú del móvil con el PDF'+(llevaFotos(inv)?' y las fotos':'')+' ya dentro: elige <b>Mail</b> (o Gmail/Outlook) y pega los correos en «Para», que ya van copiados.'
+      ? 'Se abre el menú del móvil con el PDF'+(llevaFotos(inv)?' y las fotos':'')+' ya dentro: elige <b>Outlook</b> (o Mail). Los correos marcados ya van copiados: en «Para», mantén pulsado y toca <b>Pegar</b>.'
       : 'Un solo clic: baja el PDF'+(llevaFotos(inv)?' y las fotos':'')+' y abre el correo ya escrito, con los destinatarios. Solo te queda adjuntar el PDF desde <b>Descargas</b> y darle a Enviar.')+'</p>'+
     '<div class="lbl" style="margin-bottom:6px">Otras formas</div>'+
     '<div class="toolbar" style="margin:0">'+
@@ -2033,6 +2041,7 @@ function sendBoxHTML(inv){
       '<button class="btn ghost" data-wa>Abrir WhatsApp</button>'+
       (canShareFiles()?'<button class="btn ghost" data-share>Compartir PDF…</button>':"")+
       '<button class="btn ghost" data-mail>Copiar texto</button>'+
+      '<button class="btn ghost" data-copiar-correos>Copiar correos</button>'+
     "</div>"+
     '<div class="dest">'+
       "<span>WhatsApp: <b>"+esc(tel?waDisplay(inv):"elegirás el contacto")+"</b></span>"+
@@ -2165,8 +2174,13 @@ function enviarPorCorreo(inv, dlg){
   enviando=true; setTimeout(function(){ enviando=false; }, 1500);
   if(movilComparte()){
     /* Los correos quedan copiados para pegarlos en «Para» */
-    try{ navigator.clipboard.writeText(destinos.join(", ")).catch(function(){}); }catch(e){}
+    var copiados=false;
+    try{ navigator.clipboard.writeText(destinos.join(", ")).then(function(){ copiados=true; }).catch(function(){}); }catch(e){}
     shareInvoice(inv).then(function(r){
+      if(r===true || r==="abort"){
+        if(r===true) toast(copiados ? "Correos copiados: en «Para» mantén pulsado y pulsa Pegar."
+                                    : "No se pudieron copiar los correos: usa «Copiar correos».", !copiados);
+      }
       if(r===true){
         preguntarEnviada(inv, destinos, dlg);
       } else if(r==="error"){

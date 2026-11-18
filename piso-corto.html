@@ -72,7 +72,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
 @media(max-width:640px){header .logo{font-size:16px}}
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="comun.css?v=202611171317">
+<link rel="stylesheet" href="comun.css?v=202611181155">
 </head>
 <body>
 
@@ -475,7 +475,7 @@ input[readonly]:focus{border-color:var(--border);box-shadow:none}
 </div>
 
 
-<script src="sync.js?v=202611171317"></script>
+<script src="sync.js?v=202611181155"></script>
 <script>
 /* Red de seguridad. Si los archivos de la app no están al lado de esta
    página — pasa al abrirla fuera de la web: vista previa, doble clic en
@@ -492,7 +492,7 @@ window.reintentarJS = function(viejo, nombre, sub){
   }
   var s = document.createElement('script');
   s.setAttribute('data-rein', '1');
-  s.src = WEB_APPS + nombre + '?v=202611171317' + Date.now();
+  s.src = WEB_APPS + nombre + '?v=202611181155' + Date.now();
   s.onload = viejo.onload;
   s.onerror = function(){ reintentarJS(s, nombre, sub); };
   document.body.appendChild(s);
@@ -540,7 +540,7 @@ if (!window.Sync) (function(){
 
   Sync.iniciar('piso').then(function(){
     var s = document.createElement('script');
-    s.src = 'piso-corto.js?v=202611171317' + Date.now();
+    s.src = 'piso-corto.js?v=202611181155' + Date.now();
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
