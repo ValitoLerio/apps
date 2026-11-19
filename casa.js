@@ -757,6 +757,7 @@ function verCompra(main){
       "No hay que dar de alta nada: se escribe el nombre y ya.",
       selectorMes("c_mes")+
       '<button class="btn" id="fotoTiquet">📷 Foto del tiquet</button>'+
+      '<button class="btn" id="codigoBarras">▦ Código de barras</button>'+
       '<button class="btn" id="dictar">🎤 Dictar precios</button>'+
       '<button class="btn fuerte" id="nuevaCompra">Anotar compra</button>')+
 
@@ -800,6 +801,7 @@ function verCompra(main){
   document.getElementById("nuevaCompra").addEventListener("click", function(){ editarCompra(null); });
   document.getElementById("dictar").addEventListener("click", abrirDictado);
   document.getElementById("fotoTiquet").addEventListener("click", abrirFotoTiquet);
+  document.getElementById("codigoBarras").addEventListener("click", abrirCodigoBarras);
   document.getElementById("masAlmacen").addEventListener("click", function(){ editarSuper(null); });
   main.querySelectorAll("[data-pliegue]").forEach(function(det){
     det.addEventListener("toggle", function(){
@@ -1213,6 +1215,213 @@ function abrirFotoTiquet(){
           ? 'No he podido cargar el lector. Mira que haya internet y vuelve a probar.'
           : 'No he podido leer la foto. Prueba con otra.')+'</span>';
     });
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ESCANEAR UN PAPEL EN CUALQUIER APARTADO
+   ══════════════════════════════════════════════════════════════
+   Arriba de cada ventana de anotar (médico, gasolina, taller, recibos,
+   otros gastos) hay un botón «📷 Escanear». Se hace la foto a la
+   factura o al tiquet, el mismo lector gratuito de la compra saca el
+   texto y se rellenan solos la fecha, el importe, el nombre de quien la
+   hace y, en la gasolina, los litros. Lo demás se repasa a mano. */
+function leerPapel(texto){
+  var filas=String(texto||"").split(/\r?\n/).map(function(x){ return x.replace(/\s+/g," ").trim(); })
+                             .filter(function(x){ return x.length>1; });
+  var t=leerTiquet(texto), out={fecha:t.fecha, nombre:"", importe:null, litros:null};
+  for(var k=0;k<Math.min(5,filas.length);k++){
+    if(letras(filas[k])>=4 && !NO_ES_PRODUCTO.test(filas[k])){
+      out.nombre=nombreBonito(filas[k].split(",")[0].replace(/\b(s\.?\s?a\.?|s\.?\s?l\.?\s?u?\.?)(?=\s|$)/ig," ").replace(/\S*\d\S*/g," "));
+      break;
+    }
+  }
+  /* El importe: el del total; si no lo pone, la cifra más alta */
+  var reTotal=/\b(total|importe|a\s*pagar|neto|pagado|suma)\b/i, mayor=0;
+  for(var i=filas.length-1;i>=0;i--){
+    var m=filas[i].match(PRECIO_FIN);
+    if(m && reTotal.test(filas[i]) && !/sub/i.test(filas[i])){ out.importe=aPrecio(m); break; }
+  }
+  if(out.importe==null){
+    filas.forEach(function(f){
+      (f.match(/\d{1,5}\s?[.,]\s?\d{2}\b/g)||[]).forEach(function(x){
+        var v=parseFloat(x.replace(/\s/g,"").replace(",",".")); if(v>mayor && v<100000) mayor=v;
+      });
+    });
+    if(mayor>0) out.importe=r2(mayor);
+  }
+  var ml=String(texto).match(/(\d{1,3}[.,]\d{1,3})\s*(?:l\b|lt\b|lts\b|litros|ltr)/i);
+  if(ml) out.litros=r2(parseFloat(ml[1].replace(",",".")));
+  return out;
+}
+function leerFoto(archivo, estado){
+  var foto;
+  return prepararFoto(archivo).then(function(c){ foto=c; return cargarTesseract(); })
+    .then(function(T){
+      return T.recognize(foto, "spa", { logger:function(m){
+        if(m.status==="recognizing text" && estado) estado.textContent="Leyendo… "+Math.round((m.progress||0)*100)+" %";
+      }});
+    })
+    .then(function(r){ return r && r.data ? r.data.text : ""; });
+}
+/* campos: {fecha, importe, nombre, litros} con el id de cada casilla */
+function ponerEscaner(campos){
+  var dlg=document.getElementById("dlg"); if(!dlg) return;
+  var cuerpo=dlg.querySelector(".dlg-cuerpo"); if(!cuerpo) return;
+  var barra=document.createElement("div");
+  barra.style.cssText="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 14px;"+
+                      "padding:0 0 12px;border-bottom:1px solid var(--linea)";
+  barra.innerHTML='<label class="btn sm" style="display:inline-flex;cursor:pointer">📷 Escanear el papel'+
+    '<input type="file" accept="image/*" capture="environment" style="display:none"></label>'+
+    '<span class="nota" style="margin:0">Foto a la factura o al tiquet y se rellena solo.</span>';
+  cuerpo.insertBefore(barra, cuerpo.firstChild);
+  var nota=barra.querySelector(".nota");
+  barra.querySelector("input").addEventListener("change", function(){
+    var archivo=this.files && this.files[0]; if(!archivo) return;
+    nota.textContent="Preparando el lector… (la primera vez tarda un poco)";
+    leerFoto(archivo, nota).then(function(texto){
+      var r=leerPapel(texto), puesto=[];
+      function poner(id, v, que){
+        var e=id && document.getElementById(id);
+        if(!e || v==null || v==="") return;
+        e.value=v; e.dispatchEvent(new Event("input",{bubbles:true})); e.dispatchEvent(new Event("change",{bubbles:true}));
+        puesto.push(que);
+      }
+      poner(campos.fecha, r.fecha, "la fecha");
+      poner(campos.importe, r.importe, "el importe ("+eur(r.importe||0)+")");
+      if(campos.nombre){ var en=document.getElementById(campos.nombre); if(en && !en.value) poner(campos.nombre, r.nombre, "el nombre"); }
+      poner(campos.litros, r.litros, "los litros");
+      nota.innerHTML = puesto.length
+        ? 'Puesto: '+puesto.join(", ")+'. <b>Repásalo</b> antes de guardar.'
+        : '<span style="color:var(--aviso)">No he sabido leer nada útil. Prueba otra foto más recta y con más luz.</span>';
+    }).catch(function(e){
+      nota.innerHTML='<span style="color:var(--aviso)">'+(e && e.message==="no-carga"
+        ? 'No he podido cargar el lector. Mira que haya internet.' : 'No he podido leer la foto.')+'</span>';
+    });
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CÓDIGO DE BARRAS
+   ══════════════════════════════════════════════════════════════
+   Se apunta la cámara al código de un producto. Si ya lo tienes, sale
+   su nombre; si no, se busca en Open Food Facts (la base libre de
+   productos de supermercado) y se propone el nombre. Luego, con un
+   toque, va a «Lo que falta» o se le pone el precio en un almacén.
+   Chrome lee el código él solo; Safari (iPhone) no sabe, y para él se
+   carga un lector gratuito (ZXing). */
+var ZXING_URL="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/zxing-browser.min.js";
+function cargarZXing(){
+  if(window.ZXingBrowser) return Promise.resolve(window.ZXingBrowser);
+  return new Promise(function(ok, mal){
+    var sc=document.createElement("script"); sc.src=ZXING_URL;
+    sc.onload=function(){ window.ZXingBrowser ? ok(window.ZXingBrowser) : mal(new Error("no-carga")); };
+    sc.onerror=function(){ mal(new Error("no-carga")); };
+    document.head.appendChild(sc);
+  });
+}
+function productoDeCodigo(cod){
+  return (libro.productos||[]).filter(function(p){ return p.codigo===cod; })[0]||null;
+}
+function abrirCodigoBarras(){
+  var parar=function(){};
+  abrirVentana("Código de barras",
+    '<p class="nota" style="margin:0 0 10px">Apunta la cámara al código de barras del producto, bien cerca y recto.</p>'+
+    '<video id="cb_video" playsinline muted style="width:100%;max-height:300px;background:#000;border-radius:8px;object-fit:cover"></video>'+
+    '<div id="cb_estado" class="nota" style="margin:8px 0 0">Abriendo la cámara…</div>'+
+    '<div class="campo" style="margin-top:10px"><label class="lbl" for="cb_mano">O escribe los números del código</label>'+
+      '<input id="cb_mano" inputmode="numeric" placeholder="8410000000000"></div>',
+    function(){
+      var v=valor("cb_mano").replace(/\D/g,"");
+      if(v.length<6){ avisar("Escribe el código entero.", true); return true; }
+      parar(); setTimeout(function(){ codigoLeido(v); }, 50);
+    }, {aceptar:"Buscar"});
+  var dlg=document.getElementById("dlg"), video=document.getElementById("cb_video"), estado=document.getElementById("cb_estado");
+  var vivo=true;
+  dlg.addEventListener("close", function(){ vivo=false; parar(); });
+  function encontrado(cod){
+    if(!vivo) return; vivo=false; parar();
+    try{ navigator.vibrate && navigator.vibrate(80); }catch(e){}
+    dlg.close(); dlg.remove(); codigoLeido(cod);
+  }
+  if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
+    estado.textContent="Este navegador no deja usar la cámara. Escribe el código abajo."; return;
+  }
+  if("BarcodeDetector" in window){
+    navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}}).then(function(stream){
+      video.srcObject=stream; video.play();
+      parar=function(){ stream.getTracks().forEach(function(t){ t.stop(); }); };
+      var det=new window.BarcodeDetector({formats:["ean_13","ean_8","upc_a","upc_e","code_128"]});
+      estado.textContent="Buscando el código…";
+      (function mirar(){
+        if(!vivo) return;
+        det.detect(video).then(function(r){ if(r && r.length) encontrado(r[0].rawValue); else setTimeout(mirar, 250); })
+                         .catch(function(){ setTimeout(mirar, 400); });
+      })();
+    }).catch(function(){ estado.textContent="No me has dado permiso para la cámara. Escribe el código abajo."; });
+    return;
+  }
+  cargarZXing().then(function(Z){
+    if(!vivo) return;
+    var lector=new Z.BrowserMultiFormatReader();
+    estado.textContent="Buscando el código…";
+    return lector.decodeFromVideoDevice(undefined, video, function(res){
+      if(res) encontrado(res.getText());
+    }).then(function(ctrl){ parar=function(){ try{ ctrl.stop(); }catch(e){} }; if(!vivo) parar(); });
+  }).catch(function(){ estado.textContent="No he podido abrir el lector. Escribe el código abajo."; });
+}
+function codigoLeido(cod){
+  var p=productoDeCodigo(cod);
+  if(p){ queHacerConProducto(p); return; }
+  avisar("Buscando el producto…");
+  var nombre="";
+  fetch("https://world.openfoodfacts.org/api/v2/product/"+encodeURIComponent(cod)+".json?fields=product_name,product_name_es,brands,quantity")
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      var pr=j && j.product;
+      if(pr){
+        nombre=[pr.product_name_es||pr.product_name||"", (pr.brands||"").split(",")[0], pr.quantity||""]
+               .map(function(x){ return String(x).trim(); }).filter(Boolean).join(" ");
+      }
+    }).catch(function(){})
+    .then(function(){ nombrarProducto(cod, nombre); });
+}
+function nombrarProducto(cod, propuesto){
+  abrirVentana("Producto nuevo",
+    '<p class="nota" style="margin:0 0 10px">Código <span class="mono">'+esc(cod)+'</span>. '+
+      (propuesto?'Lo he encontrado así; cámbialo si quieres.':'No lo conozco: ponle nombre una vez y la próxima saldrá solo.')+'</p>'+
+    datalistProductos()+
+    '<div class="campo"><label class="lbl" for="cb_nom">Nombre</label>'+
+      '<input id="cb_nom" list="listaProductos" value="'+esc(propuesto||"")+'" placeholder="Leche entera 1 L"></div>'+
+    '<p class="nota" style="margin:8px 0 0">Si ya lo tenías con otro nombre, elígelo de la lista y quedará unido a este código.</p>',
+    function(){
+      var n=valor("cb_nom"); if(!n){ avisar("Ponle un nombre.", true); return true; }
+      var p=productoDeNombre(n); p.codigo=cod; guardar();
+      setTimeout(function(){ queHacerConProducto(p); }, 50);
+    }, {aceptar:"Seguir"});
+}
+function queHacerConProducto(p){
+  var sups=libro.supermercados||[];
+  abrirVentana(p.nombre,
+    '<p class="nota" style="margin:0 0 12px">¿Qué hacemos con él?</p>'+
+    '<button class="btn fuerte" id="cb_lista" style="width:100%;justify-content:center;margin-bottom:14px">🛒 Añadir a lo que falta en casa</button>'+
+    '<div class="lbl" style="margin-bottom:6px">O apuntar su precio</div>'+
+    '<div class="rejilla">'+
+      '<div class="campo"><label class="lbl" for="cb_sup">Almacén</label>'+
+        '<input id="cb_sup" list="listaSupers" autocomplete="off" value="'+esc(sups.length?nombreSuper(ultimoSuper()):"")+'"></div>'+
+      '<div class="campo"><label class="lbl" for="cb_pre">Precio (€)</label>'+
+        '<input type="number" id="cb_pre" min="0" step="0.01"></div>'+
+    '</div>'+datalistSupers(),
+    function(){
+      var sn=valor("cb_sup"), pr=numero("cb_pre");
+      if(!sn || !(pr>0)){ avisar("Pon el almacén y el precio, o usa «Añadir a lo que falta».", true); return true; }
+      var s=superDeNombre(sn); ponerPrecio(p.id, s.id, pr); guardar(); pintar();
+      avisar("Precio de "+p.nombre+" en "+s.nombre+": "+eur(pr));
+    }, {aceptar:"Guardar precio"});
+  document.getElementById("cb_lista").addEventListener("click", function(){
+    anadirALista(p.nombre, 1);
+    var d=document.getElementById("dlg"); if(d){ d.close(); d.remove(); }
+    pintar(); avisar(p.nombre+" añadido a lo que falta");
   });
 }
 
@@ -2628,6 +2837,7 @@ function editarVisita(id){
       if(!id) libro.medico.push(v);
       guardar(); pintar(); avisar(id?"Visita actualizada":"Visita anotada");
     });
+  ponerEscaner({fecha:"v_fecha", importe:"v_cons", nombre:"v_medico"});
 
   /* Los recibos que ya te han pagado enteros, marcados a mano. */
   var tachados=papelesCobrados(v).slice();
@@ -3284,6 +3494,7 @@ function editarRepostaje(id){
       }
       guardar(); pintar(); avisar(id?"Repostaje actualizado":"Repostaje anotado");
     });
+  ponerEscaner({fecha:"g_fecha", importe:"g_imp", nombre:"g_est", litros:"g_lit"});
 }
 
 function editarRevision(id){
@@ -3328,6 +3539,7 @@ function editarRevision(id){
       }
       guardar(); pintar(); avisar(id?"Actualizado":"Visita al taller anotada: "+eur(costeRevision(r)));
     });
+  ponerEscaner({fecha:"t_fecha", importe:"t_mano", nombre:"t_taller"});
 
   var caja=document.getElementById("piezas");
   function totalTaller(){
@@ -3569,6 +3781,7 @@ function editarFijo(id, tipoPuesto){
       if(!id) libro.fijos.push(f);
       guardar(); pintar(); avisar(id?"Recibo actualizado":"Recibo anotado");
     });
+  ponerEscaner({fecha:"fx_fecha", importe:"fx_imp", nombre:"fx_conc"});
 
   /* La pista de los vehículos, según el tipo elegido */
   function refrescarPista(){
@@ -3667,6 +3880,7 @@ function editarOtro(id){
       if(!id) libro.otros.push(o);
       guardar(); pintar(); avisar(id?"Gasto actualizado":"Gasto anotado");
     });
+  ponerEscaner({fecha:"ot_fecha", importe:"ot_imp", nombre:"ot_conc"});
 }
 
 /* ══════════════════════════════════════════════════════════════ */
