@@ -1065,7 +1065,38 @@ function cargarTesseract(){
 }
 /* La foto del móvil es enorme y con sombras: se reduce, se pasa a gris
    y se le sube el contraste, que es como mejor lee. */
+/* Si lo escaneado es un PDF, se dibuja su primera página como imagen
+   (con pdf.js, gratuito) y se lee igual que una foto. */
+var PDFJS_URL="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js";
+function cargarPdfjs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  return new Promise(function(ok, mal){
+    var sc=document.createElement("script"); sc.src=PDFJS_URL;
+    sc.onload=function(){
+      if(!window.pdfjsLib){ mal(new Error("no-carga")); return; }
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS_URL.replace("pdf.min.js","pdf.worker.min.js");
+      ok(window.pdfjsLib);
+    };
+    sc.onerror=function(){ mal(new Error("no-carga")); };
+    document.head.appendChild(sc);
+  });
+}
+function pdfAImagen(archivo){
+  return Promise.all([cargarPdfjs(), archivo.arrayBuffer()]).then(function(r){
+    return r[0].getDocument({data:r[1]}).promise;
+  }).then(function(doc){ return doc.getPage(1); }).then(function(pag){
+    var v=pag.getViewport({scale:1}), k=Math.min(3, 1800/Math.max(v.width, v.height));
+    var vp=pag.getViewport({scale:k}), c=document.createElement("canvas");
+    c.width=Math.round(vp.width); c.height=Math.round(vp.height);
+    var x=c.getContext("2d"); x.fillStyle="#fff"; x.fillRect(0,0,c.width,c.height);
+    return pag.render({canvasContext:x, viewport:vp}).promise.then(function(){
+      return new Promise(function(ok){ c.toBlob(function(b){ ok(b); }, "image/png"); });
+    });
+  });
+}
+function esPdf(archivo){ return archivo && (archivo.type==="application/pdf" || /\.pdf$/i.test(archivo.name||"")); }
 function prepararFoto(archivo){
+  if(esPdf(archivo)) return pdfAImagen(archivo).then(function(b){ return prepararFoto(b); });
   return new Promise(function(ok, mal){
     var url=URL.createObjectURL(archivo), img=new Image();
     img.onload=function(){
@@ -1173,7 +1204,7 @@ function abrirFotoTiquet(){
     '<p class="nota" style="margin:0 0 12px">Haz la foto con el tiquet <strong>estirado, recto y con buena luz</strong>, '+
     'que se lea de arriba abajo. La foto no sale de tu móvil: se lee aquí mismo.</p>'+
     '<label class="btn fuerte" style="display:inline-flex;cursor:pointer">📷 Hacer foto o elegirla'+
-      '<input type="file" id="ti_foto" accept="image/*" capture="environment" style="display:none"></label>'+
+      '<input type="file" id="ti_foto" accept="image/*,application/pdf" capture="environment" style="display:none"></label>'+
     '<div id="ti_estado" class="nota" style="margin:12px 0 0"></div>'+
     '<img id="ti_vista" alt="" style="display:none;max-width:100%;max-height:260px;margin-top:10px;border:1px solid var(--linea);border-radius:8px">',
     function(){ return true; }, {aceptar:"Leer"});
@@ -1182,7 +1213,7 @@ function abrirFotoTiquet(){
   var estado=document.getElementById("ti_estado"), vista=document.getElementById("ti_vista");
   document.getElementById("ti_foto").addEventListener("change", function(){
     var archivo=this.files && this.files[0]; if(!archivo) return;
-    vista.src=URL.createObjectURL(archivo); vista.style.display="block";
+    if(!esPdf(archivo)){ vista.src=URL.createObjectURL(archivo); vista.style.display="block"; }
     estado.textContent="Preparando el lector… (la primera vez tarda un poco)";
     var foto;
     prepararFoto(archivo).then(function(c){ foto=c; return cargarTesseract(); })
@@ -1272,7 +1303,7 @@ function ponerEscaner(campos){
   barra.style.cssText="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 14px;"+
                       "padding:0 0 12px;border-bottom:1px solid var(--linea)";
   barra.innerHTML='<label class="btn sm" style="display:inline-flex;cursor:pointer">📷 Escanear el papel'+
-    '<input type="file" accept="image/*" capture="environment" style="display:none"></label>'+
+    '<input type="file" accept="image/*,application/pdf" capture="environment" style="display:none"></label>'+
     '<span class="nota" style="margin:0">Foto a la factura o al tiquet y se rellena solo.</span>';
   cuerpo.insertBefore(barra, cuerpo.firstChild);
   var nota=barra.querySelector(".nota");
