@@ -64,6 +64,27 @@ var weekStart = null;
 // HELPERS
 // ================================================================
 function staff()        { return ENC.concat(COC).concat(CAM); }
+/* El dia que entra a trabajar cada uno (alta: 'AAAA-MM-DD'). Antes de
+   ese dia no se le pone turno al hacer el horario. Los dos camareros
+   nuevos (xxx1 y xxx2) entran el 1 de diciembre de 2026 mientras no se
+   cambie en Personal. Vacio = desde siempre. */
+function altaDe(s){
+  if (!s) return '';
+  if (s.alta != null) return s.alta || '';
+  return /^xxx\s*[12]$/i.test(String(s.name || '').trim()) ? '2026-12-01' : '';
+}
+function antesDeAlta(s, dia){
+  var a = altaDe(typeof s === 'string' ? staff().filter(function(x){ return x.id === s; })[0] : s);
+  if (!a) return false;
+  var t = a.split('-');
+  return new Date(dia.y, dia.m, dia.d) < new Date(+t[0], +t[1] - 1, +t[2]);
+}
+function ponerAlta(id, v){
+  staff().forEach(function(x){ if (x.id === id) x.alta = v || ''; });
+  save(); renderCamList(); renderAll();
+  if (v) { var t = v.split('-'); toast('Entra el ' + parseInt(t[2]) + '/' + parseInt(t[1]) + '/' + t[0]); }
+  else toast('Sin fecha de entrada');
+}
 function visibleStaff() { return staff().filter(function(s){ return !hidden[s.id]; }); }
 
 // ----------------------------------------------------------------
@@ -2100,6 +2121,9 @@ function renderTable() {
       } else if (est !== 'libre') {
         var lbl = est==='baja'?'B':est==='ausencia'?'A':EICO[est]||est;
         inn = '<span class="tb '+cls+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'+lbl+'</span>';
+      } else if (antesDeAlta(s, dia)) {
+        var tA = altaDe(s).split('-');
+        inn = '<span class="tb '+cls+'" style="opacity:.3" title="Entra el '+parseInt(tA[2])+'/'+parseInt(tA[1])+'/'+tA[0]+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">&middot;</span>';
       } else {
         inn = '<span class="tb '+cls+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">+</span>';
       }
@@ -3168,6 +3192,8 @@ function renderCamList() {
          + '<span>a</span>'
          + '<input type="time" value="'+(f.fin||'')+'" onchange="setFijo(\''+c.id+'\',\'fin\',this.value)" style="font-size:.72rem;padding:2px 4px;width:78px">'
          + '<select onchange="setFijo(\''+c.id+'\',\'libra\',this.value)" style="font-size:.72rem;padding:2px 4px">'+opciones+'</select>'
+         + '<span style="margin-left:4px">Entra el</span>'
+         + '<input type="date" value="'+altaDe(c)+'" onchange="ponerAlta(\''+c.id+'\',this.value)" title="Antes de este dia no se le pone turno. Vacio = desde siempre" style="font-size:.72rem;padding:2px 4px">'
          + (tieneFijo
              ? '<button onclick="rellenarMes(\''+c.id+'\')" title="Poner su turno fijo en los dias vacios del mes que estas viendo" style="background:rgba(39,174,96,.18);border:1px solid rgba(39,174,96,.45);color:var(--est-trabajo);border-radius:5px;padding:2px 8px;cursor:pointer;font-size:.72rem;font-family:\'DM Sans\',sans-serif">Rellenar el mes</button>'
              : '<span style="opacity:.7">pon la hora y saldra el boton de rellenar</span>')
@@ -3960,7 +3986,8 @@ function planRellenar(){
         var dispo = 0;
         for (var i = 0; i < 7; i++) {
           var f = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() + i);
-          var c = gcAt(s.id, {y:f.getFullYear(), m:f.getMonth(), d:f.getDate()});
+          var dF = {y:f.getFullYear(), m:f.getMonth(), d:f.getDate()}, c = gcAt(s.id, dF);
+          if (antesDeAlta(s, dF)) continue;
           if (!c || c.estado === 'trabajo' || c.estado === 'festivo' || c.estado === 'libre') dispo++;
         }
         if (dispo >= 4) encs.push(s.id);
@@ -4022,7 +4049,8 @@ function planRellenar(){
       var n = 0;
       for (var i = 0; i < 7; i++) {
         var f = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() + i);
-        var c = gcAt(id, {y:f.getFullYear(), m:f.getMonth(), d:f.getDate()});
+        var dF = {y:f.getFullYear(), m:f.getMonth(), d:f.getDate()}, c = gcAt(id, dF);
+        if (antesDeAlta(id, dF)) continue;
         if (!c || c.estado === 'trabajo' || c.estado === 'festivo' || c.estado === 'libre') n++;
       }
       return n >= 4;
@@ -4058,6 +4086,7 @@ function planRellenar(){
         var g = p.gente[st.id]; if (!g || g.grupo === 'no') return;
         var fd = g.fest; if (!(fd >= 0)) return;
         var dia = dd[fd]; if (!dia) return;                     /* ese dia queda fuera del rango */
+        if (antesDeAlta(st, dia)) return;                       /* aun no ha entrado */
         var c = gcAt(st.id, dia);
         if (c && c.estado && c.estado !== 'festivo') return;    /* vacaciones, baja o turno puesto a mano */
         cuenta[fd]++;
@@ -4075,6 +4104,7 @@ function planRellenar(){
         for (var j = quien[lleno].length - 1; j >= 0; j--) {
           var cand = quien[lleno][j], g2 = p.gente[cand.id];
           if (gcAt(cand.id, dDest)) continue;                   /* ese dia ya tiene algo puesto */
+          if (antesDeAlta(cand, dDest)) continue;               /* aun no ha entrado */
           if (g2.propio && g2.propio[vacio] && !g2.propio[vacio].libre) continue;
           if (fest2Dia(g2, +k) === vacio) continue;             /* ya es su segunda fiesta */
           var fe = new Date(dDest.y, dDest.m, dDest.d);
@@ -4100,6 +4130,7 @@ function planRellenar(){
     var fijos = [], libres = [];
     lista.forEach(function(s){
       var g = p.gente[s.id]; if (!g || g.grupo === 'no') return;
+      if (antesDeAlta(s, dia)) return;                          /* aun no ha entrado */
       var c = gcAt(s.id, dia);
       if (c && c.estado) { if (c.estado === 'trabajo' && c.inicio) { c._enc = (g.grupo === 'enc' || g.grupo === 'enccoc'); fijos.push(c); } return; }
       var pets = petActivas(g, fecha);
