@@ -42,6 +42,9 @@ try{ state=JSON.parse(localStorage.getItem(LS)||"null"); }catch(e){ state=null; 
 if(!state || !Array.isArray(state.equipos)) state=inicial();
 ["temps","limpiezas","recepciones","incidencias","gente","tareas","equipos"].forEach(function(k){ if(!Array.isArray(state[k])) state[k]=[]; });
 if(!state.turnos) state.turnos="dos";
+/* Cuadrante: quién hace cada función cada día de la semana.
+   {clave:{"1":"Luis",...,"0":"..."}}; las limpiezas mensuales usan "x". */
+if(!state.cuadrante || typeof state.cuadrante!=="object") state.cuadrante={};
 /* Los encargados salen para elegirlos con un toque en «Recibe» */
 if(!Array.isArray(state.encargados)) state.encargados=["Valeriano","Luis","Martin"];
 state.encargados.forEach(function(n){ if(state.gente.indexOf(n)<0) state.gente.push(n); });
@@ -130,7 +133,7 @@ function selQuienLimp(l){
 function apuntarGente(n){ n=(n||"").trim(); if(n && state.gente.indexOf(n)<0) state.gente.push(n); return n; }
 
 /* ── armazón ───────────────────────────────────────────────────── */
-var VISTAS=[["hoy","Hoy"],["temperaturas","Temperaturas"],["limpieza","Limpieza"],["recepcion","Mercancía recibida"],["incidencias","Incidencias"],["informe","Resumen del mes"],["ajustes","Ajustes"]];
+var VISTAS=[["hoy","Hoy"],["temperaturas","Temperaturas"],["limpieza","Limpieza"],["recepcion","Mercancía recibida"],["cuadrante","Quién hace qué"],["incidencias","Incidencias"],["informe","Resumen del mes"],["ajustes","Ajustes"]];
 function pendientesHoy(){
   var f=iso(new Date()), n=0;
   state.equipos.forEach(function(e){ turnos().forEach(function(t){ if(!tempDe(f,e.id,t[0])) n++; }); });
@@ -147,7 +150,7 @@ function render(){
     '</nav><main id="main"></main>';
   $$("[data-v]", root).forEach(function(b){ b.addEventListener("click", function(){ ui.vista=b.getAttribute("data-v"); if(ui.vista==="hoy") ui.fecha=iso(new Date()); render(); window.scrollTo(0,0); }); });
   if(window.Sync && Sync.mostrarEstadoEn) Sync.mostrarEstadoEn($("#sync-estado"));
-  ({hoy:vHoy, temperaturas:vTemps, limpieza:vLimpieza, recepcion:vRecepcion, incidencias:vIncidencias, informe:vInforme, ajustes:vAjustes})[ui.vista]($("#main"));
+  ({hoy:vHoy, temperaturas:vTemps, limpieza:vLimpieza, recepcion:vRecepcion, cuadrante:vCuadrante, incidencias:vIncidencias, informe:vInforme, ajustes:vAjustes})[ui.vista]($("#main"));
 }
 function refrescarRail(){
   var c={hoy:pendientesHoy()||"", incidencias:abiertas().length||""};
@@ -178,7 +181,7 @@ function vHoy(box){
       '<div class="seg"><button data-dia="-1" aria-label="Día anterior">‹</button><button data-dia="0"'+(esHoy?' aria-pressed="true"':'')+'>Hoy</button><button data-dia="1" aria-label="Día siguiente"'+(esHoy?' disabled':'')+'>›</button></div>')+
     '<div class="quien"><label class="lbl" for="q_quien">¿Quién apunta?</label>'+selGente("q_quien", quien())+'</div>'+
     /* Temperaturas */
-    '<section class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab"><h2>🌡️ Temperaturas</h2><span class="pista">'+state.equipos.length+' equipos · en rojo si se sale del límite</span></div>'+
+    '<section class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab"><h2>🌡️ Temperaturas</h2><span class="pista">'+state.equipos.length+' equipos · en rojo si se sale del límite'+tocaTxt(tt.map(function(t){ return [t[1], leToca("temp-"+t[0], f)]; }))+'</span></div>'+
       '<div class="tarjeta-cuerpo" style="padding:6px 12px">'+
       (state.equipos.length ? state.equipos.map(function(e){
         return '<div class="fila-eq"><div class="eq-nom"><b>'+esc(e.nombre)+'</b><small>'+esc(TIPOS[e.tipo]||"")+' · de '+fmtT(e.min)+' a '+fmtT(e.max)+(e.tipo==="congelador"?' · el menos se pone solo':'')+'</small></div>'+
@@ -207,12 +210,12 @@ function vHoy(box){
             '<span class="t-nom">'+esc(ta.nombre)+(ta.frec!=="diaria"?' <span class="chapa neutra">'+esc(FREC[ta.frec])+'</span>':'')+'</span>'+
           '</label>'+
           (l ? selQuienLimp(l) + (l.hora?'<span class="t-quien">'+esc(l.hora)+'</span>':'')
-             : '<span class="t-quien"></span>')+
+             : '<span class="t-quien">'+(leToca("ta-"+ta.id, f)?'Le toca a <b>'+esc(leToca("ta-"+ta.id, f))+'</b>':'')+'</span>')+
         '</div>';
       }).join("") : '<p class="nota" style="margin:10px 0">Ese día no toca ninguna limpieza.</p>')+
     '</div></section>'+
     /* Mercancía */
-    '<section class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab"><h2>📦 Mercancía recibida</h2><button class="btn fuerte sm" data-rec-nueva>+ Apuntar entrega</button></div>'+
+    '<section class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab"><h2>📦 Mercancía recibida'+(leToca("rec",f)?' <span class="pista" style="font-weight:400">· le toca a '+esc(leToca("rec",f))+'</span>':'')+'</h2><button class="btn fuerte sm" data-rec-nueva>+ Apuntar entrega</button></div>'+
       '<div class="tarjeta-cuerpo" style="padding:4px 12px">'+
       (rec.length ? rec.map(filaRec).join("") : '<p class="nota" style="margin:10px 0">Nada apuntado '+(esHoy?'hoy':'ese día')+'. Al recibir un pedido: proveedor, temperatura si es de frío y si se acepta.</p>')+
     '</div></section>'+
@@ -619,7 +622,9 @@ function pasarAHojas(cual, m){
       })});
     }); });
   }
-  var url=tablaImagen(titulo, sub, cab, filas);
+  aHojas(titulo, tablaImagen(titulo, sub, cab, filas), cual);
+}
+function aHojas(titulo, url, cual){
   var nombre=titulo.replace(/ · /g," ").replace(/[^\wÀ-ÿ ]+/g,"").trim()+".png";
   try{
     localStorage.setItem("hojas.entrada", JSON.stringify({titulo:titulo, carpeta:"Restaurante", nombre:nombre, url:url, notas:"Sacada de Control sanitario", etiquetas:["sanidad", cual]}));
@@ -629,7 +634,7 @@ function pasarAHojas(cual, m){
   }
   var d=dialogo("Pasar a Hojas",
     '<p style="margin:0 0 12px">La hoja <b>'+esc(titulo)+'</b> está lista. Al abrir la app <b>Hojas</b> se guarda sola en la carpeta <b>Restaurante</b>'+
-    ' (si ya estaba la de este mes, se cambia por esta).</p><img src="'+url+'" alt="" style="width:100%;border:1px solid var(--linea);border-radius:6px">',
+    ' (si ya estaba, se cambia por esta).</p><img src="'+url+'" alt="" style="width:100%;border:1px solid var(--linea);border-radius:6px">',
     '<button class="btn" data-x>Ahora no</button><a class="btn fuerte" href="hojas.html">Abrir Hojas</a>');
 }
 
@@ -665,6 +670,92 @@ function textoFrec(ta){
   if(ta.frec==="semanal") return "Cada "+DIAS[ta.dia==null?1:+ta.dia];
   if(ta.frec==="mensual") return "El día "+(ta.dia==null?1:ta.dia)+" de cada mes";
   return "Cada día";
+}
+
+/* ── quién hace qué (cuadrante semanal) ───────────────────────── */
+var SEMANA=[1,2,3,4,5,6,0];
+var DIAS_L=["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+function funciones(){
+  var f=[];
+  turnos().forEach(function(t){ f.push({k:"temp-"+t[0], nom:"Temperaturas"+(turnos().length>1?" · "+t[1]:""), sub:"Apuntar todas las neveras"}); });
+  f.push({k:"rec", nom:"Recibir mercancía", sub:"Revisar y apuntar las entregas"});
+  f.push({k:"inc", nom:"Incidencias", sub:"Apuntar lo que pase y qué se hizo"});
+  state.tareas.forEach(function(ta){ f.push({k:"ta-"+ta.id, nom:ta.nombre, sub:"Limpieza · "+textoFrec(ta), ta:ta}); });
+  return f;
+}
+/* Qué días de la semana tiene sentido esa función: las semanales solo
+   su día; las mensuales caen cada mes en un día distinto, así que van
+   con una sola persona («x»). */
+function diasDe(fn){
+  if(fn.ta && fn.ta.frec==="mensual") return ["x"];
+  if(fn.ta && fn.ta.frec==="semanal") return [String(fn.ta.dia==null?1:+fn.ta.dia)];
+  return SEMANA.map(String);
+}
+function leToca(k, fecha){
+  var c=state.cuadrante[k]; if(!c) return "";
+  return c[String(deIso(fecha).getDay())] || c.x || "";
+}
+function tocaTxt(pares){
+  var con=pares.filter(function(p){ return p[1]; });
+  if(!con.length) return "";
+  return " · le toca a "+con.map(function(p){ return pares.length>1 ? p[0]+": "+esc(p[1]) : esc(p[1]); }).join(", ");
+}
+function selPersona(attr, val){
+  var g=state.gente.slice(); if(val && g.indexOf(val)<0) g.push(val);
+  return '<select '+attr+' style="width:100%;min-width:92px;font-size:13px;padding:5px 4px">'+
+    '<option value="">—</option>'+
+    g.map(function(n){ return '<option value="'+esc(n)+'"'+(n===val?" selected":"")+'>'+esc(n)+'</option>'; }).join("")+
+    '<option value="__otro">Otro…</option></select>';
+}
+function vCuadrante(box){
+  var fs=funciones();
+  box.innerHTML=cabecera("Quién hace qué", "Elige quién se encarga de cada cosa cada día. En «Hoy» saldrá a quién le toca.",
+      '<button class="btn" data-cu-hojas>📄 Pasar a Hojas</button>')+
+    (state.gente.length ? '' : '<p class="nota">Primero añade al personal en Ajustes.</p>')+
+    '<div class="tarjeta"><div class="tabla-caja"><table class="mes-l cuadrante"><thead><tr><th style="text-align:left;min-width:190px">Función</th><th style="min-width:110px">Toda la semana</th>'+
+      SEMANA.map(function(d){ return '<th>'+DIAS_L[d]+'</th>'; }).join("")+'</tr></thead><tbody>'+
+      fs.map(function(fn){
+        var ds=diasDe(fn), c=state.cuadrante[fn.k]||{};
+        var celdas;
+        if(ds[0]==="x"){
+          celdas='<td></td><td colspan="7" style="text-align:left">'+selPersona('data-cu="'+fn.k+'|x" style="max-width:180px"', c.x||"")+' <small style="color:var(--muted)">el día que toque</small></td>';
+        } else if(ds.length===1){
+          celdas='<td></td>'+SEMANA.map(function(d){ return String(d)===ds[0] ? '<td>'+selPersona('data-cu="'+fn.k+'|'+d+'"', c[d]||"")+'</td>' : '<td style="color:var(--muted);text-align:center">·</td>'; }).join("");
+        } else {
+          var todos=SEMANA.map(function(d){ return c[d]||""; }), igual=todos.every(function(v){ return v===todos[0]; })?todos[0]:"";
+          celdas='<td>'+selPersona('data-cu-todo="'+fn.k+'"', igual)+'</td>'+SEMANA.map(function(d){ return '<td>'+selPersona('data-cu="'+fn.k+'|'+d+'"', c[d]||"")+'</td>'; }).join("");
+        }
+        return '<tr><td style="text-align:left"><b>'+esc(fn.nom)+'</b><br><small style="color:var(--muted)">'+esc(fn.sub)+'</small></td>'+celdas+'</tr>';
+      }).join("")+
+    '</tbody></table></div></div>';
+  function poner(sel, fn){
+    var v=sel.value;
+    if(v==="__otro"){ v=(window.prompt("¿Quién?", "")||"").trim(); if(!v){ vCuadrante(box); return; } apuntarGente(v); }
+    fn(v); guardar(); vCuadrante(box);
+  }
+  $$("[data-cu]", box).forEach(function(s){ s.addEventListener("change", function(){
+    var p=s.getAttribute("data-cu").split("|");
+    poner(s, function(v){ var c=state.cuadrante[p[0]]||(state.cuadrante[p[0]]={}); if(v) c[p[1]]=v; else delete c[p[1]]; });
+  }); });
+  $$("[data-cu-todo]", box).forEach(function(s){ s.addEventListener("change", function(){
+    var k=s.getAttribute("data-cu-todo");
+    poner(s, function(v){ var c=state.cuadrante[k]||(state.cuadrante[k]={}); SEMANA.forEach(function(d){ if(v) c[d]=v; else delete c[d]; }); });
+  }); });
+  $("[data-cu-hojas]", box).addEventListener("click", cuadranteAHojas);
+}
+function cuadranteAHojas(){
+  var fs=funciones();
+  var cab=SEMANA.map(function(d){ return {a:"", b:DIAS_L[d], fin:d===0}; });
+  var filas=fs.map(function(fn){
+    var ds=diasDe(fn), c=state.cuadrante[fn.k]||{};
+    return {nom:fn.nom, sub:fn.sub, celdas:SEMANA.map(function(d,i){
+      if(ds[0]==="x") return i===0 && c.x ? {t:c.x+" (el día que toque)"} : null;
+      if(ds.indexOf(String(d))<0) return null;
+      return c[d] ? {t:c[d]} : {t:"—", color:"#bbb"};
+    })};
+  });
+  var url=tablaImagen("Quién hace qué", "Encargado de cada función según el día de la semana", cab, filas);
+  aHojas("Quién hace qué", url, "cuadrante");
 }
 
 /* ── resumen del mes ───────────────────────────────────────────── */
