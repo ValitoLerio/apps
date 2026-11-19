@@ -238,7 +238,7 @@ dialog::backdrop{background:rgba(20,14,11,.55)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202611191202"></script>
+<script src="sync.js?v=202611191207"></script>
 <script>
 /* Red de seguridad. Si los archivos de la app no están al lado de esta
    página — pasa al abrirla fuera de la web: vista previa, doble clic en
@@ -255,7 +255,7 @@ window.reintentarJS = function(viejo, nombre, sub){
   }
   var s = document.createElement('script');
   s.setAttribute('data-rein', '1');
-  s.src = WEB_APPS + nombre + '?v=202611191202' + Date.now();
+  s.src = WEB_APPS + nombre + '?v=202611191207' + Date.now();
   s.onload = viejo.onload;
   s.onerror = function(){ reintentarJS(s, nombre, sub); };
   document.body.appendChild(s);
@@ -303,7 +303,7 @@ if (!window.Sync) (function(){
 
   Sync.iniciar('recetas').then(function(){
     var s = document.createElement('script');
-    s.src = 'recetas.js?v=202611191202' + Date.now();
+    s.src = 'recetas.js?v=202611191207' + Date.now();
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ reintentarJS(s, 'recetas.js', sub); };
     document.body.appendChild(s);

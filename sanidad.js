@@ -18,7 +18,8 @@
 var LS = "sanidad.libro.v1";
 var TIPOS = {nevera:"Nevera", congelador:"Congelador", camara:"Cámara", otro:"Otro"};
 var RANGO = {nevera:[0,4], congelador:[-25,-18], camara:[0,4], otro:[0,8]};
-var FREC = {diaria:"Cada día", semanal:"Cada semana", mensual:"Cada mes"};
+var FREC = {diaria:"Cada día", semanal:"Cada semana", mensual:"Cada mes", cada:"Otro: cada X días, semanas o meses"};
+var UNID = {dias:["día","días"], semanas:["semana","semanas"], meses:["mes","meses"]};
 var DIAS = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
 var DIAS_C = ["D","L","M","X","J","V","S"];
 var MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
@@ -94,6 +95,18 @@ function tocaHoy(ta, f){
   if(ta.frec==="mensual"){
     var dia=ta.dia==null?1:+ta.dia, ult=new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
     return d.getDate()===Math.min(dia, ult);
+  }
+  if(ta.frec==="cada"){
+    /* Cada N días, semanas o meses, contando desde el día que se eligió */
+    var n=Math.max(1, +ta.n||1), ini=deIso(ta.desde||state.desde||f);
+    if(d<ini) return false;
+    if(ta.unidad==="meses"){
+      var meses=(d.getFullYear()-ini.getFullYear())*12+(d.getMonth()-ini.getMonth());
+      var udm=new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+      return meses%n===0 && d.getDate()===Math.min(ini.getDate(), udm);
+    }
+    var dias=Math.round((d-ini)/86400000);
+    return dias%(ta.unidad==="semanas"?7*n:n)===0;
   }
   return false;
 }
@@ -207,7 +220,7 @@ function vHoy(box){
         return '<div class="tarea'+(l?" hecha":"")+'">'+
           '<label style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer;margin:0">'+
             '<input type="checkbox" data-ta="'+ta.id+'"'+(l?" checked":"")+'>'+
-            '<span class="t-nom">'+esc(ta.nombre)+(ta.frec!=="diaria"?' <span class="chapa neutra">'+esc(FREC[ta.frec])+'</span>':'')+'</span>'+
+            '<span class="t-nom">'+esc(ta.nombre)+(ta.frec!=="diaria"?' <span class="chapa neutra">'+esc(ta.frec==="cada"?textoFrec(ta):FREC[ta.frec])+'</span>':'')+'</span>'+
           '</label>'+
           (l ? selQuienLimp(l) + (l.hora?'<span class="t-quien">'+esc(l.hora)+'</span>':'')
              : '<span class="t-quien">'+(leToca("ta-"+ta.id, f)?'Le toca a <b>'+esc(leToca("ta-"+ta.id, f))+'</b>':'')+'</span>')+
@@ -669,6 +682,10 @@ function vLimpieza(box){
 function textoFrec(ta){
   if(ta.frec==="semanal") return "Cada "+DIAS[ta.dia==null?1:+ta.dia];
   if(ta.frec==="mensual") return "El día "+(ta.dia==null?1:ta.dia)+" de cada mes";
+  if(ta.frec==="cada"){
+    var n=Math.max(1, +ta.n||1), u=UNID[ta.unidad]||UNID.dias;
+    return (n===1?"Cada "+u[0]:"Cada "+n+" "+u[1])+(ta.desde?" · desde el "+dm(ta.desde):"");
+  }
   return "Cada día";
 }
 
@@ -687,7 +704,9 @@ function funciones(){
    su día; las mensuales caen cada mes en un día distinto, así que van
    con una sola persona («x»). */
 function diasDe(fn){
-  if(fn.ta && fn.ta.frec==="mensual") return ["x"];
+  if(fn.ta && fn.ta.frec==="cada" && fn.ta.unidad==="dias" && (+fn.ta.n||1)===1) return SEMANA.map(String);
+  if(fn.ta && fn.ta.frec==="cada" && fn.ta.unidad==="semanas" && fn.ta.desde) return [String(deIso(fn.ta.desde).getDay())];
+  if(fn.ta && (fn.ta.frec==="mensual" || fn.ta.frec==="cada")) return ["x"];
   if(fn.ta && fn.ta.frec==="semanal") return [String(fn.ta.dia==null?1:+fn.ta.dia)];
   return SEMANA.map(String);
 }
@@ -910,18 +929,31 @@ function editarTa(t, luego){
   var d=dialogo(nuevo?"Añadir limpieza":"Cambiar limpieza",
     '<div class="campo"><label class="lbl" for="t_n">Qué se limpia</label><input id="t_n" value="'+esc(t.nombre||"")+'" placeholder="Freidora"></div>'+
     '<div class="dos" style="margin-top:10px"><div class="campo"><label class="lbl" for="t_f">Cada cuánto</label><select id="t_f">'+Object.keys(FREC).map(function(k){ return '<option value="'+k+'"'+(t.frec===k?" selected":"")+'>'+FREC[k]+'</option>'; }).join("")+'</select></div>'+
-      '<div class="campo" id="t_dw"><label class="lbl" for="t_d">Qué día</label><select id="t_d"></select></div></div>',
+      '<div class="campo" id="t_dw"><label class="lbl" for="t_d">Qué día</label><select id="t_d"></select></div></div>'+
+    '<div id="t_cada" style="margin-top:10px;display:none"><div class="dos">'+
+      '<div class="campo"><label class="lbl" for="t_num">Cada</label><div style="display:flex;gap:8px">'+
+        '<input id="t_num" type="number" inputmode="numeric" min="1" step="1" value="'+esc(t.n||2)+'" style="width:80px">'+
+        '<select id="t_uni">'+Object.keys(UNID).map(function(k){ return '<option value="'+k+'"'+((t.unidad||"dias")===k?" selected":"")+'>'+UNID[k][1]+'</option>'; }).join("")+'</select></div></div>'+
+      '<div class="campo"><label class="lbl" for="t_ini">Empezando el</label><input id="t_ini" type="date" value="'+esc(t.desde||iso(new Date()))+'"></div>'+
+    '</div><p class="nota" style="margin:6px 0 0">Por ejemplo: cada 2 semanas, cada 3 meses… Toca ese día y luego cada vez que pase ese tiempo.</p></div>',
     (nuevo?'':'<button class="btn malo" data-borrar style="margin-right:auto">Quitar</button>')+'<button class="btn" data-x>Cancelar</button><button class="btn fuerte" data-ok>Guardar</button>');
   var fs=$("#t_f", d), ds=$("#t_d", d);
   function pintarDia(){
-    var f=fs.value; $("#t_dw", d).style.visibility=f==="diaria"?"hidden":"visible";
+    var f=fs.value; $("#t_dw", d).style.visibility=(f==="diaria"||f==="cada")?"hidden":"visible";
+    $("#t_cada", d).style.display=f==="cada"?"block":"none";
     if(f==="semanal") ds.innerHTML=[1,2,3,4,5,6,0].map(function(i){ return '<option value="'+i+'"'+(+t.dia===i&&t.frec==="semanal"?" selected":"")+'>'+DIAS[i]+'</option>'; }).join("");
     else if(f==="mensual"){ var o=""; for(var i=1;i<=31;i++) o+='<option value="'+i+'"'+(+t.dia===i&&t.frec==="mensual"?" selected":"")+'>día '+i+'</option>'; ds.innerHTML=o; }
   }
   fs.addEventListener("change", pintarDia); pintarDia();
   $("[data-ok]", d).addEventListener("click", function(){
     var n=$("#t_n", d).value.trim(); if(!n){ aviso("Escribe qué se limpia", true); return; }
-    t.nombre=n; t.frec=fs.value; t.dia=t.frec==="diaria"?null:+ds.value;
+    t.nombre=n; t.frec=fs.value; t.dia=(t.frec==="diaria"||t.frec==="cada")?null:+ds.value;
+    if(t.frec==="cada"){
+      var nn=parseInt($("#t_num", d).value,10), ini=$("#t_ini", d).value;
+      if(!(nn>=1)){ aviso("Pon cada cuánto: un número de 1 en adelante", true); return; }
+      if(!ini){ aviso("Elige desde qué día empieza", true); return; }
+      t.n=nn; t.unidad=$("#t_uni", d).value; t.desde=ini;
+    } else { delete t.n; delete t.unidad; delete t.desde; }
     if(nuevo){ t.id=uid(); state.tareas.push(t); }
     guardar(); d.close();
   });
