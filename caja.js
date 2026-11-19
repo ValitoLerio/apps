@@ -77,7 +77,9 @@ function libroVacio(){
                          aAmarilla, fondoCaja, retirado, nota} */
     aportaciones:[],  /* {id, fecha, importe, motivo} — dinero que entra sin ser de la caja */
     retiradas:[],     /* {id, fecha, importe, motivo} — dinero que sale de la amarilla */
-    tramos:[]         /* {id, desde, hasta, motivo, entregado, fechaEntrega} — dias sin retirar */
+    tramos:[],        /* {id, desde, hasta, motivo, entregado, fechaEntrega} — dias sin retirar */
+    adelantos:[]      /* {id, fecha, quien, importe, motivo, tipo:"pone"|"devuelve"} — dinero propio
+                         que alguien pone para pagar pedidos y que la caja le devuelve luego */
   };
 }
 
@@ -590,6 +592,7 @@ var APARTADOS=[
   {id:"comparar", nombre:"Comparar"},
   {id:"amarilla", nombre:"Caja amarilla"},
   {id:"tramos",   nombre:"Sin retirar"},
+  {id:"adelantos", nombre:"Dinero adelantado"},
   {id:"ajustes",  nombre:"Ajustes"}
 ];
 
@@ -617,7 +620,7 @@ function pintar(){
 
   var main=document.getElementById("main");
   ({dia:verDia, mes:verMes, anio:verAnio, comparar:verComparar, amarilla:verAmarilla,
-    tramos:verTramos, ajustes:verAjustes})[ui.vista](main);
+    tramos:verTramos, adelantos:verAdelantos, ajustes:verAjustes})[ui.vista](main);
 }
 
 function cabecera(titulo, sub, derecha){
@@ -3466,6 +3469,113 @@ function borrarTramo(t){
       libro.tramos=(libro.tramos||[]).filter(function(x){ return x.id!==t.id; });
       guardar(); pintar(); avisar("Tramo borrado");
     }, {aceptar:"Borrar", malo:true});
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DINERO ADELANTADO
+   ══════════════════════════════════════════════════════════════
+   Hay días que Valeriano o Luis ponen dinero suyo para pagar un pedido
+   y lo recuperan cuando se puede. No es dinero de la caja ni entra en
+   las cuentas del día: es una deuda de la caja con esa persona. Aquí se
+   apunta lo que pone cada uno y lo que se le va devolviendo, y queda a
+   la vista lo que se le debe todavía. */
+var GENTE_ADELANTOS=["Valeriano","Luis"];
+function quienesAdelantan(){
+  var l=GENTE_ADELANTOS.slice();
+  (libro.adelantos||[]).forEach(function(a){ if(a.quien && l.indexOf(a.quien)<0) l.push(a.quien); });
+  return l;
+}
+function debeA(quien){
+  return r2((libro.adelantos||[]).reduce(function(s,a){
+    if(a.quien!==quien) return s;
+    return s+(a.tipo==="devuelve" ? -(+a.importe||0) : (+a.importe||0));
+  },0));
+}
+function verAdelantos(main){
+  var gente=quienesAdelantan();
+  var lista=(libro.adelantos||[]).slice().sort(function(a,b){ return (b.fecha||"").localeCompare(a.fecha||""); });
+  var total=r2(gente.reduce(function(s,q){ return s+Math.max(0,debeA(q)); },0));
+  main.innerHTML=
+    cabecera("Dinero adelantado",
+      "Lo que pone alguien de su bolsillo para pagar pedidos y que la caja le devuelve cuando se puede.",
+      '<button class="btn fuerte" id="ad_pone">+ Ha puesto dinero</button>')+
+    '<div class="cifras">'+
+      gente.map(function(q){
+        var d=debeA(q);
+        return '<div class="cifra"><div class="k">Se le debe a '+esc(q)+'</div>'+
+          '<div class="v"'+(d>0?' style="color:var(--malo,#b3261e)"':'')+'>'+eur(Math.max(0,d))+'</div>'+
+          '<div class="n">'+(d>0
+            ? '<button class="btn sm" data-ad-dev="'+esc(q)+'">Devolverle</button>'
+            : (d<0 ? "se le ha devuelto "+eur(-d)+" de más" : "no se le debe nada"))+'</div></div>';
+      }).join("")+
+      '<div class="cifra"><div class="k">Total pendiente</div><div class="v">'+eur(total)+'</div>'+
+        '<div class="n">lo que la caja debe devolver</div></div>'+
+    '</div>'+
+    '<div class="tarjeta">'+(lista.length
+      ? '<div class="tabla-caja"><table><thead><tr><th>Fecha</th><th>Quién</th><th>Qué</th><th>Para qué</th>'+
+        '<th class="num">Importe</th><th></th></tr></thead><tbody>'+
+        lista.map(function(a){
+          var dev=a.tipo==="devuelve";
+          return '<tr><td>'+esc(dmy(a.fecha))+'</td><td>'+esc(a.quien)+'</td>'+
+            '<td>'+(dev?'Se le devuelve':'Pone dinero')+'</td><td>'+esc(a.motivo||"")+'</td>'+
+            '<td class="num" style="font-weight:600;color:'+(dev?'var(--ok,#1e7a3c)':'var(--malo,#b3261e)')+'">'+
+              (dev?'− ':'+ ')+eur(+a.importe||0)+'</td>'+
+            '<td class="num"><button class="btn suave sm" data-ad-ed="'+a.id+'">Cambiar</button></td></tr>';
+        }).join("")+'</tbody></table></div>'
+      : '<div class="vacio"><strong>No hay nada apuntado</strong>'+
+        'Cuando alguien pague un pedido con su dinero, pulsa «Ha puesto dinero». '+
+        'Cuando se le devuelva, pulsa «Devolverle» debajo de su nombre.</div>')+
+    '</div>';
+  document.getElementById("ad_pone").addEventListener("click", function(){ editarAdelanto(null, "pone"); });
+  main.querySelectorAll("[data-ad-dev]").forEach(function(b){
+    b.addEventListener("click", function(){ editarAdelanto(null, "devuelve", b.getAttribute("data-ad-dev")); });
+  });
+  main.querySelectorAll("[data-ad-ed]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var a=(libro.adelantos||[]).filter(function(x){ return x.id===b.getAttribute("data-ad-ed"); })[0];
+      if(a) editarAdelanto(a, a.tipo);
+    });
+  });
+}
+function editarAdelanto(a, tipo, quien){
+  var nuevo=!a, dev=tipo==="devuelve";
+  a=a||{fecha:hoyISO(), quien:quien||"", importe:"", motivo:"", tipo:tipo};
+  if(nuevo && dev && a.quien){ var pend=debeA(a.quien); if(pend>0) a.importe=pend; }
+  var gente=quienesAdelantan();
+  abrirVentana(dev ? "Devolver dinero" : "Ha puesto dinero",
+    '<div class="rejilla">'+
+      '<div class="campo"><label class="lbl" for="ad_q">'+(dev?"A quién":"Quién lo pone")+'</label>'+
+        '<select id="ad_q">'+gente.map(function(g){ return '<option'+(g===a.quien?" selected":"")+'>'+esc(g)+'</option>'; }).join("")+
+        '<option value="__otro">Otra persona…</option></select>'+
+        '<input id="ad_otro" placeholder="Nombre" style="display:none;margin-top:6px"></div>'+
+      '<div class="campo"><label class="lbl" for="ad_f">Fecha</label>'+
+        '<input type="date" id="ad_f" value="'+esc(a.fecha)+'"></div>'+
+      '<div class="campo"><label class="lbl" for="ad_imp">Importe (€)</label>'+
+        '<input type="number" id="ad_imp" class="grande" min="0" step="0.01" value="'+esc(a.importe)+'"></div>'+
+      '<div class="campo"><label class="lbl" for="ad_mot">'+(dev?"Nota":"Para qué")+'</label>'+
+        '<input id="ad_mot" value="'+esc(a.motivo)+'" placeholder="'+(dev?"De la caja amarilla, en efectivo…":"Pedido de Comercial Mateu…")+'"></div>'+
+    '</div>'+
+    (dev && nuevo && a.importe ? '<p class="nota" style="margin-top:12px">Viene puesto todo lo que se le debe; cámbialo si se le devuelve solo una parte.</p>' : '')+
+    (!nuevo ? '<p style="margin-top:14px"><button class="btn malo sm" id="ad_borrar">Borrar este apunte</button></p>' : ''),
+    function(){
+      var q=valor("ad_q"); if(q==="__otro") q=valor("ad_otro");
+      var imp=numero("ad_imp");
+      if(!q){ avisar("Pon quién.", true); return true; }
+      if(!imp){ avisar("Pon el importe.", true); return true; }
+      a.quien=q; a.fecha=valor("ad_f")||hoyISO(); a.importe=imp; a.motivo=valor("ad_mot"); a.tipo=tipo;
+      if(nuevo){ a.id=uid(); libro.adelantos=libro.adelantos||[]; libro.adelantos.push(a); }
+      guardar(); pintar();
+      var d=debeA(q);
+      avisar(d>0 ? "Apuntado. Se le debe a "+q+": "+eur(d) : "Apuntado. A "+q+" ya no se le debe nada.");
+    }, {aceptar: dev ? "Devolver" : "Apuntar"});
+  var sel=document.getElementById("ad_q"), otro=document.getElementById("ad_otro");
+  sel.addEventListener("change", function(){ otro.style.display = sel.value==="__otro" ? "block" : "none"; if(sel.value==="__otro") otro.focus(); });
+  var bb=document.getElementById("ad_borrar");
+  if(bb) bb.addEventListener("click", function(){
+    libro.adelantos=(libro.adelantos||[]).filter(function(x){ return x!==a; });
+    guardar(); var dl=document.getElementById("dlg"); if(dl){ dl.close(); dl.remove(); } pintar();
+    avisar("Apunte borrado");
+  });
 }
 
 function verAjustes(main){
