@@ -756,6 +756,7 @@ function verCompra(main){
       "Apunta lo que falta en casa y, al volver del súper, lo que has comprado. "+
       "No hay que dar de alta nada: se escribe el nombre y ya.",
       selectorMes("c_mes")+
+      '<button class="btn" id="fotoTiquet">📷 Foto del tiquet</button>'+
       '<button class="btn" id="dictar">🎤 Dictar precios</button>'+
       '<button class="btn fuerte" id="nuevaCompra">Anotar compra</button>')+
 
@@ -798,6 +799,7 @@ function verCompra(main){
   engancharMes("c_mes");
   document.getElementById("nuevaCompra").addEventListener("click", function(){ editarCompra(null); });
   document.getElementById("dictar").addEventListener("click", abrirDictado);
+  document.getElementById("fotoTiquet").addEventListener("click", abrirFotoTiquet);
   document.getElementById("masAlmacen").addEventListener("click", function(){ editarSuper(null); });
   main.querySelectorAll("[data-pliegue]").forEach(function(det){
     det.addEventListener("toggle", function(){
@@ -1037,6 +1039,181 @@ function entenderDictado(frase){
   linea.producto=texto.replace(/\s+(?:€|euros?|a|de|en|el|la|por)\s*$/i," ")
                       .replace(/\s+/g," ").trim();
   return linea;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   FOTO DEL TIQUET
+   ══════════════════════════════════════════════════════════════
+   Se hace una foto al tiquet y un lector de texto gratuito (Tesseract,
+   que trabaja dentro del propio navegador: la foto no sale del
+   dispositivo) saca las letras. De ahí se cogen el almacén, la fecha y
+   una línea por producto con su precio, y se abre «Anotar compra» ya
+   rellena para repasarla: el lector se equivoca con tiquets arrugados
+   o borrosos, así que nada se guarda sin mirarlo. Al guardar, cada
+   precio queda apuntado en su almacén, como con cualquier compra. */
+var TESSERACT_URL="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+function cargarTesseract(){
+  if(window.Tesseract) return Promise.resolve(window.Tesseract);
+  return new Promise(function(ok, mal){
+    var sc=document.createElement("script"); sc.src=TESSERACT_URL;
+    sc.onload=function(){ window.Tesseract ? ok(window.Tesseract) : mal(new Error("no-carga")); };
+    sc.onerror=function(){ mal(new Error("no-carga")); };
+    document.head.appendChild(sc);
+  });
+}
+/* La foto del móvil es enorme y con sombras: se reduce, se pasa a gris
+   y se le sube el contraste, que es como mejor lee. */
+function prepararFoto(archivo){
+  return new Promise(function(ok, mal){
+    var url=URL.createObjectURL(archivo), img=new Image();
+    img.onload=function(){
+      var max=1800, k=Math.min(1, max/Math.max(img.width, img.height));
+      var c=document.createElement("canvas");
+      c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
+      var x=c.getContext("2d"); x.drawImage(img,0,0,c.width,c.height);
+      var d=x.getImageData(0,0,c.width,c.height), p=d.data;
+      for(var i=0;i<p.length;i+=4){
+        var g=0.299*p[i]+0.587*p[i+1]+0.114*p[i+2];
+        g=Math.max(0, Math.min(255, (g-128)*1.6+150));
+        p[i]=p[i+1]=p[i+2]=g;
+      }
+      x.putImageData(d,0,0); URL.revokeObjectURL(url); ok(c);
+    };
+    img.onerror=function(){ URL.revokeObjectURL(url); mal(new Error("foto")); };
+    img.src=url;
+  });
+}
+var NO_ES_PRODUCTO=/\b(total|subtotal|sub-total|iva|igi|i\.g\.i|base\s*imp|imponible|tarjeta|efectivo|cambio|entregad|a\s*devolver|visa|mastercard|maestro|contactless|importe|pagad|factura|simplificada|nif|cif|n\.?r\.?t|tel[eé]?f?|tlf|fecha|hora|caj[ae]r|cajero|tiquet|ticket|gracias|atendid|operaci|autoriz|aid\b|arc\b|terminal|comercio|devoluci|redondeo|ahorro|puntos|socio|cliente|art[ií]culos|unidades|uds\.?\s*total|copia|www|http|@)\b/i;
+var PRECIO_FIN=/(-?\d{1,4})\s?[.,]\s?(\d{2})\s*(?:€|eur|euros|[a-e])?\s*$/i;
+function aPrecio(m){ return r2(parseFloat(m[1]+"."+m[2])); }
+function nombreBonito(t){
+  t=String(t||"").replace(/[^0-9A-Za-zÀ-ÿ%/.,' -]+/g," ").replace(/\s+/g," ").trim()
+                 .replace(/^[^A-Za-zÀ-ÿ0-9]+|[^A-Za-zÀ-ÿ0-9%.)]+$/g,"");
+  /* Los tiquets van en mayúsculas: se dejan como una frase normal */
+  if(t===t.toUpperCase()) t=t.toLowerCase();
+  return t.charAt(0).toUpperCase()+t.slice(1);
+}
+function letras(t){ return (String(t).match(/[A-Za-zÀ-ÿ]/g)||[]).length; }
+function leerTiquet(texto){
+  var filas=String(texto||"").split(/\r?\n/).map(function(x){ return x.replace(/\s+/g," ").trim(); })
+                             .filter(function(x){ return x.length>1; });
+  var out={fecha:"", superId:"", superNombre:"", lineas:[], total:null};
+  /* La fecha: la primera que parezca una */
+  for(var i=0;i<filas.length;i++){
+    var f=filas[i].match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/);
+    if(f){
+      var a=+f[3]; if(a<100) a+=2000;
+      var mm=+f[2], dd=+f[1];
+      if(mm>=1&&mm<=12&&dd>=1&&dd<=31&&a>2000&&a<2100){ out.fecha=a+"-"+p2(mm)+"-"+p2(dd); break; }
+    }
+  }
+  /* El total, para comprobar luego si cuadra con la suma */
+  for(var j=filas.length-1;j>=0;j--){
+    if(/\btotal\b/i.test(filas[j]) && !/sub/i.test(filas[j])){
+      var mt=filas[j].match(PRECIO_FIN); if(mt){ out.total=aPrecio(mt); break; }
+    }
+  }
+  /* El almacén: en la cabecera. Primero entre los que ya conoces. */
+  var cabeza=filas.slice(0,8).join(" ");
+  var conocido=entenderDictado(cabeza);
+  if(conocido.superId){ out.superId=conocido.superId; out.superNombre=nombreSuper(conocido.superId); }
+  else {
+    for(var k=0;k<Math.min(5,filas.length);k++){
+      if(letras(filas[k])>=4 && !NO_ES_PRODUCTO.test(filas[k])){
+        /* Sin la razón social: «MERCADONA, S.A. A-46103834» es «Mercadona» */
+        var limpio=filas[k].split(",")[0].replace(/\b(s\.?\s?a\.?|s\.?\s?l\.?\s?u?\.?)(?=\s|$)/ig," ")
+                           .replace(/\S*\d\S*/g," ");
+        out.superNombre=nombreBonito(limpio); break;
+      }
+    }
+  }
+  /* Los productos: una fila que acaba en precio. Si la fila no trae
+     nombre (la de «0,524 kg x 2,99 €/kg»), el nombre es el de la fila
+     de arriba, que venía sin precio. */
+  var nombrePendiente="";
+  filas.forEach(function(fila, n){
+    if(n<2) return;                                  /* cabecera */
+    if(NO_ES_PRODUCTO.test(fila)){ nombrePendiente=""; return; }
+    var m=fila.match(PRECIO_FIN);
+    if(!m){ nombrePendiente = letras(fila)>=3 ? fila : ""; return; }
+    var precio=aPrecio(m);
+    if(precio<=0 || precio>500){ nombrePendiente=""; return; }  /* descuentos y basura */
+    var resto=fila.slice(0, m.index).trim();
+    var cantidad=1, unidad=null;
+    /* «2 x 1,20» o «2 UD 1,20 2,40»: cuántos y a cuánto cada uno */
+    var mx=resto.match(/(\d{1,3})\s*(?:x|X|\*|ud|uds|un)\.?\s*(\d{1,4})\s?[.,]\s?(\d{2})/);
+    if(mx){ cantidad=+mx[1]; unidad=r2(parseFloat(mx[2]+"."+mx[3])); resto=resto.replace(mx[0]," "); }
+    else {
+      var m2=resto.match(/(\d{1,4})\s?[.,]\s?(\d{2})\s*$/);   /* precio de uno delante del total */
+      var mq=resto.match(/^(\d{1,3})\s+(?=[A-Za-zÀ-ÿ])/);
+      if(m2 && mq && +mq[1]>1){
+        cantidad=+mq[1]; unidad=r2(parseFloat(m2[1]+"."+m2[2]));
+        resto=resto.slice(mq[0].length, m2.index);
+      } else if(mq && +mq[1]>1 && +mq[1]<50){
+        cantidad=+mq[1]; unidad=r2(precio/cantidad); resto=resto.slice(mq[0].length);
+      } else if(mq && +mq[1]===1){
+        resto=resto.slice(mq[0].length);
+      }
+    }
+    /* Productos a peso: el precio es el de lo que se ha llevado */
+    var aPeso=/\d\s?[.,]\s?\d{2,3}\s*kg/i.test(resto);
+    if(aPeso){ cantidad=1; unidad=precio; resto=resto.replace(/[\d.,]+\s*kg.*$/i," "); }
+    var nombre=nombreBonito(resto);
+    if(letras(nombre)<3 && nombrePendiente) nombre=nombreBonito(nombrePendiente.replace(/^\d{1,3}\s+/,""));
+    nombrePendiente="";
+    if(letras(nombre)<3) return;
+    out.lineas.push({nombre:nombre, cantidad:cantidad, precio:unidad!=null?unidad:precio});
+  });
+  return out;
+}
+function abrirFotoTiquet(){
+  abrirVentana("Foto del tiquet",
+    '<p class="nota" style="margin:0 0 12px">Haz la foto con el tiquet <strong>estirado, recto y con buena luz</strong>, '+
+    'que se lea de arriba abajo. La foto no sale de tu móvil: se lee aquí mismo.</p>'+
+    '<label class="btn fuerte" style="display:inline-flex;cursor:pointer">📷 Hacer foto o elegirla'+
+      '<input type="file" id="ti_foto" accept="image/*" capture="environment" style="display:none"></label>'+
+    '<div id="ti_estado" class="nota" style="margin:12px 0 0"></div>'+
+    '<img id="ti_vista" alt="" style="display:none;max-width:100%;max-height:260px;margin-top:10px;border:1px solid var(--linea);border-radius:8px">',
+    function(){ return true; }, {aceptar:"Leer"});
+  var dlg=document.getElementById("dlg");
+  var ok=dlg.querySelector("[data-ok]"); ok.style.display="none";
+  var estado=document.getElementById("ti_estado"), vista=document.getElementById("ti_vista");
+  document.getElementById("ti_foto").addEventListener("change", function(){
+    var archivo=this.files && this.files[0]; if(!archivo) return;
+    vista.src=URL.createObjectURL(archivo); vista.style.display="block";
+    estado.textContent="Preparando el lector… (la primera vez tarda un poco)";
+    var foto;
+    prepararFoto(archivo).then(function(c){ foto=c; return cargarTesseract(); })
+    .then(function(T){
+      return T.recognize(foto, "spa", { logger:function(m){
+        if(m.status==="recognizing text") estado.textContent="Leyendo el tiquet… "+Math.round((m.progress||0)*100)+" %";
+      }});
+    })
+    .then(function(r){
+      var t=leerTiquet(r && r.data ? r.data.text : "");
+      if(!t.lineas.length){
+        estado.innerHTML='<span style="color:var(--aviso)">No he sabido sacar ningún producto. '+
+          'Prueba otra foto más cerca, recta y con más luz.</span>';
+        return;
+      }
+      dlg.close(); dlg.remove();
+      var suma=r2(t.lineas.reduce(function(s,l){ return s+l.cantidad*l.precio; },0));
+      var aviso='Leído del tiquet: <strong>'+plural(t.lineas.length,"cosa","cosas")+'</strong>'+
+        (t.total!=null
+          ? (Math.abs(suma-t.total)<0.02
+              ? ' y la suma cuadra con el total del tiquet ('+eur(t.total)+').'
+              : '. El tiquet dice <strong>'+eur(t.total)+'</strong> y aquí suman '+eur(suma)+': falta o sobra algo, repásalo.')
+          : '.')+
+        ' Revisa nombres y precios antes de guardar: el lector a veces se equivoca.';
+      editarCompra(null, t.lineas, null, {fecha:t.fecha, superId:t.superId, superNombre:t.superNombre||"", aviso:aviso});
+    })
+    .catch(function(e){
+      estado.innerHTML='<span style="color:var(--aviso)">'+
+        (e && e.message==="no-carga"
+          ? 'No he podido cargar el lector. Mira que haya internet y vuelve a probar.'
+          : 'No he podido leer la foto. Prueba con otra.')+'</span>';
+    });
+  });
 }
 
 function productoParecido(nombre, formato){
@@ -1708,12 +1885,14 @@ function borrarProducto(id){
    Todo escribiendo. Lo que no exista se crea al guardar, así que no hay
    que salir a dar de alta nada a media compra —que era justo lo que
    pasaba antes y por lo que quedaron tres compras a 0 €. */
-function editarCompra(id, lineasPrevias, deLaLista){
+function editarCompra(id, lineasPrevias, deLaLista, previa){
+  previa=previa||{};
   var c=id?(libro.compras||[]).filter(function(x){return x.id===id;})[0]
-          :{id:uid(), fecha:hoyISO(), superId:ultimoSuper(),
+          :{id:uid(), fecha:previa.fecha||hoyISO(), superId:previa.superNombre!=null?previa.superId||"":ultimoSuper(),
             lineas:lineasPrevias||[]};
   var nombreDelSuper=(libro.supermercados||[]).filter(function(s){
     return s.id===c.superId; })[0];
+  if(!nombreDelSuper && previa.superNombre) nombreDelSuper={nombre:previa.superNombre};
 
   abrirVentana(id?"Editar compra":"Anotar compra",
     '<div class="rejilla">'+
@@ -1725,8 +1904,9 @@ function editarCompra(id, lineasPrevias, deLaLista){
         'placeholder="Mercadona"></div>'+
     '</div>'+
     datalistSupers()+datalistProductos()+
+    (previa.aviso ? '<div class="aviso-caja" style="margin-top:14px">'+previa.aviso+'</div>' :
     '<p class="nota" style="margin-top:14px">Escribe el nombre de cada cosa. Si es la primera '+
-    'vez, se crea sola; si ya la has comprado, sale al teclear y el precio se pone solo.</p>'+
+    'vez, se crea sola; si ya la has comprado, sale al teclear y el precio se pone solo.</p>')+
     '<div id="lineas"></div>'+
     '<button class="btn sm" id="masLinea" style="margin-top:8px">+ Otra cosa</button>'+
     '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;'+
@@ -1800,7 +1980,7 @@ function editarCompra(id, lineasPrevias, deLaLista){
                     "gap:8px;margin-top:8px;align-items:end";
     f.innerHTML=
       '<div class="campo"><input class="l_prod" list="listaProductos" autocomplete="off" '+
-        'value="'+esc(prod?prod.nombre:"")+'" placeholder="Leche, pan…"></div>'+
+        'value="'+esc(prod?prod.nombre:(linea.nombre||""))+'" placeholder="Leche, pan…"></div>'+
       '<div class="campo"><input type="number" class="l_cant" min="0" step="0.01" '+
         'value="'+esc(linea.cantidad)+'" title="Cuántos"></div>'+
       '<div class="campo"><input type="number" class="l_pre" min="0" step="0.01" '+
