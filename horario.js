@@ -79,6 +79,30 @@ function antesDeAlta(s, dia){
   var t = a.split('-');
   return new Date(dia.y, dia.m, dia.d) < new Date(+t[0], +t[1] - 1, +t[2]);
 }
+/* Los dos camareros nuevos (xxx1 y xxx2): entran el 1/12/2026 y van
+   siempre de noche, de 17:00 a 01:00, en verano y en invierno. Se les
+   deja puesto una sola vez en sus datos, asi al cambiarles el nombre lo
+   conservan y se puede tocar en Personal como el de cualquiera. */
+function nuevosDiciembre(){
+  var cambio = false;
+  CAM.forEach(function(x){
+    if (x._nuevosDic || !/^xxx\s*[12]$/i.test(String(x.name || '').trim())) return;
+    if (x.alta == null) x.alta = '2026-12-01';
+    var lib = x.fijo && x.fijo.libra != null ? x.fijo.libra : '';
+    x.fijo = {ini:'17:00', fin:'01:00', libra:lib, exacto:true};
+    x._nuevosDic = 1; cambio = true;
+  });
+  if (cambio) try { localStorage.setItem('rcam', JSON.stringify({enc:ENC, coc:COC, cam:CAM})); } catch(e){}
+}
+function ponerNombre(id, v){
+  v = String(v || '').trim(); if (!v) { renderCamList(); return; }
+  staff().forEach(function(x){
+    if (x.id !== id) return;
+    if (x.alta == null) x.alta = altaDe(x);
+    x.name = v;
+  });
+  save(); renderCamList(); renderAll(); toast('Nombre cambiado: ' + v);
+}
 function ponerAlta(id, v){
   staff().forEach(function(x){ if (x.id === id) x.alta = v || ''; });
   save(); renderCamList(); renderAll();
@@ -243,6 +267,7 @@ function load() {
       }
     }
   } catch(e){}
+  try { nuevosDiciembre(); } catch(e){}
   try { var d=localStorage.getItem('rhid');   if(d){var p=JSON.parse(d);if(typeof p==='object')hidden=p;}} catch(e){}
   try { var d=localStorage.getItem('rvac');   if(d){var p=JSON.parse(d);if(typeof p==='object')vac=p;}   } catch(e){}
   try { var d=localStorage.getItem('rancho');
@@ -635,6 +660,7 @@ function leyendaFiestas(){
 }
 
 function renderAll() {
+  try { nuevosDiciembre(); } catch(e){}
   var yr = document.getElementById('yr');
   if (yr) curY = parseInt(yr.value);
   // Sync hours year selector
@@ -3137,6 +3163,7 @@ function rellenarMes(id) {
   diasDelMes(curY, curM).forEach(function(dia){
     var hay = ((((sched[dia.y]||{})[dia.m]||{})[id])||{})[dia.d];
     if (hay && hay.estado && hay.estado !== 'libre') return;    // ya hay algo
+    if (antesDeAlta(p, dia)) return;                            // aun no ha entrado
     var sM = curM, sY = curY; curM = dia.m; curY = dia.y;
     if (f.libra !== '' && dia.dow === +f.libra) { sc(id, dia.d, {estado:'festivo', nota:''}); libres++; }
     else if (f.ini && f.fin)                    { sc(id, dia.d, {estado:'trabajo', inicio:f.ini, fin:f.fin, nota:''}); puestos++; }
@@ -3179,8 +3206,9 @@ function renderCamList() {
     var tieneFijo = !!(f.ini && f.fin);
     return '<div style="padding:6px 8px;background:var(--surface2);border-radius:6px;margin-bottom:4px;border:1px solid var(--border)">'
          + '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px">'
-         + '<span style="font-size:.85rem;color:'+RCOL[c.role]+'">'+c.name
-         + '<span class="rt r'+c.role+'" style="margin-left:5px">'+RLBL[c.role]+'</span></span>'
+         + '<span style="display:flex;align-items:center;gap:5px;min-width:0">'
+         + '<input type="text" value="'+esc(c.name)+'" title="Toca para cambiar el nombre" onchange="ponerNombre(\''+c.id+'\',this.value)" style="font-size:.85rem;color:'+RCOL[c.role]+';background:transparent;border:1px solid var(--border);border-radius:5px;padding:2px 6px;width:120px">'
+         + '<span class="rt r'+c.role+'">'+RLBL[c.role]+'</span></span>'
          + '<span style="display:flex;gap:4px;align-items:center">'
          + flecha(-1, '&#9650;', esPrimero, 'Subirlo en la lista')
          + flecha( 1, '&#9660;', esUltimo,  'Bajarlo en la lista')
@@ -3689,7 +3717,7 @@ function turnoDe(s, g, h, est){
        Media jornada o un horario corto a propósito se respeta tal cual. */
     var Hf = (b - a) / 60, esJornada = Hf === SCFG.verano.rH || Hf === SCFG.verano.eH ||
                                         Hf === SCFG.invierno.rH || Hf === SCFG.invierno.eH;
-    if (esJornada && !(g && +g.jornada > 0)) {
+    if (esJornada && !s.fijo.exacto && !(g && +g.jornada > 0)) {
       var Ht = horasDe(s, est);
       if (Ht !== Hf) { b = a + Ht * 60; return {h: Math.floor(a / 60), a:a, b:b, ini:s.fijo.ini, fin:dosD(Math.floor(b / 60) % 24) + ':' + dosD(b % 60)}; }
     }
@@ -3786,6 +3814,14 @@ function planPersonas(p){
 
     if (ap.entra && ap.entra === p.turnos.O[0] && g.grupo === 'cam') g.grupo = 'fijo';
     p.gente[s.id] = g;
+  });
+  /* Quien tiene en Personal un horario que no se toca (los nuevos de
+     noche, 17:00 a 01:00) entra siempre a esa hora. */
+  lista.forEach(function(s){
+    var g = p.gente[s.id];
+    if (g && g.grupo !== 'no' && s.fijo && s.fijo.exacto && s.fijo.ini && s.fijo.fin) {
+      g.grupo = 'fijo'; g.fijoH = parseInt(s.fijo.ini, 10);
+    }
   });
   /* El día que libra cada uno manda el de Personal, si lo tiene puesto */
   lista.forEach(function(s){
