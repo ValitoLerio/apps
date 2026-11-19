@@ -893,7 +893,8 @@ function pintarFormularioDia(d){
         '<div class="campo"><label class="lbl" for="f_amAnt">Saldo anterior</label>'+
           '<input type="number" class="grande" id="f_amAnt" step="0.01" value="'+(ant!=null?esc(ant):"")+'" placeholder="0,00"></div>'+
         '<div class="campo"><label class="lbl" for="f_amIng">Ingreso diario</label>'+
-          '<input type="number" class="grande" id="f_amIng" step="0.01" value="'+esc(ing)+'" placeholder="0,00"></div>'+
+          '<input type="number" class="grande" id="f_amIng" step="0.01" value="'+esc(ing)+'" placeholder="0,00">'+
+          '<div style="font-size:12px;color:var(--muted);margin:4px 0 0">sale del efectivo real</div></div>'+
         '<div class="campo"><label class="lbl" for="f_amar">Saldo actual</label>'+
           '<input type="number" class="grande" id="f_amar" min="0" step="0.01" value="'+esc(actual.aAmarilla)+'" readonly tabindex="-1" title="Saldo anterior + ingreso diario" style="font-weight:700"></div>'+
       '</div>';
@@ -1146,6 +1147,19 @@ function pintarFormularioDia(d){
   (function(){
     var cAnt=document.getElementById("f_amAnt"), cIng=document.getElementById("f_amIng"), cAm=document.getElementById("f_amar");
     if(!cIng || !cAm) return;
+    /* Lo cobrado que hay en el cajón, sin el cambio, es lo que va a la
+       amarilla: el efectivo real pasa solo al ingreso diario. Si se
+       escribe a mano en el ingreso, manda lo escrito. En un día ya
+       guardado con otro ingreso, no se le cambia la cifra por detrás. */
+    var cReal=document.getElementById("f_efecReal");
+    var ingAMano = (cIng.value!=="" && cReal && Math.abs((+cIng.value||0)-(+cReal.value||0))>=0.005);
+    function sumaAm(){ cAm.value = (cAnt.value==="" && cIng.value==="") ? "" : r2((+cAnt.value||0)+(+cIng.value||0)); }
+    if(cReal) cReal.addEventListener("input", function(){
+      if(ingAMano) return;
+      cIng.value = cReal.value==="" ? "" : r2(+cReal.value||0);
+      sumaAm(); refrescar();
+    });
+    cIng.addEventListener("input", function(){ ingAMano = (cIng.value!==""); });
     cIng.addEventListener("input", function(){
       cAm.value = (cAnt.value==="" && cIng.value==="") ? "" : r2((+cAnt.value||0)+(+cIng.value||0));
       refrescar();
