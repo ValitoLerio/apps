@@ -675,6 +675,8 @@ function verDia(main){
         '<span class="pista">lo de cada noche</span></div>'+
       '<div class="tarjeta-cuerpo" id="formDia"></div></div>'+
 
+    tarjetaAdelantosDia(ui.dia)+
+
     '<div class="cifras">'+
       '<div class="cifra"><div class="k">Ventas del día</div><div class="v acento">'+eur(c.ventas)+'</div>'+
         '<div class="n">visa + '+(pctVisa() && !difPct ? "el efectivo calculado" : "efectivo")+'</div></div>'+
@@ -828,6 +830,7 @@ function verDia(main){
     enviarDiaPorWhatsApp(ui.dia);
   });
 
+  engancharAdelantosDia(main, ui.dia);
   pintarFormularioDia(d);   /* el hueco de la foto va dentro */
   /* La foto del papel se quitó del día: no la usa. */
 }
@@ -1443,6 +1446,19 @@ function textoDia(fecha, opciones){
   l.push("");
   bloque(bloque3);
   /* Sin desglose de pagos: basta con el total de arriba */
+
+  /* El dinero que alguien ha puesto de su bolsillo: lo de ese día y lo
+     que se le debe todavía. */
+  var movs=adelantosDelDia(fecha), pend=pendientesAdelantos();
+  if(movs.length || pend.length){
+    l.push("");
+    l.push("💶 *DINERO ADELANTADO*");
+    movs.forEach(function(a){
+      l.push((a.tipo==="devuelve" ? "Se devuelve a "+a.quien : "Pone "+a.quien)+": "+eur(+a.importe||0)+
+             (a.motivo?" ("+a.motivo+")":""));
+    });
+    pend.forEach(function(x){ l.push("Se le debe a "+x.quien+": "+eur(x.debe)); });
+  }
 
   /* Y al final, de la amarilla, sólo lo que no esté ya arriba: cuánto
      falta para el objetivo, y el saldo de hoy si el parte es de un día
@@ -3537,9 +3553,58 @@ function verAdelantos(main){
     });
   });
 }
-function editarAdelanto(a, tipo, quien){
+/* En el día: lo que se ha puesto o devuelto ese día y lo que se debe a
+   cada uno, para que se vea al cerrar y salga en el parte. */
+function adelantosDelDia(fecha){
+  return (libro.adelantos||[]).filter(function(a){ return a.fecha===fecha; });
+}
+function pendientesAdelantos(){
+  return quienesAdelantan().map(function(q){ return {quien:q, debe:debeA(q)}; })
+                           .filter(function(x){ return x.debe>0.004; });
+}
+function tarjetaAdelantosDia(fecha){
+  var hoy=adelantosDelDia(fecha), pend=pendientesAdelantos();
+  return '<div class="tarjeta" id="tarjetaAdelantos" style="margin-bottom:16px">'+
+    '<div class="tarjeta-cab"><h2>💶 Dinero adelantado</h2>'+
+      '<span style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<button class="btn sm" id="dad_pone">+ Alguien ha puesto dinero</button>'+
+        (pend.length?'<button class="btn sm" id="dad_dev">Devolver</button>':'')+
+      '</span></div>'+
+    '<div class="tarjeta-cuerpo">'+
+      (hoy.length
+        ? hoy.map(function(a){
+            var dev=a.tipo==="devuelve";
+            return '<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0">'+
+              '<span>'+(dev?'Se le devuelve a ':'Pone ')+'<b>'+esc(a.quien)+'</b>'+(a.motivo?' · '+esc(a.motivo):'')+'</span>'+
+              '<b style="color:'+(dev?'var(--ok,#1e7a3c)':'var(--malo,#b3261e)')+'">'+eur(+a.importe||0)+'</b></div>';
+          }).join("")
+        : '<p class="nota" style="margin:0 0 4px">Este día nadie ha puesto ni recuperado dinero.</p>')+
+      (pend.length
+        ? '<p class="nota" style="margin:8px 0 0">Pendiente de devolver: '+
+          pend.map(function(x){ return '<b>'+esc(x.quien)+' '+eur(x.debe)+'</b>'; }).join(" · ")+'</p>'
+        : '')+
+    '</div></div>';
+}
+function engancharAdelantosDia(main, fecha){
+  /* Sólo se repinta esta tarjeta: si se repintara el día entero, se
+     perdería lo que estés escribiendo en el cierre sin guardar. */
+  function repintar(){
+    var t=document.getElementById("tarjetaAdelantos"); if(!t) return;
+    var n=document.createElement("div"); n.innerHTML=tarjetaAdelantosDia(fecha);
+    t.replaceWith(n.firstChild); engancharAdelantosDia(document, fecha);
+  }
+  var bp=main.querySelector("#dad_pone");
+  if(bp) bp.addEventListener("click", function(){ editarAdelanto(null, "pone", "", fecha, repintar); });
+  var bd=main.querySelector("#dad_dev");
+  if(bd) bd.addEventListener("click", function(){
+    var pend=pendientesAdelantos();
+    editarAdelanto(null, "devuelve", pend.length?pend[0].quien:"", fecha, repintar);
+  });
+}
+
+function editarAdelanto(a, tipo, quien, fecha, luego){
   var nuevo=!a, dev=tipo==="devuelve";
-  a=a||{fecha:hoyISO(), quien:quien||"", importe:"", motivo:"", tipo:tipo};
+  a=a||{fecha:fecha||hoyISO(), quien:quien||"", importe:"", motivo:"", tipo:tipo};
   if(nuevo && dev && a.quien){ var pend=debeA(a.quien); if(pend>0) a.importe=pend; }
   var gente=quienesAdelantan();
   abrirVentana(dev ? "Devolver dinero" : "Ha puesto dinero",
@@ -3564,7 +3629,7 @@ function editarAdelanto(a, tipo, quien){
       if(!imp){ avisar("Pon el importe.", true); return true; }
       a.quien=q; a.fecha=valor("ad_f")||hoyISO(); a.importe=imp; a.motivo=valor("ad_mot"); a.tipo=tipo;
       if(nuevo){ a.id=uid(); libro.adelantos=libro.adelantos||[]; libro.adelantos.push(a); }
-      guardar(); pintar();
+      guardar(); if(luego) luego(); else pintar();
       var d=debeA(q);
       avisar(d>0 ? "Apuntado. Se le debe a "+q+": "+eur(d) : "Apuntado. A "+q+" ya no se le debe nada.");
     }, {aceptar: dev ? "Devolver" : "Apuntar"});
@@ -3573,7 +3638,7 @@ function editarAdelanto(a, tipo, quien){
   var bb=document.getElementById("ad_borrar");
   if(bb) bb.addEventListener("click", function(){
     libro.adelantos=(libro.adelantos||[]).filter(function(x){ return x!==a; });
-    guardar(); var dl=document.getElementById("dlg"); if(dl){ dl.close(); dl.remove(); } pintar();
+    guardar(); var dl=document.getElementById("dlg"); if(dl){ dl.close(); dl.remove(); } if(luego) luego(); else pintar();
     avisar("Apunte borrado");
   });
 }
