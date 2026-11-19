@@ -1100,14 +1100,16 @@ function prepararFoto(archivo){
   return new Promise(function(ok, mal){
     var url=URL.createObjectURL(archivo), img=new Image();
     img.onload=function(){
-      var max=1800, k=Math.min(1, max/Math.max(img.width, img.height));
+      /* Se lleva a unos 2200 px de alto: las fotos grandes se reducen y
+         los escaneos pequeños se agrandan, que con letra diminuta no lee. */
+      var max=2200, k=Math.min(3, max/Math.max(img.width, img.height));
       var c=document.createElement("canvas");
       c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
       var x=c.getContext("2d"); x.drawImage(img,0,0,c.width,c.height);
       var d=x.getImageData(0,0,c.width,c.height), p=d.data;
       for(var i=0;i<p.length;i+=4){
         var g=0.299*p[i]+0.587*p[i+1]+0.114*p[i+2];
-        g=Math.max(0, Math.min(255, (g-128)*1.6+150));
+        g=Math.max(0, Math.min(255, (g-128)*1.4+128));
         p[i]=p[i+1]=p[i+2]=g;
       }
       x.putImageData(d,0,0); URL.revokeObjectURL(url); ok(c);
@@ -1116,8 +1118,10 @@ function prepararFoto(archivo){
     img.src=url;
   });
 }
-var NO_ES_PRODUCTO=/\b(total|subtotal|sub-total|iva|igi|i\.g\.i|base\s*imp|imponible|tarjeta|efectivo|cambio|entregad|a\s*devolver|visa|mastercard|maestro|contactless|importe|pagad|factura|simplificada|nif|cif|n\.?r\.?t|tel[eé]?f?|tlf|fecha|hora|caj[ae]r|cajero|tiquet|ticket|gracias|atendid|operaci|autoriz|aid\b|arc\b|terminal|comercio|devoluci|redondeo|ahorro|puntos|socio|cliente|art[ií]culos|unidades|uds\.?\s*total|copia|www|http|@)\b/i;
-var PRECIO_FIN=/(-?\d{1,4})\s?[.,]\s?(\d{2})\s*(?:€|eur|euros|[a-e])?\s*$/i;
+var NO_ES_PRODUCTO=/\b(total|subtotal|sub-total|iva|igi|i\.g\.i|base\s*imp|imponible|tarjeta|efectivo|cambio|entregad|a\s*devolver|visa|mastercard|maestro|contactless|importe|pagad|factura|simplificada|nif|cif|n\.?r\.?t|tel[eé]?f?|tlf|fecha|hora|caj[ae]r|cajero|tiquet|ticket|gracias|targeta|articles|canvi|devoluci|caixa|centre\s*comercial|centro\s*comercial|principat|atendid|operaci|autoriz|aid\b|arc\b|terminal|comercio|devoluci|redondeo|ahorro|puntos|socio|cliente|art[ií]culos|unidades|uds\.?\s*total|copia|www|http|@)\b/i;
+/* El precio al final de la línea; detrás puede venir la letra o el
+   número del tipo de impuesto («3.10 1», «2,40 A»). */
+var PRECIO_FIN=/(-?\d{1,4})\s?[.,]\s?(\d{2})\s*(?:€|eur|euros)?\s*(?:[a-e]|[0-9])?\s*$/i;
 function aPrecio(m){ return r2(parseFloat(m[1]+"."+m[2])); }
 function nombreBonito(t){
   t=String(t||"").replace(/[^0-9A-Za-zÀ-ÿ%/.,' -]+/g," ").replace(/\s+/g," ").trim()
