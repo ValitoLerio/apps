@@ -84,10 +84,10 @@ main{padding:22px 24px 120px;max-width:1180px;min-width:0}
 .buscar-caja{position:relative}
 .buscar-caja .lupa{position:absolute;left:16px;top:50%;transform:translateY(-50%);
                    font-size:19px;opacity:.5;pointer-events:none}
-#q{width:100%;font-size:19px;font-weight:500;padding:15px 46px 15px 46px;border-radius:14px;
+#q,#li_q{width:100%;font-size:19px;font-weight:500;padding:15px 46px 15px 46px;border-radius:14px;
    border:1.5px solid var(--linea);background:var(--sup);box-shadow:var(--sombra)}
-#q::placeholder{color:var(--muted);font-weight:400}
-#q:focus{border-color:var(--acento);box-shadow:0 0 0 4px var(--acento-suave)}
+#q::placeholder,#li_q::placeholder{color:var(--muted);font-weight:400}
+#q:focus,#li_q:focus{border-color:var(--acento);box-shadow:0 0 0 4px var(--acento-suave)}
 .limpiar{position:absolute;right:9px;top:50%;transform:translateY(-50%);border:0;background:var(--sup2);
          color:var(--muted);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:15px;
          display:none;align-items:center;justify-content:center}
@@ -412,6 +412,10 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
   .reja{grid-template-columns:1fr}
   .cabecera h1{font-size:24px}
 }
+@media print{
+  .lista-completa input{border:0!important;padding:0!important}
+  #li_q, .buscar{display:none!important}
+}
 </style>
 </head>
 <body>
@@ -423,7 +427,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202611201036"></script>
+<script src="sync.js?v=202611201046"></script>
 <script>
 /* Red de seguridad. Si los archivos de la app no están al lado de esta
    página — pasa al abrirla fuera de la web: vista previa, doble clic en
@@ -440,7 +444,7 @@ window.reintentarJS = function(viejo, nombre, sub){
   }
   var s = document.createElement('script');
   s.setAttribute('data-rein', '1');
-  s.src = WEB_APPS + nombre + '?v=202611201036' + Date.now();
+  s.src = WEB_APPS + nombre + '?v=202611201046' + Date.now();
   s.onload = viejo.onload;
   s.onerror = function(){ reintentarJS(s, nombre, sub); };
   document.body.appendChild(s);
@@ -490,7 +494,7 @@ if (!window.Sync) (function(){
     var s = document.createElement('script');
     /* Siempre el último: sin esto el navegador sirve el pedidos.js de
        ayer y los cambios no se ven hasta pasado un rato. */
-    s.src = 'pedidos.js?v=202611201036' + Date.now();
+    s.src = 'pedidos.js?v=202611201046' + Date.now();
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ reintentarJS(s, 'pedidos.js', sub); };
     document.body.appendChild(s);
