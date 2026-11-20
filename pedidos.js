@@ -850,6 +850,29 @@ function pintar(){
    lista y otra nunca se contradicen. Si cambias el precio, la fecha del
    precio se pone a hoy, igual que en la ficha. */
 var qLista="";
+function apartadosExtra(){
+  var l=libro.ajustes.apartadosExtra;
+  return Array.isArray(l) ? l.filter(Boolean) : [];
+}
+function nuevoApartado(){
+  abrirVentana("Apartado nuevo",
+    '<div class="campo"><label class="lbl" for="na_nom">Nombre del apartado</label>'+
+      '<input id="na_nom" placeholder="POSTRES, PANADERÍA…" autocomplete="off"></div>'+
+    '<p class="nota" style="margin:10px 0 0">Sale en la lista vacío, con su «+ Añadir aquí» para meterle productos.</p>',
+    function(){
+      var n=valor("na_nom").trim().toUpperCase();
+      if(!n){ avisar("Ponle un nombre.", true); return true; }
+      var ya=secciones().map(function(x){ return x.nombre.toUpperCase(); }).concat(apartadosExtra().map(function(x){ return x.toUpperCase(); }));
+      if(ya.indexOf(n)>=0){ avisar("Ese apartado ya existe.", true); return true; }
+      libro.ajustes.apartadosExtra=apartadosExtra().concat([n]);
+      guardar(); pintar(); avisar("Apartado "+n+" creado");
+    }, {aceptar:"Crear"});
+  setTimeout(function(){ var e=document.getElementById("na_nom"); if(e) e.focus(); }, 50);
+}
+function quitarApartado(n){
+  libro.ajustes.apartadosExtra=apartadosExtra().filter(function(x){ return x!==n; });
+  guardar(); pintar(); avisar("Apartado quitado");
+}
 function verLista(main){
   var provs=listaProveedores().map(function(x){ return x.nombre; });
   var secs=secciones().map(function(x){ return x.nombre; }).sort(function(a,b){ return a.localeCompare(b); });
@@ -857,6 +880,7 @@ function verLista(main){
     cabecera("Lista completa",
       "Todos los productos por categorías, con proveedor, comercial y precio. Escribe en las casillas y se guarda solo.",
       '<button class="btn hueco" id="li_imprimir">Imprimir</button>'+
+      '<button class="btn" id="li_apartado">+ Apartado</button>'+
       '<button class="btn fuerte" id="li_nuevo">+ Producto nuevo</button>')+
     '<div class="buscar"><div class="buscar-caja"><span class="lupa">⌕</span>'+
       '<input id="li_q" type="search" autocomplete="off" spellcheck="false" placeholder="Buscar producto, proveedor o comercial…" value="'+esc(qLista)+'">'+
@@ -869,6 +893,7 @@ function verLista(main){
   q.addEventListener("input", function(){ qLista=this.value; pintarTablaLista(); });
   document.getElementById("li_imprimir").addEventListener("click", function(){ window.print(); });
   document.getElementById("li_nuevo").addEventListener("click", function(){ editarProducto(null); });
+  document.getElementById("li_apartado").addEventListener("click", nuevoApartado);
   pintarTablaLista();
 }
 function pintarTablaLista(){
@@ -881,6 +906,7 @@ function pintarTablaLista(){
     if(trozos.some(function(t){ return texto.indexOf(t)<0; })) return;
     var s=p.seccion||"Sin categoría"; (grupos[s]=grupos[s]||[]).push(p);
   });
+  if(!trozos.length) apartadosExtra().forEach(function(x){ if(!grupos[x]) grupos[x]=[]; });
   var nombres=Object.keys(grupos).sort(function(a,b){ return a.localeCompare(b,"es"); });
   /* Botones para ir a cada categoría sin bajar toda la lista */
   var ir=document.getElementById("li_ir");
@@ -902,7 +928,10 @@ function pintarTablaLista(){
     var ps=grupos[sec].sort(function(a,b){ return String(a.nombre).localeCompare(String(b.nombre),"es"); });
     return '<div class="tarjeta" id="li_sec_'+i+'" style="margin-bottom:16px"><div class="tarjeta-cab"><h2>'+esc(sec)+'</h2>'+
       '<span style="display:flex;gap:12px;align-items:center"><span class="pista">'+plural(ps.length,"producto","productos")+'</span>'+
+      (ps.length?'':'<button class="btn hueco sm" data-li-quitar="'+esc(sec)+'">Quitar apartado</button>')+
       '<button class="btn hueco sm" data-li-nuevo="'+esc(sec)+'">+ Añadir aquí</button></span></div>'+
+      (ps.length?'':'<div class="vacio" style="padding:18px"><div class="nota">Todavía no tiene productos. Pulsa «+ Añadir aquí».</div></div>')+
+      (!ps.length ? '</div>' :
       '<div class="tabla-caja"><table class="lista-completa"><thead><tr>'+
         '<th style="text-align:left;min-width:200px">Producto</th>'+
         '<th style="text-align:left;min-width:150px">Proveedor</th>'+
@@ -926,8 +955,11 @@ function pintarTablaLista(){
           '<td class="num" data-fecha style="color:var(--muted);white-space:nowrap">'+esc(dmy(p.fecha))+'</td>'+
           '<td><input data-c="seccion" list="li_secs" value="'+esc(p.seccion||"")+'" '+inp+'></td>'+
         '</tr>';
-      }).join("")+'</tbody></table></div></div>';
+      }).join("")+'</tbody></table></div></div>');
   }).join("");
+  caja.querySelectorAll("[data-li-quitar]").forEach(function(b){
+    b.addEventListener("click", function(){ quitarApartado(b.getAttribute("data-li-quitar")); });
+  });
   caja.querySelectorAll("[data-li-nuevo]").forEach(function(b){
     b.addEventListener("click", function(){ editarProducto(null, b.getAttribute("data-li-nuevo")); });
   });
@@ -2421,6 +2453,10 @@ function editarProducto(p, secDefecto){
   var nuevo=!p;
   var secs=secciones().map(function(s){ return s.nombre; });
   if(!secs.length) secs=["CONGELADOS","BEBIDAS","COMIDAS","LIMPIEZA","TABACO"];
+  /* Los apartados nuevos que se crean en «Lista completa» aún no tienen
+     productos, pero tienen que poder elegirse aquí. */
+  apartadosExtra().forEach(function(x){ if(secs.indexOf(x)<0) secs.push(x); });
+  if(secDefecto && secDefecto!=="Sin categoría" && secs.indexOf(secDefecto)<0) secs.push(secDefecto);
   var provs=listaProveedores().map(function(x){ return x.nombre; });
   p=p||{seccion:(secDefecto && secDefecto!=="Sin categoría")?secDefecto:secs[0], nombre:"", proveedor:"", precio:null, dto:null, fecha:hoyISO(), igi:1, udsCaja:null};
 
