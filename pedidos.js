@@ -882,12 +882,13 @@ function verLista(main){
       '<button class="btn hueco" id="li_imprimir">Imprimir</button>'+
       '<button class="btn" id="li_apartado">+ Apartado</button>'+
       '<button class="btn fuerte" id="li_nuevo">+ Producto nuevo</button>')+
+    /* Los botones de los apartados van dentro de la barra del buscador,
+       que se queda fija arriba al bajar: así siempre están a mano. */
     '<div class="buscar"><div class="buscar-caja"><span class="lupa">⌕</span>'+
       '<input id="li_q" type="search" autocomplete="off" spellcheck="false" placeholder="Buscar producto, proveedor o comercial…" value="'+esc(qLista)+'">'+
-    '</div></div>'+
+    '</div><div class="chips" id="li_ir"></div></div>'+
     '<datalist id="li_provs">'+provs.map(function(n){ return '<option value="'+esc(n)+'">'; }).join("")+'</datalist>'+
     '<datalist id="li_secs">'+secs.map(function(n){ return '<option value="'+esc(n)+'">'; }).join("")+'</datalist>'+
-    '<div class="chips" id="li_ir" style="margin:-4px 0 16px;position:sticky;top:0;z-index:3;padding:8px 0;background:var(--fondo)"></div>'+
     '<div id="li_tabla"></div>';
   var q=document.getElementById("li_q");
   q.addEventListener("input", function(){ qLista=this.value; pintarTablaLista(); });
@@ -917,7 +918,8 @@ function pintarTablaLista(){
     ir.querySelectorAll("[data-li-ir]").forEach(function(b){
       b.addEventListener("click", function(){
         var t=document.getElementById("li_sec_"+b.getAttribute("data-li-ir")); if(!t) return;
-        var y=t.getBoundingClientRect().top+window.scrollY-(ir.offsetHeight+12);
+        var barra=ir.closest(".buscar")||ir;
+        var y=t.getBoundingClientRect().top+window.scrollY-(barra.offsetHeight+12);
         window.scrollTo({top:y, behavior:"smooth"});
       });
     });

@@ -427,7 +427,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202611201052"></script>
+<script src="sync.js?v=202611201054"></script>
 <script>
 /* Red de seguridad. Si los archivos de la app no están al lado de esta
    página — pasa al abrirla fuera de la web: vista previa, doble clic en
@@ -444,7 +444,7 @@ window.reintentarJS = function(viejo, nombre, sub){
   }
   var s = document.createElement('script');
   s.setAttribute('data-rein', '1');
-  s.src = WEB_APPS + nombre + '?v=202611201052' + Date.now();
+  s.src = WEB_APPS + nombre + '?v=202611201054' + Date.now();
   s.onload = viejo.onload;
   s.onerror = function(){ reintentarJS(s, nombre, sub); };
   document.body.appendChild(s);
@@ -494,7 +494,7 @@ if (!window.Sync) (function(){
     var s = document.createElement('script');
     /* Siempre el último: sin esto el navegador sirve el pedidos.js de
        ayer y los cambios no se ven hasta pasado un rato. */
-    s.src = 'pedidos.js?v=202611201052' + Date.now();
+    s.src = 'pedidos.js?v=202611201054' + Date.now();
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ reintentarJS(s, 'pedidos.js', sub); };
     document.body.appendChild(s);
