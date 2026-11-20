@@ -1450,7 +1450,8 @@ function textoDia(fecha, opciones){
   /* El dinero que alguien ha puesto de su bolsillo: lo de ese día y lo
      que se le debe todavía. */
   var movs=adelantosDelDia(fecha), pend=pendientesAdelantos();
-  if(movs.length || pend.length){
+  /* Solo sale el día que alguien pone o recupera dinero */
+  if(movs.length){
     l.push("");
     l.push("💶 *DINERO ADELANTADO*");
     movs.forEach(function(a){
@@ -3536,7 +3537,8 @@ function verAdelantos(main){
             '<td>'+(dev?'Se le devuelve':'Pone dinero')+'</td><td>'+esc(a.motivo||"")+'</td>'+
             '<td class="num" style="font-weight:600;color:'+(dev?'var(--ok,#1e7a3c)':'var(--malo,#b3261e)')+'">'+
               (dev?'− ':'+ ')+eur(+a.importe||0)+'</td>'+
-            '<td class="num"><button class="btn suave sm" data-ad-ed="'+a.id+'">Cambiar</button></td></tr>';
+            '<td class="num" style="white-space:nowrap"><button class="btn suave sm" data-ad-ed="'+a.id+'">Cambiar</button> '+
+              '<button class="btn suave sm" data-ad-borrar="'+a.id+'" title="Borrar">✕</button></td></tr>';
         }).join("")+'</tbody></table></div>'
       : '<div class="vacio"><strong>No hay nada apuntado</strong>'+
         'Cuando alguien pague un pedido con su dinero, pulsa «Ha puesto dinero». '+
@@ -3545,6 +3547,9 @@ function verAdelantos(main){
   document.getElementById("ad_pone").addEventListener("click", function(){ editarAdelanto(null, "pone"); });
   main.querySelectorAll("[data-ad-dev]").forEach(function(b){
     b.addEventListener("click", function(){ editarAdelanto(null, "devuelve", b.getAttribute("data-ad-dev")); });
+  });
+  main.querySelectorAll("[data-ad-borrar]").forEach(function(b){
+    b.addEventListener("click", function(){ borrarAdelanto(b.getAttribute("data-ad-borrar"), pintar); });
   });
   main.querySelectorAll("[data-ad-ed]").forEach(function(b){
     b.addEventListener("click", function(){
@@ -3576,7 +3581,9 @@ function tarjetaAdelantosDia(fecha){
             var dev=a.tipo==="devuelve";
             return '<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0">'+
               '<span>'+(dev?'Se le devuelve a ':'Pone ')+'<b>'+esc(a.quien)+'</b>'+(a.motivo?' · '+esc(a.motivo):'')+'</span>'+
-              '<b style="color:'+(dev?'var(--ok,#1e7a3c)':'var(--malo,#b3261e)')+'">'+eur(+a.importe||0)+'</b></div>';
+              '<span style="display:flex;gap:10px;align-items:center;white-space:nowrap">'+
+                '<b style="color:'+(dev?'var(--ok,#1e7a3c)':'var(--malo,#b3261e)')+'">'+eur(+a.importe||0)+'</b>'+
+                '<button class="btn suave sm" data-dad-borrar="'+a.id+'" title="Borrar">✕</button></span></div>';
           }).join("")
         : '<p class="nota" style="margin:0 0 4px">Este día nadie ha puesto ni recuperado dinero.</p>')+
       (pend.length
@@ -3595,6 +3602,9 @@ function engancharAdelantosDia(main, fecha){
   }
   var bp=main.querySelector("#dad_pone");
   if(bp) bp.addEventListener("click", function(){ editarAdelanto(null, "pone", "", fecha, repintar); });
+  main.querySelectorAll("[data-dad-borrar]").forEach(function(b){
+    b.addEventListener("click", function(){ borrarAdelanto(b.getAttribute("data-dad-borrar"), repintar); });
+  });
   var bd=main.querySelector("#dad_dev");
   if(bd) bd.addEventListener("click", function(){
     var pend=pendientesAdelantos();
@@ -3602,6 +3612,15 @@ function engancharAdelantosDia(main, fecha){
   });
 }
 
+function borrarAdelanto(id, luego){
+  var a=(libro.adelantos||[]).filter(function(x){ return x.id===id; })[0]; if(!a) return;
+  confirmar("Borrar apunte",
+    '<p>¿Borrar «'+(a.tipo==="devuelve"?"Se le devuelve a ":"Pone ")+esc(a.quien)+': '+eur(+a.importe||0)+'» del '+esc(dmy(a.fecha))+'?</p>',
+    function(){
+      libro.adelantos=(libro.adelantos||[]).filter(function(x){ return x.id!==id; });
+      guardar(); luego(); avisar("Apunte borrado");
+    }, {aceptar:"Borrar", malo:true});
+}
 function editarAdelanto(a, tipo, quien, fecha, luego){
   var nuevo=!a, dev=tipo==="devuelve";
   a=a||{fecha:fecha||hoyISO(), quien:quien||"", importe:"", motivo:"", tipo:tipo};
