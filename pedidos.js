@@ -856,16 +856,19 @@ function verLista(main){
   main.innerHTML=
     cabecera("Lista completa",
       "Todos los productos por categorías, con proveedor, comercial y precio. Escribe en las casillas y se guarda solo.",
-      '<button class="btn hueco" id="li_imprimir">Imprimir</button>')+
+      '<button class="btn hueco" id="li_imprimir">Imprimir</button>'+
+      '<button class="btn fuerte" id="li_nuevo">+ Producto nuevo</button>')+
     '<div class="buscar"><div class="buscar-caja"><span class="lupa">⌕</span>'+
       '<input id="li_q" type="search" autocomplete="off" spellcheck="false" placeholder="Buscar producto, proveedor o comercial…" value="'+esc(qLista)+'">'+
     '</div></div>'+
     '<datalist id="li_provs">'+provs.map(function(n){ return '<option value="'+esc(n)+'">'; }).join("")+'</datalist>'+
     '<datalist id="li_secs">'+secs.map(function(n){ return '<option value="'+esc(n)+'">'; }).join("")+'</datalist>'+
+    '<div class="chips" id="li_ir" style="margin:-4px 0 16px;position:sticky;top:0;z-index:3;padding:8px 0;background:var(--fondo)"></div>'+
     '<div id="li_tabla"></div>';
   var q=document.getElementById("li_q");
   q.addEventListener("input", function(){ qLista=this.value; pintarTablaLista(); });
   document.getElementById("li_imprimir").addEventListener("click", function(){ window.print(); });
+  document.getElementById("li_nuevo").addEventListener("click", function(){ editarProducto(null); });
   pintarTablaLista();
 }
 function pintarTablaLista(){
@@ -879,12 +882,27 @@ function pintarTablaLista(){
     var s=p.seccion||"Sin categoría"; (grupos[s]=grupos[s]||[]).push(p);
   });
   var nombres=Object.keys(grupos).sort(function(a,b){ return a.localeCompare(b,"es"); });
+  /* Botones para ir a cada categoría sin bajar toda la lista */
+  var ir=document.getElementById("li_ir");
+  if(ir){
+    ir.innerHTML=nombres.map(function(sec, i){
+      return '<button class="chip" data-li-ir="'+i+'">'+esc(sec)+'<span class="n">'+grupos[sec].length+'</span></button>';
+    }).join("");
+    ir.querySelectorAll("[data-li-ir]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var t=document.getElementById("li_sec_"+b.getAttribute("data-li-ir")); if(!t) return;
+        var y=t.getBoundingClientRect().top+window.scrollY-(ir.offsetHeight+12);
+        window.scrollTo({top:y, behavior:"smooth"});
+      });
+    });
+  }
   if(!nombres.length){ caja.innerHTML='<div class="tarjeta"><div class="vacio"><strong>Nada que enseñar</strong></div></div>'; return; }
   var inp='style="width:100%;min-width:0;padding:5px 7px;font-size:14px;border:1px solid var(--linea);border-radius:6px;background:transparent"';
-  caja.innerHTML=nombres.map(function(sec){
+  caja.innerHTML=nombres.map(function(sec, i){
     var ps=grupos[sec].sort(function(a,b){ return String(a.nombre).localeCompare(String(b.nombre),"es"); });
-    return '<div class="tarjeta" style="margin-bottom:16px"><div class="tarjeta-cab"><h2>'+esc(sec)+'</h2>'+
-      '<span class="pista">'+plural(ps.length,"producto","productos")+'</span></div>'+
+    return '<div class="tarjeta" id="li_sec_'+i+'" style="margin-bottom:16px"><div class="tarjeta-cab"><h2>'+esc(sec)+'</h2>'+
+      '<span style="display:flex;gap:12px;align-items:center"><span class="pista">'+plural(ps.length,"producto","productos")+'</span>'+
+      '<button class="btn hueco sm" data-li-nuevo="'+esc(sec)+'">+ Añadir aquí</button></span></div>'+
       '<div class="tabla-caja"><table class="lista-completa"><thead><tr>'+
         '<th style="text-align:left;min-width:200px">Producto</th>'+
         '<th style="text-align:left;min-width:150px">Proveedor</th>'+
@@ -910,6 +928,9 @@ function pintarTablaLista(){
         '</tr>';
       }).join("")+'</tbody></table></div></div>';
   }).join("");
+  caja.querySelectorAll("[data-li-nuevo]").forEach(function(b){
+    b.addEventListener("click", function(){ editarProducto(null, b.getAttribute("data-li-nuevo")); });
+  });
   caja.querySelectorAll("tr[data-li] input").forEach(function(e){
     e.addEventListener("change", function(){ cambiarEnLista(e); });
   });
@@ -2396,12 +2417,12 @@ function editarProveedor(nombre){
 /* Cambiar el precio pone la fecha de hoy sola. Es el descuido de
    siempre: se corrige la cifra, no se toca la fecha, y medio año después
    nadie sabe si ese precio es de ahora o del año pasado. */
-function editarProducto(p){
+function editarProducto(p, secDefecto){
   var nuevo=!p;
   var secs=secciones().map(function(s){ return s.nombre; });
   if(!secs.length) secs=["CONGELADOS","BEBIDAS","COMIDAS","LIMPIEZA","TABACO"];
   var provs=listaProveedores().map(function(x){ return x.nombre; });
-  p=p||{seccion:secs[0], nombre:"", proveedor:"", precio:null, dto:null, fecha:hoyISO(), igi:1, udsCaja:null};
+  p=p||{seccion:(secDefecto && secDefecto!=="Sin categoría")?secDefecto:secs[0], nombre:"", proveedor:"", precio:null, dto:null, fecha:hoyISO(), igi:1, udsCaja:null};
 
   abrirVentana(nuevo?"Producto nuevo":p.nombre,
     '<div class="rejilla">'+
