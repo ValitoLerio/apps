@@ -245,6 +245,10 @@ function secciones(){
     if(p.seccion && !hay[p.seccion]){ hay[p.seccion]=0; vistas.push(p.seccion); }
     if(p.seccion) hay[p.seccion]++;
   });
+  /* Los apartados creados en «Lista completa» salen también aquí, aunque
+     todavía no tengan productos: así se ven igual en todas las pantallas. */
+  var extra=Array.isArray(libro.ajustes.apartadosExtra)?libro.ajustes.apartadosExtra:[];
+  extra.forEach(function(x){ if(x && hay[x]==null){ hay[x]=0; vistas.push(x); } });
   return vistas.map(function(s){ return {nombre:s, n:hay[s]}; });
 }
 /* La lista sale de los productos, pero también de las fichas sueltas:
@@ -1130,7 +1134,7 @@ function verPrecios(main){
     ui.soloPedido=!ui.soloPedido; if(ui.soloPedido) ui.seccion=""; pintar();
   });
   var bn=document.getElementById("pr_nuevo");
-  if(bn) bn.addEventListener("click", function(){ editarProducto(null); });
+  if(bn) bn.addEventListener("click", function(){ editarProducto(null, ui.seccion && ui.seccion!=="__diario" ? ui.seccion : null); });
 
   pintarResultado();
   /* En el ordenador el cursor ya está en el buscador; en el móvil no,
