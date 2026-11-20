@@ -817,7 +817,7 @@ function pintar(){
         '<button class="vs" data-ir="lista" aria-current="'+(ui.vista==="lista")+'">'+
           '<span class="ico">☰</span><span>Lista</span></button>'+
       '</div>'+
-      apartadosEnOrden().filter(function(a){ return a.id!=="precios" && a.id!=="lista"; }).map(function(a){
+      apartadosEnOrden().filter(function(a){ return ["precios","lista","verduras","carne"].indexOf(a.id)<0; }).map(function(a){
         var c=a.cuenta?a.cuenta():0;
         var puesto=(ui.vista===a.id) || (a.id==="proveedores" && ui.vista==="proveedor");
         return '<button class="nav" data-ir="'+a.id+'" aria-current="'+puesto+'">'+
