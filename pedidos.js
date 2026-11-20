@@ -808,7 +808,16 @@ function pintar(){
     '<nav class="rail">'+
       '<div class="marca"><span class="nom">Pedidos</span>'+
         '<span class="sub">'+esc(libro.ajustes.nombre||"Restaurante")+'</span></div>'+
-      apartadosEnOrden().map(function(a){
+      /* Las dos formas de ver los precios van arriba y grandes: son las
+         principales. Precios en cuadrícula (las fichas) o en lista (la
+         tabla completa por categorías). */
+      '<div class="vista-sel" role="group" aria-label="Cómo ver los precios">'+
+        '<button class="vs" data-ir="precios" aria-current="'+(ui.vista==="precios")+'">'+
+          '<span class="ico">▦</span><span>Cuadrícula</span></button>'+
+        '<button class="vs" data-ir="lista" aria-current="'+(ui.vista==="lista")+'">'+
+          '<span class="ico">☰</span><span>Lista</span></button>'+
+      '</div>'+
+      apartadosEnOrden().filter(function(a){ return a.id!=="precios" && a.id!=="lista"; }).map(function(a){
         var c=a.cuenta?a.cuenta():0;
         var puesto=(ui.vista===a.id) || (a.id==="proveedores" && ui.vista==="proveedor");
         return '<button class="nav" data-ir="'+a.id+'" aria-current="'+puesto+'">'+
