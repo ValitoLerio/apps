@@ -1233,7 +1233,6 @@ function pintarRecorrido(q){
           '</div></div></td>'+
         '<td>'+contador(p.id, campo, lp[campo], etiquetaEnvase(p))+'</td>'+
         '<td><textarea data-c="proveedor" rows="1" class="crece" '+inp+'>'+esc(p.proveedor||"")+'</textarea></td>'+
-        '<td><textarea data-c="comercial" rows="1" class="crece" placeholder="—" '+inp+(p.proveedor?'':' disabled')+'>'+esc(com)+'</textarea></td>'+
         '<td><input data-c="precio" type="number" step="0.01" min="0" inputmode="decimal" value="'+(p.precio!=null?esc(p.precio):"")+'" '+inp.replace('style="','style="text-align:right;')+'></td>'+
         '<td class="num" style="white-space:nowrap"><span data-neto><b>'+(p.precio?eur(conIgi(p)):"—")+'</b></span>'+
           '<br><small data-fecha style="color:var(--muted)">'+esc(dmy(p.fecha))+'</small></td>'+
@@ -1257,7 +1256,6 @@ function pintarRecorrido(q){
             '<th style="text-align:left;min-width:220px">Producto</th>'+
             '<th style="text-align:left;min-width:160px">Pedir</th>'+
             '<th style="text-align:left;min-width:140px">Proveedor</th>'+
-            '<th style="text-align:left;min-width:130px">Comercial</th>'+
             '<th class="num" style="min-width:80px">Precio</th>'+
             '<th class="num">Neto · fecha</th>'+
 
