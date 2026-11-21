@@ -71,14 +71,30 @@ button,input,select,textarea{font:inherit;color:inherit}
           display:flex;flex-direction:column;gap:7px}
 .pie-rail a{font-size:12px;color:var(--muted);text-decoration:none}
 .pie-rail a:hover{color:var(--tinta)}
+.re-fila,.re-zona{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--linea-suave)}
+.re-zona{background:var(--sup2,var(--fondo));font-weight:700;letter-spacing:.04em;text-transform:uppercase;font-size:13px;
+         color:var(--tinta);padding:10px 12px;border-bottom:1px solid var(--linea)}
+.re-zn{flex:1}
+.re-nom{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.re-nom small,.re-pre small{color:var(--muted);font-size:11.5px}
+.re-pre{width:96px;display:flex;flex-direction:column;gap:2px;text-align:right}
+.re-btns{display:flex;gap:4px;flex-wrap:wrap}
+.re-asa{cursor:grab;font-size:18px;color:var(--muted);user-select:none}
+.re-fila.li-pedido{background:color-mix(in srgb, var(--acento) 9%, transparent)}
+.re-arrastra{opacity:.4}
+.re-sobre{box-shadow:inset 0 3px 0 var(--acento)}
+.re-movido{animation:reMov .8s}
+@keyframes reMov{from{background:color-mix(in srgb, var(--acento) 25%, transparent)}to{background:transparent}}
+@media (max-width:700px){ .re-fila{flex-wrap:wrap} .re-nom{flex:1 0 100%} }
 .lista-completa tr.li-pedido td{background:color-mix(in srgb, var(--acento) 9%, transparent)}
 .lista-completa .contador{margin:0}
-.vista-sel{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:4px 0 12px;padding:0 0 12px;
+.vista-sel{display:grid;grid-template-columns:1fr;gap:6px;margin:4px 0 12px;padding:0 0 12px;
            border-bottom:1px solid var(--linea-suave)}
-.vs{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 6px;border-radius:10px;
+.vs{display:flex;flex-direction:row;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;
     border:1.5px solid var(--linea);background:var(--sup);color:var(--tinta2);cursor:pointer;
     font-size:13.5px;font-weight:600}
-.vs .ico{font-size:22px;line-height:1}
+.vs .ico{font-size:20px;line-height:1;width:22px;text-align:center}
+.vs{font-size:14.5px}
 .vs:hover{border-color:var(--acento);color:var(--tinta)}
 .vs[aria-current="true"]{background:var(--acento);border-color:var(--acento);color:var(--acento-tinta)}
 main{padding:22px 24px 120px;max-width:1180px;min-width:0}
@@ -94,10 +110,10 @@ main{padding:22px 24px 120px;max-width:1180px;min-width:0}
 .buscar-caja{position:relative}
 .buscar-caja .lupa{position:absolute;left:16px;top:50%;transform:translateY(-50%);
                    font-size:19px;opacity:.5;pointer-events:none}
-#q,#li_q{width:100%;font-size:19px;font-weight:500;padding:15px 46px 15px 46px;border-radius:14px;
+#q,#li_q,#re_q{width:100%;font-size:19px;font-weight:500;padding:15px 46px 15px 46px;border-radius:14px;
    border:1.5px solid var(--linea);background:var(--sup);box-shadow:var(--sombra)}
-#q::placeholder,#li_q::placeholder{color:var(--muted);font-weight:400}
-#q:focus,#li_q:focus{border-color:var(--acento);box-shadow:0 0 0 4px var(--acento-suave)}
+#q::placeholder,#li_q::placeholder,#re_q::placeholder{color:var(--muted);font-weight:400}
+#q:focus,#li_q:focus,#re_q:focus{border-color:var(--acento);box-shadow:0 0 0 4px var(--acento-suave)}
 .limpiar{position:absolute;right:9px;top:50%;transform:translateY(-50%);border:0;background:var(--sup2);
          color:var(--muted);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:15px;
          display:none;align-items:center;justify-content:center}
@@ -415,7 +431,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
   .marca{padding:0 10px 0 4px;flex:1 0 100%}
   .marca .sub{display:none}
   .nav{width:auto}
-  .vista-sel{flex:1 0 100%;margin:0 0 4px;padding:0 0 8px}
+  .vista-sel{flex:1 0 100%;margin:0 0 4px;padding:0 0 8px;grid-template-columns:1fr 1fr 1fr}
   .vs{flex-direction:row;justify-content:center;padding:9px 6px}
   .vs .ico{font-size:17px}
   .pie-rail{margin:0 0 0 auto;border:0;padding:0;flex-direction:row;gap:12px;align-items:center}
@@ -440,7 +456,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202611211057"></script>
+<script src="sync.js?v=202611211107"></script>
 <script>
 /* Red de seguridad. Si los archivos de la app no están al lado de esta
    página — pasa al abrirla fuera de la web: vista previa, doble clic en
@@ -457,7 +473,7 @@ window.reintentarJS = function(viejo, nombre, sub){
   }
   var s = document.createElement('script');
   s.setAttribute('data-rein', '1');
-  s.src = WEB_APPS + nombre + '?v=202611211057' + Date.now();
+  s.src = WEB_APPS + nombre + '?v=202611211107' + Date.now();
   s.onload = viejo.onload;
   s.onerror = function(){ reintentarJS(s, nombre, sub); };
   document.body.appendChild(s);
@@ -507,7 +523,7 @@ if (!window.Sync) (function(){
     var s = document.createElement('script');
     /* Siempre el último: sin esto el navegador sirve el pedidos.js de
        ayer y los cambios no se ven hasta pasado un rato. */
-    s.src = 'pedidos.js?v=202611211057' + Date.now();
+    s.src = 'pedidos.js?v=202611211107' + Date.now();
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ reintentarJS(s, 'pedidos.js', sub); };
     document.body.appendChild(s);

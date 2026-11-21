@@ -777,6 +777,7 @@ var APARTADOS=[
   {id:"revisar",     nombre:"Revisar", cuenta:function(){ return avisos().total; }},
   {id:"ajustes",     nombre:"Ajustes"},
   {id:"telefonos",   nombre:"Teléfonos"},
+  {id:"recorrido",   nombre:"Recorrido"},
   {id:"lista",       nombre:"Lista completa", cuenta:function(){ return libro.productos.length; }},
   {id:"verduras",    nombre:"Verduras",
    cuenta:function(){ return libro.productos.filter(function(p){
@@ -816,8 +817,10 @@ function pintar(){
           '<span class="ico">▦</span><span>Cuadrícula</span></button>'+
         '<button class="vs" data-ir="lista" aria-current="'+(ui.vista==="lista")+'">'+
           '<span class="ico">☰</span><span>Lista</span></button>'+
+        '<button class="vs" data-ir="recorrido" aria-current="'+(ui.vista==="recorrido")+'">'+
+          '<span class="ico">⇅</span><span>Recorrido</span></button>'+
       '</div>'+
-      apartadosEnOrden().filter(function(a){ return ["precios","lista","verduras","carne"].indexOf(a.id)<0; }).map(function(a){
+      apartadosEnOrden().filter(function(a){ return ["precios","lista","recorrido","verduras","carne"].indexOf(a.id)<0; }).map(function(a){
         var c=a.cuenta?a.cuenta():0;
         var puesto=(ui.vista===a.id) || (a.id==="proveedores" && ui.vista==="proveedor");
         return '<button class="nav" data-ir="'+a.id+'" aria-current="'+puesto+'">'+
@@ -847,7 +850,7 @@ function pintar(){
 
   ({precios:verPrecios, pedido:verPedido, proveedores:verProveedores,
     proveedor:verProveedor, revisar:verRevisar, ajustes:verAjustes,
-    telefonos:verTelefonos, verduras:verVerduras, lista:verLista,
+    telefonos:verTelefonos, verduras:verVerduras, lista:verLista, recorrido:verRecorrido,
     carne:verCarne})[ui.vista](document.getElementById("main"));
 
   pintarBarra();
@@ -1010,7 +1013,7 @@ function pintarTablaLista(){
   });
 }
 function cambiarEnLista(e){
-  var fila=e.closest("tr"), id=fila.getAttribute("data-li");
+  var fila=e.closest("[data-li]"), id=fila.getAttribute("data-li");
   var p=libro.productos.filter(function(x){ return x.id===id; })[0]; if(!p) return;
   var c=e.getAttribute("data-c"), v=e.value.trim();
   if(c==="nombre"){ if(!v){ e.value=p.nombre; avisar("El nombre no puede quedar vacío", true); return; } p.nombre=v; }
@@ -1036,6 +1039,148 @@ function cambiarEnLista(e){
     fila.querySelector("[data-fecha]").textContent=dmy(p.fecha);
   }
   avisar("Guardado");
+}
+
+/* ══════════════════════════════════════════════════════════════
+   RECORRIDO
+   ══════════════════════════════════════════════════════════════
+   La misma lista, pero en el orden en que se pasa por el almacén, para
+   hacer el pedido de una vuelta sin ir y venir. El orden lo pones tú:
+   arrastrando la fila (con el ratón) o con las flechas ▲ ▼ (en el
+   móvil), y se pueden meter zonas («Cámara», «Pasillo 2»…) como
+   separadores. Es sólo un orden: los productos son los mismos que en la
+   cuadrícula y en la lista, y lo que se pide aquí va al mismo pedido.
+   El orden se guarda en ajustes.recorrido como ["p:<id>", "z:<zona>"…];
+   lo que aún no se ha colocado (productos nuevos) sale al final. */
+var modoMover=false;
+function recorrido(){
+  var guardado=Array.isArray(libro.ajustes.recorrido)?libro.ajustes.recorrido:[];
+  var hay={}, out=[];
+  libro.productos.forEach(function(p){ hay[p.id]=p; });
+  var puestos={};
+  guardado.forEach(function(k){
+    if(k.indexOf("z:")===0){ out.push(k); return; }
+    var id=k.slice(2);
+    if(hay[id] && !puestos[id]){ out.push(k); puestos[id]=1; }
+  });
+  var sueltos=libro.productos.filter(function(p){ return !puestos[p.id]; })
+    .sort(function(a,b){ return (String(a.seccion)+a.nombre).localeCompare(String(b.seccion)+b.nombre,"es"); });
+  if(sueltos.length){
+    if(out.length) out.push("z:Sin colocar");
+    sueltos.forEach(function(p){ out.push("p:"+p.id); });
+  }
+  return out;
+}
+function guardarRecorrido(lista){ libro.ajustes.recorrido=lista; guardar(); }
+function verRecorrido(main){
+  main.innerHTML=
+    cabecera("Recorrido",
+      "Los productos en el orden en que pasas por el almacén. "+
+      (modoMover?"Arrastra las filas o usa ▲ ▼ para ponerlas en su sitio.":"Pide de arriba abajo, de una sola vuelta."),
+      '<button class="btn" id="re_zona">+ Zona</button>'+
+      '<button class="btn '+(modoMover?'fuerte':'hueco')+'" id="re_mover">'+(modoMover?'✓ Listo':'⇅ Ordenar')+'</button>')+
+    '<div class="buscar"><div class="buscar-caja"><span class="lupa">⌕</span>'+
+      '<input id="re_q" type="search" autocomplete="off" spellcheck="false" placeholder="Buscar en el recorrido…">'+
+    '</div></div>'+
+    '<div class="tarjeta"><div id="re_lista"></div></div>';
+  document.getElementById("re_mover").addEventListener("click", function(){ modoMover=!modoMover; pintar(); });
+  document.getElementById("re_zona").addEventListener("click", function(){ nuevaZona(); });
+  document.getElementById("re_q").addEventListener("input", function(){ pintarRecorrido(this.value); });
+  pintarRecorrido("");
+}
+function nuevaZona(despuesDe){
+  abrirVentana("Zona nueva",
+    '<div class="campo"><label class="lbl" for="re_zn">Nombre de la zona</label>'+
+      '<input id="re_zn" placeholder="Cámara, Pasillo 2, Bebidas…" autocomplete="off"></div>'+
+    '<p class="nota" style="margin:10px 0 0">Sale como separador'+(despuesDe!=null?' justo aquí':' arriba del todo')+
+      '. Luego pon debajo los productos que estén en ella.</p>',
+    function(){
+      var n=valor("re_zn").trim(); if(!n){ avisar("Ponle un nombre.", true); return true; }
+      var l=recorrido();
+      if(despuesDe!=null) l.splice(despuesDe+1, 0, "z:"+n); else l.unshift("z:"+n);
+      guardarRecorrido(l); pintar(); avisar("Zona "+n+" creada");
+    }, {aceptar:"Crear"});
+  setTimeout(function(){ var e=document.getElementById("re_zn"); if(e) e.focus(); }, 50);
+}
+function pintarRecorrido(q){
+  var caja=document.getElementById("re_lista"); if(!caja) return;
+  var l=recorrido(), trozos=norm(q||"")?norm(q).split(" "):[];
+  var inp='style="width:100%;min-width:0;padding:5px 7px;font-size:14px;border:1px solid var(--linea);border-radius:6px;background:transparent"';
+  var filtrando=trozos.length>0;
+  caja.innerHTML=l.map(function(k, i){
+    if(k.indexOf("z:")===0){
+      if(filtrando) return "";
+      return '<div class="re-zona" data-i="'+i+'"'+(modoMover?' draggable="true"':'')+'>'+
+        (modoMover?'<span class="re-asa" title="Arrastrar">⠿</span>':'')+
+        '<span class="re-zn">'+esc(k.slice(2))+'</span>'+
+        (modoMover
+          ? '<span class="re-btns"><button class="btn suave sm" data-sube="'+i+'">▲</button><button class="btn suave sm" data-baja="'+i+'">▼</button>'+
+            '<button class="btn suave sm" data-zren="'+i+'">Cambiar</button><button class="btn suave sm" data-zdel="'+i+'">✕</button></span>'
+          : '')+
+      '</div>';
+    }
+    var p=productoPorId(k.slice(2)); if(!p) return "";
+    if(filtrando){
+      var t=norm([p.nombre,p.proveedor,p.seccion].join(" "));
+      if(trozos.some(function(x){ return t.indexOf(x)<0; })) return "";
+    }
+    var lp=delPedido(p.id), campo=unidadPuesta(p, lp);
+    return '<div class="re-fila'+(hayPedido(lp)?' li-pedido':'')+'" data-i="'+i+'" data-li="'+p.id+'"'+(modoMover?' draggable="true"':'')+'>'+
+      (modoMover?'<span class="re-asa" title="Arrastrar">⠿</span>':'')+
+      '<span class="re-nom"><input data-c="nombre" value="'+esc(p.nombre)+'" '+inp+'>'+
+        '<small>'+esc(p.proveedor||"")+(p.seccion?' · '+esc(p.seccion):'')+'</small></span>'+
+      (modoMover
+        ? '<span class="re-btns"><button class="btn suave sm" data-sube="'+i+'">▲</button><button class="btn suave sm" data-baja="'+i+'">▼</button>'+
+          '<button class="btn suave sm" data-zaqui="'+i+'" title="Meter una zona debajo">+ Zona</button></span>'
+        : '<span class="re-ped">'+contador(p.id, campo, lp[campo], etiquetaEnvase(p))+'</span>'+
+          '<span class="re-pre"><input data-c="precio" type="number" step="0.01" min="0" inputmode="decimal" value="'+(p.precio!=null?esc(p.precio):"")+'" '+inp.replace('style="','style="text-align:right;')+'>'+
+          '<small data-neto>'+(p.precio?eur(conIgi(p))+' neto':'')+'</small><small data-fecha style="display:none"></small></span>')+
+    '</div>';
+  }).join("") || '<div class="vacio"><strong>Nada que enseñar</strong></div>';
+
+  if(!modoMover){
+    engancharFichas(caja);
+    caja.querySelectorAll(".re-fila [data-cnt]").forEach(function(c){
+      var fila=c.closest(".re-fila"), id=fila.getAttribute("data-li");
+      function marcar(){ setTimeout(function(){ fila.classList.toggle("li-pedido", hayPedido(delPedido(id))); }, 0); }
+      c.addEventListener("click", marcar); c.addEventListener("input", marcar); c.addEventListener("change", marcar);
+    });
+    caja.querySelectorAll(".re-fila input[data-c]").forEach(function(e){
+      e.addEventListener("change", function(){
+        cambiarEnLista(e);
+        var p=productoPorId(e.closest("[data-li]").getAttribute("data-li"));
+        var n=e.closest(".re-fila").querySelector("[data-neto]");
+        if(n && p) n.textContent=p.precio?eur(conIgi(p))+' neto':'';
+      });
+    });
+    return;
+  }
+  /* Mover: ▲ ▼, zonas y arrastrar */
+  function mover(de, a){
+    var l=recorrido(); if(a<0 || a>=l.length || de===a) return;
+    var x=l.splice(de,1)[0]; l.splice(a,0,x); guardarRecorrido(l); pintarRecorrido("");
+    var f=caja.querySelector('[data-i="'+a+'"]'); if(f){ f.classList.add("re-movido"); f.scrollIntoView({block:"nearest"}); }
+  }
+  caja.querySelectorAll("[data-sube]").forEach(function(b){ b.addEventListener("click", function(){ var i=+b.getAttribute("data-sube"); mover(i, i-1); }); });
+  caja.querySelectorAll("[data-baja]").forEach(function(b){ b.addEventListener("click", function(){ var i=+b.getAttribute("data-baja"); mover(i, i+1); }); });
+  caja.querySelectorAll("[data-zaqui]").forEach(function(b){ b.addEventListener("click", function(){ nuevaZona(+b.getAttribute("data-zaqui")); }); });
+  caja.querySelectorAll("[data-zdel]").forEach(function(b){ b.addEventListener("click", function(){
+    var l=recorrido(); l.splice(+b.getAttribute("data-zdel"),1); guardarRecorrido(l); pintarRecorrido(""); avisar("Zona quitada");
+  }); });
+  caja.querySelectorAll("[data-zren]").forEach(function(b){ b.addEventListener("click", function(){
+    var i=+b.getAttribute("data-zren"), l=recorrido(), viejo=l[i].slice(2);
+    abrirVentana("Cambiar zona",
+      '<div class="campo"><label class="lbl" for="re_zn2">Nombre</label><input id="re_zn2" value="'+esc(viejo)+'"></div>',
+      function(){ var n=valor("re_zn2").trim(); if(!n) return true; l[i]="z:"+n; guardarRecorrido(l); pintarRecorrido(""); }, {aceptar:"Guardar"});
+  }); });
+  var desde=null;
+  caja.querySelectorAll("[draggable]").forEach(function(f){
+    f.addEventListener("dragstart", function(e){ desde=+f.getAttribute("data-i"); f.classList.add("re-arrastra"); e.dataTransfer.effectAllowed="move"; try{ e.dataTransfer.setData("text/plain", String(desde)); }catch(x){} });
+    f.addEventListener("dragend", function(){ f.classList.remove("re-arrastra"); caja.querySelectorAll(".re-sobre").forEach(function(x){ x.classList.remove("re-sobre"); }); });
+    f.addEventListener("dragover", function(e){ e.preventDefault(); f.classList.add("re-sobre"); });
+    f.addEventListener("dragleave", function(){ f.classList.remove("re-sobre"); });
+    f.addEventListener("drop", function(e){ e.preventDefault(); var a=+f.getAttribute("data-i"); if(desde!=null) mover(desde, a); desde=null; });
+  });
 }
 
 function cabecera(titulo, sub, derecha){
