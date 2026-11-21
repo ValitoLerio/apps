@@ -1017,15 +1017,21 @@ function pintarTablaLista(){
    para que se lea el nombre entero, en vez de cortarse. Intro no mete
    salto de línea: guarda, como en una casilla normal. */
 function ajustarCrece(caja){
-  caja.querySelectorAll("textarea.crece").forEach(function(t){
-    function alto(){ t.style.height="auto"; t.style.height=(t.scrollHeight+2)+"px"; }
-    t.style.resize="none"; t.style.overflow="hidden"; t.style.lineHeight="1.35"; t.style.fontFamily="inherit";
-    alto();
-    t.addEventListener("input", function(){ t.value=t.value.replace(/\n/g," "); alto(); });
+  /* Con cientos de casillas, medir y cambiar una a una obliga al
+     navegador a recolocar la página entera cada vez (tardaba segundos en
+     abrir la lista). Se hace en dos pasadas: primero se miden todas y
+     luego se les pone el alto a todas. */
+  var ts=[].slice.call(caja.querySelectorAll("textarea.crece"));
+  var altos=ts.map(function(t){ return t.scrollHeight; });
+  ts.forEach(function(t, i){ t.style.height=(altos[i]+2)+"px"; });
+  ts.forEach(function(t){
+    t.addEventListener("input", function(){
+      t.value=t.value.replace(/\n/g," ");
+      t.style.height="auto"; t.style.height=(t.scrollHeight+2)+"px";
+    });
     t.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); t.blur(); } });
   });
 }
-
 function cambiarEnLista(e){
   var fila=e.closest("[data-li]"), id=fila.getAttribute("data-li");
   var p=libro.productos.filter(function(x){ return x.id===id; })[0]; if(!p) return;
