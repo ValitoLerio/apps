@@ -1143,7 +1143,7 @@ function verRecorrido(main){
   main.innerHTML=
     cabecera("Recorrido",
       "Los productos en el orden en que pasas por el almacén, por zonas y por orden alfabético. "+
-      "Pulsa 📍 en cada producto para colocarlo en su zona; las zonas se ordenan con ▲ ▼.",
+      "Para colocar un producto, arrástralo por ⠿ hasta una zona de arriba, o pulsa 📍. Las zonas se ordenan con ▲ ▼.",
       '<button class="btn fuerte" id="re_zona">+ Zona</button>')+
     '<div class="buscar"><div class="buscar-caja"><span class="lupa">⌕</span>'+
       '<input id="re_q" type="search" autocomplete="off" spellcheck="false" placeholder="Buscar en el recorrido…">'+
@@ -1217,7 +1217,7 @@ function pintarRecorrido(q){
   if(ir){
     ir.innerHTML=bs.map(function(b, n){
       if(!b.zona && !b.items.length) return "";
-      return '<button class="chip" data-re-ir="'+n+'">'+esc(b.zona?b.zona.slice(2):"Sin zona")+'<span class="n">'+b.items.length+'</span></button>';
+      return '<button class="chip" data-re-ir="'+n+'" data-suelta="'+esc(b.zona||"")+'">'+esc(b.zona?b.zona.slice(2):"Sin zona")+'<span class="n">'+b.items.length+'</span></button>';
     }).join("");
   }
   var html=bs.map(function(b, n){
@@ -1230,7 +1230,7 @@ function pintarRecorrido(q){
       }
       var lp=delPedido(p.id), campo=unidadPuesta(p, lp);
       var com=(libro.proveedores[p.proveedor]||{}).contacto||"";
-      return '<tr data-li="'+p.id+'"'+(hayPedido(lp)?' class="li-pedido"':'')+(' draggable="true"')+'>'+
+      return '<tr data-li="'+p.id+'"'+(hayPedido(lp)?' class="li-pedido"':'')+'>'+
         '<td><div style="display:flex;gap:6px;align-items:center"><span class="re-asa" title="Arrastra a otra zona">⠿</span>'+
           '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">'+
             '<textarea data-c="nombre" rows="1" class="crece" '+inp+'>'+esc(p.nombre)+'</textarea>'+
@@ -1247,7 +1247,7 @@ function pintarRecorrido(q){
     }).join("");
     if(trozos.length && !filas) return "";
     var idx=l.indexOf(b.zona);
-    return '<div class="tarjeta" id="re_b_'+n+'" style="margin-bottom:16px"'+(b.zona?' data-zona="'+esc(b.zona)+'"':' data-zona=""')+'>'+
+    return '<div class="tarjeta" id="re_b_'+n+'" style="margin-bottom:16px" data-suelta="'+esc(b.zona||"")+'"'+(b.zona?' data-zona="'+esc(b.zona)+'"':' data-zona=""')+'>'+
       '<div class="tarjeta-cab"><h2>'+esc(b.zona?b.zona.slice(2):"Sin zona")+'</h2>'+
         '<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="pista">'+plural(b.items.length,"producto","productos")+'</span>'+
         (b.zona
@@ -1322,24 +1322,43 @@ function pintarRecorrido(q){
       '<div class="campo"><label class="lbl" for="re_zn2">Nombre</label><input id="re_zn2" value="'+esc(viejo)+'"></div>',
       function(){ var n=valor("re_zn2").trim(); if(!n) return true; l[i]="z:"+n; guardarRecorrido(l); pintarRecorrido(""); }, {aceptar:"Guardar"});
   }); });
-  /* Arrastrar un producto encima de otra zona (en el ordenador) */
-  var arrastrado=null;
-  caja.querySelectorAll("tr[data-li][draggable]").forEach(function(f){
-    f.addEventListener("dragstart", function(e){
-      if(/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName)){ e.preventDefault(); return; }
-      arrastrado=f.getAttribute("data-li"); f.classList.add("re-arrastra"); e.dataTransfer.effectAllowed="move";
-      try{ e.dataTransfer.setData("text/plain", arrastrado); }catch(x){}
-    });
-    f.addEventListener("dragend", function(){ f.classList.remove("re-arrastra"); caja.querySelectorAll(".re-sobre").forEach(function(x){ x.classList.remove("re-sobre"); }); });
-  });
-  caja.querySelectorAll(".tarjeta[data-zona]").forEach(function(t){
-    t.addEventListener("dragover", function(e){ if(arrastrado){ e.preventDefault(); t.classList.add("re-sobre"); } });
-    t.addEventListener("dragleave", function(e){ if(!t.contains(e.relatedTarget)) t.classList.remove("re-sobre"); });
-    t.addEventListener("drop", function(e){
-      e.preventDefault(); if(!arrastrado) return;
-      var z=t.getAttribute("data-zona")||null, id=arrastrado; arrastrado=null;
-      aZona(id, z); pintarRecorrido(document.getElementById("re_q").value);
-      avisar(z ? "A la zona "+z.slice(2) : "Sin zona");
+  /* Arrastrar: se coge el producto por ⠿ y se suelta encima de un botón
+     de zona de arriba (o encima de la zona en la lista). Va con el dedo y
+     con el ratón por igual. */
+  caja.querySelectorAll("tr[data-li] .re-asa").forEach(function(asa){
+    asa.addEventListener("pointerdown", function(e){
+      e.preventDefault();
+      var fila=asa.closest("tr"), id=fila.getAttribute("data-li"), p=productoPorId(id); if(!p) return;
+      var fantasma=document.createElement("div");
+      fantasma.className="re-fantasma"; fantasma.textContent="📍 "+p.nombre;
+      document.body.appendChild(fantasma);
+      fila.classList.add("re-arrastra"); document.body.classList.add("re-arrastrando");
+      var sobre=null;
+      function mover(ev){
+        fantasma.style.left=(ev.clientX+14)+"px"; fantasma.style.top=(ev.clientY+10)+"px";
+        fantasma.style.display="none";
+        var el=document.elementFromPoint(ev.clientX, ev.clientY);
+        fantasma.style.display="";
+        var dest=el && el.closest("[data-suelta]");
+        if(dest!==sobre){ if(sobre) sobre.classList.remove("re-sobre"); sobre=dest; if(sobre) sobre.classList.add("re-sobre"); }
+        /* Cerca del borde de abajo, la página baja sola */
+        if(ev.clientY>window.innerHeight-60) window.scrollBy(0, 18);
+      }
+      function soltar(){
+        document.removeEventListener("pointermove", mover);
+        document.removeEventListener("pointerup", soltar);
+        document.removeEventListener("pointercancel", soltar);
+        fantasma.remove(); fila.classList.remove("re-arrastra"); document.body.classList.remove("re-arrastrando");
+        if(!sobre) return;
+        sobre.classList.remove("re-sobre");
+        var z=sobre.getAttribute("data-suelta")||null;
+        aZona(id, z); pintarRecorrido((document.getElementById("re_q")||{}).value||"");
+        avisar(p.nombre+" → "+(z?z.slice(2):"sin zona"));
+      }
+      mover(e);
+      document.addEventListener("pointermove", mover);
+      document.addEventListener("pointerup", soltar);
+      document.addEventListener("pointercancel", soltar);
     });
   });
 }
