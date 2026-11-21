@@ -4756,6 +4756,7 @@ function pintarPlan(){
               '<input type="number" min="0" max="20" ' + attr + '="' + h + '" value="' + (+ent[h] || 0) + '" style="' + inp + ';width:100%;text-align:center' + ((+ent[h] || 0) ? ';border-color:' + color : '') + '">' +
               (attr === 'data-e'
                 ? '<span title="Si un día falta gente, el hueco se deja en las horas marcadas así. Las demás se cubren siempre." ' +
+                    'title="Si falta gente, a esta hora puede quedarse uno menos: el hueco se deja aquí antes que en otra hora" ' +
                     'style="font-size:.6rem;color:' + (cede ? '#e8a84c' : 'var(--border)') + '">' +
                     '<input type="checkbox" data-cede="' + h + '"' + (cede ? ' checked' : '') + ' style="width:13px;height:13px;accent-color:#e8a84c;vertical-align:-2px"> cede</span>'
                 : '') + '</label>';
