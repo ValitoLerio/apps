@@ -2177,10 +2177,10 @@ function renderTable() {
   var hiddenStaff = staff().filter(function(s){ return hidden[s.id]; });
   if (hiddenStaff.length > 0) {
     tb += '<tr class="gs"><td colspan="'+(dias.length+1)+'"></td></tr>';
-    tb += '<tr><td class="nc" colspan="'+(dias.length+1)+'" style="padding:7px 12px;background:#1a1410">'
-        + '<span style="font-size:.7rem;color:var(--text2);margin-right:8px">Ocultos:</span>'
+    tb += '<tr><td class="nc" colspan="'+(dias.length+1)+'" style="padding:7px 12px;background:var(--surface2)">'
+        + '<span style="font-size:.75rem;font-weight:600;color:var(--text);margin-right:8px">Ocultos:</span>'
         + hiddenStaff.map(function(s){
-            return '<button onclick="toggleHide(\''+s.id+'\')" style="background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.3);color:var(--gold);border-radius:10px;padding:2px 9px;cursor:pointer;font-size:.73rem;font-family:\'DM Sans\',sans-serif;margin-right:4px">'+s.name+' Mostrar</button>';
+            return '<button onclick="toggleHide(\''+s.id+'\')" style="background:var(--gold);border:1px solid var(--gold);color:var(--bg);font-weight:600;border-radius:10px;padding:2px 9px;cursor:pointer;font-size:.75rem;font-family:\'DM Sans\',sans-serif;margin-right:4px">'+s.name+' Mostrar</button>';
           }).join('')
         + '</td></tr>';
   }
