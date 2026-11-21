@@ -1139,17 +1139,24 @@ function aZona(id, zona){
   dest.items.push(k);
   guardarRecorrido(deBloques(bs));
 }
+/* Colocar rápido: se elige una zona arriba y cada producto lleva un botón
+   «➜ zona» para meterlo con un toque. undefined = apagado. */
+var destinoRapido;
 function verRecorrido(main){
   main.innerHTML=
     cabecera("Recorrido",
       "Los productos en el orden en que pasas por el almacén, por zonas y por orden alfabético. "+
       "Para colocar un producto, arrástralo por ⠿ hasta una zona de arriba, o pulsa 📍. Las zonas se ordenan con ▲ ▼.",
+      '<button class="btn '+(destinoRapido!==undefined?'fuerte':'')+'" id="re_rapido">⚡ Colocar rápido</button>'+
       '<button class="btn fuerte" id="re_zona">+ Zona</button>')+
     '<div class="buscar"><div class="buscar-caja"><span class="lupa">⌕</span>'+
       '<input id="re_q" type="search" autocomplete="off" spellcheck="false" placeholder="Buscar en el recorrido…">'+
     '</div><div class="chips" id="re_ir"></div></div>'+
     '<div id="re_lista"></div>';
   document.getElementById("re_zona").addEventListener("click", function(){ nuevaZona(); });
+  document.getElementById("re_rapido").addEventListener("click", function(){
+    destinoRapido = destinoRapido===undefined ? null : undefined; pintar();
+  });
   document.getElementById("re_q").addEventListener("input", function(){ pintarRecorrido(this.value); });
   pintarRecorrido("");
 }
@@ -1217,8 +1224,19 @@ function pintarRecorrido(q){
   if(ir){
     ir.innerHTML=bs.map(function(b, n){
       if(!b.zona && !b.items.length) return "";
-      return '<button class="chip" data-re-ir="'+n+'" data-suelta="'+esc(b.zona||"")+'">'+esc(b.zona?b.zona.slice(2):"Sin zona")+'<span class="n">'+b.items.length+'</span></button>';
+      var elegida = destinoRapido!==undefined && (b.zona||null)===destinoRapido;
+      return '<button class="chip" data-re-ir="'+n+'" data-suelta="'+esc(b.zona||"")+'"'+
+        (destinoRapido!==undefined?' aria-pressed="'+elegida+'"':'')+'>'+esc(b.zona?b.zona.slice(2):"Sin zona")+'<span class="n">'+b.items.length+'</span></button>';
     }).join("");
+    if(destinoRapido!==undefined){
+      ir.insertAdjacentHTML("afterbegin", '<span class="nota" style="align-self:center;margin:0 6px 0 0"><b>'+
+        (destinoRapido ? 'Colocar en:' : 'Toca la zona donde vas a colocar:')+'</b></span>');
+      /* Las zonas vacías también tienen que poder elegirse */
+      zonas.forEach(function(z){
+        if(ir.querySelector('[data-suelta="'+z.replace(/"/g,'\\"')+'"]')) return;
+        ir.insertAdjacentHTML("beforeend", '<button class="chip" data-suelta="'+esc(z)+'" aria-pressed="'+(z===destinoRapido)+'">'+esc(z.slice(2))+'<span class="n">0</span></button>');
+      });
+    }
   }
   var html=bs.map(function(b, n){
     if(!b.zona && !b.items.length) return "";
@@ -1234,8 +1252,12 @@ function pintarRecorrido(q){
         '<td><div style="display:flex;gap:6px;align-items:center"><span class="re-asa" title="Arrastra a otra zona">⠿</span>'+
           '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">'+
             '<textarea data-c="nombre" rows="1" class="crece" '+inp+'>'+esc(p.nombre)+'</textarea>'+
-            '<button class="btn sm re-colocar" data-colocar="'+p.id+'" title="Colocar en su zona">📍 '+
-              (b.zona && b.zona!=="z:Sin colocar" ? 'Zona: '+esc(b.zona.slice(2)) : '<b>Colocar</b>')+'</button>'+
+            (destinoRapido
+              ? (b.zona===destinoRapido
+                  ? '<span class="nota" style="margin:0">✓ ya está en '+esc(destinoRapido.slice(2))+'</span>'
+                  : '<button class="btn fuerte sm re-colocar" data-rapido="'+p.id+'">➜ '+esc(destinoRapido.slice(2))+'</button>')
+              : '<button class="btn sm re-colocar" data-colocar="'+p.id+'" title="Colocar en su zona">📍 '+
+                  (b.zona && b.zona!=="z:Sin colocar" ? 'Zona: '+esc(b.zona.slice(2)) : '<b>Colocar</b>')+'</button>')+
           '</div></div></td>'+
         '<td>'+contador(p.id, campo, lp[campo], etiquetaEnvase(p))+'</td>'+
         '<td><textarea data-c="proveedor" rows="1" class="crece" '+inp+'>'+esc(p.proveedor||"")+'</textarea></td>'+
@@ -1277,7 +1299,21 @@ function pintarRecorrido(q){
 
   ajustarCrece(caja);
   engancharFichas(caja);
-  if(ir) ir.querySelectorAll("[data-re-ir]").forEach(function(btn){
+  if(ir && destinoRapido!==undefined) ir.querySelectorAll("[data-suelta]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      destinoRapido = btn.getAttribute("data-suelta")||null;
+      pintarRecorrido((document.getElementById("re_q")||{}).value||"");
+    });
+  });
+  caja.querySelectorAll("[data-rapido]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var id=btn.getAttribute("data-rapido"), p=productoPorId(id), y=window.scrollY;
+      aZona(id, destinoRapido); pintarRecorrido((document.getElementById("re_q")||{}).value||"");
+      window.scrollTo(0, y);
+      avisar((p?p.nombre:"")+" → "+destinoRapido.slice(2));
+    });
+  });
+  if(ir && destinoRapido===undefined) ir.querySelectorAll("[data-re-ir]").forEach(function(btn){
     btn.addEventListener("click", function(){
       var t=document.getElementById("re_b_"+btn.getAttribute("data-re-ir")); if(!t) return;
       var barra=ir.closest(".buscar")||ir;
