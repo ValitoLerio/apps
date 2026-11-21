@@ -1223,6 +1223,11 @@ function pintarRecorrido(q){
   var l=recorrido(), trozos=norm(q||"")?norm(q).split(" "):[];
   var bs=bloquesRecorrido(l);
   var zonas=l.filter(function(k){ return k.indexOf("z:")===0; });
+  /* Colocando, lo que falta por ordenar sale lo primero: es lo que vas a ir tocando */
+  if(destinoRapido!==undefined){
+    var sinB=bs.filter(function(b){ return b.zona===SIN_ORDENAR; })[0];
+    if(sinB){ bs=bs.filter(function(b){ return b!==sinB; }); bs.splice(1,0,sinB); }
+  }
   var inp='style="width:100%;min-width:0;padding:5px 7px;font-size:14px;border:1px solid var(--linea);border-radius:6px;background:transparent"';
   var hayZonas=zonas.length>0;
   /* Botones para saltar a cada zona */
@@ -1258,7 +1263,9 @@ function pintarRecorrido(q){
         '<td><div style="display:flex;gap:6px;align-items:center"><span class="re-asa" title="Arrastra a otra zona">⠿</span>'+
           '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">'+
             '<textarea data-c="nombre" rows="1" class="crece" '+inp+'>'+esc(p.nombre)+'</textarea>'+
-            (destinoRapido
+            (destinoRapido===null
+              ? '<button class="btn sm re-colocar" disabled style="opacity:.6">➜ Toca arriba una zona</button>'
+              : destinoRapido
               ? (b.zona===destinoRapido
                   ? '<span class="nota" style="margin:0">✓ ya está en '+esc(destinoRapido.slice(2))+'</span>'
                   : '<button class="btn fuerte sm re-colocar" data-rapido="'+p.id+'">➜ '+esc(destinoRapido.slice(2))+'</button>')
