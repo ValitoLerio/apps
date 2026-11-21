@@ -216,9 +216,51 @@
 :root[data-goma="1"] .sched .tb{pointer-events:none;}
 :root[data-goma="1"] #wk-tbl td{cursor:crosshair;}
 :root[data-goma="1"] #wk-tbl td:hover{background:rgba(192,57,43,.22) !important;}
+
+/* ── Hoja para imprimir (A4 apaisado) ─────────────────────────── */
+#impresion{display:none}
+#impov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;display:none;align-items:center;justify-content:center}
+#impov.show{display:flex}
+#impov .caja{background:#1c1a16;color:#eee;border:1px solid #444;border-radius:12px;padding:20px 22px;width:min(420px,92vw);font-family:'DM Sans',sans-serif}
+#impov h3{margin:0 0 12px;font-family:'Playfair Display',serif;font-size:1.2rem}
+#impov .fila{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0}
+#impov button{font-family:'DM Sans',sans-serif;cursor:pointer;border-radius:7px}
+#impov .nav{background:transparent;border:1px solid #666;color:#ddd;padding:6px 12px;font-size:1rem}
+#impov .grande{width:100%;padding:12px;margin-top:8px;font-size:.95rem;font-weight:600;border:1px solid #c9a96e;background:#c9a96e;color:#1c1a16}
+#impov .hueco{width:100%;padding:11px;margin-top:8px;font-size:.92rem;border:1px solid #c9a96e;background:transparent;color:#e3c48f}
+#impov label{display:flex;gap:8px;align-items:center;font-size:.86rem;color:#ccc;margin-top:10px}
+@media print{
+  @page{size:A4 landscape;margin:9mm}
+  body.imprimiendo > *:not(#impresion){display:none!important}
+  body.imprimiendo{background:#fff!important;color:#000!important}
+  body.imprimiendo #impresion{display:block!important}
+  #impresion .pag{page-break-after:always;break-after:page}
+  #impresion .pag:last-child{page-break-after:auto;break-after:auto}
+  #impresion *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+#impresion{font-family:Arial,Helvetica,sans-serif;color:#000}
+#impresion .cab{display:flex;justify-content:space-between;align-items:baseline;margin:0 0 6px}
+#impresion h1{font-size:20pt;margin:0;font-weight:800}
+#impresion .sub{font-size:11pt;color:#333}
+#impresion table{width:100%;border-collapse:collapse;table-layout:fixed}
+#impresion th,#impresion td{border:1.2px solid #222;text-align:center;vertical-align:middle;padding:3px 2px}
+#impresion th{background:#e9e4d8;font-size:11pt}
+#impresion th small{display:block;font-weight:400;font-size:9pt}
+#impresion th.fes{background:#f6d7d2}
+#impresion td.nom{text-align:left;font-weight:700;padding-left:6px;font-size:14pt;white-space:nowrap;overflow:hidden}
+#impresion td.nom small{font-weight:400;color:#555;font-size:8.5pt;margin-left:4px}
+#impresion td.t{font-size:16pt;font-weight:700;line-height:1.15}
+#impresion td.t small{display:block;font-size:8.5pt;font-weight:400}
+#impresion td.libre{color:#999;font-size:10pt;font-weight:400}
+#impresion td.vac{background:#d9ead3;font-size:10pt;font-weight:700}
+#impresion td.fest{background:#f6d7d2;font-size:10pt;font-weight:700}
+#impresion td.baja{background:#e6e0f0;font-size:10pt;font-weight:700}
+#impresion td.h{font-size:11pt;font-weight:700;background:#f4f1ea}
+#impresion tr.sep td{border:0;height:5px;padding:0}
+#impresion .pie{font-size:8.5pt;color:#555;margin-top:5px;display:flex;justify-content:space-between}
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="comun.css?v=202611211157">
+<link rel="stylesheet" href="comun.css?v=202611211350">
 </head>
 <body>
 
@@ -248,6 +290,7 @@
   <button class="tbtn" id="bgoma" style="border-color:#e87c6f;color:#e87c6f" onclick="ponerGoma()" title="Borrar varios d&iacute;as de una vez: p&aacute;sale el dedo o el rat&oacute;n por encima">&#129529; Borrar</button>
   <button class="tbtn" id="balto" style="border-color:var(--gold);color:var(--gold)" onclick="cambiarAlto()" title="Lo alto que es cada fila: apretando caben los doce empleados de una vez">&#8597; Normal</button>
   <button class="tbtn" style="border-color:#25d366;color:#4ee383" onclick="abrirSemanaWA()" title="Mandar el horario de una semana">&#128241; WhatsApp</button>
+  <button class="tbtn" style="border-color:#c9a96e;color:#e3c48f" onclick="abrirImprimir()" title="Hoja en A4 para colgar en la cocina">&#128424;&#65039; Imprimir</button>
   <button class="tbtn" style="border-color:var(--gold);color:var(--gold)" onclick="openTheme()">&#127912; Colores</button>
   <button class="tbtn" style="border-color:#27ae60;color:#6dbb85" onclick="exportarHorario()" title="Descargar una copia">&#11015;&#65039; Copia</button>
   <label class="tbtn" style="border-color:#27ae60;color:#6dbb85;display:inline-flex;align-items:center" title="Cargar una copia">&#11014;&#65039; Importar
@@ -583,7 +626,7 @@
 
 
 
-<script src="sync.js?v=202611211157"></script>
+<script src="sync.js?v=202611211350"></script>
 <script>
 /* Red de seguridad. Si los archivos de la app no están al lado de esta
    página — pasa al abrirla fuera de la web: vista previa, doble clic en
@@ -600,7 +643,7 @@ window.reintentarJS = function(viejo, nombre, sub){
   }
   var s = document.createElement('script');
   s.setAttribute('data-rein', '1');
-  s.src = WEB_APPS + nombre + '?v=202611211157' + Date.now();
+  s.src = WEB_APPS + nombre + '?v=202611211350' + Date.now();
   s.onload = viejo.onload;
   s.onerror = function(){ reintentarJS(s, nombre, sub); };
   document.body.appendChild(s);
@@ -648,7 +691,7 @@ if (!window.Sync) (function(){
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202611211157' + Date.now();
+    s.src = 'horario.js?v=202611211350' + Date.now();
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
@@ -665,5 +708,14 @@ if (!window.Sync) (function(){
   });
 })();
 </script>
+<div id="impov" onclick="if(event.target===this)cerrarImprimir()"><div class="caja">
+  <h3>&#128424;&#65039; Imprimir horario</h3>
+  <div class="fila"><button class="nav" onclick="impMover(-1)">&#9664;</button><b id="imp-sem" style="text-align:center;flex:1"></b><button class="nav" onclick="impMover(1)">&#9654;</button></div>
+  <label><input type="checkbox" id="imp-horas" checked> Poner las horas de cada uno en la semana</label>
+  <button class="grande" onclick="imprimirSemana()">Imprimir esta semana</button>
+  <button class="hueco" onclick="imprimirMes()">Imprimir el mes entero (<span id="imp-mes"></span>)</button>
+  <button class="nav" style="width:100%;margin-top:12px;border:0;color:#999" onclick="cerrarImprimir()">Cancelar</button>
+</div></div>
+<div id="impresion"></div>
 </body>
 </html>

@@ -73,6 +73,14 @@ function altaDe(s){
   if (s.alta != null) return s.alta || '';
   return /^xxx\s*[12]$/i.test(String(s.name || '').trim()) ? '2026-12-01' : '';
 }
+/* ¿Trabaja ya en alguno de estos días? (sirve con {y,m,d} y con Date).
+   Quien aún no ha entrado no sale en el cuadrante de ese mes o semana. */
+function enPeriodo(s, dias){
+  return dias.some(function(x){
+    var d = x instanceof Date ? {y:x.getFullYear(), m:x.getMonth(), d:x.getDate()} : x;
+    return !antesDeAlta(s, d);
+  });
+}
 function antesDeAlta(s, dia){
   var a = altaDe(typeof s === 'string' ? staff().filter(function(x){ return x.id === s; })[0] : s);
   if (!a) return false;
@@ -746,9 +754,13 @@ function renderHours() {
   montarHorasDesde();
   var hyr = document.getElementById('hours-year-sel');
   var y   = hyr ? parseInt(hyr.value) : curY;
-  var all = staff();
   var view = document.getElementById('hours-view-sel');
   var mode = view ? view.value : 'monthly';
+  /* Quien aún no ha entrado no sale: en el año, si entra después del 31
+     de diciembre; en las semanas del mes, si entra después del mes. */
+  var finP = mode === 'weekly' ? (function(){ var dd = diasDelMes(y, curM); return dd[dd.length-1]; })()
+                               : {y:y, m:11, d:31};
+  var all = staff().filter(function(s){ return !antesDeAlta(s, finP); });
   ponerChapa('hours-mes',
     mode === 'annual' ? 'Año ' + y :
     mode === 'weekly' ? 'Semanas de ' + y :
@@ -2088,7 +2100,7 @@ function renderTable() {
   if (!area) return;
   var dias  = diasDelMes(curY, curM);
   var today = new Date();
-  var all   = visibleStaff();
+  var all   = visibleStaff().filter(function(s){ return enPeriodo(s, dias); });
 
   var th = '<thead><tr><th class="nch" style="position:sticky;left:0;top:0;z-index:20;background:var(--surface);min-width:100px;text-align:center">Personal</th>';
   dias.forEach(function(dia){
@@ -2148,8 +2160,10 @@ function renderTable() {
         var lbl = est==='baja'?'B':est==='ausencia'?'A':EICO[est]||est;
         inn = '<span class="tb '+cls+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">'+lbl+'</span>';
       } else if (antesDeAlta(s, dia)) {
+        /* Aún no ha entrado: casilla vacía y sin tocar */
         var tA = altaDe(s).split('-');
-        inn = '<span class="tb '+cls+'" style="opacity:.3" title="Entra el '+parseInt(tA[2])+'/'+parseInt(tA[1])+'/'+tA[0]+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">&middot;</span>';
+        inn = '<span title="Entra el '+parseInt(tA[2])+'/'+parseInt(tA[1])+'/'+tA[0]+'" style="display:block;width:100%;height:100%;min-height:22px;'+
+              'background:repeating-linear-gradient(45deg,transparent 0 5px,rgba(128,128,128,.10) 5px 7px)"></span>';
       } else {
         inn = '<span class="tb '+cls+'" onclick="openCell(\''+s.id+'\','+d+',event,'+dia.m+','+dia.y+')">+</span>';
       }
@@ -2199,13 +2213,13 @@ function renderWeekTable() {
   updateWeekLabel();
   var area = document.getElementById('sarea');
   if (!area) return;
-  var all  = visibleStaff();
   var dias = [];
   for (var i = 0; i < 7; i++) {
     var dd = new Date(weekStart);
     dd.setDate(dd.getDate()+i);
     dias.push(dd);
   }
+  var all  = visibleStaff().filter(function(s){ return enPeriodo(s, dias); });
   var today = new Date();
   var fmt   = function(d){ return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear(); };
   var end   = new Date(weekStart); end.setDate(end.getDate()+6);
@@ -2293,6 +2307,12 @@ function renderWeekTable() {
       if (p) { fullCell = p.fondo; inner = p.dentro; }
 
       var wrapAlign = est==='trabajo' ? '' : 'justify-content:center;';
+      if (antesDeAlta(s, {y:y, m:m, d:d}) && est === 'libre') {
+        var tA2 = altaDe(s).split('-');
+        tb += '<td title="Entra el '+parseInt(tA2[2])+'/'+parseInt(tA2[1])+'/'+tA2[0]+'" style="border:1px solid var(--border);border-bottom:2px solid var(--border);padding:0;'+
+              'background:repeating-linear-gradient(45deg,transparent 0 6px,rgba(128,128,128,.10) 6px 8px)"><div style="height:40px"></div></td>';
+        return;
+      }
       tb += '<td data-sid="'+s.id+'" data-d="'+d+'" data-m="'+m+'" data-y="'+y+'" onclick="openCell(\''+s.id+'\','+d+',event,'+m+','+y+')" style="'+fullCell+'border:1px solid var(--border);border-bottom:2px solid var(--border);padding:0;vertical-align:middle;cursor:pointer;text-align:center" onmouseover="this.style.filter=\'brightness(1.3)\'" onmouseout="this.style.filter=\'none\'">'
           + (est==='trabajo' && cell && cell.inicio
               ? inner
@@ -6015,4 +6035,94 @@ function pegarDeshacerYa(){
   document.getElementById('pegar-deshacer').style.display = 'none';
   document.getElementById('pegar-res').textContent = 'Deshecho: la semana está como antes.';
   toast('Deshecho');
+}
+
+// ================================================================
+// IMPRIMIR EN A4
+// ================================================================
+// Una hoja apaisada por semana, con letra grande para colgarla en la
+// cocina: una fila por persona (separados encargados, cocina y sala),
+// una columna por día y, al final, las horas de la semana. El mes
+// entero sale como una hoja por semana. Se imprime solo la hoja: lo
+// demás de la pantalla se esconde mientras tanto.
+var impLunes = null;
+function abrirImprimir(){
+  impLunes = lunesDeLaSemana();
+  pintarImprimir();
+  var ov = document.getElementById('impov'); if (ov) ov.classList.add('show');
+}
+function cerrarImprimir(){ var ov = document.getElementById('impov'); if (ov) ov.classList.remove('show'); }
+function impMover(pasos){ impLunes.setDate(impLunes.getDate() + pasos*7); pintarImprimir(); }
+function pintarImprimir(){
+  var e = document.getElementById('imp-sem'); if (e) e.textContent = 'Semana ' + rangoSemana(impLunes);
+  var m = document.getElementById('imp-mes'); if (m) m.textContent = MESES[curM] + ' ' + curY;
+}
+function impCelda(c){
+  if (!c || !c.estado || c.estado === 'libre') return '<td class="t libre">Libre</td>';
+  if (c.estado === 'vacaciones') return '<td class="t vac">Vacaciones</td>';
+  if (c.estado === 'festivo')    return '<td class="t fest">Festivo</td>';
+  if (c.estado === 'baja')       return '<td class="t baja">Baja</td>';
+  if (c.estado === 'ausencia')   return '<td class="t baja">Ausencia</td>';
+  if (c.estado === 'trabajo' && c.inicio){
+    /* Como en la pantalla: sin los «:00» (7-15, 17-1) */
+    var tx = fmtC(c.inicio) + '-' + fmtF(c.fin) + (esPartido(c) ? ' / ' + fmtC(c.inicio2) + '-' + fmtF(c.fin2) : '');
+    return '<td class="t">' + esc(tx) + (c.nota ? '<small>' + esc(c.nota) + '</small>' : '') + '</td>';
+  }
+  return '<td class="t libre">' + esc(c.estado) + '</td>';
+}
+function impHoja(lunes){
+  var dias = diasDeLaSemana(lunes), gente = visibleStaff().filter(function(s){ return enPeriodo(s, dias); });
+  var conHoras = !document.getElementById('imp-horas') || document.getElementById('imp-horas').checked;
+  var nombre = '';
+  try { nombre = (document.querySelector('.logo, .brand, h1') || {}).textContent || ''; } catch(e){}
+  var h = '<div class="pag"><div class="cab"><h1>Horario · ' + esc(rangoSemana(lunes)) + ' ' + dias[6].getFullYear() + '</h1>' +
+          '<span class="sub">La Palmera de Soldeu</span></div>' +
+          '<table><colgroup><col style="width:' + (conHoras ? 15 : 16) + '%">' +
+          dias.map(function(){ return '<col>'; }).join('') + (conHoras ? '<col style="width:6%">' : '') + '</colgroup>' +
+          '<thead><tr><th></th>' + dias.map(function(d){
+            var f = fiestasDe(d.getFullYear(), d.getMonth(), d.getDate());
+            return '<th' + (f.length ? ' class="fes"' : '') + '>' + DC_FULL[d.getDay()].replace('Miercoles','Miércoles').replace('Sabado','Sábado') +
+                   '<small>' + d.getDate() + '/' + (d.getMonth()+1) + (f.length ? ' · ' + esc(textoFiestas(f)) : '') + '</small></th>';
+          }).join('') + (conHoras ? '<th>Horas</th>' : '') + '</tr></thead><tbody>';
+  /* Las filas se estiran para llenar el folio: con poca gente, más altas */
+  var alto = Math.max(9, Math.min(17, Math.floor(150 / Math.max(1, gente.length))));
+  var ult = null;
+  gente.forEach(function(s){
+    if (ult !== null && s.role !== ult) h += '<tr class="sep"><td colspan="' + (conHoras ? 9 : 8) + '"></td></tr>';
+    ult = s.role;
+    var tot = 0;
+    var celdas = dias.map(function(d){
+      if (antesDeAlta(s, {y:d.getFullYear(), m:d.getMonth(), d:d.getDate()})) return '<td class="t libre">—</td>';
+      var c = celdaDeFecha(s.id, d);
+      if (c && c.estado === 'trabajo') tot += horasDeCelda(c);
+      return impCelda(c);
+    }).join('');
+    h += '<tr style="height:' + alto + 'mm"><td class="nom">' + esc(s.name) + '<small>' + (RLBL[s.role] || '') + '</small></td>' + celdas +
+         (conHoras ? '<td class="h">' + (Math.round(tot*10)/10).toString().replace('.', ',') + '</td>' : '') + '</tr>';
+  });
+  var hoy = new Date();
+  h += '</tbody></table><div class="pie"><span>ENC encargado · COC cocina · CAM sala</span>' +
+       '<span>Impreso el ' + hoy.getDate() + '/' + (hoy.getMonth()+1) + '/' + hoy.getFullYear() + '</span></div></div>';
+  return h;
+}
+function impLanzar(html){
+  var caja = document.getElementById('impresion'); if (!caja) return;
+  caja.innerHTML = html;
+  cerrarImprimir();
+  document.body.classList.add('imprimiendo');
+  var fin = function(){ document.body.classList.remove('imprimiendo'); caja.innerHTML = ''; window.removeEventListener('afterprint', fin); };
+  window.addEventListener('afterprint', fin);
+  /* Al volver de la ventana de imprimir se deja todo como estaba
+     (afterprint; y, por si un navegador no lo avisa, al tocar la página). */
+  setTimeout(function(){
+    window.print();
+    setTimeout(function(){ document.addEventListener('pointerdown', fin, {once:true}); }, 500);
+  }, 60);
+}
+function imprimirSemana(){ impLanzar(impHoja(new Date(impLunes))); }
+function imprimirMes(){
+  var semanas = getWeeksOfMonth(curY, curM);
+  impLanzar(semanas.map(function(w){
+    var d = w.days[0]; return impHoja(getMondayOf(new Date(d.y, d.m, d.d)));
+  }).join(''));
 }
