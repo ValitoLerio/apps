@@ -1262,7 +1262,8 @@ function pintarRecorrido(q){
       return '<tr data-li="'+p.id+'"'+(hayPedido(lp)?' class="li-pedido"':'')+'>'+
         '<td><div style="display:flex;gap:6px;align-items:center"><span class="re-asa" title="Arrastra a otra zona">⠿</span>'+
           '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">'+
-            '<textarea data-c="nombre" rows="1" class="crece" '+inp+'>'+esc(p.nombre)+'</textarea>'+
+            '<div style="display:flex;gap:4px;align-items:center"><textarea data-c="nombre" rows="1" class="crece" '+inp+'>'+esc(p.nombre)+'</textarea>'+
+              '<button class="btn suave sm" data-re-borrar="'+p.id+'" title="Borrar producto" aria-label="Borrar producto" style="padding:4px 6px">🗑</button></div>'+
             (destinoRapido===null
               ? '<button class="btn sm re-colocar" disabled style="opacity:.6">➜ Toca arriba una zona</button>'
               : destinoRapido
@@ -1358,6 +1359,21 @@ function pintarRecorrido(q){
   }
   caja.querySelectorAll("[data-sube]").forEach(function(b){ b.addEventListener("click", function(){ moverZona(recorrido()[+b.getAttribute("data-sube")], -1); }); });
   caja.querySelectorAll("[data-baja]").forEach(function(b){ b.addEventListener("click", function(){ moverZona(recorrido()[+b.getAttribute("data-baja")], 1); }); });
+  caja.querySelectorAll("[data-re-borrar]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var p=productoPorId(b.getAttribute("data-re-borrar")); if(!p) return;
+      confirmar("Borrar producto",
+        '<p style="margin:0">¿Borrar <strong>'+esc(p.nombre)+'</strong>'+(p.proveedor?' de '+esc(p.proveedor):'')+'? '+
+        'Se quita de todas las listas'+(hayPedido(delPedido(p.id))?' y del pedido':'')+'.</p>',
+        function(){
+          var y=window.scrollY;
+          libro.productos=libro.productos.filter(function(x){ return x.id!==p.id; });
+          delete libro.pedido[p.id];
+          guardar(); pintarRecorrido((document.getElementById("re_q")||{}).value||""); pintarBarra();
+          window.scrollTo(0, y); avisar("Borrado");
+        }, {aceptar:"Borrar", malo:true});
+    });
+  });
   caja.querySelectorAll("[data-colocar]").forEach(function(btn){ btn.addEventListener("click", function(){
     colocarProducto(btn.getAttribute("data-colocar"));
   }); });
