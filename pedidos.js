@@ -953,32 +953,32 @@ function pintarTablaLista(){
       '<div class="tabla-caja"><table class="lista-completa"><thead><tr>'+
         '<th style="text-align:left;min-width:230px">Producto</th>'+
         '<th style="text-align:left;min-width:170px">Pedir</th>'+
-        '<th style="text-align:left;min-width:150px">Proveedor</th>'+
+        '<th style="text-align:left;min-width:140px">Proveedor</th>'+
         '<th style="text-align:left;min-width:130px">Comercial</th>'+
-        '<th class="num" style="min-width:90px">Precio</th>'+
-        '<th class="num" style="min-width:70px">Dto. %</th>'+
-        '<th class="num">IGI</th><th class="num">Neto</th><th class="num">Fecha</th>'+
-        '<th style="min-width:120px;text-align:left">Categoría</th>'+
+        '<th class="num" style="min-width:80px">Precio</th>'+
+        '<th class="num" style="min-width:58px">Dto. %</th>'+
+        '<th class="num">IGI</th><th class="num">Neto · fecha</th>'+
+        '<th style="min-width:140px;text-align:left">Categoría</th>'+
       '</tr></thead><tbody>'+
       ps.map(function(p){
         var com=(libro.proveedores[p.proveedor]||{}).contacto||"";
         var lp=delPedido(p.id), campo=unidadPuesta(p, lp);
         return '<tr data-li="'+p.id+'"'+(hayPedido(lp)?' class="li-pedido"':'')+'>'+
-          '<td><div style="display:flex;gap:4px;align-items:center"><input data-c="nombre" value="'+esc(p.nombre)+'" '+inp+'>'+
+          '<td><div style="display:flex;gap:4px;align-items:center"><textarea data-c="nombre" rows="1" class="crece" '+inp+'>'+esc(p.nombre)+'</textarea>'+
             '<button class="btn suave sm" data-li-borrar="'+p.id+'" title="Borrar producto" aria-label="Borrar producto" style="padding:4px 6px">🗑</button></div></td>'+
           '<td>'+contador(p.id, campo, lp[campo], etiquetaEnvase(p))+'</td>'+
-          '<td><input data-c="proveedor" list="li_provs" value="'+esc(p.proveedor||"")+'" '+inp+'></td>'+
-          '<td><input data-c="comercial" value="'+esc(com)+'" placeholder="—" '+inp+(p.proveedor?'':' disabled')+'></td>'+
+          '<td><textarea data-c="proveedor" rows="1" class="crece" '+inp+'>'+esc(p.proveedor||"")+'</textarea></td>'+
+          '<td><textarea data-c="comercial" rows="1" class="crece" placeholder="—" '+inp+(p.proveedor?'':' disabled')+'>'+esc(com)+'</textarea></td>'+
           '<td><input data-c="precio" type="number" step="0.01" min="0" inputmode="decimal" value="'+(p.precio!=null?esc(p.precio):"")+'" '+inp.replace('style="','style="text-align:right;')+'></td>'+
           '<td><input data-c="dto" type="number" step="0.1" min="0" inputmode="decimal" value="'+(p.dtoEn==="€"?"":(p.dto?esc(p.dto):""))+'" '+
             (p.dtoEn==="€"?'placeholder="'+esc(textoDto(p))+'" disabled ':'')+inp.replace('style="','style="text-align:right;')+'></td>'+
           '<td class="num">'+num(p.igi,(+p.igi)%1?1:0)+' %</td>'+
-          '<td class="num" data-neto><b>'+(p.precio?eur(conIgi(p)):"—")+'</b></td>'+
-          '<td class="num" data-fecha style="color:var(--muted);white-space:nowrap">'+esc(dmy(p.fecha))+'</td>'+
-          '<td><input data-c="seccion" list="li_secs" value="'+esc(p.seccion||"")+'" '+inp+'></td>'+
+          '<td class="num" style="white-space:nowrap"><span data-neto><b>'+(p.precio?eur(conIgi(p)):"—")+'</b></span>'+
+            '<br><small data-fecha style="color:var(--muted)">'+esc(dmy(p.fecha))+'</small></td>'+
+          '<td><textarea data-c="seccion" rows="1" class="crece" '+inp+'>'+esc(p.seccion||"")+'</textarea></td>'+
         '</tr>';
       }).join("")+
-      '<tr><td colspan="10" style="padding:8px 10px"><button class="btn hueco sm" data-li-nuevo="'+esc(sec)+'">+ Añadir producto en '+esc(sec)+'</button></td></tr>'+
+      '<tr><td colspan="9" style="padding:8px 10px"><button class="btn hueco sm" data-li-nuevo="'+esc(sec)+'">+ Añadir producto en '+esc(sec)+'</button></td></tr>'+
       '</tbody></table></div></div>');
   }).join("");
   /* Pedir desde la lista: el mismo contador que en la cuadrícula, así que
@@ -1008,16 +1008,34 @@ function pintarTablaLista(){
   caja.querySelectorAll("[data-li-nuevo]").forEach(function(b){
     b.addEventListener("click", function(){ editarProducto(null, b.getAttribute("data-li-nuevo")); });
   });
-  caja.querySelectorAll("tr[data-li] input[data-c]").forEach(function(e){
+  ajustarCrece(caja);
+  caja.querySelectorAll("tr[data-li] [data-c]").forEach(function(e){
     e.addEventListener("change", function(){ cambiarEnLista(e); });
   });
 }
+/* Las casillas de texto largas (nombre, comercial) crecen hacia abajo
+   para que se lea el nombre entero, en vez de cortarse. Intro no mete
+   salto de línea: guarda, como en una casilla normal. */
+function ajustarCrece(caja){
+  caja.querySelectorAll("textarea.crece").forEach(function(t){
+    function alto(){ t.style.height="auto"; t.style.height=(t.scrollHeight+2)+"px"; }
+    t.style.resize="none"; t.style.overflow="hidden"; t.style.lineHeight="1.35"; t.style.fontFamily="inherit";
+    alto();
+    t.addEventListener("input", function(){ t.value=t.value.replace(/\n/g," "); alto(); });
+    t.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); t.blur(); } });
+  });
+}
+
 function cambiarEnLista(e){
   var fila=e.closest("[data-li]"), id=fila.getAttribute("data-li");
   var p=libro.productos.filter(function(x){ return x.id===id; })[0]; if(!p) return;
   var c=e.getAttribute("data-c"), v=e.value.trim();
   if(c==="nombre"){ if(!v){ e.value=p.nombre; avisar("El nombre no puede quedar vacío", true); return; } p.nombre=v; }
-  else if(c==="proveedor"){ p.proveedor=v; }
+  else if(c==="proveedor"){
+    /* Si ya existe ese proveedor escrito de otra forma, se usa el de siempre */
+    var ya=listaProveedores().map(function(x){ return x.nombre; }).filter(function(n){ return norm(n)===norm(v); })[0];
+    p.proveedor=ya||v; e.value=p.proveedor;
+  }
   else if(c==="comercial"){
     if(!p.proveedor) return;
     var f=libro.proveedores[p.proveedor]||(libro.proveedores[p.proveedor]={});
@@ -1028,7 +1046,10 @@ function cambiarEnLista(e){
     if(ahora!==p.precio){ p.precio=ahora; p.fecha=hoyISO(); }
   }
   else if(c==="dto"){ var d=v==="" ? null : parseFloat(v.replace(",",".")); p.dto=(d>0?d:null); p.dtoEn=p.dto?"%":p.dtoEn; }
-  else if(c==="seccion"){ p.seccion=v; }
+  else if(c==="seccion"){
+    var yas=secciones().map(function(x){ return x.nombre; }).filter(function(n){ return norm(n)===norm(v); })[0];
+    p.seccion=yas||v; e.value=p.seccion;
+  }
   guardar();
   /* Se repinta lo justo: el neto y la fecha de esa fila. Si cambió el
      proveedor, el comercial o la categoría, la tabla entera (otro grupo,
@@ -1127,7 +1148,7 @@ function pintarRecorrido(q){
     var lp=delPedido(p.id), campo=unidadPuesta(p, lp);
     return '<div class="re-fila'+(hayPedido(lp)?' li-pedido':'')+'" data-i="'+i+'" data-li="'+p.id+'"'+(modoMover?' draggable="true"':'')+'>'+
       (modoMover?'<span class="re-asa" title="Arrastrar">⠿</span>':'')+
-      '<span class="re-nom"><input data-c="nombre" value="'+esc(p.nombre)+'" '+inp+'>'+
+      '<span class="re-nom"><textarea data-c="nombre" rows="1" class="crece" '+inp+'>'+esc(p.nombre)+'</textarea>'+
         '<small>'+esc(p.proveedor||"")+(p.seccion?' · '+esc(p.seccion):'')+'</small></span>'+
       (modoMover
         ? '<span class="re-btns"><button class="btn suave sm" data-sube="'+i+'">▲</button><button class="btn suave sm" data-baja="'+i+'">▼</button>'+
@@ -1145,7 +1166,8 @@ function pintarRecorrido(q){
       function marcar(){ setTimeout(function(){ fila.classList.toggle("li-pedido", hayPedido(delPedido(id))); }, 0); }
       c.addEventListener("click", marcar); c.addEventListener("input", marcar); c.addEventListener("change", marcar);
     });
-    caja.querySelectorAll(".re-fila input[data-c]").forEach(function(e){
+    ajustarCrece(caja);
+    caja.querySelectorAll(".re-fila [data-c]").forEach(function(e){
       e.addEventListener("change", function(){
         cambiarEnLista(e);
         var p=productoPorId(e.closest("[data-li]").getAttribute("data-li"));
