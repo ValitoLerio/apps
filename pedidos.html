@@ -71,6 +71,8 @@ button,input,select,textarea{font:inherit;color:inherit}
           display:flex;flex-direction:column;gap:7px}
 .pie-rail a{font-size:12px;color:var(--muted);text-decoration:none}
 .pie-rail a:hover{color:var(--tinta)}
+.lista-completa tr.li-pedido td{background:color-mix(in srgb, var(--acento) 9%, transparent)}
+.lista-completa .contador{margin:0}
 .vista-sel{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:4px 0 12px;padding:0 0 12px;
            border-bottom:1px solid var(--linea-suave)}
 .vs{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 6px;border-radius:10px;
@@ -438,7 +440,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202611201101"></script>
+<script src="sync.js?v=202611211057"></script>
 <script>
 /* Red de seguridad. Si los archivos de la app no están al lado de esta
    página — pasa al abrirla fuera de la web: vista previa, doble clic en
@@ -455,7 +457,7 @@ window.reintentarJS = function(viejo, nombre, sub){
   }
   var s = document.createElement('script');
   s.setAttribute('data-rein', '1');
-  s.src = WEB_APPS + nombre + '?v=202611201101' + Date.now();
+  s.src = WEB_APPS + nombre + '?v=202611211057' + Date.now();
   s.onload = viejo.onload;
   s.onerror = function(){ reintentarJS(s, nombre, sub); };
   document.body.appendChild(s);
@@ -505,7 +507,7 @@ if (!window.Sync) (function(){
     var s = document.createElement('script');
     /* Siempre el último: sin esto el navegador sirve el pedidos.js de
        ayer y los cambios no se ven hasta pasado un rato. */
-    s.src = 'pedidos.js?v=202611201101' + Date.now();
+    s.src = 'pedidos.js?v=202611211057' + Date.now();
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ reintentarJS(s, 'pedidos.js', sub); };
     document.body.appendChild(s);

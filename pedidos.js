@@ -948,7 +948,8 @@ function pintarTablaLista(){
       (ps.length?'':'<div class="vacio" style="padding:18px"><div class="nota">Todavía no tiene productos. Pulsa «+ Añadir aquí».</div></div>')+
       (!ps.length ? '</div>' :
       '<div class="tabla-caja"><table class="lista-completa"><thead><tr>'+
-        '<th style="text-align:left;min-width:200px">Producto</th>'+
+        '<th style="text-align:left;min-width:230px">Producto</th>'+
+        '<th style="text-align:left;min-width:170px">Pedir</th>'+
         '<th style="text-align:left;min-width:150px">Proveedor</th>'+
         '<th style="text-align:left;min-width:130px">Comercial</th>'+
         '<th class="num" style="min-width:90px">Precio</th>'+
@@ -958,8 +959,11 @@ function pintarTablaLista(){
       '</tr></thead><tbody>'+
       ps.map(function(p){
         var com=(libro.proveedores[p.proveedor]||{}).contacto||"";
-        return '<tr data-li="'+p.id+'">'+
-          '<td><input data-c="nombre" value="'+esc(p.nombre)+'" '+inp+'></td>'+
+        var lp=delPedido(p.id), campo=unidadPuesta(p, lp);
+        return '<tr data-li="'+p.id+'"'+(hayPedido(lp)?' class="li-pedido"':'')+'>'+
+          '<td><div style="display:flex;gap:4px;align-items:center"><input data-c="nombre" value="'+esc(p.nombre)+'" '+inp+'>'+
+            '<button class="btn suave sm" data-li-borrar="'+p.id+'" title="Borrar producto" aria-label="Borrar producto" style="padding:4px 6px">🗑</button></div></td>'+
+          '<td>'+contador(p.id, campo, lp[campo], etiquetaEnvase(p))+'</td>'+
           '<td><input data-c="proveedor" list="li_provs" value="'+esc(p.proveedor||"")+'" '+inp+'></td>'+
           '<td><input data-c="comercial" value="'+esc(com)+'" placeholder="—" '+inp+(p.proveedor?'':' disabled')+'></td>'+
           '<td><input data-c="precio" type="number" step="0.01" min="0" inputmode="decimal" value="'+(p.precio!=null?esc(p.precio):"")+'" '+inp.replace('style="','style="text-align:right;')+'></td>'+
@@ -970,15 +974,38 @@ function pintarTablaLista(){
           '<td class="num" data-fecha style="color:var(--muted);white-space:nowrap">'+esc(dmy(p.fecha))+'</td>'+
           '<td><input data-c="seccion" list="li_secs" value="'+esc(p.seccion||"")+'" '+inp+'></td>'+
         '</tr>';
-      }).join("")+'</tbody></table></div></div>');
+      }).join("")+
+      '<tr><td colspan="10" style="padding:8px 10px"><button class="btn hueco sm" data-li-nuevo="'+esc(sec)+'">+ Añadir producto en '+esc(sec)+'</button></td></tr>'+
+      '</tbody></table></div></div>');
   }).join("");
+  /* Pedir desde la lista: el mismo contador que en la cuadrícula, así que
+     lo que se pide aquí sale en El pedido y en la barra de abajo. */
+  engancharFichas(caja);
+  caja.querySelectorAll("tr[data-li] [data-cnt]").forEach(function(c){
+    var fila=c.closest("tr"), id=fila.getAttribute("data-li");
+    function marcar(){ setTimeout(function(){ fila.classList.toggle("li-pedido", hayPedido(delPedido(id))); }, 0); }
+    c.addEventListener("click", marcar); c.addEventListener("input", marcar); c.addEventListener("change", marcar);
+  });
+  caja.querySelectorAll("[data-li-borrar]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var p=productoPorId(b.getAttribute("data-li-borrar")); if(!p) return;
+      confirmar("Borrar producto",
+        '<p style="margin:0">¿Borrar <strong>'+esc(p.nombre)+'</strong>'+(p.proveedor?' de '+esc(p.proveedor):'')+'?'+
+        (hayPedido(delPedido(p.id))?' También se quita del pedido.':'')+'</p>',
+        function(){
+          libro.productos=libro.productos.filter(function(x){ return x.id!==p.id; });
+          delete libro.pedido[p.id];
+          guardar(); pintar(); avisar("Borrado");
+        }, {aceptar:"Borrar", malo:true});
+    });
+  });
   caja.querySelectorAll("[data-li-quitar]").forEach(function(b){
     b.addEventListener("click", function(){ quitarApartado(b.getAttribute("data-li-quitar")); });
   });
   caja.querySelectorAll("[data-li-nuevo]").forEach(function(b){
     b.addEventListener("click", function(){ editarProducto(null, b.getAttribute("data-li-nuevo")); });
   });
-  caja.querySelectorAll("tr[data-li] input").forEach(function(e){
+  caja.querySelectorAll("tr[data-li] input[data-c]").forEach(function(e){
     e.addEventListener("change", function(){ cambiarEnLista(e); });
   });
 }
