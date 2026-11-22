@@ -100,7 +100,23 @@ function nuevosDiciembre(){
     x.fijo = {ini:'17:00', fin:'01:00', libra:lib, exacto:true};
     x._nuevosDic = 1; cambio = true;
   });
+  /* Los de noche cierran con el encargado: su turno acaba al cierre (la 1
+     en verano, las 3 en invierno) y empieza sus horas antes. */
+  CAM.forEach(function(x){
+    if (x._cierraNoche || !x._nuevosDic || !x.fijo) return;
+    x.fijo.cierra = true; x._cierraNoche = 1; cambio = true;
+  });
   if (cambio) try { localStorage.setItem('rcam', JSON.stringify({enc:ENC, coc:COC, cam:CAM})); } catch(e){}
+}
+/* El turno fijo de un día. Si «cierra», acaba a la hora de cierre de la
+   temporada y empieza sus horas antes: en verano 17-1, en invierno 18-3. */
+function fijoDelDia(s, est){
+  var f = s && s.fijo; if (!f) return null;
+  if (f.cierra) {
+    var e = est || curS, cierre = e === 'invierno' ? 27 : 25, H = horasDe(s, e);
+    return {ini: dosD((cierre - H) % 24) + ':00', fin: dosD(cierre % 24) + ':00'};
+  }
+  return f.ini && f.fin ? {ini:f.ini, fin:f.fin} : null;
 }
 function ponerNombre(id, v){
   v = String(v || '').trim(); if (!v) { renderCamList(); return; }
@@ -3270,7 +3286,7 @@ function rellenarMes(id) {
     if (antesDeAlta(p, dia)) return;                            // aun no ha entrado
     var sM = curM, sY = curY; curM = dia.m; curY = dia.y;
     if (f.libra !== '' && dia.dow === +f.libra) { sc(id, dia.d, {estado:'festivo', nota:''}); libres++; }
-    else if (f.ini && f.fin)                    { sc(id, dia.d, {estado:'trabajo', inicio:f.ini, fin:f.fin, nota:''}); puestos++; }
+    else if (f.ini && f.fin)                    { var fd = fijoDelDia(p, temporadaDia(dia)) || f; sc(id, dia.d, {estado:'trabajo', inicio:fd.ini, fin:fd.fin, nota:''}); puestos++; }
     curM = sM; curY = sY;
   });
   renderAll();
@@ -3838,6 +3854,10 @@ function horasDe(s, est){
   return s.role === 'enc' ? e.eH : e.rH;
 }
 function turnoDe(s, g, h, est){
+  if (g && g.grupo === 'fijo' && s.fijo && s.fijo.cierra) {
+    var fc = fijoDelDia(s, est), ac = aMin(fc.ini), bc = aMin(fc.fin); if (bc <= ac) bc += 1440;
+    return {h: Math.floor(ac / 60), a:ac, b:bc, ini:fc.ini, fin:fc.fin};
+  }
   if (g && g.grupo === 'fijo' && s.fijo && s.fijo.ini && s.fijo.fin) {
     var a = aMin(s.fijo.ini), b = aMin(s.fijo.fin); if (b <= a) b += 1440;
     /* El horario fijo dice a qué hora entra. Si lo que hace es una
@@ -4514,6 +4534,10 @@ function planRellenar(){
         coste += r * 4;
         if (tt.exc) coste += 10;                                            /* menos descanso: solo para cambiar de turno */
         if (encs[i] && tt.b > CIERRE + 30) coste += (tt.b - CIERRE) / 60 * 30;   /* encargado que se queda de más */
+        /* La cocina no se queda hasta el cierre de invierno: a las 3 cierra
+           el encargado con los camareros de noche. El cocinero, como mucho
+           hasta la 1. */
+        if (cocs[i] && !encs[i] && tt.b > 25*60) coste += (tt.b - 25*60) / 60 * 400;
         cats[libres[i].s.id] = catDe(tt.a);
         /* El turno de su semana (rota cada semana): salirse de él cuesta.
            Menos que dejar sin cubrir la apertura, las comidas o el
