@@ -2242,6 +2242,29 @@ function renderTable() {
       vaciarDia(+th2.dataset.coly, +th2.dataset.colm, +th2.dataset.cold);
     });
   });
+  hueco_final(area, tabla);
+}
+/* Un hueco invisible después del cuadro, para que la última semana del
+   mes también se pueda llevar del todo a la izquierda, pegada a los
+   nombres, igual que las demás. Sin él, el cuadro se acaba y la última
+   semana se queda a la derecha. */
+function hueco_final(area, tabla){
+  var viejo = area.querySelector('.hueco-final'); if (viejo) viejo.remove();
+  var ths = tabla.querySelectorAll('thead th.dh'); if (ths.length < 7) return;
+  var nombres = tabla.querySelector('thead th');
+  var ult = ths[ths.length - 1], lunesUlt = null;
+  for (var i = ths.length - 1; i >= 0; i--) {
+    var d = new Date(+ths[i].dataset.coly, +ths[i].dataset.colm, +ths[i].dataset.cold);
+    if (d.getDay() === 1) { lunesUlt = ths[i]; break; }
+  }
+  if (!lunesUlt) return;
+  var anchoSemana = (ult.offsetLeft + ult.offsetWidth) - lunesUlt.offsetLeft;
+  var falta = area.clientWidth - (nombres ? nombres.offsetWidth : 0) - anchoSemana;
+  if (falta <= 0) return;
+  var h = document.createElement('div');
+  h.className = 'hueco-final';
+  h.style.cssText = 'width:' + (tabla.offsetWidth + falta) + 'px;height:1px';
+  area.appendChild(h);
 }
 
 // ================================================================
