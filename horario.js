@@ -402,6 +402,7 @@ function selMonth(m) {
   if (bv) bv.classList.toggle('on', curS==='verano');
   if (bi) bi.classList.toggle('on', curS==='invierno');
   renderAll();
+  irASemanaActual();
 }
 
 // ================================================================
@@ -3596,8 +3597,30 @@ function iniciarHorario(){
   if(bv) bv.classList.toggle('on', curS==='verano');
   if(bi) bi.classList.toggle('on', curS==='invierno');
   renderAll();
+  irASemanaActual();
   if (pasadas) toast(pasadas + ' dias de vacaciones pasados al horario');
   if (staff().length === 0) openAddModal();
+}
+/* Al abrir, los cuadros del mes se colocan en la semana de hoy (su
+   lunes pegado a la columna de los nombres), en vez de empezar por el
+   primer día del mes. Para ver lo de antes, basta con ir hacia atrás. */
+function irASemanaActual(){
+  if (weekMode) return;
+  var hoy = new Date(), mh = mesDeFecha(hoy);
+  if (mh.y !== curY || mh.m !== curM) return;
+  var lunes = getMondayOf(new Date(hoy));
+  var sel = 'th[data-coly="' + lunes.getFullYear() + '"][data-colm="' + lunes.getMonth() + '"][data-cold="' + lunes.getDate() + '"]';
+  var hacer = function(){
+    document.querySelectorAll(sel).forEach(function(th){
+      var caja = th.closest('.schedule-area') || th.parentNode;
+      while (caja && caja !== document.body && !(caja.scrollWidth > caja.clientWidth + 2)) caja = caja.parentNode;
+      if (!caja || caja === document.body) return;
+      var fila = th.parentNode, primera = fila && fila.firstElementChild;
+      var ancho = primera && primera !== th ? primera.offsetWidth : 0;
+      caja.scrollLeft = Math.max(0, th.offsetLeft - ancho);
+    });
+  };
+  hacer(); setTimeout(hacer, 120);   /* otra vez cuando ya ha pintado todo */
 }
 window.addEventListener('resize', function(){ pegarCabeceras(); });
 iniciarHorario();
