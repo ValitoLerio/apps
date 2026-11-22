@@ -177,6 +177,14 @@ function rangoDelMes(y, m) {
   return cor(a) + ' - ' + cor(b);
 }
 function autoS(m)       { return VERANO.indexOf(m) >= 0 ? 'verano' : 'invierno'; }
+/* La temporada de un día va por el MES DEL HORARIO al que pertenece, no
+   por el del calendario: el horario de noviembre llega hasta el primer
+   lunes de diciembre, y esos días de diciembre siguen siendo de verano
+   (se cierra a la 1, nadie hasta las 3). Acepta Date o {y,m,d}. */
+function temporadaDia(f){
+  var d = f instanceof Date ? f : new Date(f.y, f.m, f.d);
+  return autoS(mesDeFecha(d).m);
+}
 function esc(t)         { return String(t==null?'':t).replace(/[&<>"']/g, function(c){
                             return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 function fmtH(t)        { if (!t) return '?'; return t; }
@@ -413,7 +421,7 @@ function toggleWeekMode() {
 function prevWeek() { weekStart.setDate(weekStart.getDate()-7); syncWeekMonth(); renderAll(); }
 function nextWeek() { weekStart.setDate(weekStart.getDate()+7); syncWeekMonth(); renderAll(); }
 function syncWeekMonth() {
-  curM = weekStart.getMonth(); curY = weekStart.getFullYear(); curS = autoS(curM);
+  var mhS = mesDeFecha(weekStart); curM = mhS.m; curY = mhS.y; curS = autoS(curM);
   var bv=document.getElementById('bv'), bi=document.getElementById('bi'), yr=document.getElementById('yr');
   if (bv) bv.classList.toggle('on', curS==='verano');
   if (bi) bi.classList.toggle('on', curS==='invierno');
@@ -3601,9 +3609,10 @@ function planHasta(){
 /* La jornada de cada día va con la temporada de su mes; la del mes que
    se ve, la que esté puesta arriba. */
 function planEstacion(k, mes){ return k === 0 ? curS : autoS(mes); }
-/* La temporada de cada día va por su mes: la semana del 30/11 al 6/12
-   cierra a la hora de verano hasta el 30 y a la de invierno desde el 1. */
-function planEstDia(d){ return (d.y === curY && d.m === curM) ? curS : autoS(d.m); }
+/* La temporada de cada día va por el mes del horario al que pertenece:
+   del 30/11 al 6/12 todo es del horario de noviembre, o sea de verano.
+   En el mes que se está viendo manda lo que esté puesto arriba. */
+function planEstDia(d){ var mh = mesDeFecha(new Date(d.y, d.m, d.d)); return (mh.y === curY && mh.m === curM) ? curS : autoS(mh.m); }
 /* Por defecto, la primera semana que tiene algún día sin poner. */
 function planDesde(){
   var sem = planSemanasLargo();
@@ -5034,7 +5043,7 @@ function planRevisar(){
   function otro(d, k){ var f = new Date(d.y, d.m, d.d + k); return {y:f.getFullYear(), m:f.getMonth(), d:f.getDate()}; }
   dias.forEach(function(dia){
     var fecha = new Date(dia.y, dia.m, dia.d), et = DC_FULL[fecha.getDay()] + ' ' + fecha.getDate() + '/' + (fecha.getMonth() + 1) + ': ';
-    var CIERRE = autoS(dia.m) === 'invierno' ? 27*60 : 25*60;
+    var CIERRE = temporadaDia(dia) === 'invierno' ? 27*60 : 25*60;
     var encT = 0, encA = false, encC = false, otroC = false, cocD = false, cocN = false, hayAlguien = false, hor = {};
     var abreOk = false, abrenN = 0, abreFalla = [], manN = 0, com13 = 0, com14 = 0;
     var MIN_MAN = p.minMan == null ? 3 : (+p.minMan || 0);
@@ -5061,7 +5070,7 @@ function planRevisar(){
       /* Las horas de la temporada: verano 8 y 9 los encargados,
          invierno 9 y 10. Se salta a quien tenga jornada propia puesta. */
       if (!(+g.jornada > 0) && g.grupo !== 'fijo') {
-        var Ht = horasDe(s, autoS(dia.m)), Hr = Math.round((t2[1] - t2[0]) / 6) / 10;
+        var Ht = horasDe(s, temporadaDia(dia)), Hr = Math.round((t2[1] - t2[0]) / 6) / 10;
         if (Math.abs(Hr - Ht) > 0.01) av.push(et + s.name + ' hace ' + Hr + ' h y le tocan ' + Ht);
       }
       var esEnc = g.grupo === 'enc' || g.grupo === 'enccoc', esCoc = g.grupo === 'coc' || g.grupo === 'enccoc';
@@ -5406,7 +5415,7 @@ function planResumen(p, lista, dias, avisos){
         if (!c || c.estado !== 'trabajo' || !c.inicio) continue;
         dT++; h += horasDeCelda(c);
         var a = aMin(c.inicio), b = aMin(c.fin); if (b <= a) b += 1440;
-        var cierre = autoS(f.getMonth()) === 'invierno' ? 27*60 : 25*60;
+        var cierre = temporadaDia(f) === 'invierno' ? 27*60 : 25*60;
         if (b >= cierre - 1) cie++;
       }
       h = Math.round(h * 10) / 10;
@@ -5416,7 +5425,7 @@ function planResumen(p, lista, dias, avisos){
         var cj = gcAt(s.id, {y:fj.getFullYear(), m:fj.getMonth(), d:fj.getDate()});
         if (!cj || cj.estado !== 'trabajo' || !cj.inicio) continue;
         var aj = aMin(cj.inicio), bj = aMin(cj.fin); if (bj <= aj) bj += 1440;
-        var cierreJ = autoS(fj.getMonth()) === 'invierno' ? 27*60 : 25*60;
+        var cierreJ = temporadaDia(fj) === 'invierno' ? 27*60 : 25*60;
         tq[bj >= cierreJ - 1 ? 'noc' : aj < 11*60 ? 'man' : aj < 15*60 ? 'med' : 'noc']++;
       }
       Object.keys(tq).forEach(function(k){ if (tq[k] > tMax) { tMax = tq[k]; tSem = k; } });
@@ -6015,7 +6024,7 @@ function pegarLeer(txt){
          (verano 8 h y 9 los encargados, invierno 9 y 10). */
       if (/^\d{1,2}$/.test(vals[i]) && +vals[i] <= 24) {
         var fx = new Date(weekStart); fx.setDate(fx.getDate() + i);
-        var H = horasDe(s, autoS(fx.getMonth())), h0 = +vals[i];
+        var H = horasDe(s, temporadaDia(fx)), h0 = +vals[i];
         dias.push({estado:'trabajo', inicio: dosD(h0) + ':00', fin: dosD((h0 + H) % 24) + ':00', nota:''});
         continue;
       }
