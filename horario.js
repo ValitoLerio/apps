@@ -2016,6 +2016,7 @@ function barraGoma(si){
     st.textContent = '#goma-bar{flex-wrap:nowrap}@media (max-width:480px){#goma-bar .gb-txt{display:none}#goma-bar button{padding:8px 12px !important}}';
     document.head.appendChild(st);
     bar.innerHTML = '<span class="gb-txt" style="font-weight:700;font-size:.9rem;white-space:nowrap">\uD83E\uDDF9 Borrando</span>' +
+      '<button type="button" onclick="vaciarMesEntero()" style="cursor:pointer;font-family:inherit;font-size:.85rem;font-weight:700;padding:8px 14px;border-radius:10px;border:1.5px solid #fff;background:#8e2a20;color:#fff">\uD83D\uDDD1 Vaciar el mes</button>' +
       '<button type="button" onclick="devolverBorrado()" style="cursor:pointer;font-family:inherit;font-size:.85rem;font-weight:600;padding:8px 14px;border-radius:10px;border:1.5px solid #fff;background:transparent;color:#fff">\u21A9 Deshacer</button>' +
       '<button type="button" onclick="ponerGoma(false)" style="cursor:pointer;font-family:inherit;font-size:.95rem;font-weight:800;padding:9px 18px;border-radius:10px;border:none;background:#fff;color:#c0392b">\u2715 Parar de borrar</button>';
     document.body.appendChild(bar);
@@ -2062,6 +2063,28 @@ function vaciarMesDe(sid){
   if (!n){ toast(quien.name + ' no tiene nada ese mes'); return; }
   save(); repintarTodo();
   avisarConDeshacer(n + (n === 1 ? ' dia vaciado de ' : ' dias vaciados de ') + quien.name);
+}
+/* El mes entero de todos, de una vez, en vez de ir semana a semana. Se
+   quitan los turnos y las fiestas; las vacaciones, bajas y ausencias se
+   quedan, que se ponen aparte y no se rehacen con el horario. Se puede
+   devolver con «Deshacer». */
+function vaciarMesEntero(){
+  var dias = diasDelMes(curY, curM), n = 0;
+  if (!confirm('¿Vaciar todo el horario de ' + rotuloMes(curY, curM) + '?\n\n' +
+               'Se quitan los turnos y las fiestas de todo el personal. Las vacaciones, bajas y ausencias se quedan.\n' +
+               'Si te equivocas, pulsa «Deshacer».')) return;
+  loBorrado = [];
+  staff().forEach(function(s){
+    dias.forEach(function(dia){
+      var c = ((sched[dia.y] || {})[dia.m] || {})[s.id];
+      c = c ? c[dia.d] : null;
+      if (!c || c.estado === 'vacaciones' || c.estado === 'baja' || c.estado === 'ausencia') return;
+      if (borrarDia(s.id, dia.y, dia.m, dia.d, true)) n++;
+    });
+  });
+  if (!n){ toast('Ese mes ya estaba vacío'); return; }
+  save(); repintarTodo();
+  avisarConDeshacer(n + ' turnos quitados de ' + MESES[curM]);
 }
 /* Un dia entero, de todo el personal. */
 function vaciarDia(y, m, d){
