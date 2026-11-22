@@ -183,7 +183,24 @@ function autoS(m)       { return VERANO.indexOf(m) >= 0 ? 'verano' : 'invierno';
    (se cierra a la 1, nadie hasta las 3). Acepta Date o {y,m,d}. */
 function temporadaDia(f){
   var d = f instanceof Date ? f : new Date(f.y, f.m, f.d);
-  return autoS(mesDeFecha(d).m);
+  var mh = mesDeFecha(d);
+  return temporadaMes(mh.y, mh.m);
+}
+/* La temporada la pone Lito con los botones Verano / Invierno, y se
+   queda guardada para ese mes del horario. Un mes en el que no la ha
+   tocado sigue con la del último mes en que sí la puso (si puso verano
+   en noviembre, diciembre sigue en verano hasta que pulse Invierno). Si
+   nunca ha puesto ninguna antes, se usa la de siempre por meses. */
+var temporadas = {};
+try { var _t = localStorage.getItem('rtemp'); if (_t) { var _p = JSON.parse(_t); if (_p && typeof _p === 'object') temporadas = _p; } } catch(e){}
+function temporadaMes(y, m){
+  var yy = y, mm = m;
+  for (var i = 0; i < 36; i++) {
+    var t = temporadas[yy + '-' + mm];
+    if (t === 'verano' || t === 'invierno') return t;
+    mm--; if (mm < 0) { mm = 11; yy--; }
+  }
+  return autoS(m);
 }
 function esc(t)         { return String(t==null?'':t).replace(/[&<>"']/g, function(c){
                             return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
@@ -371,13 +388,16 @@ function cambiarAncho() {
 // ================================================================
 function setSeason(s) {
   curS = s;
+  temporadas[curY + '-' + curM] = s;
+  try { localStorage.setItem('rtemp', JSON.stringify(temporadas)); } catch(e){}
+  if (typeof toast === 'function') toast((s === 'verano' ? 'Verano' : 'Invierno') + ' para ' + rotuloMes(curY, curM) + ' y los meses siguientes, hasta que lo cambies');
   var bv = document.getElementById('bv'), bi = document.getElementById('bi');
   if (bv) { bv.classList.toggle('on', s==='verano'); }
   if (bi) { bi.classList.toggle('on', s==='invierno'); }
   renderAll();
 }
 function selMonth(m) {
-  curM = m; curS = autoS(m);
+  curM = m; curS = temporadaMes(curY, m);
   var bv = document.getElementById('bv'), bi = document.getElementById('bi');
   if (bv) bv.classList.toggle('on', curS==='verano');
   if (bi) bi.classList.toggle('on', curS==='invierno');
@@ -421,7 +441,7 @@ function toggleWeekMode() {
 function prevWeek() { weekStart.setDate(weekStart.getDate()-7); syncWeekMonth(); renderAll(); }
 function nextWeek() { weekStart.setDate(weekStart.getDate()+7); syncWeekMonth(); renderAll(); }
 function syncWeekMonth() {
-  var mhS = mesDeFecha(weekStart); curM = mhS.m; curY = mhS.y; curS = autoS(curM);
+  var mhS = mesDeFecha(weekStart); curM = mhS.m; curY = mhS.y; curS = temporadaMes(curY, curM);
   var bv=document.getElementById('bv'), bi=document.getElementById('bi'), yr=document.getElementById('yr');
   if (bv) bv.classList.toggle('on', curS==='verano');
   if (bi) bi.classList.toggle('on', curS==='invierno');
@@ -678,7 +698,16 @@ function leyendaFiestas(){
 function renderAll() {
   try { nuevosDiciembre(); } catch(e){}
   var yr = document.getElementById('yr');
-  if (yr) curY = parseInt(yr.value);
+  if (yr) {
+    var yNuevo = parseInt(yr.value);
+    /* Al cambiar de año, la temporada es la que toque a ese mes */
+    if (yNuevo !== curY) {
+      curY = yNuevo; curS = temporadaMes(curY, curM);
+      var bv0 = document.getElementById('bv'), bi0 = document.getElementById('bi');
+      if (bv0) bv0.classList.toggle('on', curS==='verano');
+      if (bi0) bi0.classList.toggle('on', curS==='invierno');
+    }
+  }
   // Sync hours year selector
   var hyr = document.getElementById('hours-year-sel');
   if (hyr) hyr.value = curY;
@@ -3286,7 +3315,8 @@ function exportarHorario(){
     rcam: {enc:ENC, coc:COC, cam:CAM},
     rhid: hidden,
     rvac: vac,
-    rtheme: getThemeVals()
+    rtheme: getThemeVals(),
+    rtemp: temporadas
   };
   var nombre = 'horario-copia-' + datos.fecha + '.json';
   var blob = new Blob([JSON.stringify(datos, null, 2)], {type:'application/json'});
@@ -3312,6 +3342,7 @@ function importarHorario(ev){
       if(d.rhid)   localStorage.setItem('rhid',   JSON.stringify(d.rhid));
       if(d.rvac)   localStorage.setItem('rvac',   JSON.stringify(d.rvac));
       if(d.rtheme) localStorage.setItem('rtheme', JSON.stringify(d.rtheme));
+      if(d.rtemp)  localStorage.setItem('rtemp',  JSON.stringify(d.rtemp));
       location.reload();
     } catch(err){
       alert('No he podido leer ese archivo: ' + err.message);
@@ -3560,7 +3591,7 @@ function iniciarHorario(){
   if (yr && [].some.call(yr.options, function(o){ return +o.value === ahora.y; })) {
     yr.value = ahora.y;
   }
-  curS = autoS(curM);
+  curS = temporadaMes(curY, curM);
   var bv=document.getElementById('bv'), bi=document.getElementById('bi');
   if(bv) bv.classList.toggle('on', curS==='verano');
   if(bi) bi.classList.toggle('on', curS==='invierno');
@@ -3612,7 +3643,7 @@ function planEstacion(k, mes){ return k === 0 ? curS : autoS(mes); }
 /* La temporada de cada día va por el mes del horario al que pertenece:
    del 30/11 al 6/12 todo es del horario de noviembre, o sea de verano.
    En el mes que se está viendo manda lo que esté puesto arriba. */
-function planEstDia(d){ var mh = mesDeFecha(new Date(d.y, d.m, d.d)); return (mh.y === curY && mh.m === curM) ? curS : autoS(mh.m); }
+function planEstDia(d){ var mh = mesDeFecha(new Date(d.y, d.m, d.d)); return (mh.y === curY && mh.m === curM) ? curS : temporadaMes(mh.y, mh.m); }
 /* Por defecto, la primera semana que tiene algún día sin poner. */
 function planDesde(){
   var sem = planSemanasLargo();
