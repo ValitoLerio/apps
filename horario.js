@@ -3848,6 +3848,26 @@ function planPersonas(p){
     var g = p.gente[s.id];
     if (g && s.fijo && s.fijo.libra !== '' && s.fijo.libra != null) g.fest = +s.fijo.libra;
   });
+  /* Quien todavía no tiene día de fiesta (los nuevos, que no tienen
+     historia de donde aprenderlo) no se queda sin librar: se le da el día
+     de entre semana en que libra menos gente, para no dejar el
+     restaurante corto. Sábado y domingo no, que es cuando más se trabaja.
+     Si alguien está puesto a propósito sin fiesta («—», -1), se respeta. */
+  lista.forEach(function(s){
+    var g = p.gente[s.id];
+    if (!g || g.grupo === 'no' || g.sinFiesta) return;
+    if (g.fest != null && g.fest >= 0) return;
+    /* Solo a quien no tiene de dónde aprenderlo: los que aún no han
+       trabajado nada (los nuevos). A los demás no se les toca. */
+    if (planAprender(s.id).entra) return;
+    var n = {1:0, 2:0, 3:0, 4:0, 5:0};
+    Object.keys(p.gente).forEach(function(id){
+      var o = p.gente[id]; if (o && o !== g && o.grupo !== 'no' && n[o.fest] != null) n[o.fest]++;
+    });
+    var mejor = 1;
+    [1,2,3,4,5].forEach(function(d){ if (n[d] < n[mejor]) mejor = d; });
+    g.fest = mejor;
+  });
   /* Lo que dijo Lito de la cocina y de quién abre (una sola vez: luego
      se cambia en la ventana).
        · A las 7 entra siempre Tamara, con un encargado.
@@ -4843,6 +4863,7 @@ function leerPlanDeLaVentana(){
     var sid = tr.dataset.pid, g = p.gente[sid] || {};
     g.grupo = tr.querySelector('[data-k="grupo"]').value;
     g.fest = parseInt(tr.querySelector('[data-k="fest"]').value, 10);
+    g.sinFiesta = g.fest < 0;   /* «—» puesto a mano: sin fiesta a propósito */
     /* y se queda también en Personal, que es de donde salen los festivos solos */
     var per = personaDe(sid);
     if (per) {
