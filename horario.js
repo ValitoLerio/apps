@@ -6283,3 +6283,109 @@ function imprimirMes(){
     var d = w.days[0]; return impHoja(getMondayOf(new Date(d.y, d.m, d.d)));
   }).join(''));
 }
+
+// ================================================================
+// RECUPERAR UN MES
+// ================================================================
+// Si se borra algo sin querer, cada cambio queda guardado en GitHub y
+// se puede volver atrás: se elige de cuándo (hace 5 minutos, una hora,
+// ayer o un día y hora) y el mes que se está viendo vuelve a quedar
+// como estaba entonces. Primero enseña lo que hay en esa copia y lo que
+// hay ahora, y no toca nada hasta pulsar «Recuperar». Se puede deshacer.
+var recCopia = null, recDeshacer = null;
+function abrirRecuperar(){
+  var ov = document.getElementById('recov');
+  if (!ov) {
+    ov = document.createElement('div'); ov.className = 'ov'; ov.id = 'recov';
+    ov.innerHTML = '<div class="modal" style="max-width:520px;width:94vw"><div id="rec-cuerpo"></div></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function(e){ if (e.target === ov) ov.classList.remove('show'); });
+  }
+  recCopia = null;
+  var pad = function(n){ return (n < 10 ? '0' : '') + n; }, ah = new Date();
+  var hoyTxt = ah.getFullYear() + '-' + pad(ah.getMonth()+1) + '-' + pad(ah.getDate());
+  var rapido = [[5,'hace 5 min'],[15,'hace 15 min'],[60,'hace 1 hora'],[180,'hace 3 horas'],[1440,'ayer a esta hora']];
+  document.getElementById('rec-cuerpo').innerHTML =
+    '<h3>&#9851;&#65039; Recuperar ' + esc(rotuloMes(curY, curM)) + '</h3>' +
+    '<div style="font-size:.8rem;color:var(--text2);line-height:1.5;margin-bottom:10px">El mes que estás viendo vuelve a quedar como estaba en el momento que elijas. ' +
+      'Antes de cambiar nada te enseño lo que había.</div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap">' + rapido.map(function(r){
+      return '<button class="bs" onclick="recBuscar(' + r[0] + ')">' + r[1] + '</button>';
+    }).join('') + '</div>' +
+    '<div style="display:flex;gap:6px;align-items:center;margin-top:10px;flex-wrap:wrap;font-size:.8rem;color:var(--text2)">o el día ' +
+      '<input type="date" id="rec2-dia" value="' + hoyTxt + '" style="font-size:.8rem;padding:4px">' +
+      ' a las <input type="time" id="rec2-hora" value="' + pad(ah.getHours()) + ':' + pad(ah.getMinutes()) + '" style="font-size:.8rem;padding:4px">' +
+      '<button class="bs" onclick="recBuscar()">Buscar</button></div>' +
+    '<div id="rec-res" style="margin-top:12px;font-size:.82rem;line-height:1.55"></div>' +
+    '<div class="mact" style="margin-top:12px">' +
+      (recDeshacer ? '<button class="bs" onclick="recDeshacerYa()">&#8617; Deshacer la última recuperación</button>' : '') +
+      '<button class="bs" onclick="document.getElementById(\'recov\').classList.remove(\'show\')">Cerrar</button></div>';
+  ov.classList.add('show');
+}
+function recContar(mes){
+  var t = 0, f = 0, otros = 0;
+  diasDelMes(curY, curM).forEach(function(dia){
+    var m = ((mes[dia.y] || {})[dia.m]) || {};
+    Object.keys(m).forEach(function(sid){
+      var c = (m[sid] || {})[dia.d]; if (!c || !c.estado) return;
+      if (c.estado === 'trabajo') t++; else if (c.estado === 'festivo') f++; else otros++;
+    });
+  });
+  return {t:t, f:f, o:otros};
+}
+function recBuscar(minutos){
+  var res = document.getElementById('rec-res');
+  if (!window.Sync || !Sync.versionAnterior || Sync.sinSync) { if (res) res.innerHTML = '<span style="color:#e87c6f">Para recuperar hace falta estar conectado a GitHub.</span>'; return; }
+  var hasta;
+  if (minutos) hasta = new Date(Date.now() - minutos * 60000);
+  else {
+    var d = (document.getElementById('rec2-dia') || {}).value, h = (document.getElementById('rec2-hora') || {}).value || '23:59';
+    if (!d) { toast('Pon el día'); return; }
+    hasta = new Date(d + 'T' + h + ':00');
+  }
+  if (res) res.innerHTML = 'Buscando la copia…';
+  Sync.versionAnterior(hasta.toISOString()).then(function(r){
+    var v = ((r.datos || {}).horario || {}).rsch;
+    if (typeof v === 'string') { try { v = JSON.parse(v); } catch(e){ v = null; } }
+    if (!v) throw new Error('esa copia no tiene horario');
+    recCopia = v;
+    var antes = recContar(v), ahora = recContar(sched);
+    var c = r.cuando ? new Date(r.cuando) : hasta;
+    var pad = function(n){ return (n < 10 ? '0' : '') + n; };
+    res.innerHTML =
+      'Copia del <b>' + c.getDate() + '/' + (c.getMonth()+1) + ' a las ' + pad(c.getHours()) + ':' + pad(c.getMinutes()) + '</b>:<br>' +
+      '&nbsp;· entonces: <b>' + antes.t + '</b> turnos, ' + antes.f + ' fiestas, ' + antes.o + ' vacaciones/bajas<br>' +
+      '&nbsp;· ahora: <b>' + ahora.t + '</b> turnos, ' + ahora.f + ' fiestas, ' + ahora.o + ' vacaciones/bajas<br>' +
+      (antes.t + antes.f + antes.o === 0
+        ? '<span style="color:#e87c6f">En esa copia el mes estaba vacío: prueba con un momento anterior.</span>'
+        : '<button class="bs" style="margin-top:8px;background:#2e86c1;border-color:#2e86c1;color:#fff;font-weight:700" onclick="recAplicar()">&#9851;&#65039; Recuperar ' + esc(MESES[curM]) + ' como estaba</button>');
+  }).catch(function(e){
+    if (res) res.innerHTML = '<span style="color:#e87c6f">No he encontrado la copia: ' + esc(e.message) + '</span>';
+  });
+}
+function recAplicar(){
+  if (!recCopia) return;
+  recDeshacer = JSON.stringify(sched);
+  var n = 0;
+  diasDelMes(curY, curM).forEach(function(dia){
+    var viejo = ((recCopia[dia.y] || {})[dia.m]) || {};
+    var actual = (sched[dia.y] = sched[dia.y] || {})[dia.m] = (sched[dia.y][dia.m] || {});
+    var gente = {}; Object.keys(viejo).forEach(function(k){ gente[k] = 1; }); Object.keys(actual).forEach(function(k){ gente[k] = 1; });
+    Object.keys(gente).forEach(function(sid){
+      var c = (viejo[sid] || {})[dia.d];
+      actual[sid] = actual[sid] || {};
+      if (c) { actual[sid][dia.d] = JSON.parse(JSON.stringify(c)); n++; }
+      else delete actual[sid][dia.d];
+    });
+  });
+  save(); renderAll();
+  document.getElementById('recov').classList.remove('show');
+  toast(MESES[curM] + ' recuperado (' + n + ' días puestos)');
+}
+function recDeshacerYa(){
+  if (!recDeshacer) return;
+  try { sched = JSON.parse(recDeshacer); } catch(e){ return; }
+  recDeshacer = null; save(); renderAll();
+  document.getElementById('recov').classList.remove('show');
+  toast('Recuperación deshecha');
+}

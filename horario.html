@@ -260,7 +260,7 @@
 #impresion .pie{font-size:8.5pt;color:#555;margin-top:5px;display:flex;justify-content:space-between}
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="comun.css?v=202611221200">
+<link rel="stylesheet" href="comun.css?v=202611221203">
 </head>
 <body>
 
@@ -290,6 +290,7 @@
   <button class="tbtn" id="bgoma" style="border-color:#e87c6f;color:#e87c6f" onclick="ponerGoma()" title="Borrar varios d&iacute;as de una vez: p&aacute;sale el dedo o el rat&oacute;n por encima">&#129529; Borrar</button>
   <button class="tbtn" id="balto" style="border-color:var(--gold);color:var(--gold)" onclick="cambiarAlto()" title="Lo alto que es cada fila: apretando caben los doce empleados de una vez">&#8597; Normal</button>
   <button class="tbtn" style="border-color:#25d366;color:#4ee383" onclick="abrirSemanaWA()" title="Mandar el horario de una semana">&#128241; WhatsApp</button>
+  <button class="tbtn" style="border-color:#5dade2;color:#7fc4ee" onclick="abrirRecuperar()" title="Volver a poner un mes como estaba antes (si se ha borrado algo sin querer)">&#9851;&#65039; Recuperar</button>
   <button class="tbtn" style="border-color:#c9a96e;color:#e3c48f" onclick="abrirImprimir()" title="Hoja en A4 para colgar en la cocina">&#128424;&#65039; Imprimir</button>
   <button class="tbtn" style="border-color:var(--gold);color:var(--gold)" onclick="openTheme()">&#127912; Colores</button>
   <button class="tbtn" style="border-color:#27ae60;color:#6dbb85" onclick="exportarHorario()" title="Descargar una copia">&#11015;&#65039; Copia</button>
@@ -626,7 +627,7 @@
 
 
 
-<script src="sync.js?v=202611221200"></script>
+<script src="sync.js?v=202611221203"></script>
 <script>
 /* Red de seguridad. Si los archivos de la app no están al lado de esta
    página — pasa al abrirla fuera de la web: vista previa, doble clic en
@@ -643,7 +644,7 @@ window.reintentarJS = function(viejo, nombre, sub){
   }
   var s = document.createElement('script');
   s.setAttribute('data-rein', '1');
-  s.src = WEB_APPS + nombre + '?v=202611221200' + Date.now();
+  s.src = WEB_APPS + nombre + '?v=202611221203' + Date.now();
   s.onload = viejo.onload;
   s.onerror = function(){ reintentarJS(s, nombre, sub); };
   document.body.appendChild(s);
@@ -691,7 +692,7 @@ if (!window.Sync) (function(){
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202611221200' + Date.now();
+    s.src = 'horario.js?v=202611221203' + Date.now();
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();
