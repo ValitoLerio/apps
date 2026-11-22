@@ -4928,6 +4928,9 @@ function pintarPlan(){
     '<div style="display:flex;gap:6px;flex-wrap:wrap">' + planSemanas().map(function(w, i){
       return '<button class="bs" style="color:#e87c6f;border-color:#e87c6f;padding:6px 10px;font-size:.76rem" onclick="planBorrarSemana(' + i + ')">&#128465; ' + esc(w.txt) + '</button>';
     }).join('') + '</div>' +
+    '<div style="margin-top:8px"><button class="bs" style="background:#c0392b;border-color:#c0392b;color:#fff;font-weight:700;padding:8px 14px;font-size:.8rem" ' +
+      'onclick="vaciarMesEntero()" title="Quita los turnos de todo el mes. Las fiestas, vacaciones, bajas y ausencias se quedan">&#128465; Vaciar todo el mes</button>' +
+      ' <span style="font-size:.7rem;color:var(--text2)">solo los turnos: fiestas, vacaciones, bajas y ausencias se quedan</span></div>' +
     '<div id="plan-res" style="margin-top:12px;font-size:.78rem;line-height:1.5"></div>' +
     '<div class="mact" style="margin-top:12px;flex-wrap:wrap">' +
       '<button class="bp" onclick="planRellenar()">&#129668; ' + (planModo === 'semana'
