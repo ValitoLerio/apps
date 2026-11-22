@@ -2081,20 +2081,19 @@ function vaciarMesDe(sid){
   avisarConDeshacer(n + (n === 1 ? ' dia vaciado de ' : ' dias vaciados de ') + quien.name);
 }
 /* El mes entero de todos, de una vez, en vez de ir semana a semana. Se
-   quitan los turnos y las fiestas; las vacaciones, bajas y ausencias se
-   quedan, que se ponen aparte y no se rehacen con el horario. Se puede
-   devolver con «Deshacer». */
+   quitan solo los turnos; las fiestas, vacaciones, bajas y ausencias se
+   quedan. Se puede devolver con «Deshacer». */
 function vaciarMesEntero(){
   var dias = diasDelMes(curY, curM), n = 0;
   if (!confirm('¿Vaciar todo el horario de ' + rotuloMes(curY, curM) + '?\n\n' +
-               'Se quitan los turnos y las fiestas de todo el personal. Las vacaciones, bajas y ausencias se quedan.\n' +
+               'Se quitan los turnos de todo el personal. Las fiestas, vacaciones, bajas y ausencias se quedan.\n' +
                'Si te equivocas, pulsa «Deshacer».')) return;
   loBorrado = [];
   staff().forEach(function(s){
     dias.forEach(function(dia){
       var c = ((sched[dia.y] || {})[dia.m] || {})[s.id];
       c = c ? c[dia.d] : null;
-      if (!c || c.estado === 'vacaciones' || c.estado === 'baja' || c.estado === 'ausencia') return;
+      if (!c || c.estado === 'vacaciones' || c.estado === 'baja' || c.estado === 'ausencia' || c.estado === 'festivo') return;
       if (borrarDia(s.id, dia.y, dia.m, dia.d, true)) n++;
     });
   });
