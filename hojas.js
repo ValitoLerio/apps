@@ -686,7 +686,7 @@ var HOR_MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto"
 function horEsFiesta(v){ return /^\s*(f|fiesta|festa|libre)\s*$/i.test(String(v||"")); }
 function horFondo(v, edit){
   var col = horEsFiesta(v) ? "#ffd8a8" : (edit ? "#fffef5" : "#fff");
-  return col+(edit && String(v||"").trim() ? " linear-gradient(#1a73e8,#1a73e8) no-repeat right 0 bottom 0/2.2mm 2.2mm" : "");
+  return col;
 }
 function horNuevo(){ return {personal:["VALERIANO","LUIS","MARTIN","J.ANTONIO","SERGIO","MELO","CRIS","TONI","TAMARA"], desde:"", semanas:2, dias:false}; }
 function horLunes(iso){ if(!iso) return null; var d=new Date(iso+"T12:00:00"); if(isNaN(d)) return null; d.setDate(d.getDate()-((d.getDay()+6)%7)); return d; }
@@ -823,7 +823,9 @@ function abrirHorario(h){
       '<button class="btn sm fuerte" data-rep="todos" disabled title="Repite lo de la casilla a todas las personas ese día">&#11015;&#65039; A todos</button>'+
       '<button class="btn sm malo" data-vac>Empezar de nuevo</button>'+
       '<button class="btn sm fuerte" data-ok>Hecho</button></span></div>'+
-      '<div data-sc style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px"></div>';
+      '<div data-sc style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px"></div>'+
+      /* el cuadradito azul para arrastrar sale solo en la casilla que estás escribiendo */
+      '<style>[data-c]:focus{box-shadow:inset 0 0 0 2px #1a73e8;background-image:linear-gradient(#1a73e8,#1a73e8)!important;background-repeat:no-repeat!important;background-position:right 0 bottom 0!important;background-size:2.6mm 2.6mm!important}</style>';
     d.appendChild(ov);
     var sc=ov.querySelector("[data-sc]"), zr=1;
     function pinta(){
@@ -835,7 +837,7 @@ function abrirHorario(h){
         td.style.background=horFondo(v, true); }); });
       /* Correr el valor como en Excel: el cuadradito azul de la esquina se arrastra a los lados o hacia abajo */
       sc.querySelectorAll("[data-c]").forEach(function(td){
-        function enEsquina(x,y){ var r=td.getBoundingClientRect(); return td.innerText.trim() && x>r.right-24 && y>r.bottom-24; }
+        function enEsquina(x,y){ var r=td.getBoundingClientRect(); return document.activeElement===td && td.innerText.trim() && x>r.right-24 && y>r.bottom-24; }
         function empieza(x,y){
           var src=td.getAttribute("data-c").split("|"), val=td.innerText.replace(/\n+$/,""), per=personas(), pi=per.indexOf(src[1]), k0=+src[2], marcadas=[];
           td.blur();
