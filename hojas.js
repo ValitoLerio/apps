@@ -778,7 +778,7 @@ function abrirHorario(h){
       '<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div class="lbl" style="margin:0">Así sale</div><button class="btn sm" id="ho_verarch" style="margin-left:auto">&#128450;&#65039; Guardados</button><button class="btn sm fuerte" id="ho_rell">&#9998;&#65039; Rellenar</button><button class="btn sm" id="ho_zoom">&#128269; Ampliar</button></div>'+
         '<div id="ho_vista" style="border:1px solid var(--linea);border-radius:8px;overflow:hidden;background:#fff;height:520px;position:relative;cursor:zoom-in"></div></div>'+
     '</div>',
-    '<span class="nota" id="ho_estado" style="margin:0 auto 0 0"></span><button class="btn" id="ho_guardar">Cerrar</button><button class="btn" id="ho_wa" style="background:#25d366;border-color:#25d366;color:#fff">&#128172; WhatsApp</button><button class="btn fuerte" id="ho_imp">&#128424; Imprimir</button>', true);
+    '<button class="btn malo" id="ho_borrar">&#128465;&#65039; Borrar horario entero</button><span class="nota" id="ho_estado" style="margin:0 auto 0 0"></span><button class="btn" id="ho_guardar">Cerrar</button><button class="btn" id="ho_wa" style="background:#25d366;border-color:#25d366;color:#fff">&#128172; WhatsApp</button><button class="btn fuerte" id="ho_imp">&#128424; Imprimir</button>', true);
   var sel=d.querySelector("#ho_sem");
   for(var k=1;k<=12;k++) sel.insertAdjacentHTML("beforeend",'<option value="'+k+'"'+(k===(+c.semanas||2)?" selected":"")+'>'+k+'</option>');
   function lista(){
@@ -822,7 +822,7 @@ function abrirHorario(h){
       '<button class="btn sm fuerte" data-rep="sem" disabled title="Repite lo de la casilla en los 7 días">&#10145;&#65039; Toda la semana</button>'+
       '<button class="btn sm fuerte" data-rep="todos" disabled title="Repite lo de la casilla a todas las personas ese día">&#11015;&#65039; A todos</button>'+
       '<button class="btn sm" data-wa style="background:#25d366;border-color:#25d366;color:#fff">&#128172; WhatsApp</button>'+
-      '<button class="btn sm malo" data-vac>Empezar de nuevo</button>'+
+      '<button class="btn sm malo" data-vac>&#128465;&#65039; Borrar horario entero</button>'+
       '<button class="btn sm fuerte" data-ok>Hecho</button></span></div>'+
       '<div data-sc style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px"></div>'+
       /* Rueda de horas: se elige entrada y salida sin escribir */
@@ -1015,8 +1015,8 @@ function abrirHorario(h){
     function repinta(){ var y=sc.scrollTop; pinta(); sc.scrollTop=y; auto(); if(ultCelda){ var t=tdDe(ultCelda); if(t) t.classList.add("sel"); } chips(); }
     ajusta("ancho"); pinta(); chips();
     ov.querySelector("[data-vac]").addEventListener("click", function(){
-      if(!confirm("¿Empezar de nuevo? Lo que hay escrito se guarda antes en «Horarios guardados» y la hoja queda en blanco (los nombres no se tocan).")) return;
-      archivar(true); c.celdas={}; c.titulos={}; c.desde=""; d.querySelector("#ho_desde").value=""; repinta(); aviso("Guardado en el archivo y hoja en blanco");
+      if(!confirm("¿Borrar el horario entero? Se quedan solo los nombres.")) return;
+      borrarTodo(); repinta(); aviso("Horario borrado (si lo necesitas, está en «Guardados»)");
     });
     ov.querySelector("[data-ok]").addEventListener("click", function(){ ov.remove(); vista(); });
     ov.querySelector("[data-wa]").addEventListener("click", function(){ guardarYa(); horWhatsApp(c, horTitulos(c)[0]); });
@@ -1080,6 +1080,13 @@ function abrirHorario(h){
     return true;
   }
   d.querySelector("#ho_arch").addEventListener("click", function(){ archivar(false); });
+  /* Borrar el horario entero: casillas y fechas; antes se guarda una copia en «Guardados» por si acaso */
+  function borrarTodo(){ archivar(true); c.celdas={}; c.titulos={}; c.desde=""; d.querySelector("#ho_desde").value=""; guardarYa(); }
+  d.querySelector("#ho_borrar").addEventListener("click", function(){
+    if(!Object.keys(c.celdas||{}).length && !Object.keys(c.titulos||{}).length){ aviso("El horario ya está en blanco"); return; }
+    if(!confirm("¿Borrar el horario entero? Se quedan solo los nombres.")) return;
+    borrarTodo(); vista(); aviso("Horario borrado (si lo necesitas, está en «Guardados»)");
+  });
   d.querySelector("#ho_verarch").addEventListener("click", function(){ d.querySelector("#ho_arch").scrollIntoView({behavior:"smooth", block:"start"}); });
   pintaArch();
   d.querySelector("#ho_imp").addEventListener("click", function(){ guardarYa(); d.close(); imprimirHorario(h); });
