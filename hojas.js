@@ -778,7 +778,7 @@ function abrirHorario(h){
       '<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div class="lbl" style="margin:0">Así sale</div><button class="btn sm" id="ho_verarch" style="margin-left:auto">&#128450;&#65039; Guardados</button><button class="btn sm fuerte" id="ho_rell">&#9998;&#65039; Rellenar</button><button class="btn sm" id="ho_zoom">&#128269; Ampliar</button></div>'+
         '<div id="ho_vista" style="border:1px solid var(--linea);border-radius:8px;overflow:hidden;background:#fff;height:520px;position:relative;cursor:zoom-in"></div></div>'+
     '</div>',
-    '<span class="nota" id="ho_estado" style="margin:0 auto 0 0"></span><button class="btn" id="ho_guardar">Cerrar</button><button class="btn fuerte" id="ho_imp">&#128424; Imprimir</button>', true);
+    '<span class="nota" id="ho_estado" style="margin:0 auto 0 0"></span><button class="btn" id="ho_guardar">Cerrar</button><button class="btn" id="ho_wa" style="background:#25d366;border-color:#25d366;color:#fff">&#128172; WhatsApp</button><button class="btn fuerte" id="ho_imp">&#128424; Imprimir</button>', true);
   var sel=d.querySelector("#ho_sem");
   for(var k=1;k<=12;k++) sel.insertAdjacentHTML("beforeend",'<option value="'+k+'"'+(k===(+c.semanas||2)?" selected":"")+'>'+k+'</option>');
   function lista(){
@@ -821,6 +821,7 @@ function abrirHorario(h){
       '<button class="btn sm" data-rz="1" style="min-width:42px;font-size:18px" title="Más grande">+</button>'+
       '<button class="btn sm fuerte" data-rep="sem" disabled title="Repite lo de la casilla en los 7 días">&#10145;&#65039; Toda la semana</button>'+
       '<button class="btn sm fuerte" data-rep="todos" disabled title="Repite lo de la casilla a todas las personas ese día">&#11015;&#65039; A todos</button>'+
+      '<button class="btn sm" data-wa style="background:#25d366;border-color:#25d366;color:#fff">&#128172; WhatsApp</button>'+
       '<button class="btn sm malo" data-vac>Empezar de nuevo</button>'+
       '<button class="btn sm fuerte" data-ok>Hecho</button></span></div>'+
       '<div data-sc style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px"></div>'+
@@ -951,6 +952,7 @@ function abrirHorario(h){
       archivar(true); c.celdas={}; c.titulos={}; c.desde=""; d.querySelector("#ho_desde").value=""; repinta(); aviso("Guardado en el archivo y hoja en blanco");
     });
     ov.querySelector("[data-ok]").addEventListener("click", function(){ ov.remove(); vista(); });
+    ov.querySelector("[data-wa]").addEventListener("click", function(){ guardarYa(); horWhatsApp(c, horTitulos(c)[0]); });
   });
   d.querySelector("#ho_zoom").addEventListener("click", grande);
   d.querySelector("#ho_vista").addEventListener("click", grande);
@@ -981,12 +983,14 @@ function abrirHorario(h){
         '<span style="flex:1;font-size:13.5px"><b>'+esc(x.nombre)+'</b><br><span class="nota" style="margin:0">'+Object.keys(x.celdas||{}).length+' casillas · guardado el '+dmy(x.fecha)+'</span></span>'+
         '<button class="btn sm" data-av="'+x.id+'" title="Verlo en grande">&#128269;</button>'+
         '<button class="btn sm" data-ai="'+x.id+'" title="Imprimir">&#128424;</button>'+
+        '<button class="btn sm" data-aw="'+x.id+'" title="Mandar por WhatsApp">&#128172;</button>'+
         '<button class="btn sm" data-ac="'+x.id+'" title="Pasarlo a la hoja para cambiarlo">Abrir</button>'+
         '<button class="btn sm suave" data-ab="'+x.id+'" title="Borrar">✕</button></div>';
     }).join("") : '<p class="nota" style="margin:0">Aún no hay ninguno.</p>';
     function de(id){ return (c.archivo||[]).filter(function(x){ return x.id===id; })[0]; }
     function comoHor(x){ return {personal:x.personal, desde:x.desde, semanas:x.semanas, dias:x.dias, celdas:x.celdas, titulos:x.titulos}; }
     box.querySelectorAll("[data-av]").forEach(function(b){ b.addEventListener("click", function(){ var x=de(b.getAttribute("data-av")); verGrande(d, x.nombre, horHTML(comoHor(x), false)); }); });
+    box.querySelectorAll("[data-aw]").forEach(function(b){ b.addEventListener("click", function(){ var x=de(b.getAttribute("data-aw")); horWhatsApp(comoHor(x), x.nombre); }); });
     box.querySelectorAll("[data-ai]").forEach(function(b){ b.addEventListener("click", function(){ var x=de(b.getAttribute("data-ai")); guardarYa(); d.close(); imprimirPaginas(h, horHTML(comoHor(x), false)); }); });
     box.querySelectorAll("[data-ac]").forEach(function(b){ b.addEventListener("click", function(){
       var x=de(b.getAttribute("data-ac"));
@@ -1012,9 +1016,70 @@ function abrirHorario(h){
   d.querySelector("#ho_verarch").addEventListener("click", function(){ d.querySelector("#ho_arch").scrollIntoView({behavior:"smooth", block:"start"}); });
   pintaArch();
   d.querySelector("#ho_imp").addEventListener("click", function(){ guardarYa(); d.close(); imprimirHorario(h); });
+  d.querySelector("#ho_wa").addEventListener("click", function(){ guardarYa(); horWhatsApp(c, horTitulos(c)[0]); });
   lista(); setTimeout(vista, 30);
 }
 function imprimirHorario(h){ imprimirPaginas(h, horHTML(h.hor||horNuevo(), false)); }
+
+/* ── Mandar la hoja de horarios por WhatsApp: se dibuja como foto ── */
+function horTitulos(hor){
+  var n=Math.max(1, Math.min(52, parseInt(hor.semanas,10)||2)), lun=horLunes(hor.desde), tits=hor.titulos||{}, out=[];
+  for(var i=0;i<n;i++){
+    if(lun){ var a=new Date(lun); a.setDate(a.getDate()+7*i); var b=new Date(a); b.setDate(b.getDate()+6);
+      out.push("Semana del "+a.getDate()+" de "+HOR_MESES[a.getMonth()]+" al "+b.getDate()+" de "+HOR_MESES[b.getMonth()]+" de "+b.getFullYear()); }
+    else { var t=(tits[i]&&typeof tits[i]==="object")?tits[i]:{};
+      out.push((t[0]||t[2]) ? "Semana del "+(t[0]||"__")+" de "+(t[1]||"____")+" al "+(t[2]||"__")+" de "+(t[3]||"____") : "Semana "+(i+1)); }
+  }
+  return out;
+}
+function horImagen(hor){
+  var per=(hor.personal||[]).filter(function(x){ return String(x).trim(); }), cel=hor.celdas||{}, tits=horTitulos(hor);
+  /* solo las semanas que tienen algo escrito (si no hay nada, todas) */
+  var sems=tits.map(function(t,i){ return i; }).filter(function(i){ return Object.keys(cel).some(function(k){ return k.split("|")[0]===String(i); }); });
+  if(!sems.length) sems=tits.map(function(t,i){ return i; });
+  var W=1500, M=40, cn=240, cd=(W-2*M-cn)/7, fh=54, th=70, gap=40;
+  var H=M+sems.length*(th+fh*(per.length+1)+gap)-gap+M;
+  var cv=document.createElement("canvas"); cv.width=W; cv.height=H; var x=cv.getContext("2d");
+  x.fillStyle="#fff"; x.fillRect(0,0,W,H);
+  var y=M;
+  sems.forEach(function(i){
+    x.fillStyle="#000"; x.font="bold 30px Helvetica, Arial, sans-serif"; x.textAlign="center"; x.textBaseline="middle";
+    x.fillText(tits[i], W/2, y+th/2-6); y+=th;
+    x.lineWidth=2; x.strokeStyle="#000";
+    x.fillStyle="#eee"; x.fillRect(M+cn, y, cd*7, fh);
+    x.fillStyle="#000"; x.font="bold 21px Helvetica, Arial, sans-serif";
+    HOR_DIAS.forEach(function(d,k){ x.fillText(d, M+cn+cd*k+cd/2, y+fh/2); });
+    per.forEach(function(p,r){
+      var yy=y+fh*(r+1);
+      x.textAlign="left"; x.font="bold 23px Helvetica, Arial, sans-serif"; x.fillStyle="#000"; x.fillText(p, M+12, yy+fh/2);
+      x.textAlign="center";
+      for(var k=0;k<7;k++){
+        var v=cel[i+"|"+p+"|"+k]||"", cx=M+cn+cd*k;
+        if(horEsFiesta(v)){ x.fillStyle="#ffd8a8"; x.fillRect(cx, yy, cd, fh); }
+        if(v){ x.fillStyle="#000"; var lin=String(v).split("\n"), fs=lin.length>1?18:24; x.font="bold "+fs+"px Helvetica, Arial, sans-serif";
+          lin.forEach(function(l,j){ x.fillText(l, cx+cd/2, yy+fh/2+(j-(lin.length-1)/2)*(fs+2), cd-8); }); }
+      }
+    });
+    for(var r=0;r<=per.length+1;r++){ x.beginPath(); x.moveTo(r===0?M+cn:M, y+fh*r); x.lineTo(W-M, y+fh*r); x.stroke(); }
+    x.beginPath(); x.moveTo(M, y+fh); x.lineTo(M, y+fh*(per.length+1)); x.stroke();
+    for(var k=0;k<=7;k++){ x.beginPath(); x.moveTo(M+cn+cd*k, y); x.lineTo(M+cn+cd*k, y+fh*(per.length+1)); x.stroke(); }
+    y+=fh*(per.length+1)+gap;
+  });
+  return new Promise(function(ok){ cv.toBlob(ok, "image/png"); });
+}
+async function horWhatsApp(hor, nombre){
+  var blob=await horImagen(hor), titulo=horTitulos(hor)[0]||"Horario";
+  var fich=new File([blob], (nombre||"horario").replace(/[^\w\- ]+/g,"").trim().replace(/\s+/g,"-")+".png", {type:"image/png"});
+  try{
+    if(navigator.canShare && navigator.canShare({files:[fich]})){ await navigator.share({files:[fich], title:"Horario"}); return; }
+  }catch(e){ if(e && e.name==="AbortError") return; }
+  /* Sin «compartir» (Chrome en el Mac): la foto se copia y se descarga, y se abre WhatsApp para pegarla */
+  var copiada=false;
+  try{ await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]); copiada=true; }catch(_){}
+  var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=fich.name; document.body.appendChild(a); a.click(); a.remove();
+  window.open("https://web.whatsapp.com/", "_blank");
+  aviso(copiada ? "Foto del horario copiada: en WhatsApp abre el chat y pulsa Cmd+V" : "Foto del horario descargada: en WhatsApp pulsa el clip y adjúntala");
+}
 
 /* ── añadir ────────────────────────────────────────────────────── */
 async function anadir(files){
