@@ -682,6 +682,12 @@ function imprimirPaginas(h, html){
    fechas puestas. h.hor = {personal:[…], desde:"AAAA-MM-DD"|"", semanas:n} */
 var HOR_DIAS=["LUNES","MARTES","MIÉRCOLES","JUEVES","VIERNES","SÁBADO","DOMINGO"];
 var HOR_MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+/* F (fiesta) sale en color, también al imprimir */
+function horEsFiesta(v){ return /^\s*(f|fiesta|festa|libre)\s*$/i.test(String(v||"")); }
+function horFondo(v, edit){
+  var col = horEsFiesta(v) ? "#ffd8a8" : (edit ? "#fffef5" : "#fff");
+  return col+(edit && String(v||"").trim() ? " linear-gradient(#1a73e8,#1a73e8) no-repeat right 0 bottom 0/2.2mm 2.2mm" : "");
+}
 function horNuevo(){ return {personal:["VALERIANO","LUIS","MARTIN","J.ANTONIO","SERGIO","MELO","CRIS","TONI","TAMARA"], desde:"", semanas:2, dias:false}; }
 function horLunes(iso){ if(!iso) return null; var d=new Date(iso+"T12:00:00"); if(isNaN(d)) return null; d.setDate(d.getDate()-((d.getDay()+6)%7)); return d; }
 function horHTML(hor, soloPrimera, edit){
@@ -718,7 +724,7 @@ function horHTML(hor, soloPrimera, edit){
         return '<th style="border:.3mm solid #000;font:700 9pt Helvetica,Arial,sans-serif;color:#000;letter-spacing:0;text-transform:none;text-align:center;padding:0;background:#eee">'+d+(s.fechas?' '+s.fechas[k]:'')+'</th>'; }).join("")+'</tr>'+
       per.map(function(p){ return '<tr style="height:'+fila.toFixed(2)+'mm"><td style="border:.3mm solid #000;font-weight:700;font-size:'+(fila<9?8:10)+'pt;padding:0 2mm;white-space:nowrap;overflow:hidden">'+esc(p)+'</td>'+
         HOR_DIAS.map(function(_,k){ var key=s.i+"|"+p+"|"+k, v=cel[key]||"";
-          return '<td'+(edit?' contenteditable="true" data-c="'+esc(key)+'"':'')+' style="border:.3mm solid #000;text-align:center;vertical-align:middle;font:700 '+(fila<9?8:10)+'pt Helvetica,Arial,sans-serif;white-space:pre-wrap;line-height:1.1;padding:0 1mm;overflow:hidden;outline:none'+(edit?';background:#fffef5'+(v?' linear-gradient(#1a73e8,#1a73e8) no-repeat right 0 bottom 0/2.2mm 2.2mm':''):'')+'">'+esc(v)+'</td>'; }).join("")+'</tr>'; }).join("")+
+          return '<td'+(edit?' contenteditable="true" data-c="'+esc(key)+'"':'')+' style="border:.3mm solid #000;text-align:center;vertical-align:middle;font:700 '+(fila<9?8:10)+'pt Helvetica,Arial,sans-serif;white-space:pre-wrap;line-height:1.1;padding:0 1mm;overflow:hidden;outline:none'+';background:'+horFondo(v, edit)+'">'+esc(v)+'</td>'; }).join("")+'</tr>'; }).join("")+
       '</table></div>';
   }
   var pags=[]; for(var j=0;j<sem.length;j+=2) pags.push(sem.slice(j,j+2));
@@ -826,7 +832,7 @@ function abrirHorario(h){
       sc.querySelectorAll("[data-c]").forEach(function(td){ td.addEventListener("input", function(){
         var v=td.innerText.replace(/\n+$/,""); if(v.trim()) c.celdas[td.getAttribute("data-c")]=v; else delete c.celdas[td.getAttribute("data-c")];
         ultCelda=td.getAttribute("data-c"); marcaBotones(); auto();
-        td.style.background="#fffef5"+(v.trim()?" linear-gradient(#1a73e8,#1a73e8) no-repeat right 0 bottom 0/2.2mm 2.2mm":""); }); });
+        td.style.background=horFondo(v, true); }); });
       /* Correr el valor como en Excel: el cuadradito azul de la esquina se arrastra a los lados o hacia abajo */
       sc.querySelectorAll("[data-c]").forEach(function(td){
         function enEsquina(x,y){ var r=td.getBoundingClientRect(); return td.innerText.trim() && x>r.right-24 && y>r.bottom-24; }
@@ -956,7 +962,7 @@ function abrirHorario(h){
   var tAuto;
   function auto(){ clearTimeout(tAuto); tAuto=setTimeout(guardarYa, 500); }
   d.addEventListener("close", function(){ guardarYa(); pintarLista(); });
-  d.querySelector("#ho_guardar").addEventListener("click", function(){ d.close(); });
+  d.querySelector("#ho_guardar").addEventListener("click", function(){ guardarYa(); d.close(); });
   /* Archivo de horarios ya hechos */
   function nombreArch(){
     var n=Math.max(1,+c.semanas||2), t0=(c.titulos||{})[0], tn=(c.titulos||{})[n-1]||t0;
@@ -1003,7 +1009,7 @@ function abrirHorario(h){
   d.querySelector("#ho_arch").addEventListener("click", function(){ archivar(false); });
   d.querySelector("#ho_verarch").addEventListener("click", function(){ d.querySelector("#ho_arch").scrollIntoView({behavior:"smooth", block:"start"}); });
   pintaArch();
-  d.querySelector("#ho_imp").addEventListener("click", function(){ d.close(); imprimirHorario(h); });
+  d.querySelector("#ho_imp").addEventListener("click", function(){ guardarYa(); d.close(); imprimirHorario(h); });
   lista(); setTimeout(vista, 30);
 }
 function imprimirHorario(h){ imprimirPaginas(h, horHTML(h.hor||horNuevo(), false)); }
