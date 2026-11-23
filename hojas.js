@@ -684,7 +684,8 @@ var HOR_DIAS=["LUNES","MARTES","MIÉRCOLES","JUEVES","VIERNES","SÁBADO","DOMING
 var HOR_MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 function horNuevo(){ return {personal:["VALERIANO","LUIS","MARTIN","J.ANTONIO","SERGIO","MELO","CRIS","TONI","TAMARA"], desde:"", semanas:2, dias:false}; }
 function horLunes(iso){ if(!iso) return null; var d=new Date(iso+"T12:00:00"); if(isNaN(d)) return null; d.setDate(d.getDate()-((d.getDay()+6)%7)); return d; }
-function horHTML(hor, soloPrimera){
+function horHTML(hor, soloPrimera, edit){
+  var cel=hor.celdas||{}, tits=hor.titulos||{};
   var per=(hor.personal||[]).filter(function(x){ return String(x).trim(); }), n=Math.max(1, Math.min(52, parseInt(hor.semanas,10)||2));
   var lun=horLunes(hor.desde), sem=[];
   for(var i=0;i<n;i++){
@@ -693,8 +694,14 @@ function horHTML(hor, soloPrimera){
       var a=new Date(lun); a.setDate(a.getDate()+7*i); var b=new Date(a); b.setDate(b.getDate()+6);
       tit="Semana del "+a.getDate()+" de "+HOR_MESES[a.getMonth()]+(a.getFullYear()!==b.getFullYear()?" de "+a.getFullYear():"")+" al "+b.getDate()+" de "+HOR_MESES[b.getMonth()]+" de "+b.getFullYear();
       if(hor.dias){ fechas=[]; for(var k=0;k<7;k++){ var c=new Date(a); c.setDate(c.getDate()+k); fechas.push(c.getDate()); } }
-    } else tit='Semana del <span class="hl" style="width:18mm"></span> de <span class="hl" style="width:32mm"></span> al <span class="hl" style="width:18mm"></span> de <span class="hl" style="width:32mm"></span>';
-    sem.push({tit:tit, fechas:fechas});
+    } else {
+      var t=(tits[i] && typeof tits[i]==="object") ? tits[i] : {}, an=[18,32,18,32];
+      var hueco=function(n){ return edit
+        ? '<input data-t="'+i+'" data-n="'+n+'" value="'+esc(t[n]||"")+'" style="width:'+an[n]+'mm;font:inherit;text-align:center;border:0;border-bottom:.3mm solid #000;background:#fffef5;padding:0;outline:none">'
+        : (t[n] ? '<span style="display:inline-block;min-width:'+an[n]+'mm;border-bottom:.3mm solid #000">'+esc(t[n])+'</span>' : '<span class="hl" style="width:'+an[n]+'mm"></span>'); };
+      tit='Semana del '+hueco(0)+' de '+hueco(1)+' al '+hueco(2)+' de '+hueco(3);
+    }
+    sem.push({tit:tit, fechas:fechas, i:i});
   }
   /* alto de fila: que quepan dos semanas en el folio */
   var alto=(297-20-12)/2 - 12, fila=Math.max(7, Math.min(16, alto/(per.length+1)));
@@ -705,7 +712,8 @@ function horHTML(hor, soloPrimera){
       '<tr style="height:'+fila.toFixed(2)+'mm"><th style="width:30mm;border:.3mm solid #000;padding:0"></th>'+HOR_DIAS.map(function(d,k){
         return '<th style="border:.3mm solid #000;font:700 9pt Helvetica,Arial,sans-serif;color:#000;letter-spacing:0;text-transform:none;text-align:center;padding:0;background:#eee">'+d+(s.fechas?' '+s.fechas[k]:'')+'</th>'; }).join("")+'</tr>'+
       per.map(function(p){ return '<tr style="height:'+fila.toFixed(2)+'mm"><td style="border:.3mm solid #000;font-weight:700;font-size:'+(fila<9?8:10)+'pt;padding:0 2mm;white-space:nowrap;overflow:hidden">'+esc(p)+'</td>'+
-        HOR_DIAS.map(function(){ return '<td style="border:.3mm solid #000"></td>'; }).join("")+'</tr>'; }).join("")+
+        HOR_DIAS.map(function(_,k){ var key=s.i+"|"+p+"|"+k, v=cel[key]||"";
+          return '<td'+(edit?' contenteditable="true" data-c="'+esc(key)+'"':'')+' style="border:.3mm solid #000;text-align:center;vertical-align:middle;font:700 '+(fila<9?8:10)+'pt Helvetica,Arial,sans-serif;white-space:pre-wrap;line-height:1.1;padding:0 1mm;overflow:hidden;outline:none'+(edit?';background:#fffef5':'')+'">'+esc(v)+'</td>'; }).join("")+'</tr>'; }).join("")+
       '</table></div>';
   }
   var pags=[]; for(var j=0;j<sem.length;j+=2) pags.push(sem.slice(j,j+2));
@@ -751,7 +759,7 @@ function abrirHorario(h){
         '<label style="display:flex;gap:8px;align-items:center;font-size:14px;margin-bottom:8px"><input type="checkbox" id="ho_dias" style="width:auto"'+(c.dias?" checked":"")+'> Poner el número del día junto a LUNES, MARTES…</label>'+
         '<label style="display:flex;gap:8px;align-items:center;font-size:14px">Semanas <select id="ho_sem" '+inp+'></select> <span class="nota" style="margin:0">(2 por folio)</span></label>'+
       '</div>'+
-      '<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div class="lbl" style="margin:0">Así sale</div><button class="btn sm" id="ho_zoom" style="margin-left:auto">&#128269; Ampliar</button></div>'+
+      '<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div class="lbl" style="margin:0">Así sale</div><button class="btn sm fuerte" id="ho_rell" style="margin-left:auto">&#9998;&#65039; Rellenar</button><button class="btn sm" id="ho_zoom">&#128269; Ampliar</button></div>'+
         '<div id="ho_vista" style="border:1px solid var(--linea);border-radius:8px;overflow:hidden;background:#fff;height:520px;position:relative;cursor:zoom-in"></div></div>'+
     '</div>',
     '<button class="btn" data-x>Cerrar sin guardar</button><button class="btn" id="ho_guardar">Guardar</button><button class="btn fuerte" id="ho_imp">&#128424; Guardar e imprimir</button>', true);
@@ -782,6 +790,34 @@ function abrirHorario(h){
   d.querySelector("#ho_dias").addEventListener("change", function(e){ c.dias=e.target.checked; vista(); });
   sel.addEventListener("change", function(){ c.semanas=+sel.value; vista(); });
   function grande(){ verGrande(d, h.titulo, horHTML(c, false)); }
+  /* Rellenar: la hoja en grande y se escribe en cada casilla */
+  d.querySelector("#ho_rell").addEventListener("click", function(){
+    c.celdas=c.celdas||{}; c.titulos=c.titulos||{};
+    var ov=document.createElement("div");
+    ov.style.cssText="position:fixed;inset:0;z-index:50;background:rgba(30,30,30,.92);display:flex;flex-direction:column";
+    ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;padding:10px 14px;background:var(--sup);border-bottom:1px solid var(--linea);flex-wrap:wrap">'+
+      '<b style="font-size:15px">Rellenar · toca una casilla y escribe</b>'+
+      '<span style="margin-left:auto;display:flex;gap:6px"><button class="btn sm malo" data-vac>Borrar todo lo escrito</button>'+
+      '<button class="btn sm fuerte" data-ok>Hecho</button></span></div>'+
+      '<div data-sc style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px"></div>';
+    d.appendChild(ov);
+    var sc=ov.querySelector("[data-sc]");
+    function pinta(){
+      var px=210*96/25.4, k=Math.min(1.6, (sc.clientWidth-32)/px);
+      sc.innerHTML='<div style="zoom:'+k+'">'+horHTML(c, false, true).replace(/class="et-pag" style="/g,'class="et-pag" style="margin:0 auto 16px;box-shadow:0 2px 12px rgba(0,0,0,.4);')+'</div>';
+      sc.querySelectorAll("[data-c]").forEach(function(td){ td.addEventListener("input", function(){
+        var v=td.innerText.replace(/\n+$/,""); if(v.trim()) c.celdas[td.getAttribute("data-c")]=v; else delete c.celdas[td.getAttribute("data-c")]; }); });
+      sc.querySelectorAll("[data-t]").forEach(function(t){ t.addEventListener("input", function(){
+        var i=t.getAttribute("data-t"); if(!c.titulos[i] || typeof c.titulos[i]!=="object") c.titulos[i]={};
+        c.titulos[i][t.getAttribute("data-n")]=t.value.trim(); }); });
+    }
+    pinta();
+    ov.querySelector("[data-vac]").addEventListener("click", function(){
+      if(!confirm("¿Borrar todos los horarios escritos? Los nombres no se tocan.")) return;
+      c.celdas={}; c.titulos={}; pinta();
+    });
+    ov.querySelector("[data-ok]").addEventListener("click", function(){ ov.remove(); vista(); });
+  });
   d.querySelector("#ho_zoom").addEventListener("click", grande);
   d.querySelector("#ho_vista").addEventListener("click", grande);
   function guardarYa(){ c.personal=c.personal.filter(function(x){ return String(x).trim(); }); h.hor=c; h.paginas=Math.ceil((+c.semanas||2)/2); guardar(); pintarLista(); }
