@@ -94,6 +94,10 @@ body.re-arrastrando{user-select:none;-webkit-user-select:none;cursor:grabbing}
 .re-arrastra{opacity:.4}
 .re-sobre{box-shadow:inset 0 3px 0 var(--acento)}
 .re-movido{animation:reMov .8s}
+.re-sel{width:20px!important;height:20px;flex:none;cursor:pointer;accent-color:var(--acento,#2c5d8a)}
+tr.re-elegido td{background:rgba(44,93,138,.10)!important}
+#re_selbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom));z-index:60;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;
+  background:var(--sup,#fff);border:1px solid var(--linea,#ddd);border-radius:14px;padding:10px 14px;box-shadow:0 6px 24px rgba(0,0,0,.18);max-width:calc(100vw - 20px)}
 @keyframes reMov{from{background:color-mix(in srgb, var(--acento) 25%, transparent)}to{background:transparent}}
 @media (max-width:700px){ .re-fila{flex-wrap:wrap} .re-nom{flex:1 0 100%} }
 .lista-completa tr.li-pedido td{background:color-mix(in srgb, var(--acento) 9%, transparent)}
@@ -466,7 +470,7 @@ dialog::backdrop{background:rgba(10,16,18,.5)}
 
 <div id="root" class="app"></div>
 
-<script src="sync.js?v=202611231228"></script>
+<script src="sync.js?v=202611231242"></script>
 <script>
 /* Red de seguridad. Si los archivos de la app no están al lado de esta
    página — pasa al abrirla fuera de la web: vista previa, doble clic en
@@ -483,7 +487,7 @@ window.reintentarJS = function(viejo, nombre, sub){
   }
   var s = document.createElement('script');
   s.setAttribute('data-rein', '1');
-  s.src = WEB_APPS + nombre + '?v=202611231228' + Date.now();
+  s.src = WEB_APPS + nombre + '?v=202611231242' + Date.now();
   s.onload = viejo.onload;
   s.onerror = function(){ reintentarJS(s, nombre, sub); };
   document.body.appendChild(s);
@@ -533,7 +537,7 @@ if (!window.Sync) (function(){
     var s = document.createElement('script');
     /* Siempre el último: sin esto el navegador sirve el pedidos.js de
        ayer y los cambios no se ven hasta pasado un rato. */
-    s.src = 'pedidos.js?v=202611231228' + Date.now();
+    s.src = 'pedidos.js?v=202611231242' + Date.now();
     s.onload = function(){ capa.remove(); };
     s.onerror = function(){ reintentarJS(s, 'pedidos.js', sub); };
     document.body.appendChild(s);

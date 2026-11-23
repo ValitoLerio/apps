@@ -804,6 +804,7 @@ function apartadosEnOrden(){
 }
 
 function pintar(){
+  var sb=document.getElementById("re_selbar"); if(sb) sb.remove();
   var root=document.getElementById("root");
   root.innerHTML=
     '<nav class="rail">'+
@@ -1145,6 +1146,17 @@ function aZona(id, zona){
   dest.items.push(k);
   guardarRecorrido(deBloques(bs));
 }
+/* Varios a la vez a una zona */
+function aZonaVarios(ids, zona){
+  var bs=bloquesRecorrido(recorrido()), ks=ids.map(function(id){ return "p:"+id; });
+  bs.forEach(function(b){ b.items=b.items.filter(function(x){ return ks.indexOf(x)<0; }); });
+  var dest=bs.filter(function(b){ return b.zona===zona; })[0]||bs[0];
+  dest.items=dest.items.concat(ks);
+  guardarRecorrido(deBloques(bs));
+}
+/* Selección de varios productos en Recorrido (ids) */
+var reSel={}, reUltimo=null;
+function reSeleccionados(){ return Object.keys(reSel).filter(function(id){ return reSel[id] && productoPorId(id); }); }
 /* Colocar rápido: se elige una zona arriba y cada producto lleva un botón
    «➜ zona» para meterlo con un toque. undefined = apagado. */
 var destinoRapido;
@@ -1187,10 +1199,13 @@ function nuevaZona(despuesDe){
    orden del almacén. Un toque y queda en su sitio (por orden alfabético
    dentro de la zona). Desde aquí mismo se puede crear la zona si falta. */
 function colocarProducto(id){
+  var ids=Array.isArray(id)?id:[id], varios=ids.length>1;
+  id=ids[0];
   var p=productoPorId(id); if(!p) return;
   var l=recorrido(), zonas=l.filter(function(k){ return k.indexOf("z:")===0 && k!==SIN_ORDENAR; });
   var actual=null, z=null; for(var i=0;i<l.length;i++){ if(l[i].indexOf("z:")===0) z=l[i]; if(l[i]==="p:"+id){ actual=z; break; } }
-  abrirVentana("¿Dónde está "+p.nombre+"?",
+  if(varios) actual=null;
+  abrirVentana(varios ? "¿Dónde van estos "+ids.length+" productos?" : "¿Dónde está "+p.nombre+"?",
     (zonas.length
       ? '<div class="re-zonas-elegir">'+zonas.map(function(k){
           return '<button class="btn'+(k===actual?' fuerte':'')+'" data-a="'+esc(k)+'">'+esc(k.slice(2))+(k===actual?' ✓':'')+'</button>';
@@ -1203,9 +1218,10 @@ function colocarProducto(id){
   var ok=document.querySelector("#dlg [data-aceptar]"); if(ok) ok.style.display="none";
   function hecho(zona){
     cerrarVentana();
-    aZona(id, zona); pintarRecorrido((document.getElementById("re_q")||{}).value||"");
+    if(varios){ aZonaVarios(ids, zona); reSel={}; } else aZona(id, zona);
+    pintarRecorrido((document.getElementById("re_q")||{}).value||"");
     var f=document.querySelector('#re_lista tr[data-li="'+id+'"]'); if(f){ f.classList.add("re-movido"); f.scrollIntoView({block:"center"}); }
-    avisar(p.nombre+" → "+(zona?zona.slice(2):"sin zona"));
+    avisar((varios ? ids.length+" productos" : p.nombre)+" → "+(zona?zona.slice(2):"sin zona"));
   }
   document.querySelectorAll("#dlg [data-a]").forEach(function(b){
     b.addEventListener("click", function(){ hecho(b.getAttribute("data-a")); });
@@ -1259,8 +1275,10 @@ function pintarRecorrido(q){
       }
       var lp=delPedido(p.id), campo=unidadPuesta(p, lp);
       var com=(libro.proveedores[p.proveedor]||{}).contacto||"";
-      return '<tr data-li="'+p.id+'"'+(hayPedido(lp)?' class="li-pedido"':'')+'>'+
-        '<td><div style="display:flex;gap:6px;align-items:center"><span class="re-asa" title="Arrastra a otra zona">⠿</span>'+
+      return '<tr data-li="'+p.id+'" class="'+(hayPedido(lp)?'li-pedido':'')+(reSel[p.id]?' re-elegido':'')+'">'+
+        '<td><div style="display:flex;gap:6px;align-items:center">'+
+          '<input type="checkbox" class="re-sel" data-sel="'+p.id+'"'+(reSel[p.id]?' checked':'')+' title="Seleccionar para mover varios a la vez">'+
+          '<span class="re-asa" title="Arrastra a otra zona">⠿</span>'+
           '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">'+
             '<div style="display:flex;gap:4px;align-items:center"><textarea data-c="nombre" rows="1" class="crece" '+inp+'>'+esc(p.nombre)+'</textarea>'+
               '<button class="btn suave sm" data-re-borrar="'+p.id+'" title="Borrar producto" aria-label="Borrar producto" style="padding:4px 6px">🗑</button></div>'+
@@ -1286,6 +1304,7 @@ function pintarRecorrido(q){
     return '<div class="tarjeta" id="re_b_'+n+'" style="margin-bottom:16px" data-suelta="'+esc(b.zona||"")+'"'+(b.zona?' data-zona="'+esc(b.zona)+'"':' data-zona=""')+'>'+
       '<div class="tarjeta-cab"><h2>'+esc(b.zona?b.zona.slice(2):"Sin zona")+'</h2>'+
         '<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="pista">'+plural(b.items.length,"producto","productos")+'</span>'+
+        (b.items.length ? '<button class="btn hueco sm" data-zsel="'+n+'" title="Seleccionar todos los de esta zona">☑ Todos</button>' : '')+
         (b.zona && b.zona!==SIN_ORDENAR
           ? '<button class="btn hueco sm" data-sube="'+idx+'" title="Subir la zona">▲</button>'+
             '<button class="btn hueco sm" data-baja="'+idx+'" title="Bajar la zona">▼</button>'+
@@ -1314,6 +1333,28 @@ function pintarRecorrido(q){
 
   ajustarCrece(caja);
   engancharFichas(caja);
+  /* ── Seleccionar varios ── */
+  var visibles=Array.prototype.map.call(caja.querySelectorAll("[data-sel]"), function(c){ return c.getAttribute("data-sel"); });
+  caja.querySelectorAll("[data-sel]").forEach(function(cb){
+    cb.addEventListener("click", function(e){
+      var id=cb.getAttribute("data-sel");
+      /* con Mayúsculas se marcan todos los que hay entre el anterior y este */
+      if(e.shiftKey && reUltimo && visibles.indexOf(reUltimo)>=0){
+        var a=visibles.indexOf(reUltimo), z=visibles.indexOf(id);
+        visibles.slice(Math.min(a,z), Math.max(a,z)+1).forEach(function(x){ reSel[x]=cb.checked; });
+      } else reSel[id]=cb.checked;
+      reUltimo=id;
+      caja.querySelectorAll("[data-sel]").forEach(function(o){ var i=o.getAttribute("data-sel"); o.checked=!!reSel[i]; o.closest("tr").classList.toggle("re-elegido", !!reSel[i]); });
+      barraSel();
+    });
+  });
+  caja.querySelectorAll("[data-zsel]").forEach(function(b){ b.addEventListener("click", function(){
+    var t=document.getElementById("re_b_"+b.getAttribute("data-zsel")); if(!t) return;
+    var cbs=t.querySelectorAll("[data-sel]"), todos=Array.prototype.every.call(cbs, function(c){ return c.checked; });
+    cbs.forEach(function(c){ reSel[c.getAttribute("data-sel")]=!todos; c.checked=!todos; c.closest("tr").classList.toggle("re-elegido", !todos); });
+    barraSel();
+  }); });
+  barraSel();
   if(ir && destinoRapido!==undefined) ir.querySelectorAll("[data-suelta]").forEach(function(btn){
     btn.addEventListener("click", function(){
       destinoRapido = btn.getAttribute("data-suelta")||null;
@@ -1408,8 +1449,9 @@ function pintarRecorrido(q){
     asa.addEventListener("pointerdown", function(e){
       e.preventDefault();
       var fila=asa.closest("tr"), id=fila.getAttribute("data-li"), p=productoPorId(id); if(!p) return;
+      var lote=(reSel[id] && reSeleccionados().length>1) ? reSeleccionados() : null;
       var fantasma=document.createElement("div");
-      fantasma.className="re-fantasma"; fantasma.textContent="📍 "+p.nombre;
+      fantasma.className="re-fantasma"; fantasma.textContent="📍 "+(lote ? lote.length+" productos" : p.nombre);
       document.body.appendChild(fantasma);
       fila.classList.add("re-arrastra"); document.body.classList.add("re-arrastrando");
       var sobre=null;
@@ -1431,8 +1473,9 @@ function pintarRecorrido(q){
         if(!sobre) return;
         sobre.classList.remove("re-sobre");
         var z=sobre.getAttribute("data-suelta")||null;
-        aZona(id, z); pintarRecorrido((document.getElementById("re_q")||{}).value||"");
-        avisar(p.nombre+" → "+(z?z.slice(2):"sin zona"));
+        if(lote){ aZonaVarios(lote, z); reSel={}; } else aZona(id, z);
+        pintarRecorrido((document.getElementById("re_q")||{}).value||"");
+        avisar((lote ? lote.length+" productos" : p.nombre)+" → "+(z?z.slice(2):"sin zona"));
       }
       mover(e);
       document.addEventListener("pointermove", mover);
@@ -1442,6 +1485,25 @@ function pintarRecorrido(q){
   });
 }
 
+/* Barra de abajo cuando hay productos elegidos */
+function barraSel(){
+  var ids=reSeleccionados(), b=document.getElementById("re_selbar");
+  if(!ids.length || !document.getElementById("re_lista")){ if(b) b.remove(); return; }
+  if(!b){ b=document.createElement("div"); b.id="re_selbar"; document.body.appendChild(b); }
+  b.innerHTML='<b>'+ids.length+' '+(ids.length===1?'producto elegido':'productos elegidos')+'</b>'+
+    (destinoRapido ? '<button class="btn fuerte" data-sb="rapido">➜ '+esc(destinoRapido.slice(2))+'</button>' : '')+
+    '<button class="btn fuerte" data-sb="colocar">📍 Colocar en…</button>'+
+    '<button class="btn" data-sb="quitar">Quitar selección</button>';
+  b.querySelector('[data-sb="colocar"]').addEventListener("click", function(){ colocarProducto(reSeleccionados()); });
+  b.querySelector('[data-sb="quitar"]').addEventListener("click", function(){ reSel={}; pintarRecorrido((document.getElementById("re_q")||{}).value||""); });
+  var r=b.querySelector('[data-sb="rapido"]');
+  if(r) r.addEventListener("click", function(){
+    var n=reSeleccionados().length, y=window.scrollY;
+    aZonaVarios(reSeleccionados(), destinoRapido); reSel={};
+    pintarRecorrido((document.getElementById("re_q")||{}).value||""); window.scrollTo(0,y);
+    avisar(n+" productos → "+destinoRapido.slice(2));
+  });
+}
 function cabecera(titulo, sub, derecha){
   return '<div class="cabecera"><div><h1>'+esc(titulo)+'</h1>'+
          (sub?'<p>'+sub+'</p>':"")+'</div>'+
