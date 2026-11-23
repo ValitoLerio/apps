@@ -764,11 +764,15 @@ function abrirHorario(h){
         '<p class="nota" style="margin:4px 0 8px">Déjalo en blanco para escribir las fechas a mano, como en tu hoja.</p>'+
         '<label style="display:flex;gap:8px;align-items:center;font-size:14px;margin-bottom:8px"><input type="checkbox" id="ho_dias" style="width:auto"'+(c.dias?" checked":"")+'> Poner el número del día junto a LUNES, MARTES…</label>'+
         '<label style="display:flex;gap:8px;align-items:center;font-size:14px">Semanas <select id="ho_sem" '+inp+'></select> <span class="nota" style="margin:0">(2 por folio)</span></label>'+
+        '<div class="lbl" style="margin:18px 0 6px">Horarios guardados</div>'+
+        '<p class="nota" style="margin:0 0 6px">Lo que escribes se guarda solo. Cuando acabes unas semanas, pulsa «Guardar en el archivo» y quedan guardadas para verlas o imprimirlas cuando quieras.</p>'+
+        '<button class="btn sm fuerte" id="ho_arch">&#128190; Guardar en el archivo</button>'+
+        '<div id="ho_lista_arch" style="margin-top:8px;display:flex;flex-direction:column;gap:6px"></div>'+
       '</div>'+
-      '<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div class="lbl" style="margin:0">Así sale</div><button class="btn sm fuerte" id="ho_rell" style="margin-left:auto">&#9998;&#65039; Rellenar</button><button class="btn sm" id="ho_zoom">&#128269; Ampliar</button></div>'+
+      '<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div class="lbl" style="margin:0">Así sale</div><button class="btn sm" id="ho_verarch" style="margin-left:auto">&#128450;&#65039; Guardados</button><button class="btn sm fuerte" id="ho_rell">&#9998;&#65039; Rellenar</button><button class="btn sm" id="ho_zoom">&#128269; Ampliar</button></div>'+
         '<div id="ho_vista" style="border:1px solid var(--linea);border-radius:8px;overflow:hidden;background:#fff;height:520px;position:relative;cursor:zoom-in"></div></div>'+
     '</div>',
-    '<button class="btn" data-x>Cerrar sin guardar</button><button class="btn" id="ho_guardar">Guardar</button><button class="btn fuerte" id="ho_imp">&#128424; Guardar e imprimir</button>', true);
+    '<span class="nota" id="ho_estado" style="margin:0 auto 0 0"></span><button class="btn" id="ho_guardar">Cerrar</button><button class="btn fuerte" id="ho_imp">&#128424; Imprimir</button>', true);
   var sel=d.querySelector("#ho_sem");
   for(var k=1;k<=12;k++) sel.insertAdjacentHTML("beforeend",'<option value="'+k+'"'+(k===(+c.semanas||2)?" selected":"")+'>'+k+'</option>');
   function lista(){
@@ -787,6 +791,7 @@ function abrirHorario(h){
   function vista(){
     var box=d.querySelector("#ho_vista"), k=box.clientWidth/(210*96/25.4);
     box.innerHTML='<div style="transform:scale('+k+');transform-origin:0 0;position:absolute;left:0;top:0">'+horHTML(c, true)+'</div>';
+    if(typeof auto==="function") auto();
   }
   function mas(){ var e=d.querySelector("#ho_nuevo"), v=e.value.trim().toUpperCase(); if(!v){ e.focus(); return; } c.personal.push(v); e.value=""; lista(); vista(); e.focus(); }
   d.querySelector("#ho_mas").addEventListener("click", mas);
@@ -810,7 +815,7 @@ function abrirHorario(h){
       '<button class="btn sm" data-rz="1" style="min-width:42px;font-size:18px" title="Más grande">+</button>'+
       '<button class="btn sm fuerte" data-rep="sem" disabled title="Repite lo de la casilla en los 7 días">&#10145;&#65039; Toda la semana</button>'+
       '<button class="btn sm fuerte" data-rep="todos" disabled title="Repite lo de la casilla a todas las personas ese día">&#11015;&#65039; A todos</button>'+
-      '<button class="btn sm malo" data-vac>Borrar todo lo escrito</button>'+
+      '<button class="btn sm malo" data-vac>Empezar de nuevo</button>'+
       '<button class="btn sm fuerte" data-ok>Hecho</button></span></div>'+
       '<div data-sc style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px"></div>';
     d.appendChild(ov);
@@ -820,7 +825,7 @@ function abrirHorario(h){
       sc.innerHTML='<div style="zoom:'+k+'">'+horHTML(c, false, true).replace(/class="et-pag" style="/g,'class="et-pag" style="margin:0 auto 16px;box-shadow:0 2px 12px rgba(0,0,0,.4);')+'</div>';
       sc.querySelectorAll("[data-c]").forEach(function(td){ td.addEventListener("input", function(){
         var v=td.innerText.replace(/\n+$/,""); if(v.trim()) c.celdas[td.getAttribute("data-c")]=v; else delete c.celdas[td.getAttribute("data-c")];
-        ultCelda=td.getAttribute("data-c"); marcaBotones();
+        ultCelda=td.getAttribute("data-c"); marcaBotones(); auto();
         td.style.background="#fffef5"+(v.trim()?" linear-gradient(#1a73e8,#1a73e8) no-repeat right 0 bottom 0/2.2mm 2.2mm":""); }); });
       /* Correr el valor como en Excel: el cuadradito azul de la esquina se arrastra a los lados o hacia abajo */
       sc.querySelectorAll("[data-c]").forEach(function(td){
@@ -907,7 +912,7 @@ function abrirHorario(h){
       }); });
       sc.querySelectorAll("[data-t]").forEach(function(t){ t.addEventListener("input", function(){
         var i=t.getAttribute("data-t"); if(!c.titulos[i] || typeof c.titulos[i]!=="object") c.titulos[i]={};
-        c.titulos[i][t.getAttribute("data-n")]=t.value.trim(); }); });
+        c.titulos[i][t.getAttribute("data-n")]=t.value.trim(); auto(); }); });
     }
     function ajusta(modo){
       var px=210*96/25.4, py=297*96/25.4;
@@ -931,19 +936,74 @@ function abrirHorario(h){
       });
     });
     function personas(){ return (c.personal||[]).filter(function(x){ return String(x).trim(); }); }
-    function repinta(){ var y=sc.scrollTop; pinta(); sc.scrollTop=y; }
+    function repinta(){ var y=sc.scrollTop; pinta(); sc.scrollTop=y; auto(); }
     ajusta("ancho"); pinta();
     ov.querySelector("[data-vac]").addEventListener("click", function(){
-      if(!confirm("¿Borrar todos los horarios escritos? Los nombres no se tocan.")) return;
-      c.celdas={}; c.titulos={}; pinta();
+      if(!confirm("¿Empezar de nuevo? Lo que hay escrito se guarda antes en «Horarios guardados» y la hoja queda en blanco (los nombres no se tocan).")) return;
+      archivar(true); c.celdas={}; c.titulos={}; c.desde=""; d.querySelector("#ho_desde").value=""; repinta(); aviso("Guardado en el archivo y hoja en blanco");
     });
     ov.querySelector("[data-ok]").addEventListener("click", function(){ ov.remove(); vista(); });
   });
   d.querySelector("#ho_zoom").addEventListener("click", grande);
   d.querySelector("#ho_vista").addEventListener("click", grande);
-  function guardarYa(){ c.personal=c.personal.filter(function(x){ return String(x).trim(); }); h.hor=c; h.paginas=Math.ceil((+c.semanas||2)/2); guardar(); pintarLista(); }
-  d.querySelector("#ho_guardar").addEventListener("click", function(){ guardarYa(); d.close(); aviso("Hoja de horarios guardada"); });
-  d.querySelector("#ho_imp").addEventListener("click", function(){ guardarYa(); d.close(); imprimirHorario(h); });
+  function guardarYa(){
+    clearTimeout(tAuto);
+    var g=JSON.parse(JSON.stringify(c)); g.personal=g.personal.filter(function(x){ return String(x).trim(); });
+    h.hor=g; h.paginas=Math.ceil((+g.semanas||2)/2); guardar();
+    var e=d.querySelector("#ho_estado"); if(e){ var t=new Date(); e.textContent="✓ Guardado "+String(t.getHours()).padStart(2,"0")+":"+String(t.getMinutes()).padStart(2,"0"); }
+  }
+  /* Se guarda solo, medio segundo después de cada cambio */
+  var tAuto;
+  function auto(){ clearTimeout(tAuto); tAuto=setTimeout(guardarYa, 500); }
+  d.addEventListener("close", function(){ guardarYa(); pintarLista(); });
+  d.querySelector("#ho_guardar").addEventListener("click", function(){ d.close(); });
+  /* Archivo de horarios ya hechos */
+  function nombreArch(){
+    var n=Math.max(1,+c.semanas||2), t0=(c.titulos||{})[0], tn=(c.titulos||{})[n-1]||t0;
+    var lun=horLunes(c.desde);
+    if(lun){ var f=new Date(lun); f.setDate(f.getDate()+7*n-1); return "Del "+lun.getDate()+" "+HOR_MESES[lun.getMonth()]+" al "+f.getDate()+" "+HOR_MESES[f.getMonth()]+" "+f.getFullYear(); }
+    if(t0 && typeof t0==="object" && t0[0]) return "Del "+t0[0]+" "+(t0[1]||"")+" al "+((tn&&tn[2])||"")+" "+((tn&&tn[3])||"");
+    return "Guardado el "+dmy(new Date().toISOString());
+  }
+  function pintaArch(){
+    var box=d.querySelector("#ho_lista_arch"), a=c.archivo||[];
+    var vb=d.querySelector("#ho_verarch"); if(vb) vb.innerHTML="&#128450;&#65039; Guardados ("+a.length+")";
+    box.innerHTML = a.length ? a.slice().reverse().map(function(x){
+      return '<div style="display:flex;gap:6px;align-items:center;padding:6px 8px;border:1px solid var(--linea);border-radius:6px;background:var(--sup)">'+
+        '<span style="flex:1;font-size:13.5px"><b>'+esc(x.nombre)+'</b><br><span class="nota" style="margin:0">'+Object.keys(x.celdas||{}).length+' casillas · guardado el '+dmy(x.fecha)+'</span></span>'+
+        '<button class="btn sm" data-av="'+x.id+'" title="Verlo en grande">&#128269;</button>'+
+        '<button class="btn sm" data-ai="'+x.id+'" title="Imprimir">&#128424;</button>'+
+        '<button class="btn sm" data-ac="'+x.id+'" title="Pasarlo a la hoja para cambiarlo">Abrir</button>'+
+        '<button class="btn sm suave" data-ab="'+x.id+'" title="Borrar">✕</button></div>';
+    }).join("") : '<p class="nota" style="margin:0">Aún no hay ninguno.</p>';
+    function de(id){ return (c.archivo||[]).filter(function(x){ return x.id===id; })[0]; }
+    function comoHor(x){ return {personal:x.personal, desde:x.desde, semanas:x.semanas, dias:x.dias, celdas:x.celdas, titulos:x.titulos}; }
+    box.querySelectorAll("[data-av]").forEach(function(b){ b.addEventListener("click", function(){ var x=de(b.getAttribute("data-av")); verGrande(d, x.nombre, horHTML(comoHor(x), false)); }); });
+    box.querySelectorAll("[data-ai]").forEach(function(b){ b.addEventListener("click", function(){ var x=de(b.getAttribute("data-ai")); guardarYa(); d.close(); imprimirPaginas(h, horHTML(comoHor(x), false)); }); });
+    box.querySelectorAll("[data-ac]").forEach(function(b){ b.addEventListener("click", function(){
+      var x=de(b.getAttribute("data-ac"));
+      if(Object.keys(c.celdas||{}).length && !confirm("Lo que hay ahora en la hoja se cambia por «"+x.nombre+"». Si quieres conservarlo, antes pulsa «Guardar en el archivo». ¿Seguir?")) return;
+      var y=JSON.parse(JSON.stringify(comoHor(x))); c.personal=y.personal; c.desde=y.desde; c.semanas=y.semanas; c.dias=y.dias; c.celdas=y.celdas||{}; c.titulos=y.titulos||{};
+      sel.value=String(c.semanas||2); d.querySelector("#ho_desde").value=c.desde||""; d.querySelector("#ho_dias").checked=!!c.dias;
+      lista(); vista(); aviso("Abierto: "+x.nombre);
+    }); });
+    box.querySelectorAll("[data-ab]").forEach(function(b){ b.addEventListener("click", function(){
+      var x=de(b.getAttribute("data-ab")); if(!confirm("¿Borrar «"+x.nombre+"» del archivo?")) return;
+      c.archivo=c.archivo.filter(function(y){ return y.id!==x.id; }); pintaArch(); auto();
+    }); });
+  }
+  function archivar(silencio){
+    if(!Object.keys(c.celdas||{}).length){ if(!silencio) aviso("No hay nada escrito que guardar", true); return false; }
+    c.archivo=c.archivo||[];
+    c.archivo.push({id:uid(), nombre:nombreArch(), fecha:new Date().toISOString(), personal:c.personal.filter(function(x){ return String(x).trim(); }),
+      desde:c.desde, semanas:c.semanas, dias:c.dias, celdas:JSON.parse(JSON.stringify(c.celdas)), titulos:JSON.parse(JSON.stringify(c.titulos||{}))});
+    pintaArch(); guardarYa(); if(!silencio) aviso("Guardado en el archivo: "+c.archivo[c.archivo.length-1].nombre);
+    return true;
+  }
+  d.querySelector("#ho_arch").addEventListener("click", function(){ archivar(false); });
+  d.querySelector("#ho_verarch").addEventListener("click", function(){ d.querySelector("#ho_arch").scrollIntoView({behavior:"smooth", block:"start"}); });
+  pintaArch();
+  d.querySelector("#ho_imp").addEventListener("click", function(){ d.close(); imprimirHorario(h); });
   lista(); setTimeout(vista, 30);
 }
 function imprimirHorario(h){ imprimirPaginas(h, horHTML(h.hor||horNuevo(), false)); }
