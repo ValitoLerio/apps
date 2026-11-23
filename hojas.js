@@ -699,7 +699,8 @@ function horHTML(hor, soloPrimera, edit){
       var hueco=function(n){ return edit
         ? '<input data-t="'+i+'" data-n="'+n+'" value="'+esc(t[n]||"")+'" style="width:'+an[n]+'mm;font:inherit;text-align:center;border:0;border-bottom:.3mm solid #000;background:#fffef5;padding:0;outline:none">'
         : (t[n] ? '<span style="display:inline-block;min-width:'+an[n]+'mm;border-bottom:.3mm solid #000">'+esc(t[n])+'</span>' : '<span class="hl" style="width:'+an[n]+'mm"></span>'); };
-      tit='Semana del '+hueco(0)+' de '+hueco(1)+' al '+hueco(2)+' de '+hueco(3);
+      tit='Semana del '+hueco(0)+' de '+hueco(1)+' al '+hueco(2)+' de '+hueco(3)+
+        (edit?' <label title="Elegir la semana en el calendario" style="display:inline-flex;align-items:center;gap:1mm;font:9pt Helvetica,Arial,sans-serif;border:.3mm solid #1a73e8;border-radius:1.5mm;padding:.5mm 2mm;color:#1a73e8;cursor:pointer;vertical-align:middle">&#128197; <input type="date" data-tcal="'+i+'" style="font:inherit;border:0;background:transparent;color:#1a73e8;width:30mm;cursor:pointer"></label>':'');
     }
     sem.push({tit:tit, fechas:fechas, i:i});
   }
@@ -877,6 +878,18 @@ function abrirHorario(h){
       sc.querySelectorAll("[data-vsem]").forEach(function(b){ b.addEventListener("click", function(){
         var wi=b.getAttribute("data-vsem");
         Object.keys(c.celdas).forEach(function(key){ if(key.split("|")[0]===wi) delete c.celdas[key]; });
+        repinta();
+      }); });
+      /* Calendario: se elige un día y se ponen solas las fechas de esa semana (y las siguientes que estén vacías) */
+      sc.querySelectorAll("[data-tcal]").forEach(function(inp){ inp.addEventListener("change", function(){
+        var lun=horLunes(inp.value); if(!lun) return;
+        var i0=+inp.getAttribute("data-tcal"), n=Math.max(1, Math.min(52, parseInt(c.semanas,10)||2));
+        for(var i=i0;i<n;i++){
+          var t=c.titulos[i];
+          if(i>i0 && t && typeof t==="object" && (t[0]||t[1]||t[2]||t[3])) break;
+          var a=new Date(lun); a.setDate(a.getDate()+7*(i-i0)); var b=new Date(a); b.setDate(b.getDate()+6);
+          c.titulos[i]={0:String(a.getDate()),1:HOR_MESES[a.getMonth()],2:String(b.getDate()),3:HOR_MESES[b.getMonth()]};
+        }
         repinta();
       }); });
       sc.querySelectorAll("[data-t]").forEach(function(t){ t.addEventListener("input", function(){
