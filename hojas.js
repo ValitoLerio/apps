@@ -440,11 +440,16 @@ function abrirEtiquetas(h){
       '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" id="et_ordenar">Ordenar por precio</button><button class="btn sm" id="et_pegar">&#128203; Pegar precios</button><button class="btn sm fuerte" id="et_mas">+ Etiqueta</button></span>'+
     '</div>'+
     '<div id="et_pegado" style="display:none;margin:0 0 12px;padding:12px;border:1px solid var(--acento-linea);border-radius:8px;background:var(--acento-suave)">'+
-      '<div style="font-size:13px;line-height:1.5;margin-bottom:6px">Pega aquí los precios (de WhatsApp, de un Excel, de una nota…). Vale de cualquier forma:<br>'+
-        '<code>10,50</code> · <code>10,50 x 24</code> · <code>MANCHEGO 12,00 x 24</code> · o una fila con muchos: <code>10,50 € 8,50 € 6,00 €</code> (una etiqueta de cada).</div>'+
-      '<textarea id="et_txt" rows="6" style="width:100%;padding:8px;border:1px solid var(--linea);border-radius:6px;font:14px var(--mono);background:var(--sup);color:var(--tinta)" placeholder="12,50 x 24&#10;MANCHEGO 12,00 x 24&#10;9,50"></textarea>'+
+      '<div style="font-size:14px;line-height:1.6;margin-bottom:8px"><b>1.</b> Copia los precios de donde los tengas (WhatsApp, Excel, una nota). '+
+        '<b>2.</b> Pégalos en el recuadro blanco, <b>un precio por línea</b>. <b>3.</b> Pulsa <b>Añadir</b>.</div>'+
+      '<div style="display:grid;grid-template-columns:auto 1fr;gap:2px 14px;font-size:13px;margin:0 0 8px;padding:8px 10px;background:var(--sup);border-radius:6px">'+
+        '<span style="color:var(--muted);grid-column:1/-1;margin-bottom:2px">Ejemplos de lo que puedes escribir en cada línea:</span>'+
+        '<code>9,50</code><span>→ 8 etiquetas de 9,50 € (las que pongas abajo)</span>'+
+        '<code>12,50 x 24</code><span>→ 24 etiquetas de 12,50 €</span>'+
+        '<code>MANCHEGO 12,00 x 24</code><span>→ 24 etiquetas con el nombre MANCHEGO y 12,00 €</span></div>'+
+      '<textarea id="et_txt" rows="6" style="width:100%;padding:8px;border:1px solid var(--linea);border-radius:6px;font:15px var(--mono);background:#fff;color:var(--tinta)" placeholder="Pega o escribe aquí…"></textarea>'+
       '<div style="display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap">'+
-        '<label style="font-size:13px;display:flex;gap:6px;align-items:center">Si no pone cuántas, <input id="et_def" type="number" min="1" value="8" style="width:64px;padding:5px;border:1px solid var(--linea);border-radius:6px"> de cada</label>'+
+        '<label style="font-size:13px;display:flex;gap:6px;align-items:center">Si no pones cuántas, salen <input id="et_def" type="number" min="1" value="8" style="width:64px;padding:5px;border:1px solid var(--linea);border-radius:6px"> de cada precio</label>'+
         '<label style="font-size:13px;display:flex;gap:6px;align-items:center"><input id="et_reempl" type="checkbox" style="width:auto"> Quitar las que hay y dejar solo estas</label>'+
         '<span id="et_pinfo" class="nota" style="margin:0"></span>'+
         '<button class="btn fuerte sm" id="et_pok" style="margin-left:auto">Añadir</button></div>'+
