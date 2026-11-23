@@ -683,9 +683,19 @@ function imprimirPaginas(h, html){
 var HOR_DIAS=["LUNES","MARTES","MIÉRCOLES","JUEVES","VIERNES","SÁBADO","DOMINGO"];
 var HOR_MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 /* F (fiesta) sale en color, también al imprimir */
-function horEsFiesta(v){ return /^\s*(f|fiesta|festa|libre)\s*$/i.test(String(v||"")); }
+/* Marcas con su inicial y su color. El horario nunca las pisa al repetir, arrastrar o pegar */
+var HOR_MARCAS={F:{n:"Fiesta",col:"#ffd8a8",borde:"#f0b070"}, V:{n:"Vacaciones",col:"#cfe3ff",borde:"#8fb8ec"}, B:{n:"Baja",col:"#f8c4c4",borde:"#e08a8a"}, A:{n:"Ausencia",col:"#e6d9f7",borde:"#b9a0de"}};
+function horMarca(v){
+  v=String(v||"").trim().toLowerCase(); if(!v) return null;
+  if(/^(f|fiesta|festa|libre)$/.test(v)) return "F";
+  if(/^(v|vac|vacaciones|vacances)$/.test(v)) return "V";
+  if(/^(b|baja|baixa)$/.test(v)) return "B";
+  if(/^(a|ausencia|absencia|absència)$/.test(v)) return "A";
+  return null;
+}
+function horEsFiesta(v){ return !!horMarca(v); }
 function horFondo(v, edit){
-  var col = horEsFiesta(v) ? "#ffd8a8" : (edit ? "#fffef5" : "#fff");
+  var m=horMarca(v), col = m ? HOR_MARCAS[m].col : (edit ? "#fffef5" : "#fff");
   return col;
 }
 function horNuevo(){ return {personal:["VALERIANO","LUIS","MARTIN","J.ANTONIO","SERGIO","MELO","CRIS","TONI","TAMARA"], desde:"", semanas:2, dias:false}; }
@@ -730,7 +740,10 @@ function horHTML(hor, soloPrimera, edit){
   var pags=[]; for(var j=0;j<sem.length;j+=2) pags.push(sem.slice(j,j+2));
   if(soloPrimera) pags=pags.slice(0,1);
   return '<style>.hl{display:inline-block;border-bottom:.3mm solid #000;height:4mm;vertical-align:baseline}</style>'+pags.map(function(pg){
-    return '<div class="et-pag" style="width:210mm;height:297mm;padding:10mm;box-sizing:border-box;background:#fff;color:#000">'+pg.map(bloque).join("")+'</div>';
+    return '<div class="et-pag" style="width:210mm;height:297mm;padding:10mm;box-sizing:border-box;background:#fff;color:#000;position:relative">'+pg.map(bloque).join("")+
+      '<div style="position:absolute;left:10mm;right:10mm;bottom:7mm;display:flex;gap:6mm;justify-content:center;font:700 9pt Helvetica,Arial,sans-serif">'+
+        Object.keys(HOR_MARCAS).map(function(k){ return '<span style="display:inline-flex;align-items:center;gap:1.5mm"><span style="display:inline-block;width:6mm;height:4.5mm;background:'+HOR_MARCAS[k].col+';border:.3mm solid #000;text-align:center;line-height:4.5mm">'+k+'</span>'+HOR_MARCAS[k].n+'</span>'; }).join("")+
+      '</div></div>';
   }).join("");
 }
 function verGrande(dlg, titulo, html){
@@ -861,6 +874,7 @@ function abrirHorario(h){
       rs("partido").dispatchEvent(new Event("change"));
       marcaBotones(); chips();
     }
+    function prot(key){ return !!horMarca((c.celdas||{})[key]); }
     function ponValor(v){
       if(!ultCelda){ aviso("Toca primero una casilla", true); return; }
       var key=ultCelda, td=tdDe(key);
@@ -869,7 +883,8 @@ function abrirHorario(h){
       auto();
       /* pasa solo al día siguiente */
       var p=key.split("|"), k=+p[2];
-      if(v && k<6) selecciona(p[0]+"|"+p[1]+"|"+(k+1)); else { marcaBotones(); chips(); }
+      var sig=k+1; while(sig<7 && prot(p[0]+"|"+p[1]+"|"+sig)) sig++;   /* se salta fiestas, vacaciones, bajas y ausencias */
+      if(v && sig<7) selecciona(p[0]+"|"+p[1]+"|"+sig); else { marcaBotones(); chips(); }
     }
     function valorRueda(){
       var e1=rs("e1").value, s1=rs("s1").value; if(!e1||!s1) return "";
@@ -887,10 +902,12 @@ function abrirHorario(h){
     });
     /* botones rápidos: F y los horarios que más se usan */
     function chips(){
-      var cuenta={}; Object.keys(c.celdas||{}).forEach(function(k){ var v=c.celdas[k]; if(!horEsFiesta(v)) cuenta[v]=(cuenta[v]||0)+1; });
+      var cuenta={}; Object.keys(c.celdas||{}).forEach(function(k){ var v=c.celdas[k]; if(!horMarca(v)) cuenta[v]=(cuenta[v]||0)+1; });
       var top=Object.keys(cuenta).sort(function(a,b){ return cuenta[b]-cuenta[a]; }).slice(0,6);
       var box=ov.querySelector("[data-rchips]");
-      box.innerHTML='<button class="btn sm" data-chip="F" style="background:#ffd8a8;border-color:#f0b070;color:#000;font-weight:700;min-width:44px">F</button>'+
+      box.innerHTML=Object.keys(HOR_MARCAS).map(function(m){ var x=HOR_MARCAS[m];
+          return '<button class="btn sm" data-chip="'+m+'" title="'+x.n+'" style="background:'+x.col+';border-color:'+x.borde+';color:#000;font-weight:700;min-width:44px">'+m+'</button>'; }).join("")+
+        '<span style="width:1px;align-self:stretch;background:var(--linea)"></span>'+
         top.map(function(v){ return '<button class="btn sm" data-chip="'+esc(v)+'" style="font-weight:700">'+esc(v)+'</button>'; }).join("");
       box.querySelectorAll("[data-chip]").forEach(function(b){ b.addEventListener("click", function(){ ponValor(b.getAttribute("data-chip")); }); });
     }
@@ -922,7 +939,8 @@ function abrirHorario(h){
           function suelta(){
             document.removeEventListener("pointermove", mueve); document.removeEventListener("pointerup", suelta);
             document.removeEventListener("touchmove", mueve); document.removeEventListener("touchend", suelta);
-            (ult||[]).forEach(function(key){ c.celdas[key]=val; });
+            var origen=src.join("|");
+            (ult||[]).forEach(function(key){ if(key===origen || !prot(key)) c.celdas[key]=val; });
             repinta();
           }
           document.addEventListener("pointermove", mueve); document.addEventListener("pointerup", suelta);
@@ -951,7 +969,7 @@ function abrirHorario(h){
         if(t.indexOf("\t")<0 && t.indexOf("\n")<0){ document.execCommand("insertText", false, t); return; }
         t.split("\n").forEach(function(lin, r){
           var q=per[pi+r]; if(!q) return;
-          lin.split("\t").forEach(function(v, col){ if(k+col>6) return; var key=wi+"|"+q+"|"+(k+col); v=v.trim(); if(v) c.celdas[key]=v; else delete c.celdas[key]; });
+          lin.split("\t").forEach(function(v, col){ if(k+col>6) return; var key=wi+"|"+q+"|"+(k+col); if(prot(key)) return; v=v.trim(); if(v) c.celdas[key]=v; else delete c.celdas[key]; });
         });
         repinta();
       }); });
@@ -966,7 +984,7 @@ function abrirHorario(h){
       sc.querySelectorAll("[data-psem]").forEach(function(b){ b.addEventListener("click", function(){
         if(!copiaSemana){ aviso("Primero pulsa «Copiar esta semana» en la que quieras copiar", true); return; }
         var wi=b.getAttribute("data-psem");
-        Object.keys(copiaSemana).forEach(function(q){ copiaSemana[q].forEach(function(v,k){ var key=wi+"|"+q+"|"+k; if(v) c.celdas[key]=v; else delete c.celdas[key]; }); });
+        Object.keys(copiaSemana).forEach(function(q){ copiaSemana[q].forEach(function(v,k){ var key=wi+"|"+q+"|"+k; if(prot(key) || horMarca(v)) return; if(v) c.celdas[key]=v; else delete c.celdas[key]; }); });
         repinta(); aviso("Semana pegada");
       }); });
       sc.querySelectorAll("[data-vsem]").forEach(function(b){ b.addEventListener("click", function(){
@@ -1006,8 +1024,9 @@ function abrirHorario(h){
       b.addEventListener("click", function(){
         if(!ultCelda || !c.celdas[ultCelda]){ aviso("Primero toca una casilla con algo escrito", true); return; }
         var p=ultCelda.split("|"), v=c.celdas[ultCelda];
-        if(b.getAttribute("data-rep")==="sem") for(var k=0;k<7;k++) c.celdas[p[0]+"|"+p[1]+"|"+k]=v;
-        else personas().forEach(function(q){ c.celdas[p[0]+"|"+q+"|"+p[2]]=v; });
+        function pon(key){ if(key===ultCelda || !prot(key)) c.celdas[key]=v; }
+        if(b.getAttribute("data-rep")==="sem") for(var k=0;k<7;k++) pon(p[0]+"|"+p[1]+"|"+k);
+        else personas().forEach(function(q){ pon(p[0]+"|"+q+"|"+p[2]); });
         repinta(); marcaBotones();
       });
     });
@@ -1129,7 +1148,7 @@ function horImagen(hor){
       x.textAlign="center";
       for(var k=0;k<7;k++){
         var v=cel[i+"|"+p+"|"+k]||"", cx=M+cn+cd*k;
-        if(horEsFiesta(v)){ x.fillStyle="#ffd8a8"; x.fillRect(cx, yy, cd, fh); }
+        if(horMarca(v)){ x.fillStyle=HOR_MARCAS[horMarca(v)].col; x.fillRect(cx, yy, cd, fh); }
         if(v){ x.fillStyle="#000"; var lin=String(v).split("\n"), fs=lin.length>1?18:24; x.font="bold "+fs+"px Helvetica, Arial, sans-serif";
           lin.forEach(function(l,j){ x.fillText(l, cx+cd/2, yy+fh/2+(j-(lin.length-1)/2)*(fs+2), cd-8); }); }
       }
