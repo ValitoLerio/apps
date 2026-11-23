@@ -1141,11 +1141,16 @@ function horWhatsApp(hor, nombre){
   var blob=horImagen(hor);
   var fich=new File([blob], (nombre||"horario").replace(/[^\w\- ]+/g,"").trim().replace(/\s+/g,"-")+".png", {type:"image/png"});
   function plan_b(){
-    /* Sin «compartir»: se descarga la foto, se copia, y se abre WhatsApp para pegarla o adjuntarla */
-    var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=fich.name; document.body.appendChild(a); a.click(); a.remove();
-    try{ navigator.clipboard.write([new ClipboardItem({"image/png":blob})]).then(function(){ aviso("Foto del horario copiada: abre el chat en WhatsApp y pulsa Cmd + V"); }, function(){}); }catch(_){}
-    mostrarPlanB(blob, fich.name);
+    /* Directo: se copia la foto y se abre la app de WhatsApp; allí solo hay que elegir el chat y pegar */
+    var ok=true;
+    try{ navigator.clipboard.write([new ClipboardItem({"image/png":blob})]).then(function(){
+        aviso("Foto copiada: elige el chat en WhatsApp y pulsa Cmd + V", false);
+      }, function(){ bajar(); aviso("Foto en Descargas: en WhatsApp pulsa el clip 📎 y adjúntala", true); }); }
+    catch(_){ ok=false; }
+    if(!ok){ bajar(); aviso("Foto en Descargas: en WhatsApp pulsa el clip 📎 y adjúntala", true); }
+    var a=document.createElement("a"); a.href="whatsapp://send"; document.body.appendChild(a); a.click(); a.remove();
   }
+  function bajar(){ var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=fich.name; document.body.appendChild(a); a.click(); a.remove(); }
   /* En el Mac el menú de compartir no trae WhatsApp: allí se copia la foto y se abre WhatsApp para pegarla */
   var esMac=/Mac/.test(navigator.platform||navigator.userAgent) && !(navigator.maxTouchPoints>1);
   var puede=false; if(!esMac) try{ puede=!!(navigator.canShare && navigator.canShare({files:[fich]})); }catch(_){}
