@@ -724,7 +724,7 @@ function horHTML(hor, soloPrimera, edit){
         return '<th style="border:.3mm solid #000;font:700 9pt Helvetica,Arial,sans-serif;color:#000;letter-spacing:0;text-transform:none;text-align:center;padding:0;background:#eee">'+d+(s.fechas?' '+s.fechas[k]:'')+'</th>'; }).join("")+'</tr>'+
       per.map(function(p){ return '<tr style="height:'+fila.toFixed(2)+'mm"><td style="border:.3mm solid #000;font-weight:700;font-size:'+(fila<9?8:10)+'pt;padding:0 2mm;white-space:nowrap;overflow:hidden">'+esc(p)+'</td>'+
         HOR_DIAS.map(function(_,k){ var key=s.i+"|"+p+"|"+k, v=cel[key]||"";
-          return '<td'+(edit?' contenteditable="true" data-c="'+esc(key)+'"':'')+' style="border:.3mm solid #000;text-align:center;vertical-align:middle;font:700 '+(fila<9?8:10)+'pt Helvetica,Arial,sans-serif;white-space:pre-wrap;line-height:1.1;padding:0 1mm;overflow:hidden;outline:none'+';background:'+horFondo(v, edit)+'">'+esc(v)+'</td>'; }).join("")+'</tr>'; }).join("")+
+          return '<td'+(edit?' contenteditable="true" inputmode="none" data-c="'+esc(key)+'"':'')+' style="border:.3mm solid #000;text-align:center;vertical-align:middle;font:700 '+(fila<9?8:10)+'pt Helvetica,Arial,sans-serif;white-space:pre-wrap;line-height:1.1;padding:0 1mm;overflow:hidden;outline:none'+';background:'+horFondo(v, edit)+'">'+esc(v)+'</td>'; }).join("")+'</tr>'; }).join("")+
       '</table></div>';
   }
   var pags=[]; for(var j=0;j<sem.length;j+=2) pags.push(sem.slice(j,j+2));
@@ -813,7 +813,7 @@ function abrirHorario(h){
     var ov=document.createElement("div");
     ov.style.cssText="position:fixed;inset:0;z-index:50;background:#2a2a2a;display:flex;flex-direction:column";
     ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;padding:10px 14px;background:var(--sup);border-bottom:1px solid var(--linea);flex-wrap:wrap">'+
-      '<b style="font-size:15px">Rellenar · toca una casilla y escribe</b><span class="nota" style="margin:0">Para repetir un horario: toca la casilla y pulsa «Toda la semana» o «A todos», o arrástrala hasta otra casilla</span>'+
+      '<b style="font-size:15px">Rellenar</b><span class="nota" style="margin:0">Toca una casilla y elige las horas abajo</span>'+
       '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">'+
       '<button class="btn sm" data-rz="-1" style="min-width:42px;font-size:18px" title="Más pequeño">−</button>'+
       '<button class="btn sm" data-rz="toda">Ver hoja entera</button>'+
@@ -825,10 +825,76 @@ function abrirHorario(h){
       '<button class="btn sm malo" data-vac>Empezar de nuevo</button>'+
       '<button class="btn sm fuerte" data-ok>Hecho</button></span></div>'+
       '<div data-sc style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px"></div>'+
+      /* Rueda de horas: se elige entrada y salida sin escribir */
+      '<div data-rueda style="background:var(--sup);border-top:1px solid var(--linea);padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+        '<b data-rlbl style="font-size:14px;min-width:150px">Toca una casilla</b>'+
+        '<label class="rl">Entra <select data-r="e1"></select></label>'+
+        '<label class="rl">Sale <select data-r="s1"></select></label>'+
+        '<label class="rl" style="gap:4px"><input type="checkbox" data-r="partido" style="width:auto"> Partido</label>'+
+        '<span data-r2 style="display:none;gap:10px"><label class="rl">Entra <select data-r="e2"></select></label><label class="rl">Sale <select data-r="s2"></select></label></span>'+
+        '<button class="btn fuerte" data-rponer>Poner ➜</button>'+
+        '<span data-rchips style="display:flex;gap:6px;flex-wrap:wrap"></span>'+
+        '<button class="btn suave sm" data-rborrar>Borrar</button>'+
+        '<button class="btn suave sm" data-rteclado title="Escribir con el teclado">&#9000;&#65039; Escribir</button>'+
+      '</div>'+
+      '<style>.rl{display:inline-flex;align-items:center;gap:6px;font-size:14px}.rl select{font-size:17px;padding:6px 8px;border:1px solid var(--linea);border-radius:8px;background:#fff;color:#000;min-width:84px}'+
+      '[data-c].sel{box-shadow:inset 0 0 0 3px #1a73e8}</style>'+
       /* el cuadradito azul para arrastrar sale solo en la casilla que estás escribiendo */
       '<style>[data-c]:focus{box-shadow:inset 0 0 0 2px #1a73e8;background-image:linear-gradient(#1a73e8,#1a73e8)!important;background-repeat:no-repeat!important;background-position:right 0 bottom 0!important;background-size:2.6mm 2.6mm!important}</style>';
     d.appendChild(ov);
     var sc=ov.querySelector("[data-sc]"), zr=1;
+    /* ── rueda ── */
+    var horas=['<option value="">—</option>'];
+    for(var hh=0;hh<24;hh++){ horas.push('<option>'+hh+'</option>'); horas.push('<option>'+hh+':30</option>'); }
+    ov.querySelectorAll("[data-rueda] select").forEach(function(se){ se.innerHTML=horas.join(""); });
+    function rs(n){ return ov.querySelector('[data-r="'+n+'"]'); }
+    rs("partido").addEventListener("change", function(){ ov.querySelector("[data-r2]").style.display=rs("partido").checked?"inline-flex":"none"; });
+    function tdDe(key){ return key ? sc.querySelector('[data-c="'+(window.CSS&&CSS.escape?CSS.escape(key):key)+'"]') : null; }
+    function selecciona(key){
+      sc.querySelectorAll("[data-c].sel").forEach(function(e){ e.classList.remove("sel"); });
+      ultCelda=key; var td=tdDe(key); if(td) td.classList.add("sel");
+      var p=(key||"").split("|");
+      ov.querySelector("[data-rlbl]").textContent = key ? p[1]+" · "+HOR_DIAS[+p[2]] : "Toca una casilla";
+      /* la rueda se pone en lo que ya tenga la casilla */
+      var v=(c.celdas||{})[key]||"", m=/^\s*(\d{1,2}(?::\d\d)?)\s*-\s*(\d{1,2}(?::\d\d)?)(?:\s*\/\s*(\d{1,2}(?::\d\d)?)\s*-\s*(\d{1,2}(?::\d\d)?))?/.exec(v);
+      if(m){ rs("e1").value=m[1]; rs("s1").value=m[2]; rs("partido").checked=!!m[3]; if(m[3]){ rs("e2").value=m[3]; rs("s2").value=m[4]; } }
+      rs("partido").dispatchEvent(new Event("change"));
+      marcaBotones(); chips();
+    }
+    function ponValor(v){
+      if(!ultCelda){ aviso("Toca primero una casilla", true); return; }
+      var key=ultCelda, td=tdDe(key);
+      if(v) c.celdas[key]=v; else delete c.celdas[key];
+      if(td){ td.textContent=v||""; td.style.background=horFondo(v, true); }
+      auto();
+      /* pasa solo al día siguiente */
+      var p=key.split("|"), k=+p[2];
+      if(v && k<6) selecciona(p[0]+"|"+p[1]+"|"+(k+1)); else { marcaBotones(); chips(); }
+    }
+    function valorRueda(){
+      var e1=rs("e1").value, s1=rs("s1").value; if(!e1||!s1) return "";
+      var v=e1+"-"+s1;
+      if(rs("partido").checked && rs("e2").value && rs("s2").value) v+=" / "+rs("e2").value+"-"+rs("s2").value;
+      return v;
+    }
+    ov.querySelector("[data-rponer]").addEventListener("click", function(){
+      var v=valorRueda(); if(!v){ aviso("Elige a qué hora entra y a qué hora sale", true); return; } ponValor(v);
+    });
+    ov.querySelector("[data-rborrar]").addEventListener("click", function(){ ponValor(""); });
+    ov.querySelector("[data-rteclado]").addEventListener("click", function(){
+      var td=tdDe(ultCelda); if(!td){ aviso("Toca primero una casilla", true); return; }
+      td.setAttribute("inputmode","text"); td.blur(); td.focus();
+    });
+    /* botones rápidos: F y los horarios que más se usan */
+    function chips(){
+      var cuenta={}; Object.keys(c.celdas||{}).forEach(function(k){ var v=c.celdas[k]; if(!horEsFiesta(v)) cuenta[v]=(cuenta[v]||0)+1; });
+      var top=Object.keys(cuenta).sort(function(a,b){ return cuenta[b]-cuenta[a]; }).slice(0,6);
+      var box=ov.querySelector("[data-rchips]");
+      box.innerHTML='<button class="btn sm" data-chip="F" style="background:#ffd8a8;border-color:#f0b070;color:#000;font-weight:700;min-width:44px">F</button>'+
+        top.map(function(v){ return '<button class="btn sm" data-chip="'+esc(v)+'" style="font-weight:700">'+esc(v)+'</button>'; }).join("");
+      box.querySelectorAll("[data-chip]").forEach(function(b){ b.addEventListener("click", function(){ ponValor(b.getAttribute("data-chip")); }); });
+    }
+    ov.querySelectorAll("[data-rueda] button, [data-rueda] select").forEach(function(e){ e.addEventListener("mousedown", function(){ /* deja marcada la casilla */ }); });
     function pinta(){
       var px=210*96/25.4, k=zr;
       sc.innerHTML='<div style="zoom:'+k+'">'+horHTML(c, false, true).replace(/class="et-pag" style="/g,'class="et-pag" style="margin:0 auto 16px;box-shadow:0 2px 12px rgba(0,0,0,.4);')+'</div>';
@@ -873,7 +939,8 @@ function abrirHorario(h){
           function fin(){ document.removeEventListener("pointermove", mov); document.removeEventListener("pointerup", fin); }
           document.addEventListener("pointermove", mov); document.addEventListener("pointerup", fin);
         });
-        td.addEventListener("focus", function(){ ultCelda=td.getAttribute("data-c"); marcaBotones(); });
+        td.addEventListener("focus", function(){ selecciona(td.getAttribute("data-c")); });
+        td.addEventListener("blur", function(){ td.setAttribute("inputmode","none"); });
         td.addEventListener("pointermove", function(e){ td.style.cursor = enEsquina(e.clientX,e.clientY) ? "crosshair" : ""; });
       });
       /* Pegar en una casilla: si trae varias (de Excel o de otra semana), se reparten hacia la derecha y hacia abajo */
@@ -945,8 +1012,8 @@ function abrirHorario(h){
       });
     });
     function personas(){ return (c.personal||[]).filter(function(x){ return String(x).trim(); }); }
-    function repinta(){ var y=sc.scrollTop; pinta(); sc.scrollTop=y; auto(); }
-    ajusta("ancho"); pinta();
+    function repinta(){ var y=sc.scrollTop; pinta(); sc.scrollTop=y; auto(); if(ultCelda){ var t=tdDe(ultCelda); if(t) t.classList.add("sel"); } chips(); }
+    ajusta("ancho"); pinta(); chips();
     ov.querySelector("[data-vac]").addEventListener("click", function(){
       if(!confirm("¿Empezar de nuevo? Lo que hay escrito se guarda antes en «Horarios guardados» y la hoja queda en blanco (los nombres no se tocan).")) return;
       archivar(true); c.celdas={}; c.titulos={}; c.desde=""; d.querySelector("#ho_desde").value=""; repinta(); aviso("Guardado en el archivo y hoja en blanco");
