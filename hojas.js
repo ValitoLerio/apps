@@ -693,6 +693,8 @@ function horMarca(v){
   if(/^(a|ausencia|absencia|absència)$/.test(v)) return "A";
   return null;
 }
+/* Personas que salen en la hoja: con nombre y sin ocultar (las ocultas guardan sus datos) */
+function horVisibles(hor){ var oc=hor.ocultos||[]; return (hor.personal||[]).filter(function(x){ return String(x).trim() && oc.indexOf(x)<0; }); }
 function horEsFiesta(v){ return !!horMarca(v); }
 function horFondo(v, edit){
   var m=horMarca(v), col = m ? HOR_MARCAS[m].col : (edit ? "#fffef5" : "#fff");
@@ -702,7 +704,7 @@ function horNuevo(){ return {personal:["VALERIANO","LUIS","MARTIN","J.ANTONIO","
 function horLunes(iso){ if(!iso) return null; var d=new Date(iso+"T12:00:00"); if(isNaN(d)) return null; d.setDate(d.getDate()-((d.getDay()+6)%7)); return d; }
 function horHTML(hor, soloPrimera, edit){
   var cel=hor.celdas||{}, tits=hor.titulos||{};
-  var per=(hor.personal||[]).filter(function(x){ return String(x).trim(); }), n=Math.max(1, Math.min(52, parseInt(hor.semanas,10)||2));
+  var per=horVisibles(hor), n=Math.max(1, Math.min(52, parseInt(hor.semanas,10)||2));
   var lun=horLunes(hor.desde), sem=[];
   for(var i=0;i<n;i++){
     var tit, fechas=null;
@@ -796,13 +798,23 @@ function abrirHorario(h){
   for(var k=1;k<=12;k++) sel.insertAdjacentHTML("beforeend",'<option value="'+k+'"'+(k===(+c.semanas||2)?" selected":"")+'>'+k+'</option>');
   function lista(){
     var box=d.querySelector("#ho_per");
+    c.ocultos=c.ocultos||[];
     box.innerHTML=c.personal.map(function(p,i){
-      return '<div style="display:flex;gap:6px;margin-bottom:6px" data-i="'+i+'"><input value="'+esc(p)+'" '+inp+' style="flex:1">'+
+      var oc=c.ocultos.indexOf(p)>=0;
+      return '<div style="display:flex;gap:6px;margin-bottom:6px;'+(oc?'opacity:.5':'')+'" data-i="'+i+'"><input value="'+esc(p)+'" '+inp+' style="flex:1'+(oc?';text-decoration:line-through':'')+'">'+
+        '<button class="btn sm '+(oc?'':'suave')+'" data-o title="'+(oc?'Oculto: pulsa para que vuelva a salir':'Ocultar en la hoja (no se borra)')+'">'+(oc?'&#128584; Oculto':'&#128065;&#65039;')+'</button>'+
         '<button class="btn sm suave" data-m="-1" title="Subir"'+(i===0?' disabled':'')+'>&#9650;</button>'+
         '<button class="btn sm suave" data-m="1" title="Bajar"'+(i===c.personal.length-1?' disabled':'')+'>&#9660;</button>'+
         '<button class="btn sm suave" data-q title="Quitar">✕</button></div>';
     }).join("");
-    box.querySelectorAll("input").forEach(function(e){ e.addEventListener("input", function(){ c.personal[+e.parentNode.getAttribute("data-i")]=e.value.toUpperCase(); vista(); }); });
+    box.querySelectorAll("input").forEach(function(e){ e.addEventListener("input", function(){
+      var i=+e.parentNode.getAttribute("data-i"), viejo=c.personal[i], o=c.ocultos.indexOf(viejo);
+      c.personal[i]=e.value.toUpperCase(); if(o>=0) c.ocultos[o]=c.personal[i]; vista(); }); });
+    box.querySelectorAll("[data-o]").forEach(function(b){ b.addEventListener("click", function(){
+      var p=c.personal[+b.parentNode.getAttribute("data-i")], o=c.ocultos.indexOf(p);
+      if(o>=0) c.ocultos.splice(o,1); else c.ocultos.push(p);
+      lista(); vista(); aviso(o>=0 ? p+" vuelve a salir en la hoja" : p+" oculto: no sale en la hoja, pero no se borra nada");
+    }); });
     box.querySelectorAll("[data-m]").forEach(function(b){ b.addEventListener("click", function(){
       var i=+b.parentNode.getAttribute("data-i"), j=i+(+b.getAttribute("data-m")); var t=c.personal[i]; c.personal[i]=c.personal[j]; c.personal[j]=t; lista(); vista(); }); });
     box.querySelectorAll("[data-q]").forEach(function(b){ b.addEventListener("click", function(){ c.personal.splice(+b.parentNode.getAttribute("data-i"),1); lista(); vista(); }); });
@@ -1030,7 +1042,7 @@ function abrirHorario(h){
         repinta(); marcaBotones();
       });
     });
-    function personas(){ return (c.personal||[]).filter(function(x){ return String(x).trim(); }); }
+    function personas(){ return horVisibles(c); }
     function repinta(){ var y=sc.scrollTop; pinta(); sc.scrollTop=y; auto(); if(ultCelda){ var t=tdDe(ultCelda); if(t) t.classList.add("sel"); } chips(); }
     ajusta("ancho"); pinta(); chips();
     ov.querySelector("[data-vac]").addEventListener("click", function(){
@@ -1074,7 +1086,7 @@ function abrirHorario(h){
         '<button class="btn sm suave" data-ab="'+x.id+'" title="Borrar">✕</button></div>';
     }).join("") : '<p class="nota" style="margin:0">Aún no hay ninguno.</p>';
     function de(id){ return (c.archivo||[]).filter(function(x){ return x.id===id; })[0]; }
-    function comoHor(x){ return {personal:x.personal, desde:x.desde, semanas:x.semanas, dias:x.dias, celdas:x.celdas, titulos:x.titulos}; }
+    function comoHor(x){ return {personal:x.personal, ocultos:x.ocultos||[], desde:x.desde, semanas:x.semanas, dias:x.dias, celdas:x.celdas, titulos:x.titulos}; }
     box.querySelectorAll("[data-av]").forEach(function(b){ b.addEventListener("click", function(){ var x=de(b.getAttribute("data-av")); verGrande(d, x.nombre, horHTML(comoHor(x), false)); }); });
     box.querySelectorAll("[data-aw]").forEach(function(b){ b.addEventListener("click", function(){ var x=de(b.getAttribute("data-aw")); horWhatsApp(comoHor(x), x.nombre); }); });
     box.querySelectorAll("[data-ai]").forEach(function(b){ b.addEventListener("click", function(){ var x=de(b.getAttribute("data-ai")); guardarYa(); d.close(); imprimirPaginas(h, horHTML(comoHor(x), false)); }); });
@@ -1093,7 +1105,7 @@ function abrirHorario(h){
   function archivar(silencio){
     if(!Object.keys(c.celdas||{}).length){ if(!silencio) aviso("No hay nada escrito que guardar", true); return false; }
     c.archivo=c.archivo||[];
-    c.archivo.push({id:uid(), nombre:nombreArch(), fecha:new Date().toISOString(), personal:c.personal.filter(function(x){ return String(x).trim(); }),
+    c.archivo.push({id:uid(), nombre:nombreArch(), fecha:new Date().toISOString(), personal:c.personal.filter(function(x){ return String(x).trim(); }), ocultos:(c.ocultos||[]).slice(),
       desde:c.desde, semanas:c.semanas, dias:c.dias, celdas:JSON.parse(JSON.stringify(c.celdas)), titulos:JSON.parse(JSON.stringify(c.titulos||{}))});
     pintaArch(); guardarYa(); if(!silencio) aviso("Guardado en el archivo: "+c.archivo[c.archivo.length-1].nombre);
     return true;
@@ -1126,7 +1138,7 @@ function horTitulos(hor){
   return out;
 }
 function horImagen(hor){
-  var per=(hor.personal||[]).filter(function(x){ return String(x).trim(); }), cel=hor.celdas||{}, tits=horTitulos(hor);
+  var per=horVisibles(hor), cel=hor.celdas||{}, tits=horTitulos(hor);
   /* solo las semanas que tienen algo escrito (si no hay nada, todas) */
   var sems=tits.map(function(t,i){ return i; }).filter(function(i){ return Object.keys(cel).some(function(k){ return k.split("|")[0]===String(i); }); });
   if(!sems.length) sems=tits.map(function(t,i){ return i; });
