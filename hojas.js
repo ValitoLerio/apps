@@ -802,12 +802,14 @@ function abrirHorario(h){
     var ov=document.createElement("div");
     ov.style.cssText="position:fixed;inset:0;z-index:50;background:#2a2a2a;display:flex;flex-direction:column";
     ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;padding:10px 14px;background:var(--sup);border-bottom:1px solid var(--linea);flex-wrap:wrap">'+
-      '<b style="font-size:15px">Rellenar · toca una casilla y escribe</b><span class="nota" style="margin:0">Para repetirlo en otros días, arrastra el cuadradito azul de la esquina</span>'+
+      '<b style="font-size:15px">Rellenar · toca una casilla y escribe</b><span class="nota" style="margin:0">Para repetir un horario: toca la casilla y pulsa «Toda la semana» o «A todos», o arrástrala hasta otra casilla</span>'+
       '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">'+
       '<button class="btn sm" data-rz="-1" style="min-width:42px;font-size:18px" title="Más pequeño">−</button>'+
       '<button class="btn sm" data-rz="toda">Ver hoja entera</button>'+
       '<button class="btn sm" data-rz="ancho">Ancho</button>'+
       '<button class="btn sm" data-rz="1" style="min-width:42px;font-size:18px" title="Más grande">+</button>'+
+      '<button class="btn sm fuerte" data-rep="sem" disabled title="Repite lo de la casilla en los 7 días">&#10145;&#65039; Toda la semana</button>'+
+      '<button class="btn sm fuerte" data-rep="todos" disabled title="Repite lo de la casilla a todas las personas ese día">&#11015;&#65039; A todos</button>'+
       '<button class="btn sm malo" data-vac>Borrar todo lo escrito</button>'+
       '<button class="btn sm fuerte" data-ok>Hecho</button></span></div>'+
       '<div data-sc style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px"></div>';
@@ -818,6 +820,7 @@ function abrirHorario(h){
       sc.innerHTML='<div style="zoom:'+k+'">'+horHTML(c, false, true).replace(/class="et-pag" style="/g,'class="et-pag" style="margin:0 auto 16px;box-shadow:0 2px 12px rgba(0,0,0,.4);')+'</div>';
       sc.querySelectorAll("[data-c]").forEach(function(td){ td.addEventListener("input", function(){
         var v=td.innerText.replace(/\n+$/,""); if(v.trim()) c.celdas[td.getAttribute("data-c")]=v; else delete c.celdas[td.getAttribute("data-c")];
+        ultCelda=td.getAttribute("data-c"); marcaBotones();
         td.style.background="#fffef5"+(v.trim()?" linear-gradient(#1a73e8,#1a73e8) no-repeat right 0 bottom 0/2.2mm 2.2mm":""); }); });
       /* Correr el valor como en Excel: el cuadradito azul de la esquina se arrastra a los lados o hacia abajo */
       sc.querySelectorAll("[data-c]").forEach(function(td){
@@ -846,7 +849,17 @@ function abrirHorario(h){
           document.addEventListener("touchmove", mueve, {passive:false}); document.addEventListener("touchend", suelta);
         }
         td.addEventListener("touchstart", function(e){ var p=e.touches[0]; if(enEsquina(p.clientX,p.clientY)){ e.preventDefault(); empieza(p.clientX,p.clientY); } }, {passive:false});
-        td.addEventListener("pointerdown", function(e){ if(e.pointerType!=="touch" && enEsquina(e.clientX,e.clientY)){ e.preventDefault(); empieza(e.clientX,e.clientY); } });
+        td.addEventListener("pointerdown", function(e){
+          if(e.pointerType==="touch") return;
+          if(enEsquina(e.clientX,e.clientY)){ e.preventDefault(); empieza(e.clientX,e.clientY); return; }
+          /* con ratón también vale arrastrar desde la propia casilla hasta otra */
+          if(!td.innerText.trim()) return;
+          function mov(ev){ var el=document.elementFromPoint(ev.clientX,ev.clientY), t=el&&el.closest&&el.closest("[data-c]");
+            if(t && t!==td){ fin(); try{ window.getSelection().removeAllRanges(); }catch(_){} empieza(ev.clientX,ev.clientY); } }
+          function fin(){ document.removeEventListener("pointermove", mov); document.removeEventListener("pointerup", fin); }
+          document.addEventListener("pointermove", mov); document.addEventListener("pointerup", fin);
+        });
+        td.addEventListener("focus", function(){ ultCelda=td.getAttribute("data-c"); marcaBotones(); });
         td.addEventListener("pointermove", function(e){ td.style.cursor = enEsquina(e.clientX,e.clientY) ? "crosshair" : ""; });
       });
       /* Pegar en una casilla: si trae varias (de Excel o de otra semana), se reparten hacia la derecha y hacia abajo */
@@ -905,6 +918,18 @@ function abrirHorario(h){
       if(v==="toda"||v==="ancho") ajusta(v); else zr=Math.max(.2, Math.min(3, zr*(v==="1"?1.25:0.8)));
       repinta();
     }); });
+    var ultCelda=null;
+    function marcaBotones(){ ov.querySelectorAll("[data-rep]").forEach(function(b){ b.disabled=!(ultCelda && c.celdas[ultCelda]); }); }
+    ov.querySelectorAll("[data-rep]").forEach(function(b){
+      b.addEventListener("pointerdown", function(e){ e.preventDefault(); }); /* que no se pierda la casilla */
+      b.addEventListener("click", function(){
+        if(!ultCelda || !c.celdas[ultCelda]){ aviso("Primero toca una casilla con algo escrito", true); return; }
+        var p=ultCelda.split("|"), v=c.celdas[ultCelda];
+        if(b.getAttribute("data-rep")==="sem") for(var k=0;k<7;k++) c.celdas[p[0]+"|"+p[1]+"|"+k]=v;
+        else personas().forEach(function(q){ c.celdas[p[0]+"|"+q+"|"+p[2]]=v; });
+        repinta(); marcaBotones();
+      });
+    });
     function personas(){ return (c.personal||[]).filter(function(x){ return String(x).trim(); }); }
     function repinta(){ var y=sc.scrollTop; pinta(); sc.scrollTop=y; }
     ajusta("ancho"); pinta();
