@@ -1003,6 +1003,16 @@ function abrirHorario(h){
           return true;
         }
         td.addEventListener("blur", completa);
+        /* sin pulsar nada: al parar de escribir un momento, se completa sola */
+        var tEsc;
+        td.addEventListener("input", function(){
+          clearTimeout(tEsc);
+          if(!/^\d{1,2}(?:[:.,h]\d\d)?$/.test(td.innerText.trim())) return;
+          tEsc=setTimeout(function(){
+            if(document.activeElement!==td) return;
+            if(completa()){ var r=document.createRange(); r.selectNodeContents(td); r.collapse(false); var sl=getSelection(); sl.removeAllRanges(); sl.addRange(r); }
+          }, 900);
+        });
         td.addEventListener("keydown", function(e){
           if(e.key!=="Enter" && e.key!=="Tab") return;
           e.preventDefault(); completa();
