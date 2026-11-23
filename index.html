@@ -663,7 +663,7 @@
 
 </div>
 
-<script src="sync.js?v=202611231121"></script>
+<script src="sync.js?v=202611231131"></script>
 <script>
 /* Red de seguridad. Si los archivos de la app no están al lado de esta
    página — pasa al abrirla fuera de la web: vista previa, doble clic en
@@ -680,7 +680,7 @@ window.reintentarJS = function(viejo, nombre, sub){
   }
   var s = document.createElement('script');
   s.setAttribute('data-rein', '1');
-  s.src = WEB_APPS + nombre + '?v=202611231121' + Date.now();
+  s.src = WEB_APPS + nombre + '?v=202611231131' + Date.now();
   s.onload = viejo.onload;
   s.onerror = function(){ reintentarJS(s, nombre, sub); };
   document.body.appendChild(s);
