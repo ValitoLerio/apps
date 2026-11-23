@@ -850,7 +850,7 @@ function abrirHorario(h){
     var ov=document.createElement("div");
     ov.style.cssText="position:fixed;inset:0;z-index:50;background:#2a2a2a;display:flex;flex-direction:column";
     ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;padding:10px 14px;background:var(--sup);border-bottom:1px solid var(--linea);flex-wrap:wrap">'+
-      '<b style="font-size:15px">Rellenar</b><span class="nota" style="margin:0">Toca una casilla y elige las horas abajo</span>'+
+      '<b style="font-size:15px">Rellenar</b><span class="nota" style="margin:0">Escribe solo la hora de entrada (ej. 12) y pulsa Intro: la salida se pone sola</span>'+
       '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">'+
       '<button class="btn sm" data-rz="-1" style="min-width:42px;font-size:18px" title="Más pequeño">−</button>'+
       '<button class="btn sm" data-rz="toda">Ver hoja entera</button>'+
@@ -993,6 +993,27 @@ function abrirHorario(h){
           document.addEventListener("pointermove", mov); document.addEventListener("pointerup", fin);
         });
         td.addEventListener("focus", function(){ selecciona(td.getAttribute("data-c")); });
+        /* Se escribe solo la entrada (12, 12:30, 9) y al salir de la casilla se pone la salida sola */
+        function completa(){
+          var key=td.getAttribute("data-c"), v=td.innerText.trim(), m=/^(\d{1,2})(?:[:.,h](\d\d))?$/.exec(v);
+          if(!m || +m[1]>23 || (m[2] && +m[2]>59)) return false;
+          var e=(+m[1])*60+(+(m[2]||0)), tot=horasDe(key.split("|")[1])*60;
+          var nv=aHora(e)+"-"+aHora(e+tot);
+          c.celdas[key]=nv; td.textContent=nv; td.style.background=horFondo(nv, true); auto(); chips(); marcaBotones();
+          return true;
+        }
+        td.addEventListener("blur", completa);
+        td.addEventListener("keydown", function(e){
+          if(e.key!=="Enter" && e.key!=="Tab") return;
+          e.preventDefault(); completa();
+          /* Intro o Tab: al día siguiente (saltando fiestas, vacaciones, bajas y ausencias) */
+          var p=td.getAttribute("data-c").split("|"), k=+p[2]+(e.shiftKey?-1:1);
+          while(k>=0 && k<7 && prot(p[0]+"|"+p[1]+"|"+k)) k+=(e.shiftKey?-1:1);
+          var sig=(k>=0&&k<7) ? tdDe(p[0]+"|"+p[1]+"|"+k) : null;
+          if(!sig){ var per=personas(), i=per.indexOf(p[1])+1; if(per[i]) sig=tdDe(p[0]+"|"+per[i]+"|0"); }
+          if(sig){ sig.focus(); var r=document.createRange(); r.selectNodeContents(sig); r.collapse(false); var sl=getSelection(); sl.removeAllRanges(); sl.addRange(r); }
+          else td.blur();
+        });
 
         td.addEventListener("pointermove", function(e){ td.style.cursor = enEsquina(e.clientX,e.clientY) ? "crosshair" : ""; });
       });
