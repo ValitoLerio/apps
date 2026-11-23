@@ -1183,12 +1183,11 @@ function horWhatsApp(hor, nombre){
     var ok=true;
     try{ navigator.clipboard.write([new ClipboardItem({"image/png":blob})]).then(function(){
         aviso("Foto copiada: elige el chat en WhatsApp y pulsa Cmd + V", false);
-      }, function(){ bajar(); aviso("Foto en Descargas: en WhatsApp pulsa el clip 📎 y adjúntala", true); }); }
+      }, function(){ mostrarPlanB(blob, fich.name); }); }
     catch(_){ ok=false; }
-    if(!ok){ bajar(); aviso("Foto en Descargas: en WhatsApp pulsa el clip 📎 y adjúntala", true); }
+    if(!ok){ mostrarPlanB(blob, fich.name); }
     var a=document.createElement("a"); a.href="whatsapp://send"; document.body.appendChild(a); a.click(); a.remove();
   }
-  function bajar(){ var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=fich.name; document.body.appendChild(a); a.click(); a.remove(); }
   /* En el Mac el menú de compartir no trae WhatsApp: allí se copia la foto y se abre WhatsApp para pegarla */
   var esMac=/Mac/.test(navigator.platform||navigator.userAgent) && !(navigator.maxTouchPoints>1);
   var puede=false; if(!esMac) try{ puede=!!(navigator.canShare && navigator.canShare({files:[fich]})); }catch(_){}
@@ -1205,21 +1204,20 @@ function mostrarPlanB(blob, nombre){
   ov.style.cssText="position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px";
   ov.innerHTML='<div style="background:var(--sup);color:var(--tinta);border-radius:12px;max-width:620px;width:100%;max-height:92vh;overflow:auto;padding:18px">'+
     '<h3 style="margin:0 0 10px">Mandar por WhatsApp</h3>'+
-    '<p style="margin:0 0 10px;font-size:14.5px;line-height:1.55">La foto del horario se ha guardado en <b>Descargas</b>.<br>'+
-    '<b>1.</b> Abre WhatsApp. <b>2.</b> Entra en el chat o grupo. <b>3.</b> Pulsa <b>Cmd + V</b> para pegar la foto, o el clip 📎 y elige la foto de Descargas.</p>'+
+    '<p style="margin:0 0 10px;font-size:14.5px;line-height:1.55">'+
+    '<b>1.</b> Abre WhatsApp y entra en el chat o grupo. <b>2.</b> <b>Arrastra esta foto</b> hasta el chat, o pulsa «Copiar foto» y en el chat <b>Cmd + V</b>.</p>'+
     '<img src="'+url+'" style="width:100%;border:1px solid var(--linea);border-radius:6px">'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:12px">'+
-      '<button class="btn" data-pb="copiar">Copiar foto</button><button class="btn" data-pb="bajar">Descargar otra vez</button>'+
+      '<button class="btn" data-pb="copiar">Copiar foto</button>'+
       '<a class="btn" style="background:#25d366;border-color:#25d366;color:#fff;text-decoration:none" href="https://web.whatsapp.com/" target="_blank" rel="noopener">WhatsApp Web</a>'+
       '<a class="btn" style="background:#25d366;border-color:#25d366;color:#fff;text-decoration:none" href="whatsapp://send">App WhatsApp</a>'+
       '<button class="btn fuerte" data-pb="cerrar">Cerrar</button></div></div>';
   padre.appendChild(ov);
   ov.addEventListener("click", function(e){ if(e.target===ov) ov.remove(); });
   ov.querySelector('[data-pb="cerrar"]').addEventListener("click", function(){ ov.remove(); });
-  ov.querySelector('[data-pb="bajar"]').addEventListener("click", function(){ var a=document.createElement("a"); a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); a.remove(); });
   ov.querySelector('[data-pb="copiar"]').addEventListener("click", function(){
-    try{ navigator.clipboard.write([new ClipboardItem({"image/png":blob})]).then(function(){ aviso("Foto copiada: en WhatsApp pulsa Cmd + V"); }, function(){ aviso("No se ha podido copiar: usa el clip 📎 y la foto de Descargas", true); }); }
-    catch(_){ aviso("No se ha podido copiar: usa el clip 📎 y la foto de Descargas", true); }
+    try{ navigator.clipboard.write([new ClipboardItem({"image/png":blob})]).then(function(){ aviso("Foto copiada: en WhatsApp pulsa Cmd + V"); }, function(){ aviso("No se ha podido copiar: arrastra la foto hasta el chat", true); }); }
+    catch(_){ aviso("No se ha podido copiar: arrastra la foto hasta el chat", true); }
   });
 }
 
