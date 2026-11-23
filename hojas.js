@@ -563,19 +563,36 @@ function abrirEtiquetas(h){
   });
   /* Pegar muchos de golpe */
   function leerPegado(txt, porDefecto){
-    var out=[], re=/(\d{1,4})\s?[.,]\s?(\d{1,2})(?!\d)\s*(?:€|eur)?/gi;
+    var out=[];
+    function num(t){ return String(+String(t).replace(",", ".")); }
     String(txt||"").split(/\r?\n/).forEach(function(lin){
-      lin=lin.replace(/\t/g," ").trim(); if(!lin) return;
-      var precios=[], m; re.lastIndex=0;
-      while((m=re.exec(lin))) precios.push({p:m[1]+"."+(m[2].length===1?m[2]+"0":m[2]), i:m.index, f:m.index+m[0].length});
-      if(!precios.length) return;
-      if(precios.length>1){ precios.forEach(function(x){ out.push({nombre:"", precio:x.p, cant:1}); }); return; }
-      var x=precios[0], antes=lin.slice(0,x.i).trim(), despues=lin.slice(x.f).trim();
-      var q=/^(?:x|×|\*|por)?\s*(\d{1,4})\b/i.exec(despues) || /\b(\d{1,4})\s*(?:x|×|uds?|unidades|etiquetas)\s*$/i.exec(antes);
-      var cant=q ? parseInt(q[1],10) : porDefecto;
-      if(q && q.index!=null && antes.slice(q.index)===q[0]) antes=antes.slice(0,q.index).trim();
-      antes=antes.replace(/[-–:=]+$/,"").trim();
-      out.push({nombre:antes.toUpperCase(), precio:x.p, cant:cant});
+      if(!lin.trim()) return;
+      /* De Excel: columnas separadas por tabulador → texto = nombre, 1er número = precio, 2º = cuántas */
+      if(lin.indexOf("\t")>=0){
+        var cel=lin.split("\t").map(function(c){ return c.trim(); }).filter(Boolean), nom=[], ns=[];
+        cel.forEach(function(c){ var m=/^(?:€\s*)?(\d{1,4}(?:[.,]\d{1,2})?)\s*(?:€|eur|euros?)?$/i.exec(c); if(m) ns.push(m[1]); else nom.push(c); });
+        if(ns.length){ out.push({nombre:nom.join(" ").toUpperCase(), precio:num(ns[0]), cant: ns[1]&&/^\d+$/.test(ns[1]) ? +ns[1] : porDefecto}); }
+        return;
+      }
+      lin=lin.trim();
+      var cant=null, m;
+      /* cuántas: "x 24", "× 24", "* 24", "24 uds", "24 unidades", "24 etiquetas", "24 x 3,50" */
+      if((m=/(?:\bx|×|\*|\bpor)\s*(\d{1,4})\s*(?:uds?|unidades|etiquetas)?\s*$/i.exec(lin))){ cant=+m[1]; lin=lin.slice(0,m.index).trim(); }
+      else if((m=/\b(\d{1,4})\s*(?:uds?|unidades|etiquetas)\b\.?/i.exec(lin))){ cant=+m[1]; lin=(lin.slice(0,m.index)+" "+lin.slice(m.index+m[0].length)).trim(); }
+      else if((m=/^(\d{1,4})\s*(?:x|×|\*)\s*/i.exec(lin))){ cant=+m[1]; lin=lin.slice(m[0].length).trim(); }
+      /* precios: con decimales, o con €, o un número solo */
+      var re=/(?:€\s*)?(\d{1,4}(?:\s?[.,]\s?\d{1,2})?)(?!\d)\s*(€|eur(?:os?)?)?/gi, ps=[];
+      while((m=re.exec(lin))){
+        var v=m[1].replace(/\s/g,""), fuerte=/[.,]/.test(v) || !!m[2] || /€\s*$/.test(lin.slice(0,m.index+1));
+        ps.push({v:v, fuerte:fuerte, i:m.index, f:m.index+m[0].length});
+      }
+      if(!ps.length) return;
+      var buenos=ps.filter(function(x){ return x.fuerte; });
+      if(buenos.length>1 && cant==null){ buenos.forEach(function(x){ out.push({nombre:"", precio:num(x.v), cant:1}); }); return; }
+      var x=buenos[0] || ps[ps.length-1];
+      var nombre=(lin.slice(0,x.i)+" "+lin.slice(x.f)).replace(/[-–:=€]+/g," ").replace(/\s+/g," ").trim();
+      if(/^\d+([.,]\d+)?$/.test(nombre)) nombre="";
+      out.push({nombre:nombre.toUpperCase(), precio:num(x.v), cant: cant==null ? porDefecto : cant});
     });
     /* los iguales se juntan */
     var junt={}, orden=[];
@@ -594,7 +611,8 @@ function abrirEtiquetas(h){
   txt.addEventListener("input", infoPegado); d.querySelector("#et_def").addEventListener("input", infoPegado);
   d.querySelector("#et_pok").addEventListener("click", function(){
     var l=leerPegado(txt.value, parseInt(d.querySelector("#et_def").value,10)||1);
-    if(!l.length){ aviso("No he encontrado ningún precio en lo pegado", true); return; }
+    if(!txt.value.trim()){ aviso("El recuadro está vacío: pega o escribe ahí los precios", true); txt.focus(); return; }
+    if(!l.length){ aviso("No veo ningún número que sea un precio. Escribe por ejemplo: 9,50", true); txt.focus(); return; }
     if(d.querySelector("#et_reempl").checked) copia.hojas[cur].items=[];
     l.forEach(function(e){
       var ya=it().filter(function(x){ return String(x.nombre||"").toUpperCase()===e.nombre && +x.precio===+e.precio; })[0];
