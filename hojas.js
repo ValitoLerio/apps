@@ -1065,21 +1065,54 @@ function horImagen(hor){
     for(var k=0;k<=7;k++){ x.beginPath(); x.moveTo(M+cn+cd*k, y); x.lineTo(M+cn+cd*k, y+fh*(per.length+1)); x.stroke(); }
     y+=fh*(per.length+1)+gap;
   });
-  return new Promise(function(ok){ cv.toBlob(ok, "image/png"); });
+  /* sin esperas: compartir tiene que salir en el mismo toque, si no Safari lo bloquea */
+  var b64=cv.toDataURL("image/png").split(",")[1], bin=atob(b64), u=new Uint8Array(bin.length);
+  for(var q=0;q<bin.length;q++) u[q]=bin.charCodeAt(q);
+  return new Blob([u], {type:"image/png"});
 }
-async function horWhatsApp(hor, nombre){
-  var blob=await horImagen(hor), titulo=horTitulos(hor)[0]||"Horario";
+function horWhatsApp(hor, nombre){
+  var blob=horImagen(hor);
   var fich=new File([blob], (nombre||"horario").replace(/[^\w\- ]+/g,"").trim().replace(/\s+/g,"-")+".png", {type:"image/png"});
-  try{
-    if(navigator.canShare && navigator.canShare({files:[fich]})){ await navigator.share({files:[fich], title:"Horario"}); return; }
-  }catch(e){ if(e && e.name==="AbortError") return; }
-  /* Sin «compartir» (Chrome en el Mac): la foto se copia y se descarga, y se abre WhatsApp para pegarla */
-  var copiada=false;
-  try{ await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]); copiada=true; }catch(_){}
-  var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=fich.name; document.body.appendChild(a); a.click(); a.remove();
-  window.open("https://web.whatsapp.com/", "_blank");
-  aviso(copiada ? "Foto del horario copiada: en WhatsApp abre el chat y pulsa Cmd+V" : "Foto del horario descargada: en WhatsApp pulsa el clip y adjúntala");
+  function plan_b(){
+    /* Sin «compartir»: se descarga la foto, se copia, y se abre WhatsApp para pegarla o adjuntarla */
+    var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=fich.name; document.body.appendChild(a); a.click(); a.remove();
+    try{ navigator.clipboard.write([new ClipboardItem({"image/png":blob})]).then(function(){ aviso("Foto del horario copiada: abre el chat en WhatsApp y pulsa Cmd + V"); }, function(){}); }catch(_){}
+    mostrarPlanB(blob, fich.name);
+  }
+  /* En el Mac el menú de compartir no trae WhatsApp: allí se copia la foto y se abre WhatsApp para pegarla */
+  var esMac=/Mac/.test(navigator.platform||navigator.userAgent) && !(navigator.maxTouchPoints>1);
+  var puede=false; if(!esMac) try{ puede=!!(navigator.canShare && navigator.canShare({files:[fich]})); }catch(_){}
+  if(puede){
+    navigator.share({files:[fich]}).catch(function(e){ if(!e || e.name!=="AbortError") plan_b(); });
+    return;
+  }
+  plan_b();
 }
+/* Ventanita con la foto y los pasos, por si no hay «compartir» (encima de lo que esté abierto, sin cerrarlo) */
+function mostrarPlanB(blob, nombre){
+  var url=URL.createObjectURL(blob), padre=document.querySelector("dialog[open]")||document.body;
+  var ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px";
+  ov.innerHTML='<div style="background:var(--sup);color:var(--tinta);border-radius:12px;max-width:620px;width:100%;max-height:92vh;overflow:auto;padding:18px">'+
+    '<h3 style="margin:0 0 10px">Mandar por WhatsApp</h3>'+
+    '<p style="margin:0 0 10px;font-size:14.5px;line-height:1.55">La foto del horario se ha guardado en <b>Descargas</b>.<br>'+
+    '<b>1.</b> Abre WhatsApp. <b>2.</b> Entra en el chat o grupo. <b>3.</b> Pulsa <b>Cmd + V</b> para pegar la foto, o el clip 📎 y elige la foto de Descargas.</p>'+
+    '<img src="'+url+'" style="width:100%;border:1px solid var(--linea);border-radius:6px">'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:12px">'+
+      '<button class="btn" data-pb="copiar">Copiar foto</button><button class="btn" data-pb="bajar">Descargar otra vez</button>'+
+      '<a class="btn" style="background:#25d366;border-color:#25d366;color:#fff;text-decoration:none" href="https://web.whatsapp.com/" target="_blank" rel="noopener">WhatsApp Web</a>'+
+      '<a class="btn" style="background:#25d366;border-color:#25d366;color:#fff;text-decoration:none" href="whatsapp://send">App WhatsApp</a>'+
+      '<button class="btn fuerte" data-pb="cerrar">Cerrar</button></div></div>';
+  padre.appendChild(ov);
+  ov.addEventListener("click", function(e){ if(e.target===ov) ov.remove(); });
+  ov.querySelector('[data-pb="cerrar"]').addEventListener("click", function(){ ov.remove(); });
+  ov.querySelector('[data-pb="bajar"]').addEventListener("click", function(){ var a=document.createElement("a"); a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); a.remove(); });
+  ov.querySelector('[data-pb="copiar"]').addEventListener("click", function(){
+    try{ navigator.clipboard.write([new ClipboardItem({"image/png":blob})]).then(function(){ aviso("Foto copiada: en WhatsApp pulsa Cmd + V"); }, function(){ aviso("No se ha podido copiar: usa el clip 📎 y la foto de Descargas", true); }); }
+    catch(_){ aviso("No se ha podido copiar: usa el clip 📎 y la foto de Descargas", true); }
+  });
+}
+
 
 /* ── añadir ────────────────────────────────────────────────────── */
 async function anadir(files){
