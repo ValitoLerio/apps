@@ -35,7 +35,8 @@ function extDe(nombre){ var m=/\.([a-z0-9]+)$/i.exec(nombre||""); return m ? m[1
 function esPdf(h){ return h.tipo==="application/pdf" || /\.pdf$/i.test(h.nombre); }
 function esImg(h){ return /^image\//.test(h.tipo||""); }
 function esGoogle(h){ return h.tipo==="gsheet" || h.tipo==="gdoc"; }
-function imprimible(h){ return esGoogle(h) || esPdf(h) || esImg(h); }
+function esEtiq(h){ return h.tipo==="etiquetas"; }
+function imprimible(h){ return esGoogle(h) || esPdf(h) || esImg(h) || esEtiq(h); }
 
 /* ── Google Sheets / Docs ──────────────────────────────────────── */
 /* De un enlace de Google se saca el documento y la pestaña. Para
@@ -206,7 +207,7 @@ async function miniDe(h){
 }
 function pintarMinis(){
   document.querySelectorAll("[data-mini]").forEach(function(box){
-    var h=porId(box.getAttribute("data-mini")); if(!h || !imprimible(h) || esGoogle(h)) return;
+    var h=porId(box.getAttribute("data-mini")); if(!h || !imprimible(h) || esGoogle(h) || esEtiq(h)) return;
     miniDe(h).then(function(u){ if(u && box.isConnected){ var e=box.querySelector(".ext"); if(e) e.remove(); var im=document.createElement("img"); im.alt=""; im.src=u; box.insertBefore(im, box.firstChild); } }).catch(function(){});
   });
 }
@@ -258,6 +259,7 @@ function render(){
           '<div class="seg" role="group" aria-label="Orden"><button data-orden="uso" aria-pressed="'+(ui.orden==="uso")+'">Más usadas</button><button data-orden="az" aria-pressed="'+(ui.orden==="az")+'">A–Z</button></div>'+
           '<button class="btn fuerte" data-google>+ Hoja de Google Sheets</button>'+
           '<button class="btn" data-anadir>+ PDF o foto</button>'+
+          '<button class="btn" data-etiq>+ Etiquetas</button>'+
         '</div></div>'+
       '<div class="busca-grande"><span class="lupa">&#128269;</span>'+
         '<input id="q" type="search" placeholder="Buscar: nómina, contrato, menú, seguro…" value="'+esc(ui.q)+'" autocomplete="off" aria-label="Buscar hojas"><kbd>/</kbd></div>'+
@@ -268,6 +270,12 @@ function render(){
   root.querySelectorAll("[data-orden]").forEach(function(b){ b.addEventListener("click", function(){ ui.orden=b.getAttribute("data-orden"); render(); }); });
   root.querySelector("[data-anadir]").addEventListener("click", function(){ $("#elegir").click(); });
   root.querySelector("[data-google]").addEventListener("click", function(){ anadirGoogle(""); });
+  root.querySelector("[data-etiq]").addEventListener("click", function(){
+    var h={id:uid(), titulo:"Etiquetas de precios", nombre:"", tipo:"etiquetas", carpeta:(ui.carpeta.indexOf("__")===0?"Restaurante":ui.carpeta),
+           etiquetas:["etiquetas","precios"], notas:"", fav:false, creada:new Date().toISOString(), subida:true, impresa:0,
+           etiq:{cols:8, items:[{nombre:"", precio:"", cant:8}]}};
+    state.hojas.push(h); guardar(); pintarLista(); abrirEtiquetas(h);
+  });
   var q=$("#q");
   q.addEventListener("input", function(){ ui.q=q.value; pintarLista(); });
   q.addEventListener("keydown", function(e){
@@ -306,7 +314,9 @@ function fichaHTML(h){
   var papel=h.papel||state.ajustes.papel;
   return '<div class="hoja">'+
     '<button class="mini" data-mini="'+h.id+'" data-abrir="'+h.id+'" aria-label="Ver '+esc(h.titulo)+'">'+
-      (esGoogle(h)
+      (esEtiq(h)
+        ? '<span class="ext" style="flex-direction:column;gap:6px;color:var(--acento)"><span style="font-size:34px">&#127991;&#65039;</span><span style="font-size:12px">'+etTotal(h)+' ETIQUETAS · EDITABLE</span></span>'
+        : esGoogle(h)
         ? '<span class="ext" style="flex-direction:column;gap:6px;color:'+(h.tipo==="gsheet"?"#188038":"#1a73e8")+'"><span style="font-size:34px">'+(h.tipo==="gsheet"?"&#9638;":"&#9636;")+'</span><span style="font-size:12px">'+(h.tipo==="gsheet"?"GOOGLE SHEETS":"GOOGLE DOCS")+'</span></span>'
         : '<span class="ext">'+esc(extDe(h.nombre))+'</span>')+
       (h.fav?'<span class="fav" aria-label="Favorita">★</span>':'')+'</button>'+
@@ -321,8 +331,142 @@ function fichaHTML(h){
       : '<button class="btn sm" data-abrir="'+h.id+'">Abrir</button>')+
       (esGoogle(h)
         ? '<a class="btn sm" href="'+esc(urlAbrirGoogle(h))+'" target="_blank" rel="noopener" data-usada="'+h.id+'">Abrir</a><button class="btn suave sm" data-abrir="'+h.id+'" title="Datos de la hoja">⋯</button>'
-        : '<button class="btn sm" data-abrir="'+h.id+'">Ver</button>')+'</div>'+
+        : '<button class="btn sm" data-abrir="'+h.id+'">'+(esEtiq(h)?'Editar':'Ver')+'</button>')+'</div>'+
   '</div>';
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ETIQUETAS DE PRECIOS (editables)
+   ══════════════════════════════════════════════════════════════
+   Una hoja de etiquetas para recortar: cada una en su cuadradito con
+   línea de puntos. Se apunta cada etiqueta (nombre si lleva, precio y
+   cuántas), y al imprimir se reparten solas en folios A4, ordenadas.
+   Se cambia el precio o la cantidad y se vuelve a imprimir: no hay que
+   pasar por Canva. Datos en la propia ficha: h.etiq = {items, cols}. */
+function etItems(h){ return ((h.etiq||{}).items)||[]; }
+function etTotal(h){ return etItems(h).reduce(function(a,x){ return a+Math.max(0, parseInt(x.cant,10)||0); },0); }
+function etTxtPrecio(p){
+  var n=parseFloat(String(p).replace(",","."));
+  return isNaN(n) ? String(p||"") : n.toFixed(2).replace(".",",")+" €";
+}
+/* Cuántas caben: columnas elegidas; el alto, proporcional al ancho */
+function etRejilla(cols){
+  cols=Math.max(3, Math.min(12, parseInt(cols,10)||8));
+  var M=7, W=210-2*M, H=297-2*M, cw=W/cols, ch=cw*0.42, filas=Math.floor(H/ch);
+  ch=H/filas;
+  return {cols:cols, filas:filas, cw:cw, ch:ch, M:M, porHoja:cols*filas};
+}
+function etLista(h){
+  var l=[];
+  etItems(h).forEach(function(x){
+    var n=Math.max(0, parseInt(x.cant,10)||0);
+    for(var i=0;i<n;i++) l.push(x);
+  });
+  return l;
+}
+function etHTMLHojas(h, soloPrimera){
+  var g=etRejilla((h.etiq||{}).cols), l=etLista(h), paginas=[];
+  for(var i=0;i<l.length;i+=g.porHoja) paginas.push(l.slice(i, i+g.porHoja));
+  if(soloPrimera) paginas=paginas.slice(0,1);
+  var fsP=Math.max(7, Math.min(22, g.cw*0.55)), fsN=Math.max(5, Math.min(11, g.cw*0.24));
+  return paginas.map(function(pg){
+    return '<div class="et-pag" style="width:210mm;height:297mm;padding:'+g.M+'mm;box-sizing:border-box;display:grid;'+
+      'grid-template-columns:repeat('+g.cols+','+g.cw.toFixed(3)+'mm);grid-auto-rows:'+g.ch.toFixed(3)+'mm;align-content:start;background:#fff;color:#000">'+
+      pg.map(function(x){
+        var lineas=String(x.nombre||"").split("/").map(function(t){ return t.trim(); }).filter(Boolean);
+        return '<div style="border:.25mm dashed #999;margin:0 -.125mm -.125mm 0;display:flex;flex-direction:column;align-items:center;justify-content:center;'+
+          'font-family:Helvetica,Arial,sans-serif;font-weight:700;line-height:1.05;overflow:hidden;text-align:center">'+
+          lineas.map(function(t){ return '<div style="font-size:'+fsN.toFixed(1)+'pt">'+esc(t)+'</div>'; }).join("")+
+          '<div style="font-size:'+(lineas.length?fsP*0.75:fsP).toFixed(1)+'pt;white-space:nowrap">'+esc(etTxtPrecio(x.precio))+'</div></div>';
+      }).join("")+'</div>';
+  }).join("");
+}
+function abrirEtiquetas(h){
+  h.etiq=h.etiq||{items:[], cols:8};
+  var copia=JSON.parse(JSON.stringify(h.etiq));
+  var d=dialogo(h.titulo,
+    '<div class="et-cab" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'+
+      '<label style="display:flex;gap:6px;align-items:center;font-size:13.5px">Por fila <select id="et_cols"></select></label>'+
+      '<span class="nota" id="et_cuenta" style="margin:0"></span>'+
+      '<span style="margin-left:auto;display:flex;gap:6px"><button class="btn sm" id="et_ordenar">Ordenar por precio</button><button class="btn sm fuerte" id="et_mas">+ Etiqueta</button></span>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px" class="et-dos">'+
+      '<div><table class="et-tabla" style="width:100%;border-collapse:collapse;font-size:14px">'+
+        '<thead><tr style="text-align:left;color:var(--muted);font-size:12px"><th style="padding:4px">Nombre (si lleva)</th><th style="padding:4px;width:90px">Precio €</th><th style="padding:4px;width:76px">Cuántas</th><th></th></tr></thead>'+
+        '<tbody id="et_filas"></tbody></table>'+
+        '<p class="nota" style="margin:8px 0 0">Para dos líneas de nombre, sepáralas con «/»: <i>GALL DINDI BRASAT / PAVO BRASEADO</i>.</p></div>'+
+      '<div><div class="lbl" style="margin-bottom:6px">Así sale la primera hoja</div>'+
+        '<div id="et_vista" style="border:1px solid var(--linea);border-radius:8px;overflow:hidden;background:#fff;height:430px;position:relative"></div></div>'+
+    '</div>',
+    '<button class="btn" data-x>Cerrar sin guardar</button><button class="btn" id="et_guardar">Guardar</button><button class="btn fuerte" id="et_imp">&#128424; Guardar e imprimir</button>', true);
+  var sel=d.querySelector("#et_cols");
+  for(var c=4;c<=12;c++) sel.insertAdjacentHTML("beforeend", '<option value="'+c+'"'+(c===(copia.cols||8)?" selected":"")+'>'+c+'</option>');
+  function filas(){
+    var tb=d.querySelector("#et_filas");
+    var inp='style="width:100%;padding:6px 8px;border:1px solid var(--linea);border-radius:6px;background:var(--sup);color:var(--tinta);font:inherit"';
+    tb.innerHTML=copia.items.map(function(x,i){
+      return '<tr data-i="'+i+'"><td style="padding:3px"><input data-k="nombre" value="'+esc(x.nombre||"")+'" placeholder="—" '+inp+'></td>'+
+        '<td style="padding:3px"><input data-k="precio" type="text" inputmode="decimal" value="'+esc(String(x.precio).replace(".",","))+'" '+inp.replace('style="','style="text-align:right;')+'></td>'+
+        '<td style="padding:3px"><input data-k="cant" type="number" min="0" step="1" value="'+esc(x.cant)+'" '+inp.replace('style="','style="text-align:right;')+'></td>'+
+        '<td style="padding:3px"><button class="btn suave sm" data-quitar title="Quitar">✕</button></td></tr>';
+    }).join("");
+    tb.querySelectorAll("input").forEach(function(e){
+      e.addEventListener("input", function(){
+        var i=+e.closest("tr").getAttribute("data-i"), k=e.getAttribute("data-k");
+        copia.items[i][k]= k==="cant" ? Math.max(0, parseInt(e.value,10)||0) : k==="precio" ? e.value.replace(",",".").replace(/[^\d.]/g,"") : e.value;
+        vista();
+      });
+    });
+    tb.querySelectorAll("[data-quitar]").forEach(function(b){
+      b.addEventListener("click", function(){ copia.items.splice(+b.closest("tr").getAttribute("data-i"),1); filas(); vista(); });
+    });
+  }
+  function vista(){
+    var tmp={etiq:copia}, g=etRejilla(copia.cols), tot=etTotal(tmp);
+    d.querySelector("#et_cuenta").textContent=tot+" etiquetas · "+Math.max(1,Math.ceil(tot/g.porHoja))+" hojas A4 ("+g.porHoja+" por hoja)";
+    var box=d.querySelector("#et_vista"), k=box.clientWidth/(210*96/25.4);
+    box.innerHTML='<div style="transform:scale('+k+');transform-origin:0 0;position:absolute;left:0;top:0">'+etHTMLHojas(tmp, true)+'</div>';
+  }
+  sel.addEventListener("change", function(){ copia.cols=+sel.value; vista(); });
+  d.querySelector("#et_mas").addEventListener("click", function(){
+    copia.items.push({nombre:"", precio:"", cant:8}); filas(); vista();
+    var u=d.querySelectorAll('#et_filas tr'); if(u.length) u[u.length-1].querySelector('[data-k="precio"]').focus();
+  });
+  d.querySelector("#et_ordenar").addEventListener("click", function(){
+    copia.items.sort(function(a,b){
+      if(!!a.nombre!==!!b.nombre) return a.nombre?-1:1;
+      return (parseFloat(a.precio)||0)-(parseFloat(b.precio)||0) || String(a.nombre).localeCompare(String(b.nombre));
+    });
+    filas(); vista();
+  });
+  function guardarYa(){
+    copia.items=copia.items.filter(function(x){ return String(x.precio).trim()!=="" || String(x.nombre||"").trim(); });
+    h.etiq=copia; h.paginas=Math.max(1,Math.ceil(etTotal(h)/etRejilla(copia.cols).porHoja)); guardar(); pintarLista();
+  }
+  d.querySelector("#et_guardar").addEventListener("click", function(){ guardarYa(); d.close(); aviso("Etiquetas guardadas"); });
+  d.querySelector("#et_imp").addEventListener("click", function(){ guardarYa(); d.close(); imprimirEtiquetas(h); });
+  filas(); setTimeout(vista, 30);
+}
+function imprimirEtiquetas(h){
+  if(!etTotal(h)){ aviso("No hay ninguna etiqueta que imprimir", true); return; }
+  var caja=document.getElementById("et-imprimir");
+  if(!caja){ caja=document.createElement("div"); caja.id="et-imprimir"; document.body.appendChild(caja); }
+  caja.innerHTML=etHTMLHojas(h, false);
+  var st=document.getElementById("et-imp-css");
+  if(!st){
+    st=document.createElement("style"); st.id="et-imp-css";
+    st.textContent="#et-imprimir{display:none}"+
+      "@media print{@page{size:A4 portrait;margin:0}body.et-imprimiendo>*:not(#et-imprimir){display:none!important}"+
+      "body.et-imprimiendo{background:#fff!important;margin:0}body.et-imprimiendo #et-imprimir{display:block!important}"+
+      "#et-imprimir .et-pag{page-break-after:always;break-after:page}#et-imprimir .et-pag:last-child{page-break-after:auto;break-after:auto}"+
+      "#et-imprimir *{-webkit-print-color-adjust:exact;print-color-adjust:exact}}";
+    document.head.appendChild(st);
+  }
+  document.body.classList.add("et-imprimiendo");
+  var fin=function(){ document.body.classList.remove("et-imprimiendo"); caja.innerHTML=""; window.removeEventListener("afterprint", fin); };
+  window.addEventListener("afterprint", fin);
+  h.impresa=(h.impresa||0)+1; h.usada=hoyISO(); guardar();
+  setTimeout(function(){ window.print(); setTimeout(function(){ document.addEventListener("pointerdown", fin, {once:true}); }, 500); }, 60);
 }
 
 /* ── añadir ────────────────────────────────────────────────────── */
@@ -501,6 +645,7 @@ function opcionesOrient(sel, conDefecto){
 function abrirHoja(id, nueva){
   var h=porId(id); if(!h) return;
   if(esGoogle(h)) return abrirGoogle(h, nueva);
+  if(esEtiq(h)) return abrirEtiquetas(h);
   var carps=state.carpetas.slice(); if(h.carpeta && carps.indexOf(h.carpeta)<0) carps.push(h.carpeta);
   var d=dialogo(nueva?"Hoja añadida":h.titulo,
     '<div class="vista" id="vista"><p class="nota" style="margin:20px">Cargando…</p></div>'+
@@ -621,6 +766,7 @@ function borrar(h){
    las copias y el color. */
 var imprimiendo=false;
 async function imprimir(h){
+  if(esEtiq(h)) return imprimirEtiquetas(h);
   if(esGoogle(h)){
     h.impresa=(h.impresa||0)+1; h.usada=hoyISO(); guardar(); pintarLista();
     var w=window.open(urlPdfGoogle(h), "_blank");
