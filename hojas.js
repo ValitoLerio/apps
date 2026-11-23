@@ -708,6 +708,10 @@ function horHTML(hor, soloPrimera, edit){
   function bloque(s){
     return '<div style="margin-bottom:12mm">'+
       '<div style="font:700 12pt Helvetica,Arial,sans-serif;margin:0 0 3mm;text-align:center">'+s.tit+'</div>'+
+      (edit?'<div style="display:flex;gap:2mm;justify-content:flex-end;margin:-1mm 0 2mm;font:9pt Helvetica,Arial,sans-serif">'+
+        '<button data-csem="'+s.i+'" style="font:inherit;padding:1mm 3mm;border:.3mm solid #999;border-radius:1.5mm;background:#fff;cursor:pointer">&#128203; Copiar esta semana</button>'+
+        '<button data-psem="'+s.i+'" style="font:inherit;padding:1mm 3mm;border:.3mm solid #999;border-radius:1.5mm;background:#fff;cursor:pointer">&#128229; Pegar aquí</button>'+
+        '<button data-vsem="'+s.i+'" style="font:inherit;padding:1mm 3mm;border:.3mm solid #c99;border-radius:1.5mm;background:#fff;color:#a22;cursor:pointer">Vaciar</button></div>':'')+
       '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-family:Helvetica,Arial,sans-serif">'+
       '<tr style="height:'+fila.toFixed(2)+'mm"><th style="width:30mm;border:.3mm solid #000;padding:0"></th>'+HOR_DIAS.map(function(d,k){
         return '<th style="border:.3mm solid #000;font:700 9pt Helvetica,Arial,sans-serif;color:#000;letter-spacing:0;text-transform:none;text-align:center;padding:0;background:#eee">'+d+(s.fechas?' '+s.fechas[k]:'')+'</th>'; }).join("")+'</tr>'+
@@ -742,6 +746,7 @@ function verGrande(dlg, titulo, html){
     var v=+b.getAttribute("data-z"); z = v===0 ? 1 : Math.max(.5, Math.min(5, z*(v>0?1.4:1/1.4))); pon(); }); });
   ov.querySelector("[data-cz]").addEventListener("click", function(){ ov.remove(); });
 }
+var copiaSemana=null;
 function abrirHorario(h){
   h.hor=h.hor||horNuevo();
   var c=JSON.parse(JSON.stringify(h.hor));
@@ -807,10 +812,43 @@ function abrirHorario(h){
       sc.innerHTML='<div style="zoom:'+k+'">'+horHTML(c, false, true).replace(/class="et-pag" style="/g,'class="et-pag" style="margin:0 auto 16px;box-shadow:0 2px 12px rgba(0,0,0,.4);')+'</div>';
       sc.querySelectorAll("[data-c]").forEach(function(td){ td.addEventListener("input", function(){
         var v=td.innerText.replace(/\n+$/,""); if(v.trim()) c.celdas[td.getAttribute("data-c")]=v; else delete c.celdas[td.getAttribute("data-c")]; }); });
+      /* Pegar en una casilla: si trae varias (de Excel o de otra semana), se reparten hacia la derecha y hacia abajo */
+      sc.querySelectorAll("[data-c]").forEach(function(td){ td.addEventListener("paste", function(e){
+        var t=(e.clipboardData||window.clipboardData).getData("text")||""; e.preventDefault();
+        t=t.replace(/\r/g,"").replace(/\n+$/,"");
+        var p=td.getAttribute("data-c").split("|"), wi=p[0], k=+p[2], per=personas(), pi=per.indexOf(p[1]);
+        if(t.indexOf("\t")<0 && t.indexOf("\n")<0){ document.execCommand("insertText", false, t); return; }
+        t.split("\n").forEach(function(lin, r){
+          var q=per[pi+r]; if(!q) return;
+          lin.split("\t").forEach(function(v, col){ if(k+col>6) return; var key=wi+"|"+q+"|"+(k+col); v=v.trim(); if(v) c.celdas[key]=v; else delete c.celdas[key]; });
+        });
+        repinta();
+      }); });
+      sc.querySelectorAll("[data-csem]").forEach(function(b){ b.addEventListener("click", function(){
+        var wi=b.getAttribute("data-csem"), per=personas(), m={};
+        per.forEach(function(q){ m[q]=[0,1,2,3,4,5,6].map(function(k){ return c.celdas[wi+"|"+q+"|"+k]||""; }); });
+        copiaSemana=m;
+        var tsv=per.map(function(q){ return m[q].join("\t"); }).join("\n");
+        try{ navigator.clipboard.writeText(tsv); }catch(_){}
+        aviso("Semana copiada: pulsa «Pegar aquí» en otra semana");
+      }); });
+      sc.querySelectorAll("[data-psem]").forEach(function(b){ b.addEventListener("click", function(){
+        if(!copiaSemana){ aviso("Primero pulsa «Copiar esta semana» en la que quieras copiar", true); return; }
+        var wi=b.getAttribute("data-psem");
+        Object.keys(copiaSemana).forEach(function(q){ copiaSemana[q].forEach(function(v,k){ var key=wi+"|"+q+"|"+k; if(v) c.celdas[key]=v; else delete c.celdas[key]; }); });
+        repinta(); aviso("Semana pegada");
+      }); });
+      sc.querySelectorAll("[data-vsem]").forEach(function(b){ b.addEventListener("click", function(){
+        var wi=b.getAttribute("data-vsem");
+        Object.keys(c.celdas).forEach(function(key){ if(key.split("|")[0]===wi) delete c.celdas[key]; });
+        repinta();
+      }); });
       sc.querySelectorAll("[data-t]").forEach(function(t){ t.addEventListener("input", function(){
         var i=t.getAttribute("data-t"); if(!c.titulos[i] || typeof c.titulos[i]!=="object") c.titulos[i]={};
         c.titulos[i][t.getAttribute("data-n")]=t.value.trim(); }); });
     }
+    function personas(){ return (c.personal||[]).filter(function(x){ return String(x).trim(); }); }
+    function repinta(){ var y=sc.scrollTop; pinta(); sc.scrollTop=y; }
     pinta();
     ov.querySelector("[data-vac]").addEventListener("click", function(){
       if(!confirm("¿Borrar todos los horarios escritos? Los nombres no se tocan.")) return;
