@@ -541,7 +541,7 @@ function abrirEtiquetas(h){
   /* Ampliar: todos los folios de la hoja, grandes, con + y − */
   function ampliar(){
     var tmp={etiq:copia}, z=1, ov=document.createElement("div");
-    ov.style.cssText="position:fixed;inset:0;z-index:50;background:rgba(30,30,30,.92);display:flex;flex-direction:column";
+    ov.style.cssText="position:fixed;inset:0;z-index:50;background:#2a2a2a;display:flex;flex-direction:column";
     ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;padding:10px 14px;background:var(--sup);border-bottom:1px solid var(--linea)">'+
       '<b style="font-size:15px">'+esc(copia.hojas[cur].nombre)+'</b><span class="nota" style="margin:0">'+etFolios(tmp,cur)+' folio(s)</span>'+
       '<span style="margin-left:auto;display:flex;gap:6px"><button class="btn sm" data-z="-1" style="min-width:42px;font-size:18px">−</button><button class="btn sm" data-z="0">Ajustar</button><button class="btn sm" data-z="1" style="min-width:42px;font-size:18px">+</button>'+
@@ -728,7 +728,7 @@ function horHTML(hor, soloPrimera, edit){
 }
 function verGrande(dlg, titulo, html){
   var z=1, ov=document.createElement("div");
-  ov.style.cssText="position:fixed;inset:0;z-index:50;background:rgba(30,30,30,.92);display:flex;flex-direction:column";
+  ov.style.cssText="position:fixed;inset:0;z-index:50;background:#2a2a2a;display:flex;flex-direction:column";
   ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;padding:10px 14px;background:var(--sup);border-bottom:1px solid var(--linea)">'+
     '<b style="font-size:15px">'+esc(titulo)+'</b>'+
     '<span style="margin-left:auto;display:flex;gap:6px"><button class="btn sm" data-z="-1" style="min-width:42px;font-size:18px">−</button><button class="btn sm" data-z="0">Ajustar</button><button class="btn sm" data-z="1" style="min-width:42px;font-size:18px">+</button>'+
@@ -799,16 +799,21 @@ function abrirHorario(h){
   d.querySelector("#ho_rell").addEventListener("click", function(){
     c.celdas=c.celdas||{}; c.titulos=c.titulos||{};
     var ov=document.createElement("div");
-    ov.style.cssText="position:fixed;inset:0;z-index:50;background:rgba(30,30,30,.92);display:flex;flex-direction:column";
+    ov.style.cssText="position:fixed;inset:0;z-index:50;background:#2a2a2a;display:flex;flex-direction:column";
     ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;padding:10px 14px;background:var(--sup);border-bottom:1px solid var(--linea);flex-wrap:wrap">'+
       '<b style="font-size:15px">Rellenar · toca una casilla y escribe</b>'+
-      '<span style="margin-left:auto;display:flex;gap:6px"><button class="btn sm malo" data-vac>Borrar todo lo escrito</button>'+
+      '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">'+
+      '<button class="btn sm" data-rz="-1" style="min-width:42px;font-size:18px" title="Más pequeño">−</button>'+
+      '<button class="btn sm" data-rz="toda">Ver hoja entera</button>'+
+      '<button class="btn sm" data-rz="ancho">Ancho</button>'+
+      '<button class="btn sm" data-rz="1" style="min-width:42px;font-size:18px" title="Más grande">+</button>'+
+      '<button class="btn sm malo" data-vac>Borrar todo lo escrito</button>'+
       '<button class="btn sm fuerte" data-ok>Hecho</button></span></div>'+
       '<div data-sc style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px"></div>';
     d.appendChild(ov);
-    var sc=ov.querySelector("[data-sc]");
+    var sc=ov.querySelector("[data-sc]"), zr=1;
     function pinta(){
-      var px=210*96/25.4, k=Math.min(1.6, (sc.clientWidth-32)/px);
+      var px=210*96/25.4, k=zr;
       sc.innerHTML='<div style="zoom:'+k+'">'+horHTML(c, false, true).replace(/class="et-pag" style="/g,'class="et-pag" style="margin:0 auto 16px;box-shadow:0 2px 12px rgba(0,0,0,.4);')+'</div>';
       sc.querySelectorAll("[data-c]").forEach(function(td){ td.addEventListener("input", function(){
         var v=td.innerText.replace(/\n+$/,""); if(v.trim()) c.celdas[td.getAttribute("data-c")]=v; else delete c.celdas[td.getAttribute("data-c")]; }); });
@@ -847,9 +852,18 @@ function abrirHorario(h){
         var i=t.getAttribute("data-t"); if(!c.titulos[i] || typeof c.titulos[i]!=="object") c.titulos[i]={};
         c.titulos[i][t.getAttribute("data-n")]=t.value.trim(); }); });
     }
+    function ajusta(modo){
+      var px=210*96/25.4, py=297*96/25.4;
+      zr = modo==="toda" ? Math.min((sc.clientHeight-32)/py, (sc.clientWidth-32)/px) : Math.min(1.6, (sc.clientWidth-32)/px);
+    }
+    ov.querySelectorAll("[data-rz]").forEach(function(b){ b.addEventListener("click", function(){
+      var v=b.getAttribute("data-rz");
+      if(v==="toda"||v==="ancho") ajusta(v); else zr=Math.max(.2, Math.min(3, zr*(v==="1"?1.25:0.8)));
+      repinta();
+    }); });
     function personas(){ return (c.personal||[]).filter(function(x){ return String(x).trim(); }); }
     function repinta(){ var y=sc.scrollTop; pinta(); sc.scrollTop=y; }
-    pinta();
+    ajusta("ancho"); pinta();
     ov.querySelector("[data-vac]").addEventListener("click", function(){
       if(!confirm("¿Borrar todos los horarios escritos? Los nombres no se tocan.")) return;
       c.celdas={}; c.titulos={}; pinta();
