@@ -717,7 +717,7 @@ function horHTML(hor, soloPrimera, edit){
         return '<th style="border:.3mm solid #000;font:700 9pt Helvetica,Arial,sans-serif;color:#000;letter-spacing:0;text-transform:none;text-align:center;padding:0;background:#eee">'+d+(s.fechas?' '+s.fechas[k]:'')+'</th>'; }).join("")+'</tr>'+
       per.map(function(p){ return '<tr style="height:'+fila.toFixed(2)+'mm"><td style="border:.3mm solid #000;font-weight:700;font-size:'+(fila<9?8:10)+'pt;padding:0 2mm;white-space:nowrap;overflow:hidden">'+esc(p)+'</td>'+
         HOR_DIAS.map(function(_,k){ var key=s.i+"|"+p+"|"+k, v=cel[key]||"";
-          return '<td'+(edit?' contenteditable="true" data-c="'+esc(key)+'"':'')+' style="border:.3mm solid #000;text-align:center;vertical-align:middle;font:700 '+(fila<9?8:10)+'pt Helvetica,Arial,sans-serif;white-space:pre-wrap;line-height:1.1;padding:0 1mm;overflow:hidden;outline:none'+(edit?';background:#fffef5':'')+'">'+esc(v)+'</td>'; }).join("")+'</tr>'; }).join("")+
+          return '<td'+(edit?' contenteditable="true" data-c="'+esc(key)+'"':'')+' style="border:.3mm solid #000;text-align:center;vertical-align:middle;font:700 '+(fila<9?8:10)+'pt Helvetica,Arial,sans-serif;white-space:pre-wrap;line-height:1.1;padding:0 1mm;overflow:hidden;outline:none'+(edit?';background:#fffef5'+(v?' linear-gradient(#1a73e8,#1a73e8) no-repeat right 0 bottom 0/2.2mm 2.2mm':''):'')+'">'+esc(v)+'</td>'; }).join("")+'</tr>'; }).join("")+
       '</table></div>';
   }
   var pags=[]; for(var j=0;j<sem.length;j+=2) pags.push(sem.slice(j,j+2));
@@ -801,7 +801,7 @@ function abrirHorario(h){
     var ov=document.createElement("div");
     ov.style.cssText="position:fixed;inset:0;z-index:50;background:#2a2a2a;display:flex;flex-direction:column";
     ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;padding:10px 14px;background:var(--sup);border-bottom:1px solid var(--linea);flex-wrap:wrap">'+
-      '<b style="font-size:15px">Rellenar · toca una casilla y escribe</b>'+
+      '<b style="font-size:15px">Rellenar · toca una casilla y escribe</b><span class="nota" style="margin:0">Para repetirlo en otros días, arrastra el cuadradito azul de la esquina</span>'+
       '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">'+
       '<button class="btn sm" data-rz="-1" style="min-width:42px;font-size:18px" title="Más pequeño">−</button>'+
       '<button class="btn sm" data-rz="toda">Ver hoja entera</button>'+
@@ -816,7 +816,38 @@ function abrirHorario(h){
       var px=210*96/25.4, k=zr;
       sc.innerHTML='<div style="zoom:'+k+'">'+horHTML(c, false, true).replace(/class="et-pag" style="/g,'class="et-pag" style="margin:0 auto 16px;box-shadow:0 2px 12px rgba(0,0,0,.4);')+'</div>';
       sc.querySelectorAll("[data-c]").forEach(function(td){ td.addEventListener("input", function(){
-        var v=td.innerText.replace(/\n+$/,""); if(v.trim()) c.celdas[td.getAttribute("data-c")]=v; else delete c.celdas[td.getAttribute("data-c")]; }); });
+        var v=td.innerText.replace(/\n+$/,""); if(v.trim()) c.celdas[td.getAttribute("data-c")]=v; else delete c.celdas[td.getAttribute("data-c")];
+        td.style.background="#fffef5"+(v.trim()?" linear-gradient(#1a73e8,#1a73e8) no-repeat right 0 bottom 0/2.2mm 2.2mm":""); }); });
+      /* Correr el valor como en Excel: el cuadradito azul de la esquina se arrastra a los lados o hacia abajo */
+      sc.querySelectorAll("[data-c]").forEach(function(td){
+        function enEsquina(x,y){ var r=td.getBoundingClientRect(); return td.innerText.trim() && x>r.right-24 && y>r.bottom-24; }
+        function empieza(x,y){
+          var src=td.getAttribute("data-c").split("|"), val=td.innerText.replace(/\n+$/,""), per=personas(), pi=per.indexOf(src[1]), k0=+src[2], marcadas=[];
+          td.blur();
+          function rango(x2,y2){
+            marcadas.forEach(function(e){ e.style.outline=""; }); marcadas=[];
+            var el=document.elementFromPoint(x2,y2), t=el&&el.closest&&el.closest("[data-c]"); if(!t) return null;
+            var p=t.getAttribute("data-c").split("|"); if(p[0]!==src[0]) return null;
+            var pj=per.indexOf(p[1]), k1=+p[2], keys=[];
+            for(var a=Math.min(pi,pj); a<=Math.max(pi,pj); a++) for(var k=Math.min(k0,k1); k<=Math.max(k0,k1); k++) keys.push(src[0]+"|"+per[a]+"|"+k);
+            keys.forEach(function(key){ var e=sc.querySelector('[data-c="'+key.replace(/"/g,'\\"')+'"]'); if(e){ e.style.outline="2px solid #1a73e8"; e.style.outlineOffset="-2px"; marcadas.push(e); } });
+            return keys;
+          }
+          var ult=rango(x,y);
+          function mueve(e){ var p=e.touches?e.touches[0]:e; e.preventDefault(); ult=rango(p.clientX,p.clientY)||ult; }
+          function suelta(){
+            document.removeEventListener("pointermove", mueve); document.removeEventListener("pointerup", suelta);
+            document.removeEventListener("touchmove", mueve); document.removeEventListener("touchend", suelta);
+            (ult||[]).forEach(function(key){ c.celdas[key]=val; });
+            repinta();
+          }
+          document.addEventListener("pointermove", mueve); document.addEventListener("pointerup", suelta);
+          document.addEventListener("touchmove", mueve, {passive:false}); document.addEventListener("touchend", suelta);
+        }
+        td.addEventListener("touchstart", function(e){ var p=e.touches[0]; if(enEsquina(p.clientX,p.clientY)){ e.preventDefault(); empieza(p.clientX,p.clientY); } }, {passive:false});
+        td.addEventListener("pointerdown", function(e){ if(e.pointerType!=="touch" && enEsquina(e.clientX,e.clientY)){ e.preventDefault(); empieza(e.clientX,e.clientY); } });
+        td.addEventListener("pointermove", function(e){ td.style.cursor = enEsquina(e.clientX,e.clientY) ? "crosshair" : ""; });
+      });
       /* Pegar en una casilla: si trae varias (de Excel o de otra semana), se reparten hacia la derecha y hacia abajo */
       sc.querySelectorAll("[data-c]").forEach(function(td){ td.addEventListener("paste", function(e){
         var t=(e.clipboardData||window.clipboardData).getData("text")||""; e.preventDefault();
