@@ -736,7 +736,7 @@ function horHTML(hor, soloPrimera, edit){
         return '<th style="border:.3mm solid #000;font:700 9pt Helvetica,Arial,sans-serif;color:#000;letter-spacing:0;text-transform:none;text-align:center;padding:0;background:#eee">'+d+(s.fechas?' '+s.fechas[k]:'')+'</th>'; }).join("")+'</tr>'+
       per.map(function(p){ return '<tr style="height:'+fila.toFixed(2)+'mm"><td style="border:.3mm solid #000;font-weight:700;font-size:'+(fila<9?8:10)+'pt;padding:0 2mm;white-space:nowrap;overflow:hidden">'+esc(p)+'</td>'+
         HOR_DIAS.map(function(_,k){ var key=s.i+"|"+p+"|"+k, v=cel[key]||"";
-          return '<td'+(edit?' contenteditable="true" inputmode="none" data-c="'+esc(key)+'"':'')+' style="border:.3mm solid #000;text-align:center;vertical-align:middle;font:700 '+(fila<9?8:10)+'pt Helvetica,Arial,sans-serif;white-space:pre-wrap;line-height:1.1;padding:0 1mm;overflow:hidden;outline:none'+';background:'+horFondo(v, edit)+'">'+esc(v)+'</td>'; }).join("")+'</tr>'; }).join("")+
+          return '<td'+(edit?' contenteditable="true" data-c="'+esc(key)+'"':'')+' style="border:.3mm solid #000;text-align:center;vertical-align:middle;font:700 '+(fila<9?8:10)+'pt Helvetica,Arial,sans-serif;white-space:pre-wrap;line-height:1.1;padding:0 1mm;overflow:hidden;outline:none'+';background:'+horFondo(v, edit)+'">'+esc(v)+'</td>'; }).join("")+'</tr>'; }).join("")+
       '</table></div>';
   }
   var pags=[]; for(var j=0;j<sem.length;j+=2) pags.push(sem.slice(j,j+2));
@@ -860,7 +860,7 @@ function abrirHorario(h){
         '<button class="btn fuerte" data-rponer>Poner ➜</button>'+
         '<span data-rchips style="display:flex;gap:6px;flex-wrap:wrap"></span>'+
         '<button class="btn suave sm" data-rborrar>Borrar</button>'+
-        '<button class="btn suave sm" data-rteclado title="Escribir con el teclado">&#9000;&#65039; Escribir</button>'+
+
       '</div>'+
       '<style>.rl{display:inline-flex;align-items:center;gap:6px;font-size:14px}.rl select{font-size:17px;padding:6px 8px;border:1px solid var(--linea);border-radius:8px;background:#fff;color:#000;min-width:84px}'+
       '[data-c].sel{box-shadow:inset 0 0 0 3px #1a73e8}</style>'+
@@ -908,10 +908,7 @@ function abrirHorario(h){
       var v=valorRueda(); if(!v){ aviso("Elige a qué hora entra y a qué hora sale", true); return; } ponValor(v);
     });
     ov.querySelector("[data-rborrar]").addEventListener("click", function(){ ponValor(""); });
-    ov.querySelector("[data-rteclado]").addEventListener("click", function(){
-      var td=tdDe(ultCelda); if(!td){ aviso("Toca primero una casilla", true); return; }
-      td.setAttribute("inputmode","text"); td.blur(); td.focus();
-    });
+
     /* botones rápidos: F y los horarios que más se usan */
     function chips(){
       var cuenta={}; Object.keys(c.celdas||{}).forEach(function(k){ var v=c.celdas[k]; if(!horMarca(v)) cuenta[v]=(cuenta[v]||0)+1; });
@@ -970,7 +967,7 @@ function abrirHorario(h){
           document.addEventListener("pointermove", mov); document.addEventListener("pointerup", fin);
         });
         td.addEventListener("focus", function(){ selecciona(td.getAttribute("data-c")); });
-        td.addEventListener("blur", function(){ td.setAttribute("inputmode","none"); });
+
         td.addEventListener("pointermove", function(e){ td.style.cursor = enEsquina(e.clientX,e.clientY) ? "crosshair" : ""; });
       });
       /* Pegar en una casilla: si trae varias (de Excel o de otra semana), se reparten hacia la derecha y hacia abajo */
