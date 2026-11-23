@@ -273,7 +273,7 @@ function render(){
   root.querySelector("[data-etiq]").addEventListener("click", function(){
     var h={id:uid(), titulo:"Etiquetas de precios", nombre:"", tipo:"etiquetas", carpeta:(ui.carpeta.indexOf("__")===0?"Restaurante":ui.carpeta),
            etiquetas:["etiquetas","precios"], notas:"", fav:false, creada:new Date().toISOString(), subida:true, impresa:0,
-           etiq:{cols:8, items:[{nombre:"", precio:"", cant:8}]}};
+           etiq:{cols:8, hojas:[{nombre:"Hoja 1", items:[{nombre:"", precio:"", cant:8}]}]}};
     state.hojas.push(h); guardar(); pintarLista(); abrirEtiquetas(h);
   });
   var q=$("#q");
@@ -343,8 +343,23 @@ function fichaHTML(h){
    cuántas), y al imprimir se reparten solas en folios A4, ordenadas.
    Se cambia el precio o la cantidad y se vuelve a imprimir: no hay que
    pasar por Canva. Datos en la propia ficha: h.etiq = {items, cols}. */
-function etItems(h){ return ((h.etiq||{}).items)||[]; }
-function etTotal(h){ return etItems(h).reduce(function(a,x){ return a+Math.max(0, parseInt(x.cant,10)||0); },0); }
+function etNorm(e){
+  e=e||{cols:8};
+  if(!e.hojas){ e.hojas=[{nombre:"Hoja 1", items:e.items||[]}]; }
+  delete e.items;
+  if(!e.hojas.length) e.hojas.push({nombre:"Hoja 1", items:[]});
+  return e;
+}
+function etItems(h, solo){
+  var e=etNorm(h.etiq); h.etiq=e;
+  var hs = solo==null ? e.hojas : [e.hojas[solo]].filter(Boolean);
+  return hs.reduce(function(a,x){ return a.concat(x.items||[]); },[]);
+}
+function etTotal(h, solo){ return etItems(h, solo).reduce(function(a,x){ return a+Math.max(0, parseInt(x.cant,10)||0); },0); }
+function etFolios(h, solo){
+  var e=etNorm(h.etiq), g=etRejilla(e.cols);
+  return (solo==null?e.hojas:[e.hojas[solo]].filter(Boolean)).reduce(function(a,x){ return a+Math.ceil(etTotal({etiq:{cols:e.cols,hojas:[x]}})/g.porHoja); },0);
+}
 function etTxtPrecio(p){
   var n=parseFloat(String(p).replace(",","."));
   return isNaN(n) ? String(p||"") : n.toFixed(2).replace(".",",")+" €";
@@ -356,17 +371,21 @@ function etRejilla(cols){
   ch=H/filas;
   return {cols:cols, filas:filas, cw:cw, ch:ch, M:M, porHoja:cols*filas};
 }
-function etLista(h){
+function etLista(items){
   var l=[];
-  etItems(h).forEach(function(x){
+  items.forEach(function(x){
     var n=Math.max(0, parseInt(x.cant,10)||0);
     for(var i=0;i<n;i++) l.push(x);
   });
   return l;
 }
-function etHTMLHojas(h, soloPrimera){
-  var g=etRejilla((h.etiq||{}).cols), l=etLista(h), paginas=[];
-  for(var i=0;i<l.length;i+=g.porHoja) paginas.push(l.slice(i, i+g.porHoja));
+/* Cada hoja empieza en un folio nuevo. solo = índice de hoja (o null = todas) */
+function etHTMLHojas(h, soloPrimera, solo){
+  var e=etNorm(h.etiq), g=etRejilla(e.cols), paginas=[];
+  (solo==null?e.hojas:[e.hojas[solo]].filter(Boolean)).forEach(function(hj){
+    var l=etLista(hj.items||[]);
+    for(var i=0;i<l.length;i+=g.porHoja) paginas.push(l.slice(i, i+g.porHoja));
+  });
   if(soloPrimera) paginas=paginas.slice(0,1);
   var fsP=Math.max(7, Math.min(22, g.cw*0.55)), fsN=Math.max(5, Math.min(11, g.cw*0.24));
   return paginas.map(function(pg){
@@ -382,9 +401,11 @@ function etHTMLHojas(h, soloPrimera){
   }).join("");
 }
 function abrirEtiquetas(h){
-  h.etiq=h.etiq||{items:[], cols:8};
-  var copia=JSON.parse(JSON.stringify(h.etiq));
+  h.etiq=etNorm(h.etiq);
+  var copia=JSON.parse(JSON.stringify(h.etiq)), cur=0;
+  function it(){ return copia.hojas[cur].items; }
   var d=dialogo(h.titulo,
+    '<div id="et_tabs" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--linea)"></div>'+
     '<div class="et-cab" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'+
       '<label style="display:flex;gap:6px;align-items:center;font-size:13.5px">Por fila <select id="et_cols"></select></label>'+
       '<span class="nota" id="et_cuenta" style="margin:0"></span>'+
@@ -405,16 +426,16 @@ function abrirEtiquetas(h){
         '<thead><tr style="text-align:left;color:var(--muted);font-size:12px"><th style="padding:4px">Nombre (si lleva)</th><th style="padding:4px;width:90px">Precio €</th><th style="padding:4px;width:76px">Cuántas</th><th></th></tr></thead>'+
         '<tbody id="et_filas"></tbody></table>'+
         '<p class="nota" style="margin:8px 0 0">Para dos líneas de nombre, sepáralas con «/»: <i>GALL DINDI BRASAT / PAVO BRASEADO</i>.</p></div>'+
-      '<div><div class="lbl" style="margin-bottom:6px">Así sale la primera hoja</div>'+
+      '<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div class="lbl" id="et_vlbl" style="margin:0">Así sale</div><button class="btn sm" id="et_zoom" style="margin-left:auto">&#128269; Ampliar</button></div>'+
         '<div id="et_vista" style="border:1px solid var(--linea);border-radius:8px;overflow:hidden;background:#fff;height:430px;position:relative"></div></div>'+
     '</div>',
-    '<button class="btn" data-x>Cerrar sin guardar</button><button class="btn" id="et_guardar">Guardar</button><button class="btn fuerte" id="et_imp">&#128424; Guardar e imprimir</button>', true);
+    '<button class="btn" data-x>Cerrar sin guardar</button><button class="btn" id="et_guardar">Guardar</button><button class="btn" id="et_imp1">&#128424; Imprimir esta hoja</button><button class="btn fuerte" id="et_imp">&#128424; Imprimir todas</button>', true);
   var sel=d.querySelector("#et_cols");
   for(var c=4;c<=12;c++) sel.insertAdjacentHTML("beforeend", '<option value="'+c+'"'+(c===(copia.cols||8)?" selected":"")+'>'+c+'</option>');
   function filas(){
     var tb=d.querySelector("#et_filas");
     var inp='style="width:100%;padding:6px 8px;border:1px solid var(--linea);border-radius:6px;background:var(--sup);color:var(--tinta);font:inherit"';
-    tb.innerHTML=copia.items.map(function(x,i){
+    tb.innerHTML=it().map(function(x,i){
       return '<tr data-i="'+i+'"><td style="padding:3px"><input data-k="nombre" value="'+esc(x.nombre||"")+'" placeholder="—" '+inp+'></td>'+
         '<td style="padding:3px"><input data-k="precio" type="text" inputmode="decimal" value="'+esc(String(x.precio).replace(".",","))+'" '+inp.replace('style="','style="text-align:right;')+'></td>'+
         '<td style="padding:3px"><input data-k="cant" type="number" min="0" step="1" value="'+esc(x.cant)+'" '+inp.replace('style="','style="text-align:right;')+'></td>'+
@@ -423,23 +444,79 @@ function abrirEtiquetas(h){
     tb.querySelectorAll("input").forEach(function(e){
       e.addEventListener("input", function(){
         var i=+e.closest("tr").getAttribute("data-i"), k=e.getAttribute("data-k");
-        copia.items[i][k]= k==="cant" ? Math.max(0, parseInt(e.value,10)||0) : k==="precio" ? e.value.replace(",",".").replace(/[^\d.]/g,"") : e.value;
+        it()[i][k]= k==="cant" ? Math.max(0, parseInt(e.value,10)||0) : k==="precio" ? e.value.replace(",",".").replace(/[^\d.]/g,"") : e.value;
         vista();
       });
     });
     tb.querySelectorAll("[data-quitar]").forEach(function(b){
-      b.addEventListener("click", function(){ copia.items.splice(+b.closest("tr").getAttribute("data-i"),1); filas(); vista(); });
+      b.addEventListener("click", function(){ it().splice(+b.closest("tr").getAttribute("data-i"),1); filas(); vista(); });
     });
   }
   function vista(){
-    var tmp={etiq:copia}, g=etRejilla(copia.cols), tot=etTotal(tmp);
-    d.querySelector("#et_cuenta").textContent=tot+" etiquetas · "+Math.max(1,Math.ceil(tot/g.porHoja))+" hojas A4 ("+g.porHoja+" por hoja)";
+    var tmp={etiq:copia}, g=etRejilla(copia.cols), tot=etTotal(tmp, cur), fol=etFolios(tmp, cur);
+    d.querySelector("#et_cuenta").textContent="Esta hoja: "+tot+" etiquetas"+(fol>1?" ("+fol+" folios)":"")+" · caben "+g.porHoja+" por folio";
+    d.querySelector("#et_vlbl").textContent="Así sale «"+copia.hojas[cur].nombre+"»"+(fol>1?" (primer folio de "+fol+")":"");
     var box=d.querySelector("#et_vista"), k=box.clientWidth/(210*96/25.4);
-    box.innerHTML='<div style="transform:scale('+k+');transform-origin:0 0;position:absolute;left:0;top:0">'+etHTMLHojas(tmp, true)+'</div>';
+    box.innerHTML='<div style="transform:scale('+k+');transform-origin:0 0;position:absolute;left:0;top:0">'+etHTMLHojas(tmp, true, cur)+'</div>';
+    pestanas();
+  }
+  /* Pestañas: varias hojas dentro de las mismas etiquetas */
+  function pestanas(){
+    var t=d.querySelector("#et_tabs"), tmp={etiq:copia};
+    t.innerHTML=copia.hojas.map(function(hj,i){
+      return '<button class="btn sm'+(i===cur?' fuerte':'')+'" data-hj="'+i+'">'+esc(hj.nombre)+' <span style="opacity:.7">· '+etTotal(tmp,i)+'</span></button>';
+    }).join("")+
+      '<button class="btn sm" id="et_hnueva">+ Hoja</button>'+
+      '<span style="margin-left:auto;display:flex;gap:6px">'+
+      '<button class="btn sm suave" id="et_hren">&#9998; Nombre</button>'+
+      '<button class="btn sm suave" id="et_hdup">Duplicar</button>'+
+      (copia.hojas.length>1?'<button class="btn sm suave" id="et_hdel">&#128465; Borrar hoja</button>':'')+'</span>';
+    t.querySelectorAll("[data-hj]").forEach(function(b){ b.addEventListener("click", function(){ cur=+b.getAttribute("data-hj"); filas(); vista(); }); });
+    t.querySelector("#et_hnueva").addEventListener("click", function(){
+      copia.hojas.push({nombre:"Hoja "+(copia.hojas.length+1), items:[{nombre:"", precio:"", cant:8}]});
+      cur=copia.hojas.length-1; filas(); vista();
+      var u=d.querySelector('#et_filas [data-k="precio"]'); if(u) u.focus();
+    });
+    t.querySelector("#et_hren").addEventListener("click", function(){
+      var n=prompt("Nombre de la hoja", copia.hojas[cur].nombre); if(n&&n.trim()){ copia.hojas[cur].nombre=n.trim(); vista(); }
+    });
+    t.querySelector("#et_hdup").addEventListener("click", function(){
+      var c=JSON.parse(JSON.stringify(copia.hojas[cur])); c.nombre=c.nombre+" (copia)";
+      copia.hojas.splice(cur+1,0,c); cur++; filas(); vista();
+    });
+    var del=t.querySelector("#et_hdel");
+    if(del) del.addEventListener("click", function(){
+      if(!confirm("¿Borrar la hoja «"+copia.hojas[cur].nombre+"» con sus "+etTotal(tmp,cur)+" etiquetas?")) return;
+      copia.hojas.splice(cur,1); cur=Math.max(0,cur-1); filas(); vista();
+    });
   }
   sel.addEventListener("change", function(){ copia.cols=+sel.value; vista(); });
+  /* Ampliar: todos los folios de la hoja, grandes, con + y − */
+  function ampliar(){
+    var tmp={etiq:copia}, z=1, ov=document.createElement("div");
+    ov.style.cssText="position:fixed;inset:0;z-index:50;background:rgba(30,30,30,.92);display:flex;flex-direction:column";
+    ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;padding:10px 14px;background:var(--sup);border-bottom:1px solid var(--linea)">'+
+      '<b style="font-size:15px">'+esc(copia.hojas[cur].nombre)+'</b><span class="nota" style="margin:0">'+etFolios(tmp,cur)+' folio(s)</span>'+
+      '<span style="margin-left:auto;display:flex;gap:6px"><button class="btn sm" data-z="-1" style="min-width:42px;font-size:18px">−</button><button class="btn sm" data-z="0">Ajustar</button><button class="btn sm" data-z="1" style="min-width:42px;font-size:18px">+</button>'+
+      '<button class="btn sm fuerte" data-cz>Cerrar</button></span></div>'+
+      '<div data-sc style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px"><div data-in style="transform-origin:0 0"></div></div>';
+    d.appendChild(ov);
+    var sc=ov.querySelector("[data-sc]"), inn=ov.querySelector("[data-in]"), px=210*96/25.4;
+    inn.innerHTML=etHTMLHojas(tmp, false, cur).replace(/class="et-pag" style="/g,'class="et-pag" style="margin:0 auto 16px;box-shadow:0 2px 12px rgba(0,0,0,.4);');
+    var base=Math.min(1,(sc.clientWidth-32)/px);
+    function pon(){ var k=base*z; inn.style.transform="scale("+k+")"; inn.style.width=px+"px"; inn.style.height=(inn.scrollHeight)+"px";
+      inn.style.marginBottom=(inn.scrollHeight*(k-1))+"px"; inn.style.marginRight=(px*(k-1))+"px";
+      inn.style.marginLeft=Math.max(0,(sc.clientWidth-32-px*k)/2)+"px"; }
+    pon();
+    ov.querySelectorAll("[data-z]").forEach(function(b){ b.addEventListener("click", function(){
+      var v=+b.getAttribute("data-z"); z = v===0 ? 1 : Math.max(.5, Math.min(5, z*(v>0?1.4:1/1.4))); pon(); }); });
+    ov.querySelector("[data-cz]").addEventListener("click", function(){ ov.remove(); });
+  }
+  d.querySelector("#et_zoom").addEventListener("click", ampliar);
+  d.querySelector("#et_vista").addEventListener("click", ampliar);
+  d.querySelector("#et_vista").style.cursor="zoom-in";
   d.querySelector("#et_mas").addEventListener("click", function(){
-    copia.items.push({nombre:"", precio:"", cant:8}); filas(); vista();
+    it().push({nombre:"", precio:"", cant:8}); filas(); vista();
     var u=d.querySelectorAll('#et_filas tr'); if(u.length) u[u.length-1].querySelector('[data-k="precio"]').focus();
   });
   /* Pegar muchos de golpe */
@@ -476,34 +553,35 @@ function abrirEtiquetas(h){
   d.querySelector("#et_pok").addEventListener("click", function(){
     var l=leerPegado(txt.value, parseInt(d.querySelector("#et_def").value,10)||1);
     if(!l.length){ aviso("No he encontrado ningún precio en lo pegado", true); return; }
-    if(d.querySelector("#et_reempl").checked) copia.items=[];
+    if(d.querySelector("#et_reempl").checked) copia.hojas[cur].items=[];
     l.forEach(function(e){
-      var ya=copia.items.filter(function(x){ return String(x.nombre||"").toUpperCase()===e.nombre && +x.precio===+e.precio; })[0];
-      if(ya) ya.cant=(parseInt(ya.cant,10)||0)+e.cant; else copia.items.push(e);
+      var ya=it().filter(function(x){ return String(x.nombre||"").toUpperCase()===e.nombre && +x.precio===+e.precio; })[0];
+      if(ya) ya.cant=(parseInt(ya.cant,10)||0)+e.cant; else it().push(e);
     });
     txt.value=""; pinfo.textContent=""; pegado.style.display="none";
     filas(); vista(); aviso(l.length+" precios añadidos");
   });
   d.querySelector("#et_ordenar").addEventListener("click", function(){
-    copia.items.sort(function(a,b){
+    it().sort(function(a,b){
       if(!!a.nombre!==!!b.nombre) return a.nombre?-1:1;
       return (parseFloat(a.precio)||0)-(parseFloat(b.precio)||0) || String(a.nombre).localeCompare(String(b.nombre));
     });
     filas(); vista();
   });
   function guardarYa(){
-    copia.items=copia.items.filter(function(x){ return String(x.precio).trim()!=="" || String(x.nombre||"").trim(); });
-    h.etiq=copia; h.paginas=Math.max(1,Math.ceil(etTotal(h)/etRejilla(copia.cols).porHoja)); guardar(); pintarLista();
+    copia.hojas.forEach(function(hj){ hj.items=hj.items.filter(function(x){ return String(x.precio).trim()!=="" || String(x.nombre||"").trim(); }); });
+    h.etiq=copia; h.paginas=Math.max(1,etFolios(h)); guardar(); pintarLista();
   }
   d.querySelector("#et_guardar").addEventListener("click", function(){ guardarYa(); d.close(); aviso("Etiquetas guardadas"); });
   d.querySelector("#et_imp").addEventListener("click", function(){ guardarYa(); d.close(); imprimirEtiquetas(h); });
+  d.querySelector("#et_imp1").addEventListener("click", function(){ guardarYa(); d.close(); imprimirEtiquetas(h, cur); });
   filas(); setTimeout(vista, 30);
 }
-function imprimirEtiquetas(h){
-  if(!etTotal(h)){ aviso("No hay ninguna etiqueta que imprimir", true); return; }
+function imprimirEtiquetas(h, solo){
+  if(!etTotal(h, solo)){ aviso("No hay ninguna etiqueta que imprimir", true); return; }
   var caja=document.getElementById("et-imprimir");
   if(!caja){ caja=document.createElement("div"); caja.id="et-imprimir"; document.body.appendChild(caja); }
-  caja.innerHTML=etHTMLHojas(h, false);
+  caja.innerHTML=etHTMLHojas(h, false, solo);
   var st=document.getElementById("et-imp-css");
   if(!st){
     st=document.createElement("style"); st.id="et-imp-css";
