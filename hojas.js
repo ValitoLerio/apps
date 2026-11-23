@@ -388,7 +388,17 @@ function abrirEtiquetas(h){
     '<div class="et-cab" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'+
       '<label style="display:flex;gap:6px;align-items:center;font-size:13.5px">Por fila <select id="et_cols"></select></label>'+
       '<span class="nota" id="et_cuenta" style="margin:0"></span>'+
-      '<span style="margin-left:auto;display:flex;gap:6px"><button class="btn sm" id="et_ordenar">Ordenar por precio</button><button class="btn sm fuerte" id="et_mas">+ Etiqueta</button></span>'+
+      '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" id="et_ordenar">Ordenar por precio</button><button class="btn sm" id="et_pegar">&#128203; Pegar precios</button><button class="btn sm fuerte" id="et_mas">+ Etiqueta</button></span>'+
+    '</div>'+
+    '<div id="et_pegado" style="display:none;margin:0 0 12px;padding:12px;border:1px solid var(--acento-linea);border-radius:8px;background:var(--acento-suave)">'+
+      '<div style="font-size:13px;line-height:1.5;margin-bottom:6px">Pega aquí los precios (de WhatsApp, de un Excel, de una nota…). Vale de cualquier forma:<br>'+
+        '<code>10,50</code> · <code>10,50 x 24</code> · <code>MANCHEGO 12,00 x 24</code> · o una fila con muchos: <code>10,50 € 8,50 € 6,00 €</code> (una etiqueta de cada).</div>'+
+      '<textarea id="et_txt" rows="6" style="width:100%;padding:8px;border:1px solid var(--linea);border-radius:6px;font:14px var(--mono);background:var(--sup);color:var(--tinta)" placeholder="12,50 x 24&#10;MANCHEGO 12,00 x 24&#10;9,50"></textarea>'+
+      '<div style="display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap">'+
+        '<label style="font-size:13px;display:flex;gap:6px;align-items:center">Si no pone cuántas, <input id="et_def" type="number" min="1" value="8" style="width:64px;padding:5px;border:1px solid var(--linea);border-radius:6px"> de cada</label>'+
+        '<label style="font-size:13px;display:flex;gap:6px;align-items:center"><input id="et_reempl" type="checkbox" style="width:auto"> Quitar las que hay y dejar solo estas</label>'+
+        '<span id="et_pinfo" class="nota" style="margin:0"></span>'+
+        '<button class="btn fuerte sm" id="et_pok" style="margin-left:auto">Añadir</button></div>'+
     '</div>'+
     '<div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px" class="et-dos">'+
       '<div><table class="et-tabla" style="width:100%;border-collapse:collapse;font-size:14px">'+
@@ -431,6 +441,48 @@ function abrirEtiquetas(h){
   d.querySelector("#et_mas").addEventListener("click", function(){
     copia.items.push({nombre:"", precio:"", cant:8}); filas(); vista();
     var u=d.querySelectorAll('#et_filas tr'); if(u.length) u[u.length-1].querySelector('[data-k="precio"]').focus();
+  });
+  /* Pegar muchos de golpe */
+  function leerPegado(txt, porDefecto){
+    var out=[], re=/(\d{1,4})\s?[.,]\s?(\d{1,2})(?!\d)\s*(?:€|eur)?/gi;
+    String(txt||"").split(/\r?\n/).forEach(function(lin){
+      lin=lin.replace(/\t/g," ").trim(); if(!lin) return;
+      var precios=[], m; re.lastIndex=0;
+      while((m=re.exec(lin))) precios.push({p:m[1]+"."+(m[2].length===1?m[2]+"0":m[2]), i:m.index, f:m.index+m[0].length});
+      if(!precios.length) return;
+      if(precios.length>1){ precios.forEach(function(x){ out.push({nombre:"", precio:x.p, cant:1}); }); return; }
+      var x=precios[0], antes=lin.slice(0,x.i).trim(), despues=lin.slice(x.f).trim();
+      var q=/^(?:x|×|\*|por)?\s*(\d{1,4})\b/i.exec(despues) || /\b(\d{1,4})\s*(?:x|×|uds?|unidades|etiquetas)\s*$/i.exec(antes);
+      var cant=q ? parseInt(q[1],10) : porDefecto;
+      if(q && q.index!=null && antes.slice(q.index)===q[0]) antes=antes.slice(0,q.index).trim();
+      antes=antes.replace(/[-–:=]+$/,"").trim();
+      out.push({nombre:antes.toUpperCase(), precio:x.p, cant:cant});
+    });
+    /* los iguales se juntan */
+    var junt={}, orden=[];
+    out.forEach(function(e){ var k=e.nombre+"|"+(+e.precio); if(!junt[k]){ junt[k]={nombre:e.nombre, precio:String(+e.precio), cant:0}; orden.push(k); } junt[k].cant+=e.cant; });
+    return orden.map(function(k){ return junt[k]; });
+  }
+  var pegado=d.querySelector("#et_pegado"), txt=d.querySelector("#et_txt"), pinfo=d.querySelector("#et_pinfo");
+  function infoPegado(){
+    var l=leerPegado(txt.value, parseInt(d.querySelector("#et_def").value,10)||1);
+    pinfo.textContent = l.length ? l.length+" precios distintos, "+l.reduce(function(a,x){ return a+x.cant; },0)+" etiquetas" : "";
+  }
+  d.querySelector("#et_pegar").addEventListener("click", function(){
+    pegado.style.display = pegado.style.display==="none" ? "block" : "none";
+    if(pegado.style.display==="block") txt.focus();
+  });
+  txt.addEventListener("input", infoPegado); d.querySelector("#et_def").addEventListener("input", infoPegado);
+  d.querySelector("#et_pok").addEventListener("click", function(){
+    var l=leerPegado(txt.value, parseInt(d.querySelector("#et_def").value,10)||1);
+    if(!l.length){ aviso("No he encontrado ningún precio en lo pegado", true); return; }
+    if(d.querySelector("#et_reempl").checked) copia.items=[];
+    l.forEach(function(e){
+      var ya=copia.items.filter(function(x){ return String(x.nombre||"").toUpperCase()===e.nombre && +x.precio===+e.precio; })[0];
+      if(ya) ya.cant=(parseInt(ya.cant,10)||0)+e.cant; else copia.items.push(e);
+    });
+    txt.value=""; pinfo.textContent=""; pegado.style.display="none";
+    filas(); vista(); aviso(l.length+" precios añadidos");
   });
   d.querySelector("#et_ordenar").addEventListener("click", function(){
     copia.items.sort(function(a,b){
