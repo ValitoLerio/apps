@@ -371,6 +371,27 @@ function etRejilla(cols){
   ch=H/filas;
   return {cols:cols, filas:filas, cw:cw, ch:ch, M:M, porHoja:cols*filas};
 }
+/* Cada hoja = un folio. Lo que no cabe pasa a una hoja nueva justo detrás
+   (se parte la cantidad si hace falta). Devuelve {creadas, mapa: índice viejo → nuevo} */
+function etRepartir(e){
+  var cap=etRejilla(e.cols).porHoja, out=[], mapa=[], creadas=[];
+  e.hojas.forEach(function(hj, idx){
+    var cur={nombre:hj.nombre, items:[]}, n=0; out.push(cur); mapa[idx]=out.length-1;
+    (hj.items||[]).forEach(function(x){
+      var c=Math.max(0, parseInt(x.cant,10)||0);
+      if(!c){ cur.items.push(x); return; }
+      while(c>0){
+        if(n>=cap){ cur={nombre:null, items:[]}; out.push(cur); creadas.push(cur); n=0; }
+        var t=Math.min(c, cap-n), y=JSON.parse(JSON.stringify(x)); y.cant=t;
+        cur.items.push(y); n+=t; c-=t;
+      }
+    });
+  });
+  var usados={}; out.forEach(function(h){ if(h.nombre) usados[h.nombre]=1; });
+  var k=1; out.forEach(function(h){ if(!h.nombre){ while(usados["Hoja "+k]) k++; h.nombre="Hoja "+k; usados[h.nombre]=1; } });
+  e.hojas=out;
+  return {creadas:creadas.map(function(h){ return h.nombre; }), mapa:mapa};
+}
 function etLista(items){
   var l=[];
   items.forEach(function(x){
@@ -403,6 +424,13 @@ function etHTMLHojas(h, soloPrimera, solo){
 function abrirEtiquetas(h){
   h.etiq=etNorm(h.etiq);
   var copia=JSON.parse(JSON.stringify(h.etiq)), cur=0;
+  etRepartir(copia);
+  function repartir(){
+    var r=etRepartir(copia); cur=r.mapa[cur]||0;
+    if(r.creadas.length) aviso("No cabían todas en un folio: lo que sobra pasa a "+r.creadas.join(", "));
+    return r;
+  }
+  function libres(){ return etRejilla(copia.cols).porHoja - etTotal({etiq:copia}, cur); }
   function it(){ return copia.hojas[cur].items; }
   var d=dialogo(h.titulo,
     '<div id="et_tabs" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--linea)"></div>'+
@@ -447,6 +475,7 @@ function abrirEtiquetas(h){
         it()[i][k]= k==="cant" ? Math.max(0, parseInt(e.value,10)||0) : k==="precio" ? e.value.replace(",",".").replace(/[^\d.]/g,"") : e.value;
         vista();
       });
+      if(e.getAttribute("data-k")==="cant") e.addEventListener("change", function(){ if(repartir().creadas.length){ filas(); vista(); } });
     });
     tb.querySelectorAll("[data-quitar]").forEach(function(b){
       b.addEventListener("click", function(){ it().splice(+b.closest("tr").getAttribute("data-i"),1); filas(); vista(); });
@@ -454,7 +483,9 @@ function abrirEtiquetas(h){
   }
   function vista(){
     var tmp={etiq:copia}, g=etRejilla(copia.cols), tot=etTotal(tmp, cur), fol=etFolios(tmp, cur);
-    d.querySelector("#et_cuenta").textContent="Esta hoja: "+tot+" etiquetas"+(fol>1?" ("+fol+" folios)":"")+" · caben "+g.porHoja+" por folio";
+    var cu=d.querySelector("#et_cuenta");
+    cu.textContent="Esta hoja: "+tot+" de "+g.porHoja+(tot>=g.porHoja?" · llena":" · quedan "+(g.porHoja-tot));
+    cu.style.color = tot>g.porHoja ? "#b3261e" : tot===g.porHoja ? "var(--acento)" : "";
     d.querySelector("#et_vlbl").textContent="Así sale «"+copia.hojas[cur].nombre+"»"+(fol>1?" (primer folio de "+fol+")":"");
     var box=d.querySelector("#et_vista"), k=box.clientWidth/(210*96/25.4);
     box.innerHTML='<div style="transform:scale('+k+');transform-origin:0 0;position:absolute;left:0;top:0">'+etHTMLHojas(tmp, true, cur)+'</div>';
@@ -464,7 +495,8 @@ function abrirEtiquetas(h){
   function pestanas(){
     var t=d.querySelector("#et_tabs"), tmp={etiq:copia};
     t.innerHTML=copia.hojas.map(function(hj,i){
-      return '<button class="btn sm'+(i===cur?' fuerte':'')+'" data-hj="'+i+'">'+esc(hj.nombre)+' <span style="opacity:.7">· '+etTotal(tmp,i)+'</span></button>';
+      var cap=etRejilla(copia.cols).porHoja, n=etTotal(tmp,i);
+      return '<button class="btn sm'+(i===cur?' fuerte':'')+'" data-hj="'+i+'">'+esc(hj.nombre)+' <span style="opacity:.7">· '+n+(n>=cap?' llena':'/'+cap)+'</span></button>';
     }).join("")+
       '<button class="btn sm" id="et_hnueva">+ Hoja</button>'+
       '<span style="margin-left:auto;display:flex;gap:6px">'+
@@ -490,7 +522,7 @@ function abrirEtiquetas(h){
       copia.hojas.splice(cur,1); cur=Math.max(0,cur-1); filas(); vista();
     });
   }
-  sel.addEventListener("change", function(){ copia.cols=+sel.value; vista(); });
+  sel.addEventListener("change", function(){ copia.cols=+sel.value; repartir(); filas(); vista(); });
   /* Ampliar: todos los folios de la hoja, grandes, con + y − */
   function ampliar(){
     var tmp={etiq:copia}, z=1, ov=document.createElement("div");
@@ -516,7 +548,12 @@ function abrirEtiquetas(h){
   d.querySelector("#et_vista").addEventListener("click", ampliar);
   d.querySelector("#et_vista").style.cursor="zoom-in";
   d.querySelector("#et_mas").addEventListener("click", function(){
-    it().push({nombre:"", precio:"", cant:8}); filas(); vista();
+    if(libres()<=0){
+      var n=1, us={}; copia.hojas.forEach(function(x){ us[x.nombre]=1; }); while(us["Hoja "+n]) n++;
+      copia.hojas.splice(cur+1,0,{nombre:"Hoja "+n, items:[]}); cur++;
+      aviso("Esta hoja está llena: sigues en «Hoja "+n+"»");
+    }
+    it().push({nombre:"", precio:"", cant:Math.min(8, libres())}); filas(); vista();
     var u=d.querySelectorAll('#et_filas tr'); if(u.length) u[u.length-1].querySelector('[data-k="precio"]').focus();
   });
   /* Pegar muchos de golpe */
@@ -559,7 +596,8 @@ function abrirEtiquetas(h){
       if(ya) ya.cant=(parseInt(ya.cant,10)||0)+e.cant; else it().push(e);
     });
     txt.value=""; pinfo.textContent=""; pegado.style.display="none";
-    filas(); vista(); aviso(l.length+" precios añadidos");
+    var r=repartir(); filas(); vista();
+    if(!r.creadas.length) aviso(l.length+" precios añadidos");
   });
   d.querySelector("#et_ordenar").addEventListener("click", function(){
     it().sort(function(a,b){
