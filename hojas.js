@@ -776,6 +776,10 @@ function abrirHorario(h){
   var d=dialogo(h.titulo,
     '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:18px" class="et-dos">'+
       '<div>'+
+        '<div class="lbl" style="margin-bottom:6px">Temporada</div>'+
+        '<div style="display:flex;gap:6px;margin-bottom:6px" id="ho_temp">'+
+          '<button class="btn" data-tp="verano">&#9728;&#65039; Verano · 8 h</button><button class="btn" data-tp="invierno">&#10052;&#65039; Invierno · 9 h</button></div>'+
+        '<p class="nota" style="margin:0 0 16px">Los encargados (★) hacen una hora más. Al elegir la entrada en la rueda, la salida se pone sola.</p>'+
         '<div class="lbl" style="margin-bottom:6px">Personal</div>'+
         '<div id="ho_per"></div>'+
         '<div style="display:flex;gap:6px;margin-top:8px"><input id="ho_nuevo" placeholder="Nombre nuevo" '+inp+' style="flex:1"><button class="btn fuerte sm" id="ho_mas">+ Añadir</button></div>'+
@@ -802,6 +806,7 @@ function abrirHorario(h){
     box.innerHTML=c.personal.map(function(p,i){
       var oc=c.ocultos.indexOf(p)>=0;
       return '<div style="display:flex;gap:6px;margin-bottom:6px;'+(oc?'opacity:.5':'')+'" data-i="'+i+'"><input value="'+esc(p)+'" '+inp+' style="flex:1'+(oc?';text-decoration:line-through':'')+'">'+
+        '<button class="btn sm '+((c.encargados||[]).indexOf(p)>=0?'fuerte':'suave')+'" data-enc title="Encargado (hace una hora más)">&#9733;</button>'+
         '<button class="btn sm '+(oc?'':'suave')+'" data-o title="'+(oc?'Oculto: pulsa para que vuelva a salir':'Ocultar en la hoja (no se borra)')+'">'+(oc?'&#128584; Oculto':'&#128065;&#65039;')+'</button>'+
         '<button class="btn sm suave" data-m="-1" title="Subir"'+(i===0?' disabled':'')+'>&#9650;</button>'+
         '<button class="btn sm suave" data-m="1" title="Bajar"'+(i===c.personal.length-1?' disabled':'')+'>&#9660;</button>'+
@@ -809,7 +814,14 @@ function abrirHorario(h){
     }).join("");
     box.querySelectorAll("input").forEach(function(e){ e.addEventListener("input", function(){
       var i=+e.parentNode.getAttribute("data-i"), viejo=c.personal[i], o=c.ocultos.indexOf(viejo);
-      c.personal[i]=e.value.toUpperCase(); if(o>=0) c.ocultos[o]=c.personal[i]; vista(); }); });
+      c.personal[i]=e.value.toUpperCase(); if(o>=0) c.ocultos[o]=c.personal[i];
+      var en=(c.encargados||[]).indexOf(viejo); if(en>=0) c.encargados[en]=c.personal[i]; vista(); }); });
+    box.querySelectorAll("[data-enc]").forEach(function(b){ b.addEventListener("click", function(){
+      c.encargados=c.encargados||[];
+      var p=c.personal[+b.parentNode.getAttribute("data-i")], o=c.encargados.indexOf(p);
+      if(o>=0) c.encargados.splice(o,1); else c.encargados.push(p);
+      lista(); auto(); aviso(o>=0 ? p+" ya no es encargado" : p+" es encargado: una hora más");
+    }); });
     box.querySelectorAll("[data-o]").forEach(function(b){ b.addEventListener("click", function(){
       var p=c.personal[+b.parentNode.getAttribute("data-i")], o=c.ocultos.indexOf(p);
       if(o>=0) c.ocultos.splice(o,1); else c.ocultos.push(p);
@@ -873,13 +885,27 @@ function abrirHorario(h){
     for(var hh=0;hh<24;hh++){ horas.push('<option>'+hh+'</option>'); horas.push('<option>'+hh+':30</option>'); }
     ov.querySelectorAll("[data-rueda] select").forEach(function(se){ se.innerHTML=horas.join(""); });
     function rs(n){ return ov.querySelector('[data-r="'+n+'"]'); }
+    function aMin(t){ var m=/^(\d{1,2})(?::(\d\d))?$/.exec(String(t||"")); return m ? (+m[1])*60+(+(m[2]||0)) : null; }
+    function aHora(mi){ mi=((mi%1440)+1440)%1440; var hh=Math.floor(mi/60), mm=mi%60; return hh+(mm?":"+String(mm).padStart(2,"0"):""); }
+    function horasDe(per){ return ((c.temporada==="verano")?8:9) + ((c.encargados||[]).indexOf(per)>=0?1:0); }
+    function rellenaSalida(){
+      if(!ultCelda) return;
+      var tot=horasDe(ultCelda.split("|")[1])*60, e1=aMin(rs("e1").value);
+      if(e1==null) return;
+      if(!rs("partido").checked){ rs("s1").value=aHora(e1+tot); return; }
+      var s1=aMin(rs("s1").value), e2=aMin(rs("e2").value);
+      if(s1!=null && e2!=null){ var hecho=((s1-e1)+1440)%1440; rs("s2").value=aHora(e2+Math.max(0,tot-hecho)); }
+    }
+    rs("e1").addEventListener("change", function(){ if(!rs("partido").checked || !rs("s1").value) rellenaSalida(); });
+    rs("e2").addEventListener("change", rellenaSalida);
+    rs("s1").addEventListener("change", function(){ if(rs("partido").checked && rs("e2").value) rellenaSalida(); });
     rs("partido").addEventListener("change", function(){ ov.querySelector("[data-r2]").style.display=rs("partido").checked?"inline-flex":"none"; });
     function tdDe(key){ return key ? sc.querySelector('[data-c="'+(window.CSS&&CSS.escape?CSS.escape(key):key)+'"]') : null; }
     function selecciona(key){
       sc.querySelectorAll("[data-c].sel").forEach(function(e){ e.classList.remove("sel"); });
       ultCelda=key; var td=tdDe(key); if(td) td.classList.add("sel");
       var p=(key||"").split("|");
-      ov.querySelector("[data-rlbl]").textContent = key ? p[1]+" · "+HOR_DIAS[+p[2]] : "Toca una casilla";
+      ov.querySelector("[data-rlbl]").innerHTML = key ? esc(p[1])+" · "+HOR_DIAS[+p[2]]+'<br><span style="font-weight:400;font-size:12px;color:var(--muted)">'+(c.temporada==="verano"?"Verano":"Invierno")+" · "+horasDe(p[1])+" h"+((c.encargados||[]).indexOf(p[1])>=0?" (encargado)":"")+'</span>' : "Toca una casilla";
       /* la rueda se pone en lo que ya tenga la casilla */
       var v=(c.celdas||{})[key]||"", m=/^\s*(\d{1,2}(?::\d\d)?)\s*-\s*(\d{1,2}(?::\d\d)?)(?:\s*\/\s*(\d{1,2}(?::\d\d)?)\s*-\s*(\d{1,2}(?::\d\d)?))?/.exec(v);
       if(m){ rs("e1").value=m[1]; rs("s1").value=m[2]; rs("partido").checked=!!m[3]; if(m[3]){ rs("e2").value=m[3]; rs("s2").value=m[4]; } }
@@ -1108,6 +1134,10 @@ function abrirHorario(h){
     return true;
   }
   d.querySelector("#ho_arch").addEventListener("click", function(){ archivar(false); });
+  if(!c.temporada){ var mm=new Date().getMonth(); c.temporada=(mm>=5&&mm<=8)?"verano":"invierno"; }
+  function pintaTemp(){ d.querySelectorAll("[data-tp]").forEach(function(b){ b.classList.toggle("fuerte", b.getAttribute("data-tp")===c.temporada); }); }
+  d.querySelectorAll("[data-tp]").forEach(function(b){ b.addEventListener("click", function(){ c.temporada=b.getAttribute("data-tp"); pintaTemp(); auto(); }); });
+  pintaTemp();
   /* Borrar el horario entero: casillas y fechas; antes se guarda una copia en «Guardados» por si acaso */
   function borrarTodo(){ archivar(true); c.celdas={}; c.titulos={}; c.desde=""; d.querySelector("#ho_desde").value=""; guardarYa(); }
   d.querySelector("#ho_borrar").addEventListener("click", function(){
