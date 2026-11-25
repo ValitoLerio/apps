@@ -469,12 +469,12 @@
         <p class="que">Comidas de empresa: albaranes del día y factura mensual con IGI.</p>
         <div class="cifra">
           <span class="n" id="d-pendiente">—</span>
-          <span class="u">por facturar</span>
+          <span class="u">pendiente de cobrar</span>
         </div>
         <div class="tira">
-          <div class="celda"><span class="k">Empresas</span><span class="v" id="d-empresas">—</span></div>
-          <div class="celda"><span class="k">Servicios</span><span class="v" id="d-servicios">—</span></div>
-          <div class="celda"><span class="k">Facturas</span><span class="v" id="d-facturas">—</span></div>
+          <div class="celda"><span class="k">Por facturar</span><span class="v" id="d-empresas">—</span></div>
+          <div class="celda"><span class="k">Facturado sin cobrar</span><span class="v" id="d-servicios">—</span></div>
+          <div class="celda"><span class="k">Facturas sin cobrar</span><span class="v" id="d-facturas">—</span></div>
         </div>
         <div class="entrar">Abrir <span class="flecha">→</span></div>
       </a>
@@ -663,7 +663,7 @@
 
 </div>
 
-<script src="sync.js?v=202611251831"></script>
+<script src="sync.js?v=202611251857"></script>
 <script>
 /* Red de seguridad. Si los archivos de la app no están al lado de esta
    página — pasa al abrirla fuera de la web: vista previa, doble clic en
@@ -680,7 +680,7 @@ window.reintentarJS = function(viejo, nombre, sub){
   }
   var s = document.createElement('script');
   s.setAttribute('data-rein', '1');
-  s.src = WEB_APPS + nombre + '?v=202611251831' + Date.now();
+  s.src = WEB_APPS + nombre + '?v=202611251857' + Date.now();
   s.onload = viejo.onload;
   s.onerror = function(){ reintentarJS(s, nombre, sub); };
   document.body.appendChild(s);
@@ -886,10 +886,15 @@ if (!window.Sync) (function(){
       return suma + (s.gross ? importe : importe * (1 + tipo/100));
     }, 0);
 
-    pon('d-pendiente', euros(pendiente));
-    pon('d-empresas',  String((libro.companies || []).length));
-    pon('d-servicios', String(servicios.length));
-    pon('d-facturas',  String((libro.invoices || []).length));
+    /* Lo que falta por cobrar: lo apuntado sin facturar más las facturas
+       emitidas que todavía no se han cobrado */
+    var sinCobrar = (libro.invoices || []).filter(function(f){ return f.status !== 'cobrada' && f.status !== 'anulada'; });
+    var porCobrar = sinCobrar.reduce(function(s, f){ return s + (+f.total || 0); }, 0);
+
+    pon('d-pendiente', euros(pendiente + porCobrar));
+    pon('d-empresas',  euros(pendiente));
+    pon('d-servicios', euros(porCobrar));
+    pon('d-facturas',  String(sinCobrar.length));
   }
 
   // ── Colocar el escritorio ──────────────────────────────
