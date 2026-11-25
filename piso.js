@@ -273,7 +273,8 @@ function calcularSaldoAcumulado(hastaExcluido){
        una cuota de 0 € guardada cuenta como 0 y no como la de hoy. */
     const c=(m.cuota!=null)?m.cuota:(cfg.cuota||0);
     const consumo=(m.cal_cob||0)+(m.agua_cob||0)+(m.elec_cob||0);
-    saldo+=c-consumo;
+    /* lo abonado al inquilino sale del fondo */
+    saldo+=c-consumo-(m.abono||0);
   }
   return Math.round(saldo*100)/100;
 }
@@ -300,6 +301,7 @@ function initRecibo(){
   });
   document.getElementById('p-elec').value=cfg.elec||0;
   document.getElementById('elec-directo').value=cfg.elecPreu||'';
+  document.getElementById('r-abono').value='';
   set('elec-cob','');
 
   // Saldo acumulado automático (salvo que haya uno manual activo)
@@ -369,13 +371,17 @@ function calcular(){
   const liquidacion = cuota - totalConsumo;
   const saldoAnt = parseFloat(document.getElementById('saldo-ant').dataset.valor||0);
   const origenSaldo = document.getElementById('saldo-origen').textContent;
-  const total = alq + cuota;
+  /* Abono: dinero del fondo que se le devuelve al inquilino, descontado de este recibo */
+  const abono = Math.max(0, n('r-abono'));
+  const total = alq + cuota - abono;
+  const dispAb=document.getElementById('abono-disp');
+  if(dispAb){ const hay=saldoAnt+cuota-totalConsumo; dispAb.textContent = hay>0.004 ? 'Hay '+fmt(hay)+' € en el fondo'+(abono>hay+0.004?' · ¡abonas más de lo que hay!':'') : 'El fondo no tiene saldo a favor'; dispAb.style.color = abono>hay+0.004 ? 'var(--danger)' : 'var(--accent)'; }
   document.getElementById('total-r').textContent = fmt(total) + ' €';
 
   // Actualizar panel saldo en tiempo real
   const cd=document.getElementById('consumo-display');
   if(cd){ cd.textContent=(totalConsumo>0?'- ':'')+fmt(totalConsumo)+' €'; cd.style.color=totalConsumo>0?'var(--danger)':'var(--muted)'; }
-  const saldoTotal = saldoAnt + cuota - totalConsumo;
+  const saldoTotal = saldoAnt + cuota - totalConsumo - abono;
   const std=document.getElementById('saldo-total-display');
   if(std){
     std.textContent=(saldoTotal>0?'+ ':saldoTotal<0?'- ':'')+fmt(Math.abs(saldoTotal))+' €';
@@ -400,14 +406,15 @@ function calcular(){
   lines.push('*─────────────────────────────*');
   lines.push('🏡 Alquiler mensual:       *' + fmt(alq) + ' €*');
   lines.push('📦 Fondo gastos consumo:   *' + fmt(cuota) + ' €*');
+  if(abono>0) lines.push('↩️ Abono del fondo:        *- ' + fmt(abono) + ' €*');
   lines.push('*─────────────────────────────*');
-  lines.push('✅ *TOTAL:   ' + fmt(alq + cuota) + ' €*');
+  lines.push('✅ *TOTAL:   ' + fmt(alq + cuota - abono) + ' €*');
   lines.push('');
 
   // BLOQUE 2 — CUENTA CONSUMO
   const saldoFavorAnterior = saldoAnt;
   const totalFavor = saldoFavorAnterior + cuota;
-  const saldoFinal = totalFavor - totalConsumo;
+  const saldoFinal = totalFavor - totalConsumo - abono;
   const desde = cfg.cuotaDesde || '0000-00';
   const mesesAnteriores = [...meses].filter(m => m.mes < mes && m.mes >= desde);
   const numMeses = mesesAnteriores.length;
@@ -443,6 +450,7 @@ function calcular(){
     if(elec.costeCob > 0) lines.push('   ⚡ Electricidad:   *- ' + fmt(elec.costeCob) + ' €*');
     lines.push('   Total gastos:      *- ' + fmt(totalConsumo) + ' €*');
   }
+  if(abono>0){ lines.push(''); lines.push('↩️ Abonado al inquilino:  *- ' + fmt(abono) + ' €*'); }
 
   lines.push('');
   lines.push('*─────────────────────────────*');
@@ -520,7 +528,8 @@ function guardarRecibo(){
   const elecCob=elecDir*(1+elecPct/100);
   const totalConsumo=cal.cob+agua.cob+elecCob;
   const liquidacion=cuota-totalConsumo;
-  const total=alq+cuota;
+  const abono=Math.max(0, n('r-abono'));
+  const total=alq+cuota-abono;
 
   /* El margen se guarda con el recibo: asi un mes de 2024 conserva el
      suyo aunque el de Configuracion cambie manana. */
@@ -528,7 +537,7 @@ function guardarRecibo(){
     cal_ant:cal.ant,cal_act:cal.act,cal_preu:cal.preu,cal_cons:cal.cons,cal_con:cal.con,cal_cob:cal.cob,cal_pct:cal.pct,
     agua_ant:agua.ant,agua_act:agua.act,agua_preu:agua.preu,agua_cons:agua.cons,agua_con:agua.con,agua_cob:agua.cob,agua_pct:agua.pct,
     elec_directo:elecDir,elec_con:elecDir,elec_cob:elecCob,elec_pct:elecPct,
-    total};
+    abono,total};
 
   const idx=meses.findIndex(m=>m.mes===mes);
   if(idx>=0){
@@ -613,8 +622,9 @@ function textoReciboCompleto(m){
   lines.push('*─────────────────────────────*');
   lines.push('🏡 Alquiler mensual:       *' + fmt(m.alq) + ' €*');
   lines.push('📦 Fondo gastos consumo:   *' + fmt(cuota) + ' €*');
+  if(m.abono>0) lines.push('↩️ Abono del fondo:        *- ' + fmt(m.abono) + ' €*');
   lines.push('*─────────────────────────────*');
-  lines.push('✅ *TOTAL:   ' + fmt(m.alq + cuota) + ' €*');
+  lines.push('✅ *TOTAL:   ' + fmt(m.alq + cuota - (m.abono||0)) + ' €*');
   lines.push('');
 
   // BLOQUE 2 — CUENTA CONSUMO
@@ -623,7 +633,7 @@ function textoReciboCompleto(m){
   const saldoFavAnt = (m.saldo_ant!=null) ? m.saldo_ant : calcularSaldoAcumulado(m.mes);
   const totalConsumo=(m.cal_cob||0)+(m.agua_cob||0)+(m.elec_cob||0);
   const totalFavor=saldoFavAnt+cuota;
-  const saldoFinal=totalFavor-totalConsumo;
+  const saldoFinal=totalFavor-totalConsumo-(m.abono||0);
   const desdeRec = cfg.cuotaDesde || '0000-00';
   const mesesAntRec=[...meses].filter(r=>r.mes<m.mes && r.mes>=desdeRec);
   const numMesesRec=mesesAntRec.length;
@@ -658,6 +668,7 @@ function textoReciboCompleto(m){
     if((m.elec_cob||0)>0) lines.push('   ⚡ Electricidad:   *- ' + fmt(m.elec_cob) + ' €*');
     lines.push('   Total gastos:      *- ' + fmt(totalConsumo) + ' €*');
   }
+  if(m.abono>0){ lines.push(''); lines.push('↩️ Abonado al inquilino:  *- ' + fmt(m.abono) + ' €*'); }
 
   lines.push('');
   lines.push('*─────────────────────────────*');
@@ -699,6 +710,7 @@ function editarRecibo(mes){
 
   // Electricidad
   document.getElementById('elec-directo').value=m.elec_directo||'';
+  document.getElementById('r-abono').value=m.abono||'';
 
   // Saldo anterior guardado del recibo — marcar como manual
   const saldoAnt=m.saldo_ant!=null?m.saldo_ant:calcularSaldoAcumulado(mes);
@@ -1030,7 +1042,7 @@ function renderSaldoMensual(){
   meses.forEach(m=>{
     const f=fila(m.mes);
     /* Lo cobrado es el recibo entero: alquiler más la cuota de consumo */
-    f.cobrado = (m.alq||0)+cuotaDelMes(m);
+    f.cobrado = (m.alq||0)+cuotaDelMes(m)-(m.abono||0);
     f.recibo=true;
   });
   gastos.forEach(g=>{
@@ -1281,13 +1293,19 @@ function dibujarFactura(datos, lienzo){
   }
   concepto('Alquiler mensual','Vivienda · '+datos.mes,datos.alq);
   concepto('Gastos de consumo',null,datos.cuota);
+  if(datos.abono>0){
+    y+=30; t('Abono del fondo de consumos',L+14,y,DK,14,500);
+    t('Devolución de saldo a favor',L+14,y+17,LT,11.5,400);
+    t('− '+eur(datos.abono),R-14,y,AC,14,600,'right');
+    y+=28; ln(y,LN);
+  }
 
   // Total
   y+=18;
   const xt=L+CW*0.40;
   rect(xt,y,R-xt,54,AC);
   t('TOTAL A PAGAR',xt+16,y+33,'rgba(255,255,255,.75)',10,700,'left',1.4);
-  t(eur(datos.alq+datos.cuota),R-14,y+35,'#ffffff',22,700,'right');
+  t(eur(datos.alq+datos.cuota-(datos.abono||0)),R-14,y+35,'#ffffff',22,700,'right');
   y+=54;
 
   // ── Cuenta de consumos (el recibo simple no la lleva)
@@ -1309,6 +1327,7 @@ function dibujarFactura(datos, lienzo){
   if(datos.agua>0) linea('Agua caliente', datos.agua, RD, true);
   if(datos.elec>0) linea('Electricidad', datos.elec, RD, true);
   if(!(datos.totalConsumo>0)) linea('Consumos del mes', 0, MD);
+  if(datos.abono>0) linea('Abonado al arrendatario', datos.abono, RD, true);
   y+=6; ln(y,LN);
   const sf=datos.saldoFinal, pos=sf>0.004, neg=sf<-0.004;
   y+=12;
@@ -1409,9 +1428,9 @@ function datosFacturaDeRecibo(m){
   const totalFavor=saldoAnt+cuota;
   return {
     mes:fmtMes(m.mes), codigo:m.mes, inq:cfg.inq||'(Inquilino)',
-    alq:m.alq||0, cuota, saldoFavAnt:saldoAnt, numMeses,
+    alq:m.alq||0, cuota, saldoFavAnt:saldoAnt, numMeses, abono:m.abono||0,
     cal, agua, elec, totalConsumo, totalFavor,
-    saldoFinal:totalFavor-totalConsumo,
+    saldoFinal:totalFavor-totalConsumo-(m.abono||0),
     cierre:cfg.cierre||'Muchas gracias 🙏', simple:reciboSimple
   };
 }
@@ -1474,8 +1493,8 @@ function textoWhatsApp(m){
   const sf=d.saldoFinal;
   const l=['Hola '+nom+',', '',
            'Te envío el recibo del alquiler de *'+d.mes.toLowerCase()+'*.', '',
-           '*Total a pagar: '+fmtMil(d.alq+d.cuota)+' €*',
-           'Alquiler '+fmtMil(d.alq)+' € + gastos de consumo '+fmtMil(d.cuota)+' €', '',
+           '*Total a pagar: '+fmtMil(d.alq+d.cuota-(d.abono||0))+' €*',
+           'Alquiler '+fmtMil(d.alq)+' € + gastos de consumo '+fmtMil(d.cuota)+' €'+(d.abono>0?' − abono del fondo '+fmtMil(d.abono)+' €':''), '',
            reciboSimple ? null
          : sf>0.004 ? 'Cuenta de consumos: saldo a tu favor de '+fmtMil(sf)+' €.'
          : sf<-0.004 ? 'Cuenta de consumos: saldo pendiente de '+fmtMil(Math.abs(sf))+' €.'
@@ -1862,7 +1881,7 @@ function datosPropietario(m){
   const real=s.reduce((a,x)=>a+x.real,0), cob=s.reduce((a,x)=>a+x.cob,0);
   return {m, mes:fmtMes(m.mes), codigo:m.mes, inq:inqDelMes(m.mes),
     alq:m.alq||0, otros:m.otros||0, cuota, s, real, cob, ganMargen:cob-real,
-    saldoAnt, saldoFinal:saldoAnt+cuota-cob};
+    saldoAnt, abono:m.abono||0, saldoFinal:saldoAnt+cuota-cob-(m.abono||0)};
 }
 
 /* Quién vivía en el piso ese mes (el último que entró), según Inquilinos. */
@@ -2036,11 +2055,12 @@ function getDatosFactura(){
   const totalConsumo=cal+agua+elec;
   const desde=cfg.cuotaDesde||'0000-00';
   const mesesAnt=[...meses].filter(m=>m.mes<mes&&m.mes>=desde);
+  const abono=Math.max(0, n('r-abono'));
   const totalFavor=saldoAnt+cuota;
-  const saldoFinal=totalFavor-totalConsumo;
+  const saldoFinal=totalFavor-totalConsumo-abono;
   return {
     mes:fmtMes(mes), codigo:mes, inq:cfg.inq||'(Inquilino)',
-    alq,cuota,saldoFavAnt:saldoAnt,numMeses:mesesAnt.length,
+    alq,cuota,saldoFavAnt:saldoAnt,numMeses:mesesAnt.length,abono,
     cal,agua,elec,totalConsumo,totalFavor,saldoFinal,
     cierre:cfg.cierre||'Muchas gracias 🙏', simple:reciboSimple
   };
