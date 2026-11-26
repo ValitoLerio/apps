@@ -4416,6 +4416,8 @@ function planRellenar(){
       var fuera = par.map(function(sid){ var c = gcAt(sid, dia); return !!(c && c.estado && c.estado !== 'trabajo' && c.estado !== 'libre'); });
       if (fuera[0] && fuera[1]) avisos.push(DC_FULL[fecha.getDay()] + ' ' + etiquetaDia(dia, curM) + ': ' + nombreDe(par[0]) + ' y ' + nombreDe(par[1]) + ' libran a la vez');
     });
+    /* Los cocineros de ese día (para que no coincidan) */
+    var cocIds = lista.filter(function(s){ var g = p.gente[s.id]; return g && (g.grupo === 'coc' || g.grupo === 'enccoc'); }).map(function(s){ return s.id; });
     /* El turno de los que ya estaban puestos, para «van juntos» */
     var catFijo = {}, horFijo = {};
     lista.forEach(function(s){
@@ -4611,6 +4613,13 @@ function planRellenar(){
         var a = hors[par[0]] || horFijo[par[0]], b = hors[par[1]] || horFijo[par[1]];
         if (a && b && Math.min(a[1], b[1]) - Math.max(a[0], b[0]) >= 60) coste += 220;   /* peticion: no coincide con */
       });
+      /* Los cocineros (Valeriano y José Antonio) no coinciden: uno de
+         mañana y el otro de tarde. Son los dos que hay; si están juntos,
+         la otra mitad del día se queda sin cocina. */
+      for (var ci = 0; ci < cocIds.length; ci++) for (var cj = ci + 1; cj < cocIds.length; cj++) {
+        var ca = hors[cocIds[ci]] || horFijo[cocIds[ci]], cb = hors[cocIds[cj]] || horFijo[cocIds[cj]];
+        if (ca && cb) { var sola = Math.min(ca[1], cb[1]) - Math.max(ca[0], cb[0]); if (sola > 120) coste += 1500 + sola; }
+      }
       /* La mañana, lo primero después del cierre: sale más caro dejarla
          corta que dejar un hueco a cualquier otra hora, así que si falta
          gente la quita de la noche o del mediodía, no de la mañana. */
@@ -5226,6 +5235,11 @@ function planRevisar(){
       var fuera = par.map(function(sid){ var c = celdaDe(sid, dia); return !!(c && c.estado && c.estado !== 'trabajo' && c.estado !== 'libre'); });
       if (fuera[0] && fuera[1]) f.push(nombrePet(par[0]) + ' y ' + nombrePet(par[1]) + ' libran a la vez');
     });
+    var cocH = lista.filter(function(s){ var g = p.gente && p.gente[s.id]; return g && (g.grupo === 'coc' || g.grupo === 'enccoc') && hor[s.id]; });
+    for (var q1 = 0; q1 < cocH.length; q1++) for (var q2 = q1 + 1; q2 < cocH.length; q2++) {
+      var H1 = hor[cocH[q1].id], H2 = hor[cocH[q2].id];
+      if (Math.min(H1[1], H2[1]) - Math.max(H1[0], H2[0]) > 120) f.push(cocH[q1].name + ' y ' + cocH[q2].name + ' coinciden en cocina');
+    }
     lista.forEach(function(s){
       petActivas(p.gente[s.id], fecha).forEach(function(x){
         if (x.t !== 'noCoincide' || !hor[s.id] || !hor[x.con]) return;
