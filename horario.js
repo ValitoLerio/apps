@@ -4643,8 +4643,9 @@ function planRellenar(){
       /* Cocina: el cocinero, o si no, uno de los que pueden cubrirla. Un
          encargado que cubre la cocina no cuenta como el que cierra. */
       if (cubNenc && encCierran >= 2) cubN = true;
-      if (!cocDia) coste += cubD ? 6 : 250;
-      if (!cocNoche) coste += cubN ? 6 : 250;
+      /* Sin cocinero en un turno lo cubre Martín o Melo; que no quede sin nadie */
+      if (!cocDia) coste += cubD ? 6 : 1200;
+      if (!cocNoche) coste += cubN ? 6 : 1200;
       return {coste:coste, cov:cov, covE:covE, covO:covO};
     }
     function probar(i){
