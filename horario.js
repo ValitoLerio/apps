@@ -3242,7 +3242,8 @@ function autoFestivos(y, m){
   staff().forEach(function(p){
     var f = p.fijo; if (!f || f.libra === '' || f.libra == null) return;
     f.festHecho = f.festHecho || {};
-    if (f.festHecho[clave]) return;
+    /* Siempre: el día que libra, si está vacío, sale de fiesta. Lo que se
+       haya puesto a mano en ese día (un turno, vacaciones…) se respeta. */
     dias.forEach(function(dia){
       if (dia.dow !== +f.libra) return;
       if (antesDeAlta(p, dia)) return;                              // aún no ha entrado
