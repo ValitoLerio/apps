@@ -732,6 +732,7 @@ function renderAll() {
      falle al pintarse. */
   montarBarraBloques();
   autoFestivos(curY, curM);
+  festivosAdelante();
   renderNav(); renderTable(); renderStats(); renderCov(); renderHours(); renderAusencias(); renderVacaciones();
   BLOQUES.forEach(function(b){ aplicarPlegado(b.id); });
   ordenarBloques();
@@ -3213,7 +3214,7 @@ function setFijo(id, campo, valor) {
   p.fijo[campo] = valor;
   if (campo === 'libra' && String(antes) !== String(valor)) {
     moverLibra(id, antes);
-    if (valor !== '') { autoFestivos(curY, curM); }
+    if (valor !== '') festivosAdelante();
     renderAll();
   }
   /* Al escribir la entrada, la salida se rellena sola con las horas que
@@ -3244,6 +3245,8 @@ function autoFestivos(y, m){
     if (f.festHecho[clave]) return;
     dias.forEach(function(dia){
       if (dia.dow !== +f.libra) return;
+      if (antesDeAlta(p, dia)) return;                              // aún no ha entrado
+      if (new Date(dia.y, dia.m, dia.d) < hoy) return;              // días pasados, no
       var mes = ((sched[dia.y] = sched[dia.y] || {})[dia.m] = (sched[dia.y][dia.m] || {}));
       mes[p.id] = mes[p.id] || {};
       var hay = mes[p.id][dia.d];
@@ -3256,12 +3259,29 @@ function autoFestivos(y, m){
   });
   if (cambios) save();
 }
+/* Las fiestas de cada uno salen siempre: el mes que se mira y los dos
+   siguientes (se pueden cambiar a mano; lo cambiado se respeta). */
+function festivosAdelante(){
+  var h = mesDeFecha(new Date());
+  for (var k = 0; k < 3; k++) { var f = new Date(h.y, h.m + k, 1); autoFestivos(f.getFullYear(), f.getMonth()); }
+}
 /* Cambia el día que libra: los festivos de su día de antes, de este mes
    en adelante, se quitan y se ponen en el nuevo. */
 function moverLibra(id, antes){
   var p = personaDe(id); if (!p || !p.fijo) return;
   var hoy = new Date(); hoy.setHours(0,0,0,0);
   var desde = mesDeFecha(hoy);
+  /* Los festivos del día de antes, de hoy en adelante, fuera (estén en
+     el mes que estén, los haya puesto quien los haya puesto) */
+  if (antes !== '' && antes != null) Object.keys(sched).forEach(function(y){
+    Object.keys(sched[y] || {}).forEach(function(m){
+      var dd = (sched[y][m] || {})[id]; if (!dd) return;
+      Object.keys(dd).forEach(function(d){
+        var f = new Date(+y, +m, +d);
+        if (f >= hoy && f.getDay() === +antes && dd[d] && dd[d].estado === 'festivo') delete dd[d];
+      });
+    });
+  });
   Object.keys(p.fijo.festHecho || {}).forEach(function(k){
     var a = k.split('-'), y = +a[0], m = +a[1];
     if (y < desde.y || (y === desde.y && m < desde.m)) return;
@@ -5014,7 +5034,7 @@ function leerPlanDeLaVentana(){
     if (per) {
       per.fijo = per.fijo || {ini:'', fin:'', libra:''};
       var nuevo = g.fest >= 0 ? String(g.fest) : '';
-      if (String(per.fijo.libra) !== nuevo) { var ant = per.fijo.libra; per.fijo.libra = nuevo; moverLibra(sid, ant); }
+      if (String(per.fijo.libra) !== nuevo) { var ant = per.fijo.libra; per.fijo.libra = nuevo; moverLibra(sid, ant); festivosAdelante(); }
     }
     g.ini = tr.querySelector('[data-k="ini"]').value || 'man';
     if (g.grupo === 'coc' && g.ini === 'med') g.ini = 'man';
