@@ -377,6 +377,34 @@ function ultimaRec(prov){
   l.sort(function(a,b){ return a.fecha<b.fecha?1:-1; });
   return l[0]||null;
 }
+/* Para no repetir lo mismo escrito de otra forma (Lacteo, Lácteos,
+   Congelafos…): sin acentos, sin plural y con una letra de margen. */
+function claveProd(t){
+  t=String(t||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z ]/g,"").trim();
+  return t.replace(/(es|s)$/,"");
+}
+function parecidos(a,b){
+  if(a===b) return true;
+  if(Math.abs(a.length-b.length)>2 || Math.min(a.length,b.length)<4) return false;
+  var m=[], i, j; for(i=0;i<=a.length;i++){ m[i]=[i]; } for(j=0;j<=b.length;j++) m[0][j]=j;
+  for(i=1;i<=a.length;i++) for(j=1;j<=b.length;j++) m[i][j]=Math.min(m[i-1][j]+1, m[i][j-1]+1, m[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+  return m[a.length][b.length]<=2;
+}
+/* Lista sin repetidos: primero la de siempre, luego lo usado que sea distinto */
+function listaProductos(){
+  var l=PRODUCTOS.slice(), ks=l.map(claveProd);
+  state.recepciones.forEach(function(x){
+    if(!x.producto) return; var k=claveProd(x.producto);
+    if(!ks.some(function(y){ return parecidos(k,y); })){ l.push(x.producto); ks.push(k); }
+  });
+  return l;
+}
+/* Lo escrito se guarda con el nombre que ya existe si es lo mismo */
+function nombreProducto(t){
+  t=String(t||"").trim(); if(!t) return t; var k=claveProd(t);
+  var l=listaProductos(); for(var i=0;i<l.length;i++) if(parecidos(k, claveProd(l[i]))) return l[i];
+  return t;
+}
 var PRODUCTOS=["Carne","Pescado","Marisco","Pollo y aves","Embutidos","Lácteos","Huevos","Fruta y verdura","Congelados","Pan","Pastelería","Bebidas","Secos y conservas","Aceite","Limpieza","Otros"];
 /* Ruleta de una lista cualquiera: se gira y se pulsa Poner. Se abre
    encima de la ventana de la entrega, sin cerrarla. */
@@ -420,7 +448,7 @@ function editarRec(r, f, luego){
   r=r||{fecha:f, acepta:true, envase:"ok", quien:quien()};
   var provs=[]; state.recepciones.forEach(function(x){ if(x.proveedor && provs.indexOf(x.proveedor)<0) provs.push(x.proveedor); });
   /* Qué llega: al escribir la primera letra salen carne, pescado, lácteos… y lo ya usado */
-  var prods=PRODUCTOS.slice(); state.recepciones.forEach(function(x){ if(x.producto && prods.indexOf(x.producto)<0) prods.push(x.producto); });
+  var prods=listaProductos();
   var d=dialogo(nuevo?"Mercancía recibida":"Entrega del "+dm(r.fecha),
     '<div class="dos">'+
       '<div class="campo"><label class="lbl" for="r_prov">Proveedor</label><input id="r_prov" list="r_provl" value="'+esc(r.proveedor||"")+'" autocomplete="off"><datalist id="r_provl">'+provs.map(function(p){ return '<option value="'+esc(p)+'">'; }).join("")+'</datalist></div>'+
@@ -450,8 +478,7 @@ function editarRec(r, f, luego){
   /* Ruletas de «Qué llega» y de la temperatura */
   $("[data-rp]", d).addEventListener("click", function(){
     var prov=$("#r_prov", d).value.trim(), act=$("#r_prod", d).value.trim();
-    var lista=PRODUCTOS.slice();
-    state.recepciones.forEach(function(x){ if(x.producto && lista.indexOf(x.producto)<0) lista.push(x.producto); });
+    var lista=listaProductos();
     if(act && lista.indexOf(act)<0) lista.unshift(act);
     var ini=act || (ultimaRec(prov)||{}).producto || lista[0];
     ruedaLista("Qué llega", lista.map(function(t){ return {txt:t, val:t}; }), Math.max(0, lista.indexOf(ini)), function(v){ $("#r_prod", d).value=v; });
@@ -475,7 +502,7 @@ function editarRec(r, f, luego){
     /* Si llega congelado, no hace falta poner el menos: 18 es −18 (con + se queda en positivo) */
     if(tv!=null && tv>0 && t.charAt(0)!=="+" && /congel/i.test($("#r_prod", d).value)) tv=-tv;
     if(t && tv==null){ aviso("La temperatura tiene que ser un número", true); return; }
-    r.proveedor=$("#r_prov", d).value.trim(); r.producto=$("#r_prod", d).value.trim();
+    r.proveedor=$("#r_prov", d).value.trim(); r.producto=nombreProducto($("#r_prod", d).value);
     if(!r.proveedor && !r.producto){ aviso("Pon al menos el proveedor o qué llega", true); return; }
     r.temp=tv; r.lote=$("#r_lote", d).value.trim(); r.cad=$("#r_cad", d).value;
     r.envase=val("envase")||"ok"; r.acepta=val("acepta")!=="no";
