@@ -4509,6 +4509,11 @@ function planRellenar(){
     /* La mañana no se queda corta. Si falta gente se quita de otro sitio:
        de dos no baja, aunque ese día haya vacaciones o fiestas. */
     var MIN_MAN = p.minMan == null ? 3 : (+p.minMan || 0);
+    /* Lo que pide la tabla de entradas manda: si a las 7, 8 y 9 entran
+       en total 4, por la mañana tiene que haber 4 */
+    var entMan = 0;
+    E.forEach(function(h){ if (h < 11) entMan += SPLIT ? (+ENT_E[h] || 0) + (+ENT_O[h] || 0) : (+ENT[h] || 0); });
+    MIN_MAN = Math.max(MIN_MAN, entMan);
     var manFijos = 0, nocFijos = 0;
     lista.forEach(function(s){
       var g = p.gente[s.id]; if (!g || g.grupo === 'no') return;
@@ -4651,7 +4656,7 @@ function planRellenar(){
          gente la quita de la noche o del mediodía, no de la mañana. */
       /* Mañana y noche igual de importantes: ninguna se queda con dos
          si en la otra sobra gente */
-      if (deMan < MIN_MAN) coste += (MIN_MAN - deMan) * 800;
+      if (deMan < MIN_MAN) coste += (MIN_MAN - deMan) * 1300;
       if (deNoc < MIN_NOC) coste += (MIN_NOC - deNoc) * 800;
       /* En las comidas no se puede estar corto: va por delante de dejar
          un hueco a cualquier hora, y solo cede ante abrir y cerrar. */
