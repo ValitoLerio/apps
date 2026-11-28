@@ -4509,12 +4509,16 @@ function planRellenar(){
     /* La mañana no se queda corta. Si falta gente se quita de otro sitio:
        de dos no baja, aunque ese día haya vacaciones o fiestas. */
     var MIN_MAN = p.minMan == null ? 3 : (+p.minMan || 0);
-    var manFijos = 0;
+    var manFijos = 0, nocFijos = 0;
     lista.forEach(function(s){
       var g = p.gente[s.id]; if (!g || g.grupo === 'no') return;
       var c = gcAt(s.id, dia); if (!c || c.estado !== 'trabajo' || !c.inicio) return;
       if (aMin(c.inicio) < 11 * 60) manFijos++;
+      var a0 = aMin(c.inicio), b0 = aMin(c.fin); if (b0 <= a0) b0 += 1440;
+      if (a0 <= 22*60 && b0 > 22*60) nocFijos++;
     });
+    /* Y la noche tampoco: a las 22 h, al menos 3 (el encargado y dos más) */
+    var MIN_NOC = p.minNoc == null ? 3 : (+p.minNoc || 0);
     /* Las comidas, de 13 a 15. Esto no es cuantos entran, es cuantos hay
        a la vez: uno que entra a las 8 y otro que entra a las 12 estan los
        dos dentro a las 13. Se mira a las 13 y a las 14 y manda la peor. */
@@ -4548,7 +4552,7 @@ function planRellenar(){
       E.forEach(function(h){ cov[h] = base0[h]; covE[h] = base0E[h]; covO[h] = base0O[h]; });
       var encCierra = false, encAbre = false, cocDia = cocFijoD, cocNoche = cocFijoN;
       var cubD = false, cubN = false, encCierran = 0, cubNenc = false;
-      var abreQuienDebe = abreFijo, abren = abrenFijo, encUnicoAbre = false, deMan = manFijos;
+      var abreQuienDebe = abreFijo, abren = abrenFijo, encUnicoAbre = false, deMan = manFijos, deNoc = nocFijos;
       var com13 = comFijos[0], com14 = comFijos[1];
       var otroCierra = otroFijoCierra, alCierre = 0, cats = {}, hors = {};
       for (var i = 0; i < n; i++) {
@@ -4587,6 +4591,7 @@ function planRellenar(){
         if (cubre[i] && tt.a <= 13*60 && tt.b >= 15*60) cubD = true;
         if (cubre[i] && tt.b >= 23*60) { if (encs[i] && tt.b >= CIERRE - 1) cubNenc = true; else cubN = true; }
         if (tt.a < 11*60) deMan++;
+        if (tt.a <= 22*60 && tt.b > 22*60) deNoc++;
         if (tt.a <= 13*60 && tt.b > 13*60) com13++;
         if (tt.a <= 14*60 && tt.b > 14*60) com14++;
         if (tt.a <= E[0]*60) {
@@ -4644,7 +4649,10 @@ function planRellenar(){
       /* La mañana, lo primero después del cierre: sale más caro dejarla
          corta que dejar un hueco a cualquier otra hora, así que si falta
          gente la quita de la noche o del mediodía, no de la mañana. */
-      if (deMan < MIN_MAN) coste += (MIN_MAN - deMan) * 360;
+      /* Mañana y noche igual de importantes: ninguna se queda con dos
+         si en la otra sobra gente */
+      if (deMan < MIN_MAN) coste += (MIN_MAN - deMan) * 800;
+      if (deNoc < MIN_NOC) coste += (MIN_NOC - deNoc) * 800;
       /* En las comidas no se puede estar corto: va por delante de dejar
          un hueco a cualquier hora, y solo cede ante abrir y cerrar. */
       var comN = Math.min(com13, com14);
