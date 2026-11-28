@@ -136,6 +136,15 @@
   .ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:300;align-items:center;justify-content:center;}
   .ov.show{display:flex;}
   .modal{background:var(--surface);border:1px solid var(--gold);border-radius:12px;padding:20px;min-width:270px;box-shadow:0 20px 60px rgba(0,0,0,.7);max-height:90vh;overflow-y:auto;}
+  /* «Hacer horario» a un lado: el horario se ve y se puede tocar mientras */
+  #planov.lado{background:transparent;pointer-events:none;justify-content:flex-end;align-items:stretch;}
+  #planov.lado .modal{pointer-events:auto;width:min(480px,94vw)!important;max-width:none!important;height:100vh;max-height:100vh;border-radius:0;border-width:0 0 0 2px;box-shadow:-12px 0 40px rgba(0,0,0,.55);}
+  body.plan-lado{margin-right:min(480px,94vw);}
+  @media (max-width:760px){
+    #planov.lado{align-items:flex-end;justify-content:stretch;}
+    #planov.lado .modal{width:100vw!important;height:52vh;max-height:52vh;border-width:2px 0 0 0;}
+    body.plan-lado{margin-right:0;margin-bottom:52vh;}
+  }
   .modal h3{font-family:'Playfair Display',serif;color:var(--gold2);margin-bottom:13px;}
   .modal input[type=text]{width:100%;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;font-family:'DM Sans',sans-serif;font-size:.86rem;margin-bottom:10px;}
   .modal input[type=text]:focus{outline:none;border-color:var(--gold);}
@@ -260,7 +269,7 @@
 #impresion .pie{font-size:8.5pt;color:#555;margin-top:5px;display:flex;justify-content:space-between}
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="comun.css?v=202611281841">
+<link rel="stylesheet" href="comun.css?v=202611281850">
 </head>
 <body>
 
@@ -627,7 +636,7 @@
 
 
 
-<script src="sync.js?v=202611281841"></script>
+<script src="sync.js?v=202611281850"></script>
 <script>
 /* Red de seguridad. Si los archivos de la app no están al lado de esta
    página — pasa al abrirla fuera de la web: vista previa, doble clic en
@@ -644,7 +653,7 @@ window.reintentarJS = function(viejo, nombre, sub){
   }
   var s = document.createElement('script');
   s.setAttribute('data-rein', '1');
-  s.src = WEB_APPS + nombre + '?v=202611281841' + Date.now();
+  s.src = WEB_APPS + nombre + '?v=202611281850' + Date.now();
   s.onload = viejo.onload;
   s.onerror = function(){ reintentarJS(s, nombre, sub); };
   document.body.appendChild(s);
@@ -692,7 +701,7 @@ if (!window.Sync) (function(){
 
   Sync.iniciar('horario').then(function(){
     var s = document.createElement('script');
-    s.src = 'horario.js?v=202611281841' + Date.now();
+    s.src = 'horario.js?v=202611281850' + Date.now();
     s.onload = function(){
       Sync.mostrarEstadoEn(document.getElementById('sync-estado'));
       capa.remove();

@@ -4815,6 +4815,8 @@ function planRellenar(){
     caja.innerHTML = '<b style="color:var(--gold2)">Hecho: ' + puestos + ' turnos puestos.</b> Revísalo y cambia lo que quieras tocando el día.' + resumen +
       (coberturas.length ? '<div style="margin-top:6px;color:var(--text2)">Cocina cubierta (llevan la nota «Cocina»):<br>' + coberturas.map(esc).join('<br>') + '</div>' : '') +
       (avisos.length ? '<div style="margin-top:6px;color:#e8a020">Para que lo mires:<br>' + avisos.map(esc).join('<br>') + '</div>' : '');
+    /* que se vea lo que ha salido, sin tener que bajar */
+    try { caja.scrollIntoView({block:'start', behavior:'smooth'}); } catch(e){}
   }
   var bd = document.getElementById('plan-deshacer'); if (bd) bd.style.display = '';
   toast(puestos + ' turnos puestos' + (avisos.length ? ' · revisa los avisos' : ''));
@@ -4843,8 +4845,22 @@ function abrirPlan(){
   }
   pintarPlan();
   ov.classList.add('show');
+  planLadoAplicar();
 }
-function cerrarPlan(){ var ov = document.getElementById('planov'); if (ov) ov.classList.remove('show'); }
+function cerrarPlan(){ var ov = document.getElementById('planov'); if (ov) ov.classList.remove('show'); document.body.classList.remove('plan-lado'); }
+/* A un lado / en medio: se recuerda */
+function planLadoAplicar(){
+  var ov = document.getElementById('planov'), lado = false;
+  try { lado = localStorage.getItem('planLado') === '1'; } catch(e){}
+  if (ov) ov.classList.toggle('lado', lado);
+  document.body.classList.toggle('plan-lado', lado && !!(ov && ov.classList.contains('show')));
+  var b = document.getElementById('plan-lado-btn'); if (b) b.textContent = lado ? '⤢ En medio' : '⇥ A un lado';
+}
+function planLadoCambiar(){
+  var lado = false; try { lado = localStorage.getItem('planLado') === '1'; } catch(e){}
+  try { localStorage.setItem('planLado', lado ? '0' : '1'); } catch(e){}
+  planLadoAplicar();
+}
 
 function pintarPlan(){
   var p = cargarPlan();
@@ -4861,7 +4877,9 @@ function pintarPlan(){
     [1,2,3,4,5,6,0].forEach(function(i){ o += '<option value="' + i + '"' + (v === i ? ' selected' : '') + '>' + DC[i] + '</option>'; });
     return o;
   };
-  var h = '<h3>Hacer horario</h3>' +
+  var h = '<div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0;flex:1">Hacer horario</h3>' +
+      '<button type="button" id="plan-lado-btn" onclick="planLadoCambiar()" title="Ponerlo a un lado para ver el horario a la vez" style="cursor:pointer;font-family:inherit;font-size:.75rem;font-weight:700;padding:5px 12px;border-radius:14px;border:1px solid var(--gold);background:transparent;color:var(--gold)">⇥ A un lado</button>' +
+      '<button type="button" onclick="cerrarPlan()" title="Cerrar" style="cursor:pointer;font-family:inherit;font-size:1rem;padding:2px 10px;border-radius:14px;border:1px solid var(--border);background:transparent;color:var(--text2)">✕</button></div>' +
     '<div style="font-size:.8rem;color:var(--text2);line-height:1.5">Rellena desde la semana que elijas (de este mes o de los siguientes) ' +
       'con turnos que rotan cada semana. Solo toca los días vacíos: lo que ya tengas puesto se queda. Luego cambias lo que quieras tocando el día.</div>' +
     /* Mensual o semanal */
@@ -4985,6 +5003,7 @@ function pintarPlan(){
       '<button class="bs" onclick="cerrarPlan()">Cerrar</button>' +
     '</div>';
   document.getElementById('plan-cuerpo').innerHTML = h;
+  if (typeof planLadoAplicar === 'function') planLadoAplicar();
   planPintarHabra();
   document.querySelectorAll('#plan-cuerpo input[data-e], #plan-cuerpo input[data-ee]').forEach(function(i){ i.addEventListener('input', planPintarHabra); });
   document.querySelectorAll('#plan-cuerpo select[data-k="grupo"]').forEach(function(sel){
