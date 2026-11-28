@@ -419,10 +419,12 @@ function editarRec(r, f, luego){
   var nuevo=!r;
   r=r||{fecha:f, acepta:true, envase:"ok", quien:quien()};
   var provs=[]; state.recepciones.forEach(function(x){ if(x.proveedor && provs.indexOf(x.proveedor)<0) provs.push(x.proveedor); });
+  /* Qué llega: al escribir la primera letra salen carne, pescado, lácteos… y lo ya usado */
+  var prods=PRODUCTOS.slice(); state.recepciones.forEach(function(x){ if(x.producto && prods.indexOf(x.producto)<0) prods.push(x.producto); });
   var d=dialogo(nuevo?"Mercancía recibida":"Entrega del "+dm(r.fecha),
     '<div class="dos">'+
       '<div class="campo"><label class="lbl" for="r_prov">Proveedor</label><input id="r_prov" list="r_provl" value="'+esc(r.proveedor||"")+'" autocomplete="off"><datalist id="r_provl">'+provs.map(function(p){ return '<option value="'+esc(p)+'">'; }).join("")+'</datalist></div>'+
-      '<div class="campo"><label class="lbl" for="r_prod">Qué llega</label><div class="t-fila"><input id="r_prod" value="'+esc(r.producto||"")+'" placeholder="Carne, pescado, lácteos…"><button type="button" class="rueda-btn" data-rp aria-label="Elegir qué llega con la ruleta" title="Ruleta">⟳</button></div></div>'+
+      '<div class="campo"><label class="lbl" for="r_prod">Qué llega</label><div class="t-fila"><input id="r_prod" list="r_prodl" autocomplete="off" value="'+esc(r.producto||"")+'" placeholder="Carne, pescado, lácteos…"><datalist id="r_prodl">'+prods.map(function(p){ return '<option value="'+esc(p)+'">'; }).join("")+'</datalist><button type="button" class="rueda-btn" data-rp aria-label="Elegir qué llega con la ruleta" title="Ruleta">⟳</button></div></div>'+
     '</div>'+
     '<div class="tres" style="margin-top:10px">'+
       '<div class="campo"><label class="lbl" for="r_temp">Temperatura</label><div class="t-fila"><input id="r_temp" inputmode="decimal" placeholder="°C · congelado sin el menos" value="'+(r.temp!=null?String(r.temp).replace(".",","):"")+'"><button type="button" class="rueda-btn" data-rt aria-label="Elegir la temperatura con la ruleta" title="Ruleta">⟳</button></div></div>'+
@@ -436,8 +438,9 @@ function editarRec(r, f, luego){
     '<div class="dos" style="margin-top:10px">'+
       '<div class="campo"><label class="lbl" for="r_quien">Recibe</label>'+selGente("r_quien", r.quien)+
         (state.encargados.length?'<div class="chips-q">'+state.encargados.map(function(n){ return '<button type="button" class="chip-q'+(n===r.quien?' on':'')+'" data-enc="'+esc(n)+'">'+esc(n)+'</button>'; }).join("")+'</div>':'')+'</div>'+
-      '<div class="campo"><label class="lbl" for="r_nota">Nota</label><input id="r_nota" value="'+esc(r.nota||"")+'" placeholder="Albarán, motivo del rechazo…"></div>'+
+      '<div class="campo"><label class="lbl" for="r_alb">Nº de albarán</label><input id="r_alb" value="'+esc(r.albaran||"")+'" placeholder="El del papel del proveedor"></div>'+
     '</div>'+
+    '<div class="campo" style="margin-top:10px"><label class="lbl" for="r_nota">Nota</label><input id="r_nota" value="'+esc(r.nota||"")+'" placeholder="Motivo del rechazo, lo que sea…"></div>'+
     '<p class="nota" style="margin:10px 0 0">De frío: refrigerado hasta 4 °C, congelado −18 °C o menos.</p>',
     (nuevo?'':'<button class="btn malo" data-borrar style="margin-right:auto">Borrar</button>')+'<button class="btn" data-x>Cancelar</button><button class="btn fuerte" data-ok>Guardar</button>');
   $$("[data-enc]", d).forEach(function(b){ b.addEventListener("click", function(){
@@ -477,7 +480,7 @@ function editarRec(r, f, luego){
     r.temp=tv; r.lote=$("#r_lote", d).value.trim(); r.cad=$("#r_cad", d).value;
     r.envase=val("envase")||"ok"; r.acepta=val("acepta")!=="no";
     r.quien=apuntarGente($("#r_quien", d).value); if(r.quien) ponQuien(r.quien);
-    r.nota=$("#r_nota", d).value.trim();
+    r.nota=$("#r_nota", d).value.trim(); r.albaran=$("#r_alb", d).value.trim();
     if(nuevo){ r.id=uid(); r.hora=r.fecha===iso(new Date())?hora():""; state.recepciones.push(r); }
     if(r.acepta===false && nuevo){
       state.incidencias.push({id:uid(), fecha:r.fecha, texto:"Rechazada mercancía de "+(r.proveedor||"?")+(r.producto?" ("+r.producto+")":""), accion:r.nota||"Devuelta al proveedor", quien:r.quien, cerrada:true});
@@ -494,8 +497,8 @@ function vRecepcion(box){
   var l=state.recepciones.filter(function(r){ return r.fecha.slice(0,7)===ui.mes; }).sort(function(a,b){ return a.fecha<b.fecha?1:-1; });
   var rech=l.filter(function(r){ return r.acepta===false; }).length;
   box.innerHTML=cabecera("Mercancía recibida", l.length+" entregas en "+esc(mesTxt(ui.mes))+(rech?" · "+rech+" rechazadas":""), selMes()+'<button class="btn fuerte" data-rec-nueva>+ Apuntar entrega</button>')+
-    (l.length ? '<div class="tarjeta"><div class="tabla-caja"><table><thead><tr><th>Día</th><th>Proveedor</th><th>Qué</th><th class="num">Temp.</th><th>Lote</th><th>Caduca</th><th>Envase</th><th>Estado</th><th>Recibe</th></tr></thead><tbody>'+
-      l.map(function(r){ return '<tr class="clic" data-rec="'+r.id+'"><td>'+dm(r.fecha)+'</td><td>'+esc(r.proveedor||"")+'</td><td>'+esc(r.producto||"")+'</td><td class="num">'+(r.temp!=null?fmtT(r.temp):"—")+'</td><td>'+esc(r.lote||"")+'</td><td>'+(r.cad?dm(r.cad):"")+'</td>'+
+    (l.length ? '<div class="tarjeta"><div class="tabla-caja"><table><thead><tr><th>Día</th><th>Proveedor</th><th>Qué</th><th class="num">Temp.</th><th>Lote</th><th>Caduca</th><th>Albarán</th><th>Envase</th><th>Estado</th><th>Recibe</th></tr></thead><tbody>'+
+      l.map(function(r){ return '<tr class="clic" data-rec="'+r.id+'"><td>'+dm(r.fecha)+'</td><td>'+esc(r.proveedor||"")+'</td><td>'+esc(r.producto||"")+'</td><td class="num">'+(r.temp!=null?fmtT(r.temp):"—")+'</td><td>'+esc(r.lote||"")+'</td><td>'+(r.cad?dm(r.cad):"")+'</td><td>'+esc(r.albaran||"")+'</td>'+
         '<td>'+(r.envase==="mal"?'<span class="chapa malo">Mal</span>':'Bien')+'</td><td>'+(r.acepta===false?'<span class="chapa malo">Rechazado</span>':'<span class="chapa ok">Aceptado</span>')+'</td><td>'+esc(r.quien||"")+'</td></tr>'; }).join("")+
       '</tbody></table></div></div>' : '<div class="vacio"><strong>Nada este mes</strong>Las entregas se apuntan desde «Hoy» o con el botón de arriba.</div>');
   engancharMes(box, vRecepcion);
@@ -813,8 +816,8 @@ function csvMes(m){
   dias.forEach(function(f){ filas.push([dm(f)].concat(state.equipos.reduce(function(a,e){ return a.concat(tt.map(function(t){ var r=tempDe(f,e.id,t[0]); return r?String(r.valor).replace(".",",")+(fuera(e,r.valor)?" (fuera: "+(r.accion||"sin acción")+")":""):""; })); }, []))); });
   filas.push([]); filas.push(["LIMPIEZA"]); filas.push(["Día","Tarea","Hecha","Quién"]);
   dias.forEach(function(f){ state.tareas.forEach(function(ta){ if(tocaHoy(ta,f)){ var l=limpiezaDe(f,ta.id); filas.push([dm(f), ta.nombre, l?"Sí":"No", l?l.quien:""]); } }); });
-  filas.push([]); filas.push(["MERCANCÍA RECIBIDA"]); filas.push(["Día","Proveedor","Producto","Temp.","Lote","Caducidad","Envase","Estado","Recibe","Nota"]);
-  state.recepciones.filter(function(r){ return r.fecha.slice(0,7)===m; }).forEach(function(r){ filas.push([dm(r.fecha), r.proveedor, r.producto, r.temp!=null?String(r.temp).replace(".",","):"", r.lote, r.cad?dm(r.cad):"", r.envase==="mal"?"Mal":"Bien", r.acepta===false?"Rechazado":"Aceptado", r.quien, r.nota]); });
+  filas.push([]); filas.push(["MERCANCÍA RECIBIDA"]); filas.push(["Día","Proveedor","Producto","Temp.","Lote","Caducidad","Albarán","Envase","Estado","Recibe","Nota"]);
+  state.recepciones.filter(function(r){ return r.fecha.slice(0,7)===m; }).forEach(function(r){ filas.push([dm(r.fecha), r.proveedor, r.producto, r.temp!=null?String(r.temp).replace(".",","):"", r.lote, r.cad?dm(r.cad):"", r.albaran||"", r.envase==="mal"?"Mal":"Bien", r.acepta===false?"Rechazado":"Aceptado", r.quien, r.nota]); });
   filas.push([]); filas.push(["INCIDENCIAS"]); filas.push(["Día","Qué pasó","Qué se hizo","Quién","Estado"]);
   state.incidencias.filter(function(i){ return i.fecha.slice(0,7)===m; }).forEach(function(i){ filas.push([dm(i.fecha), i.texto, i.accion, i.quien, i.cerrada?"Resuelta":"Abierta"]); });
   var txt="﻿"+filas.map(function(f){ return f.map(q).join(";"); }).join("\n");
